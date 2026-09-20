@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { Customer } from './use-customer-state'
+import { chunkIds } from '@/lib/customers/batch'
 
 export interface CreditInfo {
   id: string
@@ -370,13 +371,17 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
 }
 
 // Hook para obtener resúmenes de crédito de múltiples clientes
-export function useCustomersWithCredits(customers: Customer[]) {
+export function useCustomersWithCredits(customers: Customer[], enabled = true) {
   const [creditSummaries, setCreditSummaries] = useState<Record<string, CustomerCreditSummary>>({})
   const [loading, setLoading] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
-    if (customers.length === 0) return
+    if (!enabled || customers.length === 0) {
+      setCreditSummaries({})
+      setLoading(false)
+      return
+    }
 
     // La lista de clientes cambia al filtrar o paginar, y cada cambio dispara
     // una consulta nueva. Sin esta bandera, una respuesta anterior mas lenta
@@ -393,23 +398,18 @@ export function useCustomersWithCredits(customers: Customer[]) {
         }
 
         // Real Data from Supabase via API (bypassing RLS issues on client)
-        const customerIds = customers.map(c => c.id)
-        
-        const response = await fetch('/api/credits/batch', {
+        const responses = await Promise.all(chunkIds(customers.map(c => c.id), 200).map(async (customerIds) => {
+          const response = await fetch('/api/credits/batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customerIds })
-        })
-
-        if (!response.ok) {
-            throw new Error('Failed to fetch credits')
-        }
-
-        const {
-          credits: creditsData,
-          installments: installmentsData,
-          repairDebts: repairDebtsData,
-        } = await response.json()
+            body: JSON.stringify({ customerIds }),
+          })
+          if (!response.ok) throw new Error('Failed to fetch credits')
+          return response.json()
+        }))
+        const creditsData = responses.flatMap((result) => result.credits || [])
+        const installmentsData = responses.flatMap((result) => result.installments || [])
+        const repairDebtsData = Object.assign({}, ...responses.map((result) => result.repairDebts || {}))
         
         const credits = (creditsData || []) as CreditInfo[]
         const installments = (installmentsData || []) as InstallmentInfo[]
@@ -532,7 +532,7 @@ export function useCustomersWithCredits(customers: Customer[]) {
     loadCreditSummaries()
 
     return () => { cancelled = true }
-  }, [customers, supabase])
+  }, [customers, enabled, supabase])
 
   return {
     creditSummaries,

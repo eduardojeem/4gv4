@@ -5,7 +5,7 @@ import { fetchRepairById, isNextResponse, resolveRepairRouteContext } from '@/ap
 type RouteParams = { params: Promise<{ id: string }> }
 
 const schema = z.object({
-  newFinalTotal: z.coerce.number().finite().positive().max(999_999_999_999),
+  newFinalTotal: z.coerce.number().finite().min(0).max(999_999_999_999),
   reason: z.string().trim().min(10).max(500),
   idempotencyKey: z.string().trim().min(8).max(200),
 })

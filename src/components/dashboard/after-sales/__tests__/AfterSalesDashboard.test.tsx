@@ -50,7 +50,7 @@ describe('AfterSalesDashboard validations upon completion', () => {
         },
     }
 
-    function createFetchMock(cases: any[] = [mockCase]) {
+    function createFetchMock(cases: any[] = [mockCase], totalOverride?: number, totalPagesOverride?: number) {
         return vi.fn().mockImplementation((input: RequestInfo | URL) => {
             const url = String(input)
             if (url.includes('/api/after-sales/summary')) {
@@ -63,12 +63,14 @@ describe('AfterSalesDashboard validations upon completion', () => {
                 })
             }
             if (url.includes('/api/after-sales')) {
+                const total = totalOverride ?? cases.length
+                const totalPages = totalPagesOverride ?? Math.max(1, Math.ceil(total / 15))
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({
                         success: true,
                         data: cases,
-                        pagination: { total: cases.length },
+                        pagination: { page: 1, limit: 15, total, totalPages },
                     }),
                 })
             }
@@ -205,5 +207,19 @@ describe('AfterSalesDashboard validations upon completion', () => {
 
         fireEvent.change(reasonInput, { target: { value: 'Fuera de plazo de garantía' } })
         expect(confirmBtn).not.toBeDisabled()
+    })
+
+    it('renders pagination controls when totalPages > 1', async () => {
+        global.fetch = createFetchMock([mockCase], 45, 3)
+
+        render(<AfterSalesDashboard />)
+
+        await waitFor(() => {
+            expect(screen.getByText('CASO-0001')).toBeInTheDocument()
+        })
+
+        expect(screen.getByText(/Mostrando 1 a 15 de 45 resultados/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /página 1/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /página 2/i })).toBeInTheDocument()
     })
 })

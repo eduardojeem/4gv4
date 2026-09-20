@@ -128,13 +128,13 @@ describe('productos sin servicios', () => {
     expect(page.match(/showServices=\{hasServicesModule \|\| \(globalMetrics\.services_count \?\? 0\) > 0\}/g)).toHaveLength(4)
   })
 
-  it('el filtro rápido «Solo Servicios» desaparece', () => {
+  it('el filtro rápido de servicios desaparece', () => {
     const { unmount } = render(<QuickFiltersBar {...({ products: [], onFilterClick: vi.fn() } as never)} showServices={false} />)
-    expect(screen.queryByText('Solo Servicios')).not.toBeInTheDocument()
+    expect(screen.queryByText('Servicios')).not.toBeInTheDocument()
     unmount()
 
     render(<QuickFiltersBar {...({ products: [], onFilterClick: vi.fn() } as never)} />)
-    expect(screen.getByText('Solo Servicios')).toBeInTheDocument()
+    expect(screen.getByText('Servicios')).toBeInTheDocument()
   })
 
   it('el catálogo no desglosa «0 servicios»', () => {

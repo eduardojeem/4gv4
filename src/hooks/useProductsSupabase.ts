@@ -544,8 +544,24 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         toast.warning(warning)
       }
 
-      // Actualizar estado local inmediatamente
-      setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p))
+      // Actualizar estado local inmediatamente preservando stock y relaciones si la respuesta o payload no los tocó
+      setProducts(prev => prev.map(p => {
+        if (p.id !== id) return p
+        const isStockTouched = (productData as any).stock_quantity !== undefined || (productData as any).stockQuantity !== undefined
+        const finalStock = isStockTouched
+          ? (updatedProduct.stock_quantity ?? p.stock_quantity)
+          : (p.stock_quantity ?? updatedProduct.stock_quantity)
+        return {
+          ...p,
+          ...updatedProduct,
+          stock_quantity: finalStock,
+          variants: (updatedProduct.variants && updatedProduct.variants.length > 0)
+            ? updatedProduct.variants
+            : (p.variants ?? updatedProduct.variants),
+          category: updatedProduct.category ?? p.category,
+          supplier: updatedProduct.supplier ?? p.supplier,
+        }
+      }))
 
       // Refrescar estadísticas en segundo plano
       fetchDashboardStats().catch(err => console.error('Error refreshing data after update:', err))
@@ -578,10 +594,15 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         method: 'DELETE',
         headers: branchHeaders(selectedBranchId),
       })
-      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string } | null
+      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string; code?: string } | null
 
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || 'Error al eliminar el producto')
+        return {
+          success: false,
+          error: payload?.error || 'Error al eliminar el producto',
+          code: payload?.code,
+          status: response.status,
+        }
       }
 
       // Refrescar datos en segundo plano
@@ -592,13 +613,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       return { success: true }
     } catch (err) {
-      console.error('Error deleting product:', err)
-      if (typeof err === 'object' && err !== null) {
-          console.error('Detalles del error:', JSON.stringify(err, null, 2))
-      }
+      console.error('Error deleting product (network failure):', err)
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
+        error: err instanceof Error ? err.message : 'Error al eliminar el producto'
       }
     }
   }, [selectedBranchId, fetchProducts, fetchDashboardStats])

@@ -150,7 +150,7 @@ export function RepairDeliveryDialog({
   const priceDefined = repair
     ? (repair.finalCost !== null && repair.finalCost !== undefined) || Number(repair.estimatedCost) > 0
     : false
-  const fullyPaid = priceDefined && totalDue > 0 && balanceDue <= 0
+  const fullyPaid = priceDefined && balanceDue <= 0
   const hasAdvance = alreadyPaid > 0 && !fullyPaid
   const isCredit = method === 'credit'
 
@@ -908,7 +908,7 @@ export function RepairDeliveryDialog({
           <Button
             onClick={handleConfirm}
             disabled={!canConfirm}
-            className="min-h-11 gap-2 sm:min-h-9"
+            className="min-h-11 gap-2 bg-cyan-700 hover:bg-cyan-800 text-white font-semibold sm:min-h-9 shadow-xs"
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

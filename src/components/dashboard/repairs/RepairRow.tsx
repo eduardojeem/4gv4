@@ -104,6 +104,9 @@ export const RepairRow = memo<RepairRowProps>(
       finalCost: repair.finalCost,
       estimatedCost: repair.estimatedCost,
       paidAmount: repair.paidAmount,
+      deliveryOutcome: repair.deliveryOutcome,
+      qualityCheck: repair.qualityCheck,
+      closeout: repair.closeout,
     })
     const pendingAmount = financial.balance ?? 0
 

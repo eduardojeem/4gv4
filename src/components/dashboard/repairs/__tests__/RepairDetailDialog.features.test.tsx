@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { RepairDetailDialog } from '../RepairDetailDialog'
@@ -319,5 +319,129 @@ describe('RepairDetailDialog new features', () => {
 
     const title = screen.getByText('Retiro sin reparación confirmado')
     expect(title.closest('[role="status"]')).toHaveClass('border-rose-200')
+  })
+
+  it('muestra el problema de ingreso al lado del modelo del dispositivo', () => {
+    render(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          brand: 'Xiaomi',
+          model: 'Redmi Note 11',
+          issue: 'No enciende tras golpe',
+        }}
+        onClose={vi.fn()}
+      />
+    )
+
+    const desc = screen.getByTestId('repair-detail-device-description')
+    expect(desc).toHaveTextContent('Xiaomi Redmi Note 11')
+    expect(desc).toHaveTextContent('Problema:')
+    expect(desc).toHaveTextContent('No enciende tras golpe')
+  })
+
+  it('alinea a la izquierda Cerrar, Verificar funcionamiento y Registrar adelanto si no terminó, y usa modo normal al terminar', () => {
+    const { rerender } = render(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          status: 'reparacion',
+          estimatedCost: 150000,
+          paidAmount: 0,
+        }}
+        onClose={vi.fn()}
+        onQualityCheck={vi.fn()}
+        onQuickPay={vi.fn()}
+      />
+    )
+
+    const actions = screen.getByTestId('repair-detail-actions')
+    expect(actions).toHaveClass('sm:justify-start')
+    expect(within(actions).getByRole('button', { name: /Cerrar/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: /Verificar funcionamiento/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: /Registrar adelanto/i })).toBeInTheDocument()
+
+    // Cuando termina (status: 'listo'), pasa a modo normal (sm:justify-end)
+    rerender(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          status: 'listo',
+          estimatedCost: 150000,
+          finalCost: 150000,
+          paidAmount: 50000,
+        }}
+        onClose={vi.fn()}
+        onQualityCheck={vi.fn()}
+        onQuickPay={vi.fn()}
+        onDeliver={vi.fn()}
+      />
+    )
+
+    expect(actions).toHaveClass('sm:justify-end')
+    expect(within(actions).getByRole('button', { name: /Cobrar saldo/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: /\+ Productos en POS/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: /Entregar/i })).toBeInTheDocument()
+  })
+
+  it('aplica coloración dinámica al modal: rojo si no funciona/falla, verde si funciona listo para entrega, e índigo si ya se entregó', () => {
+    // 1. No funciona / Falló prueba / Irreparable -> Rojo
+    const { rerender } = render(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          status: 'listo',
+          qualityCheck: {
+            id: 'qc-failed',
+            result: 'unrepairable',
+            checklist: {} as any,
+            checkedBy: { id: 'tech-1', name: 'Laura' },
+            checkedAt: '2026-09-13T20:00:00Z',
+          },
+        }}
+        onClose={vi.fn()}
+      />
+    )
+
+    const header = screen.getByTestId('repair-detail-header')
+    expect(header).toHaveClass('bg-rose-500/10')
+
+    // 2. Funciona y listo para entrega -> Verde Esmeralda
+    rerender(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          status: 'listo',
+          qualityCheck: {
+            id: 'qc-passed',
+            result: 'passed',
+            checklist: {} as any,
+            checkedBy: { id: 'tech-1', name: 'Laura' },
+            checkedAt: '2026-09-13T20:00:00Z',
+          },
+        }}
+        onClose={vi.fn()}
+      />
+    )
+    expect(header).toHaveClass('bg-emerald-500/10')
+
+    // 3. Ya se entregó -> Índigo
+    rerender(
+      <RepairDetailDialog
+        open
+        repair={{
+          ...sampleRepair,
+          status: 'entregado',
+          deliveryOutcome: 'repaired',
+        }}
+        onClose={vi.fn()}
+      />
+    )
+    expect(header).toHaveClass('bg-indigo-500/10')
   })
 })

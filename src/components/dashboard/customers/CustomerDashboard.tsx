@@ -30,10 +30,10 @@ import {
   CreditCard,
   Plus,
   RefreshCw,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info, X,
+  MoreHorizontal, Info, X,
   Download
 } from 'lucide-react'
-import { exportCustomersToCSV } from '@/lib/export/customers-export'
+import { exportCustomerDirectory, loadCustomerDirectoryForExport } from '@/lib/customers/export-directory'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { CUSTOMERS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { ImprovedMetricCard } from './ImprovedMetricCard'
@@ -59,16 +59,16 @@ import { useKeyboardShortcuts, customerDashboardShortcuts } from '@/hooks/use-ke
 import { KeyboardShortcutsIndicator } from '@/components/ui/keyboard-shortcuts-indicator'
 import { toast } from 'sonner'
 import { useCustomersWithCredits } from '@/hooks/use-customer-credits'
+import { useCustomerInsightsData } from '@/hooks/use-customer-insights-data'
 import { UpcomingInstallments } from '@/components/dashboard/credits/UpcomingInstallments'
 import { useCredits } from '@/hooks/use-credits'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { SearchStats, SearchInsights } from './SearchStats'
-import searchService from '@/services/search-service'
-import { formatCurrency } from '@/lib/currency'
 import { useCustomers } from '@/contexts/CustomerContext'
 import { usePlanModule } from '@/contexts/SubscriptionStatusContext'
 import { cn } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
+import { customerDirectoryParams } from '@/hooks/use-customer-directory-state'
 
 
 // Tipos para la navegación
@@ -83,6 +83,8 @@ const dashboardTabs = [
 
 export function CustomerDashboard() {
   const hasCreditsModule = usePlanModule('credits')
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState("customers")
   const { 
     customers, 
     filteredCustomers, 
@@ -92,8 +94,12 @@ export function CustomerDashboard() {
     loading, 
     error, 
     pagination,
+    directorySummary,
     setPage,
     setItemsPerPage,
+    setSort,
+    sortBy,
+    sortOrder,
     updateFilters, 
     setViewMode,
     deleteCustomer,
@@ -106,31 +112,25 @@ export function CustomerDashboard() {
   
   // Handle customer selection from search
   const handleCustomerSelectFromSearch = useCallback((customer: Customer) => {
-    setSelectedCustomer(customer)
-    setCurrentView('detail')
-  }, [])
+    const from = encodeURIComponent(typeof window === 'undefined' ? '' : window.location.search)
+    router.push(`/dashboard/customers/${encodeURIComponent(customer.id)}?from=${from}`)
+  }, [router])
 
   // Enhanced updateFilters with search intelligence
   const handleFiltersChange = React.useCallback((newFilters: Partial<import('@/hooks/use-customer-state').CustomerFilters>) => {
-    const startTime = performance.now()
-    
-    // Update filters
     updateFilters(newFilters)
+    const params = customerDirectoryParams({ ...filters, ...newFilters }, 1, pagination.itemsPerPage, sortBy, sortOrder)
+    params.delete('limit')
+    params.set('pageSize', String(pagination.itemsPerPage))
+    router.replace(`/dashboard/customers?${params.toString()}`, { scroll: false })
     
-    // Measure search time
-    const endTime = performance.now()
-    setSearchTime(Math.round(endTime - startTime))
-    
-    // Generate suggestions if search has no results
-    if (newFilters.search && filteredCustomers.length === 0) {
-      const suggestions = searchService.generateSuggestions(customers, newFilters.search)
-      setSearchSuggestions(suggestions.map(s => s.value))
-    } else {
-      setSearchSuggestions([])
-    }
-  }, [updateFilters, customers, filteredCustomers.length])
-  const { creditSummaries } = useCustomersWithCredits(customers)
-  const [activeTab, setActiveTab] = useState("customers")
+  }, [updateFilters, filters, pagination.itemsPerPage, sortBy, sortOrder, router])
+  const insights = useCustomerInsightsData(activeTab !== 'customers', activeTab === 'analytics')
+  const { creditSummaries: pageCreditSummaries } = useCustomersWithCredits(customers, activeTab === 'customers')
+  const { creditSummaries } = useCustomersWithCredits(
+    insights.customers,
+    activeTab === 'credits' || activeTab === 'notifications'
+  )
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   useEffect(() => {
@@ -139,11 +139,7 @@ export function CustomerDashboard() {
     if (params.get('new') === 'true') {
       setShowCreateModal(true)
     }
-    const q = params.get('search') || params.get('q')
-    if (q) {
-      updateFilters({ search: q })
-    }
-  }, [updateFilters])
+  }, [])
 
   const [compactMode, setCompactMode] = useState(true)
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
@@ -157,45 +153,48 @@ export function CustomerDashboard() {
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   
-  // Estados para búsqueda inteligente
-  const [searchTime, setSearchTime] = useState(0)
   // Quick view modal
   const [quickViewCustomer, setQuickViewCustomer] = useState<Customer | null>(null)
-  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
   const [showGuide, setShowGuide] = useState(true)
 
+  const handlePageChange = useCallback((page: number) => {
+    setPage(page)
+    const params = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
+    params.set('page', String(page))
+    router.replace(`/dashboard/customers?${params.toString()}`, { scroll: false })
+  }, [router, setPage])
+
+  const handlePageSizeChange = useCallback((pageSize: number) => {
+    setItemsPerPage(pageSize)
+    const params = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
+    params.set('page', '1')
+    params.set('pageSize', String(pageSize))
+    router.replace(`/dashboard/customers?${params.toString()}`, { scroll: false })
+  }, [router, setItemsPerPage])
+
+  const handleSortChange = useCallback((field: string, order: 'asc' | 'desc') => {
+    setSort(field, order)
+    const params = new URLSearchParams(window.location.search)
+    params.set('sort', field)
+    params.set('order', order)
+    params.set('page', '1')
+    router.replace(`/dashboard/customers?${params.toString()}`, { scroll: false })
+  }, [router, setSort])
+
   useEffect(() => {
-    if (typeof window === 'undefined' || customers.length === 0) return
+    if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const targetId = params.get('id') || params.get('customerId')
-    if (targetId && !selectedCustomer) {
-      const match = customers.find(c => c.id === targetId)
-      if (match) {
-        setSelectedCustomer(match)
-        setCurrentView('detail')
-      }
+    if (targetId) {
+      params.delete('id')
+      params.delete('customerId')
+      router.replace(`/dashboard/customers/${encodeURIComponent(targetId)}?from=${encodeURIComponent(`?${params.toString()}`)}`)
     }
-  }, [customers, selectedCustomer])
+  }, [router])
 
   // Calculate stats including credit metrics
-  const totalCustomers = customers.length
-  const activeCustomers = useMemo(() => customers.filter(c => c.status === "active").length, [customers])
-
-  // Credit metrics
-  const creditMetrics = useMemo(() => {
-    const summaries = Object.values(creditSummaries)
-    const totalActiveCredits = summaries.reduce((sum, s) => sum + s.active_credits, 0)
-    const totalPendingAmount = summaries.reduce((sum, s) => sum + s.total_pending, 0)
-    const customersWithDebt = summaries.filter((summary) => summary.total_pending > 0).length
-    const overduePayments = summaries.filter(s => s.overdue_debt > 0).length
-    
-    return {
-      totalActiveCredits,
-      totalPendingAmount,
-      customersWithDebt,
-      overduePayments
-    }
-  }, [creditSummaries])
+  const totalCustomers = directorySummary.total
+  const activeCustomers = directorySummary.active
 
   const stats = useMemo(() => {
     return [
@@ -209,34 +208,34 @@ export function CustomerDashboard() {
         description: `${activeCustomers} activos de ${totalCustomers} total`
       },
       {
-        title: "Créditos Activos",
-        value: creditMetrics.totalActiveCredits.toLocaleString(),
-        icon: <CreditCard className="h-5 w-5" />,
-        change: undefined,
-        changeType: "neutral" as const,
-        gradient: "from-green-500 to-emerald-500",
-        description: `Créditos en estado activo`
-      },
-      {
-        title: "Clientes con saldo",
-        value: creditMetrics.customersWithDebt.toLocaleString(),
+        title: "Resultados",
+        value: pagination.totalItems.toLocaleString(),
         icon: <UserCheck className="h-5 w-5" />,
         change: undefined,
         changeType: "neutral" as const,
-        gradient: "from-purple-500 to-violet-500",
-        description: `${totalCustomers > 0 ? Math.round((creditMetrics.customersWithDebt / totalCustomers) * 100) : 0}% con cuotas o reparaciones pendientes`
+        gradient: "from-green-500 to-emerald-500",
+        description: 'Clientes que cumplen los filtros'
       },
       {
-        title: "Saldo Pendiente",
-        value: formatCurrency(creditMetrics.totalPendingAmount),
+        title: "Página actual",
+        value: customers.length.toLocaleString(),
+        icon: <Users className="h-5 w-5" />,
+        change: undefined,
+        changeType: "neutral" as const,
+        gradient: "from-purple-500 to-violet-500",
+        description: `Página ${pagination.currentPage} de ${Math.max(1, pagination.totalPages)}`
+      },
+      {
+        title: "Clientes activos",
+        value: activeCustomers.toLocaleString(),
         icon: <TrendingUp className="h-5 w-5" />,
-        change: creditMetrics.overduePayments > 0 ? `${creditMetrics.overduePayments} vencidos` : undefined,
-        changeType: creditMetrics.overduePayments > 0 ? "negative" as const : "positive" as const,
-        gradient: creditMetrics.overduePayments > 0 ? "from-red-500 to-orange-500" : "from-orange-500 to-red-500",
-        description: creditMetrics.overduePayments > 0 ? `${creditMetrics.overduePayments} pagos vencidos` : 'Pagos al día'
+        change: undefined,
+        changeType: "neutral" as const,
+        gradient: "from-orange-500 to-red-500",
+        description: 'En toda la organización'
       }
     ]
-  }, [totalCustomers, activeCustomers, creditMetrics])
+  }, [totalCustomers, activeCustomers, pagination, customers.length])
 
   const {
     credits,
@@ -247,13 +246,13 @@ export function CustomerDashboard() {
 
   const customersWithActiveCredits = useMemo(() => {
     const term = creditSearchTerm.trim().toLowerCase()
-    return customers.filter((c) => {
+    return insights.customers.filter((c) => {
       const summary = creditSummaries[c.id]
       const hasActive = summary && summary.active_credits > 0
       const matches = term ? (c.name?.toLowerCase().includes(term) || c.email?.toLowerCase().includes(term) || c.phone?.toLowerCase().includes(term)) : true
       return hasActive && matches
     })
-  }, [customers, creditSummaries, creditSearchTerm])
+  }, [insights.customers, creditSummaries, creditSearchTerm])
 
   const selectedCreditIds = useMemo(() => {
     return credits.filter(c => c.customer_id === selectedCreditCustomerId).map(c => c.id)
@@ -426,8 +425,8 @@ export function CustomerDashboard() {
 
   const handleGoToFullDetail = (customer: Customer) => {
     setQuickViewCustomer(null)
-    setSelectedCustomer(customer)
-    setCurrentView('detail')
+    const from = encodeURIComponent(window.location.search)
+    router.push(`/dashboard/customers/${encodeURIComponent(customer.id)}?from=${from}`)
   }
 
   const handleViewHistory = (customer: Customer) => {
@@ -542,11 +541,19 @@ export function CustomerDashboard() {
     toast.success('Lista actualizada')
   }
 
-  const handleExport = () => {
-    const result = exportCustomersToCSV(filteredCustomers)
-    if (result.success) toast.success(`${filteredCustomers.length} cliente(s) exportado(s)`)
-    else toast.error(result.error || 'No se pudieron exportar los clientes')
+  const handleExport = async () => {
+    try {
+      const count = await exportCustomerDirectory(filters, sortBy, sortOrder)
+      toast.success(`${count} cliente(s) exportado(s)`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudieron exportar los clientes')
+    }
   }
+
+  const loadAllCustomersForExport = useCallback(
+    () => loadCustomerDirectoryForExport(filters, sortBy, sortOrder),
+    [filters, sortBy, sortOrder]
+  )
 
   const focusSearch = () => {
     const searchInput = document.querySelector('input[placeholder*="Buscar"]') as HTMLInputElement
@@ -632,10 +639,16 @@ export function CustomerDashboard() {
                     CRM
                   </Badge>
                 </div>
-                <div className="space-y-1">
-                  <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
-                    Clientes
-                  </h1>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                      Clientes
+                    </h1>
+                    <SectionGuideButton
+                      guide={CUSTOMERS_GUIDE}
+                      className="h-9 border-amber-200/40 bg-amber-400/15 px-3 text-amber-50 hover:bg-amber-400/25 hover:text-white"
+                    />
+                  </div>
                   <p className="max-w-2xl text-sm leading-6 text-white/70">
                     Gestiona tu cartera, historial y créditos desde una sola vista.
                   </p>
@@ -648,14 +661,9 @@ export function CustomerDashboard() {
                   <Badge className="rounded-full border-0 px-3 py-1.5 text-sm font-medium bg-white/[0.08] text-white">
                     {activeCustomers} activos
                   </Badge>
-                  {filteredCustomers.length !== totalCustomers && (
+                  {pagination.totalItems !== totalCustomers && (
                     <Badge className="rounded-full border-0 px-3 py-1.5 text-sm font-medium bg-cyan-500/15 text-cyan-100">
-                      {filteredCustomers.length} en vista
-                    </Badge>
-                  )}
-                  {creditMetrics.overduePayments > 0 && (
-                    <Badge className="rounded-full border-0 px-3 py-1.5 text-sm font-medium bg-red-500/15 text-red-100">
-                      {creditMetrics.overduePayments} vencidos
+                      {pagination.totalItems} resultados
                     </Badge>
                   )}
                 </div>
@@ -686,36 +694,17 @@ export function CustomerDashboard() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        const res = exportCustomersToCSV(filteredCustomers)
-                        if (res.success) toast.success('Clientes exportados en CSV')
-                      }}
+                      onClick={() => { void handleExport() }}
                       className="h-10 gap-1.5 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white text-xs font-semibold"
                       title="Exportar clientes filtrados en CSV"
                     >
                       <Download className="h-3.5 w-3.5" />
                       Exportar
                     </Button>
-                    <SectionGuideButton 
-                      guide={CUSTOMERS_GUIDE} 
-                      className="h-10 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-                    />
                   </div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white/70">
-                  {creditMetrics.overduePayments > 0 ? (
-                    <span className="inline-flex items-center gap-2">
-                      <ArrowDownCircle className="h-4 w-4 text-red-200" />
-                      Hay {creditMetrics.overduePayments} cuotas vencidas por revisar.
-                    </span>
-                  ) : creditMetrics.totalActiveCredits > 0 ? (
-                    <span className="inline-flex items-center gap-2">
-                      <ArrowUpCircle className="h-4 w-4 text-emerald-200" />
-                      {creditMetrics.totalActiveCredits} créditos al día.
-                    </span>
-                  ) : (
-                    <span>Sin deudas pendientes. Cartera al día.</span>
-                  )}
+                  <span>Buscá un cliente o abrí Créditos activos para revisar saldos.</span>
                 </div>
               </div>
             </div>
@@ -794,40 +783,33 @@ export function CustomerDashboard() {
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
                       customers={customers}
+                      totalCount={pagination.totalItems}
+                      loadAllCustomersForExport={loadAllCustomersForExport}
                       onAddCustomer={handleAddCustomer}
                       onRefresh={handleRefresh}
                       compact={compactMode}
                       onCustomerSelect={handleCustomerSelectFromSearch}
                     />
                     
-                    {/* Search Statistics */}
-                    {filters.search && (
-                      <SearchStats
-                        totalResults={filteredCustomers.length}
-                        searchTime={searchTime}
-                        query={filters.search}
-                        totalCustomers={totalCustomers}
-                        className="mb-4"
-                      />
+                    {filters.search && !loading && (
+                      <p className="text-sm text-muted-foreground" role="status">
+                        {pagination.totalItems} resultado{pagination.totalItems === 1 ? '' : 's'} para “{filters.search}”
+                      </p>
                     )}
-                    
-                    {/* Search Insights for no results */}
-                    <SearchInsights
-                      query={filters.search}
-                      totalResults={filteredCustomers.length}
-                      suggestions={searchSuggestions}
-                    />
                     
                     {/* Los dos campos manejan la misma busqueda: el de abajo
                         filtraba solo la pagina visible y con otras reglas. */}
                     <CustomerListView
                       customers={paginatedCustomers}
                       searchTerm={filters.search}
-                      onSearchChange={(term) => updateFilters({ search: term })}
+                      onSearchChange={(term) => handleFiltersChange({ search: term })}
                       selectedCustomers={selectedCustomers}
-                      creditSummaries={creditSummaries}
+                      creditSummaries={pageCreditSummaries}
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
+                      sortField={sortBy}
+                      sortOrder={sortOrder}
+                      onSortChange={handleSortChange}
                       onCustomerToggle={(customerId) => {
                         setSelectedCustomers(prev => 
                           prev.includes(customerId) 
@@ -836,7 +818,10 @@ export function CustomerDashboard() {
                         )
                       }}
                       onSelectAll={() => {
-                        setSelectedCustomers(paginatedCustomers.map(c => c.id))
+                        const pageIds = paginatedCustomers.map((customer) => customer.id)
+                        setSelectedCustomers((previous) => pageIds.every((id) => previous.includes(id))
+                          ? previous.filter((id) => !pageIds.includes(id))
+                          : [...new Set([...previous, ...pageIds])])
                       }}
                       onClearSelection={() => setSelectedCustomers([])}
                       onViewCustomer={handleViewDetail}
@@ -853,13 +838,6 @@ export function CustomerDashboard() {
                     {/* Al buscar no se pagina: la lista ya viene recortada y
                         ordenada por relevancia, y el hook devuelve una sola
                         pagina. Si el tope dejo gente afuera, se avisa. */}
-                    {!loading && !error && filters.search && filteredCustomers.length > paginatedCustomers.length && (
-                      <p className="mt-4 text-center text-sm text-muted-foreground">
-                        Mostrando {paginatedCustomers.length} de {filteredCustomers.length} coincidencias.
-                        Afiná la búsqueda para ver el resto.
-                      </p>
-                    )}
-
                     {!loading && !error && pagination.totalPages > 1 && (
                       <div className="mt-6">
                         <Pagination
@@ -867,8 +845,8 @@ export function CustomerDashboard() {
                           totalPages={pagination.totalPages}
                           itemsPerPage={pagination.itemsPerPage}
                           totalItems={pagination.totalItems}
-                          onPageChange={setPage}
-                          onItemsPerPageChange={setItemsPerPage}
+                          onPageChange={handlePageChange}
+                          onItemsPerPageChange={handlePageSizeChange}
                           className="justify-center"
                         />
                       </div>
@@ -924,7 +902,7 @@ export function CustomerDashboard() {
                       try {
                         const result = await updateCustomer(selectedCustomer.id, formData as Partial<Customer>)
                         if (result.success) {
-                          const updated = (result as any).data || result.customer
+                          const updated = result.customer
                           if (updated) {
                             setSelectedCustomer(updated)
                           } else {
@@ -955,21 +933,28 @@ export function CustomerDashboard() {
             </TabsContent>
 
             <TabsContent value="analytics" className="mt-0">
+              {insights.loading && <div className="p-4 text-sm text-muted-foreground">Cargando análisis de clientes…</div>}
+              {insights.error && <div role="alert" className="p-4 text-sm text-destructive">{insights.error}</div>}
+              {!insights.loading && !insights.error && (
               <Suspense fallback={<div className="p-4"><Skeleton className="h-24 w-full" /></div>}>
                 <AnalyticsDashboard
-                  customers={customers}
+                  customers={insights.customers}
                   creditSummaries={creditSummaries}
                   mode="interactive"
                   showPredictions={true}
                   showComparisons={true}
                 />
               </Suspense>
+              )}
             </TabsContent>
 
             <TabsContent value="credits" className="mt-0">
+              {insights.loading && <div className="p-4 text-sm text-muted-foreground">Cargando cartera de clientes…</div>}
+              {insights.error && <div role="alert" className="p-4 text-sm text-destructive">{insights.error}</div>}
+              {!insights.loading && !insights.error && (
               <Suspense fallback={<div className="p-4"><Skeleton className="h-32 w-full" /></div>}>
                 <CustomerActiveCreditsTab
-                  customers={customers}
+                  customers={insights.customers}
                   creditSummaries={creditSummaries}
                   credits={credits}
                   installments={installments}
@@ -981,16 +966,21 @@ export function CustomerDashboard() {
                   compact={compactMode}
                 />
               </Suspense>
+              )}
             </TabsContent>
 
             <TabsContent value="notifications" className="mt-0">
+              {insights.loading && <div className="p-4 text-sm text-muted-foreground">Cargando alertas de clientes…</div>}
+              {insights.error && <div role="alert" className="p-4 text-sm text-destructive">{insights.error}</div>}
+              {!insights.loading && !insights.error && (
               <CustomerAlerts
-                customers={customers}
+                customers={insights.customers}
                 onViewCustomer={(customer) => {
                   setActiveTab('customers')
                   handleViewDetail(customer)
                 }}
               />
+              )}
             </TabsContent>
 
 
@@ -1024,7 +1014,7 @@ export function CustomerDashboard() {
         onConfirmDelete={handleConfirmDeleteCustomer}
         onDeactivate={handleDeactivateCustomer}
         isDeleting={isDeletingCustomer}
-        creditSummary={customerToDelete ? creditSummaries[customerToDelete.id] : null}
+        creditSummary={customerToDelete ? pageCreditSummaries[customerToDelete.id] : null}
       />
 
       {/* Keyboard Shortcuts Indicator */}

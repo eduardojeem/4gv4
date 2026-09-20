@@ -39,7 +39,7 @@ describe('customer dashboard avoids duplicate work and remains usable on mobile'
     expect(metrics).toContain(".eq('organization_id', organizationId)")
   })
 
-  it('includes repair balances in the batched customer debt summary', () => {
+  it('includes repair balances in the batched customer debt summary without claiming a page total is global', () => {
     const route = read('src/app/api/credits/batch/route.ts')
     const creditsHook = read('src/hooks/use-customer-credits.ts')
     expect(route).toContain(".from('repairs')")
@@ -47,7 +47,8 @@ describe('customer dashboard avoids duplicate work and remains usable on mobile'
     expect(route).toContain('repairDebts: summarizeRepairDebts')
     expect(creditsHook).toContain('repairDebtsData')
     expect(creditsHook).toContain('installmentPending + repairPending')
-    expect(dashboard).toContain('summaries.filter(s => s.overdue_debt > 0).length')
+    expect(dashboard).toContain('pageCreditSummaries')
+    expect(dashboard).not.toContain('Sin deudas pendientes. Cartera al día.')
   })
 
   it('does not advertise an import shortcut that opens no dialog', () => {

@@ -602,6 +602,10 @@ function POSPageContent() {
 
   // Funciones del carrito
   const addToCart = useCallback((product: Product) => {
+    if (product.is_active === false) {
+      toast.error('El producto se encuentra inactivo')
+      return
+    }
     return measureCartOperation(() => {
       // Verificar si el producto tiene variantes
       const productWithVariants = getProductWithVariants(product.id)
@@ -1207,7 +1211,7 @@ function POSPageContent() {
       }
 
       const product = inventoryProducts.find(
-        (p) => p.barcode === normalized || p.barcode === barcodeInput
+        (p) => (p.barcode === normalized || p.barcode === barcodeInput) && p.is_active !== false
       )
 
       if (product) {

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Clock3 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, PackageX } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import {
@@ -33,9 +33,20 @@ export function RepairPaymentIndicator({
           icon: Clock3,
           colors: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200',
         }
+    : financial.isUnrepaired && financial.total === 0
+      ? {
+          label: financial.label,
+          detail: financial.paid > 0 ? (compact ? null : `Anticipo ${formatCurrency(financial.paid)}`) : null,
+          icon: financial.paid > 0 ? Clock3 : PackageX,
+          colors: financial.paid > 0
+            ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200'
+            : 'border-slate-300 bg-slate-100/90 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+        }
     : financial.status === 'pagado'
       ? {
-          label: 'Pagado',
+          label: financial.total === 0
+            ? (financial.delivered ? 'Entregado · sin costo' : 'Sin costo')
+            : 'Pagado',
           detail: null,
           icon: CheckCircle2,
           colors: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',

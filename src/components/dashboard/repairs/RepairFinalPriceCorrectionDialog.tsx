@@ -29,8 +29,13 @@ function FinalPriceForm({ open, repair, onOpenChange, onSaved }: {
   const difference = newTotal - currentTotal
   const overpayment = Math.max(0, paid - newTotal)
   const newBalance = Math.max(0, newTotal - paid)
-  const newStatus = useMemo(() => newTotal > 0 && paid >= newTotal ? 'Pagado' : paid > 0 ? 'Pago parcial' : 'Pendiente', [newTotal, paid])
-  const canContinue = Number.isFinite(newTotal) && newTotal > 0 && newTotal !== currentTotal && reason.trim().length >= 10 && overpayment === 0
+  const newStatus = useMemo(() => {
+    if (newTotal === 0) return paid > 0 ? 'Anticipo a favor' : 'Sin costo'
+    if (paid >= newTotal) return 'Pagado'
+    if (paid > 0) return 'Pago parcial'
+    return 'Pendiente'
+  }, [newTotal, paid])
+  const canContinue = Number.isFinite(newTotal) && newTotal >= 0 && newTotal !== currentTotal && reason.trim().length >= 10 && overpayment === 0
 
   const save = async () => {
     if (!canContinue) return

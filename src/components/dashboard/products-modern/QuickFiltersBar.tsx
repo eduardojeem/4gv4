@@ -1,10 +1,30 @@
+/**
+ * Los filtros de arriba del listado.
+ *
+ * Eran ocho botones en fila, cada uno con su color (azul, índigo, violeta,
+ * rosa, ámbar, rojo, esmeralda, gris) y su badge del mismo tono: nada decía
+ * cuáles se excluían entre sí ni cuál estaba puesto, porque todos gritaban
+ * igual. Ahora son tres grupos rotulados —tipo, estado y alertas—, neutros
+ * salvo el que está activo, y el color queda para lo que significa algo: el
+ * punto ámbar del bajo stock y el rojo del agotado.
+ */
+
 import React, { useMemo } from 'react'
-import { AlertTriangle, ShieldAlert, CheckCircle2, EyeOff, Package, Wrench, Layers, X } from 'lucide-react'
+import { Layers, Package, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Product } from '@/types/products'
 import { isLowStock, isOutOfStock, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
+
+export type QuickFilterValue =
+  | 'all'
+  | 'low_stock'
+  | 'out_of_stock'
+  | 'active'
+  | 'inactive'
+  | 'products'
+  | 'services'
+  | 'variants'
 
 export interface QuickFilterCounts {
   all: number
@@ -22,9 +42,64 @@ export interface QuickFiltersBarProps {
   showServices?: boolean
   products: Product[]
   counts?: QuickFilterCounts
-  activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants' | null
-  onFilterClick: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants') => void
+  activeFilter?: QuickFilterValue | null
+  /** El tipo con el que abre la sección, que sobrevive a los otros filtros. */
+  catalogKind?: 'part' | 'service' | null
+  /** Igual que el tipo: `true` es «solo activos», `false` «solo inactivos». */
+  isActive?: boolean | null
+  onFilterClick: (filter: QuickFilterValue) => void
   className?: string
+}
+
+type ChipProps = {
+  label: string
+  count?: number
+  active: boolean
+  onClick: () => void
+  icon?: React.ReactNode
+  /** Un punto de color cuando el filtro significa una alerta. */
+  dotClassName?: string
+}
+
+function Chip({ label, count, active, onClick, icon, dotClassName }: ChipProps) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'h-7 rounded-lg px-2.5 text-xs font-medium gap-1.5 transition-colors',
+        active
+          ? 'border-primary/40 bg-primary/10 text-primary font-semibold hover:bg-primary/15 dark:border-primary/50 dark:bg-primary/15 dark:hover:bg-primary/20'
+          : 'border-slate-200 bg-transparent text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:bg-transparent dark:text-slate-400 dark:hover:bg-slate-800/60',
+      )}
+    >
+      {dotClassName && <span className={cn('h-1.5 w-1.5 rounded-full', dotClassName)} aria-hidden="true" />}
+      {icon}
+      <span>{label}</span>
+      {count !== undefined && (
+        <span
+          className={cn(
+            'rounded px-1 text-[10px] font-semibold tabular-nums',
+            active ? 'bg-primary/15' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </Button>
+  )
+}
+
+/** El rótulo de cada grupo, para que se lea qué decide cada fila de chips. */
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </span>
+  )
 }
 
 export function QuickFiltersBar({
@@ -32,8 +107,10 @@ export function QuickFiltersBar({
   products,
   counts: providedCounts,
   activeFilter,
+  catalogKind,
+  isActive,
   onFilterClick,
-  className
+  className,
 }: QuickFiltersBarProps) {
   // Prefer global counts; otherwise derive from local products
   const counts = useMemo(() => {
@@ -63,220 +140,101 @@ export function QuickFiltersBar({
       low_stock: lowStock,
       out_of_stock: outOfStock,
       active,
-      inactive
+      inactive,
     }
   }, [products, providedCounts])
 
-  const isFiltered = activeFilter && activeFilter !== 'all'
+  // El tipo y el estado viven en el alcance de la sección; los de alerta, en
+  // `activeFilter`. Los valores viejos de `activeFilter` se siguen entendiendo
+  // para las pantallas que todavía no pasan el alcance.
+  const tipo = catalogKind ?? (activeFilter === 'products' ? 'part' : activeFilter === 'services' ? 'service' : null)
+  const estado = isActive ?? (activeFilter === 'active' ? true : activeFilter === 'inactive' ? false : null)
+  const alerta = activeFilter && ['low_stock', 'out_of_stock', 'variants'].includes(activeFilter) ? activeFilter : null
+  const hayFiltro = tipo !== null || estado !== null || alerta !== null
 
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md shadow-xs text-xs',
-        className
+        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 shadow-xs backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50',
+        className,
       )}
     >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1 hidden sm:inline">
-          Filtros:
-        </span>
-
-        {/* Todos */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('all')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'all' || !activeFilter
-              ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 shadow-xs'
-              : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-          )}
-        >
-          <Package className="h-3.5 w-3.5" />
-          <span>Todos</span>
-          <Badge variant="secondary" className="px-1 py-0 text-[10px] font-mono h-4 rounded-md">
-            {counts.all}
-          </Badge>
-        </Button>
-
-        {/* Solo Productos Físicos */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
+      <div className="flex items-center gap-1.5">
+        <GroupLabel>Tipo</GroupLabel>
+        <Chip
+          label="Productos"
+          count={counts.products ?? 0}
+          active={tipo === 'part'}
           onClick={() => onFilterClick('products')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'products'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-700 text-indigo-800 dark:text-indigo-300 shadow-xs'
-              : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-800/60'
-          )}
-        >
-          <Package className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-          <span>Solo Productos</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-indigo-100/60 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700"
-          >
-            {counts.products ?? 0}
-          </Badge>
-        </Button>
-
-        {/* Solo Servicios */}
+          icon={<Package className="h-3.5 w-3.5" aria-hidden="true" />}
+        />
         {showServices && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('services')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'services'
-              ? 'bg-purple-50 dark:bg-purple-950/60 border-purple-400 dark:border-purple-700 text-purple-800 dark:text-purple-300 shadow-xs'
-              : 'hover:bg-purple-50/50 dark:hover:bg-purple-950/30 text-purple-700 dark:text-purple-400 border-purple-200/80 dark:border-purple-800/60'
-          )}
-        >
-          <Wrench className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-          <span>Solo Servicios</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-purple-100/60 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700"
-          >
-            {counts.services ?? 0}
-          </Badge>
-        </Button>
+          <Chip
+            label="Servicios"
+            count={counts.services ?? 0}
+            active={tipo === 'service'}
+            onClick={() => onFilterClick('services')}
+            icon={<Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
+          />
         )}
-
-        {/* Con Variantes */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('variants')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'variants'
-              ? 'bg-pink-50 dark:bg-pink-950/60 border-pink-400 dark:border-pink-700 text-pink-800 dark:text-pink-300 shadow-xs'
-              : 'hover:bg-pink-50/50 dark:hover:bg-pink-950/30 text-pink-700 dark:text-pink-400 border-pink-200/80 dark:border-pink-800/60'
-          )}
-        >
-          <Layers className="h-3.5 w-3.5 text-pink-600 dark:text-pink-400" />
-          <span>Con Variantes</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-pink-100/60 dark:bg-pink-900/40 text-pink-800 dark:text-pink-300 border-pink-300 dark:border-pink-700"
-          >
-            {counts.variants ?? 0}
-          </Badge>
-        </Button>
-
-        <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
-
-        {/* Bajo Stock */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('low_stock')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'low_stock'
-              ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-300 shadow-xs'
-              : 'hover:bg-amber-50/50 dark:hover:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200/80 dark:border-amber-800/60'
-          )}
-        >
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-          <span>Bajo Stock</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-amber-100/60 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700"
-          >
-            {counts.low_stock}
-          </Badge>
-        </Button>
-
-        {/* Agotados */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('out_of_stock')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'out_of_stock'
-              ? 'bg-red-50 dark:bg-red-950/60 border-red-400 dark:border-red-700 text-red-800 dark:text-red-300 shadow-xs'
-              : 'hover:bg-red-50/50 dark:hover:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200/80 dark:border-red-800/60'
-          )}
-        >
-          <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
-          <span>Agotados</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-red-100/60 dark:bg-red-900/40 text-red-800 dark:text-red-300 border-red-300 dark:border-red-700"
-          >
-            {counts.out_of_stock}
-          </Badge>
-        </Button>
-
-        {/* Activos */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('active')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'active'
-              ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 shadow-xs'
-              : 'hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/60'
-          )}
-        >
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-          <span>Activos</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-emerald-100/60 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
-          >
-            {counts.active}
-          </Badge>
-        </Button>
-
-        {/* Inactivos */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onFilterClick('inactive')}
-          className={cn(
-            'h-7.5 px-2.5 text-xs font-semibold rounded-lg gap-1.5 transition-all',
-            activeFilter === 'inactive'
-              ? 'bg-slate-200/80 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-900 dark:text-slate-100 shadow-xs'
-              : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
-          )}
-        >
-          <EyeOff className="h-3.5 w-3.5 text-slate-500" />
-          <span>Inactivos</span>
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[10px] font-mono h-4 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700"
-          >
-            {counts.inactive}
-          </Badge>
-        </Button>
       </div>
 
-      {isFiltered && (
+      <span className="hidden h-5 w-px bg-slate-200 sm:inline-block dark:bg-slate-800" aria-hidden="true" />
+
+      <div className="flex items-center gap-1.5">
+        <GroupLabel>Estado</GroupLabel>
+        <Chip
+          label="Activos"
+          count={counts.active}
+          active={estado === true}
+          onClick={() => onFilterClick('active')}
+        />
+        <Chip
+          label="Inactivos"
+          count={counts.inactive}
+          active={estado === false}
+          onClick={() => onFilterClick('inactive')}
+        />
+      </div>
+
+      <span className="hidden h-5 w-px bg-slate-200 sm:inline-block dark:bg-slate-800" aria-hidden="true" />
+
+      <div className="flex items-center gap-1.5">
+        <GroupLabel>Alertas</GroupLabel>
+        <Chip
+          label="Bajo stock"
+          count={counts.low_stock}
+          active={alerta === 'low_stock'}
+          onClick={() => onFilterClick('low_stock')}
+          dotClassName="bg-amber-500"
+        />
+        <Chip
+          label="Agotados"
+          count={counts.out_of_stock}
+          active={alerta === 'out_of_stock'}
+          onClick={() => onFilterClick('out_of_stock')}
+          dotClassName="bg-red-500"
+        />
+        <Chip
+          label="Con variantes"
+          count={counts.variants ?? 0}
+          active={alerta === 'variants'}
+          onClick={() => onFilterClick('variants')}
+          icon={<Layers className="h-3.5 w-3.5" aria-hidden="true" />}
+        />
+      </div>
+
+      {hayFiltro && (
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={() => onFilterClick('all')}
-          className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+          className="ml-auto h-7 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
         >
-          <X className="h-3 w-3" />
-          Limpiar filtro rápido
+          <X className="h-3 w-3" aria-hidden="true" />
+          Todo el catálogo
+          <span className="font-semibold tabular-nums">{counts.all}</span>
         </Button>
       )}
     </div>

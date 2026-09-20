@@ -110,6 +110,48 @@ const STATUS_FLOW_LABELS: Record<string, string> = {
   entregado: 'Entregado',
 }
 
+function getRepairModalTone(repair: Repair) {
+  const isUnrepairedOrFailed =
+    repair.deliveryOutcome === 'unrepairable' ||
+    repair.deliveryOutcome === 'withdrawn' ||
+    (repair.qualityCheck && repair.qualityCheck.result !== 'passed') ||
+    repair.status === 'cancelado'
+
+  if (isUnrepairedOrFailed) {
+    return {
+      type: 'failed' as const,
+      modalBorder: 'border-rose-400/80 dark:border-rose-700/80 shadow-rose-500/10',
+      headerBg: 'bg-rose-500/10 border-b-rose-200/90 dark:bg-rose-950/30 dark:border-b-rose-900/60',
+      accentBar: 'bg-rose-500',
+    }
+  }
+
+  if (repair.status === 'entregado') {
+    return {
+      type: 'delivered' as const,
+      modalBorder: 'border-indigo-400/80 dark:border-indigo-700/80 shadow-indigo-500/10',
+      headerBg: 'bg-indigo-500/10 border-b-indigo-200/90 dark:bg-indigo-950/30 dark:border-b-indigo-900/60',
+      accentBar: 'bg-indigo-500',
+    }
+  }
+
+  if (repair.status === 'listo') {
+    return {
+      type: 'ready' as const,
+      modalBorder: 'border-emerald-400/80 dark:border-emerald-700/80 shadow-emerald-500/10',
+      headerBg: 'bg-emerald-500/10 border-b-emerald-200/90 dark:bg-emerald-950/30 dark:border-b-emerald-900/60',
+      accentBar: 'bg-emerald-500',
+    }
+  }
+
+  return {
+    type: 'default' as const,
+    modalBorder: 'border-border/60',
+    headerBg: 'bg-muted/20 dark:bg-muted/10 border-b-border',
+    accentBar: 'bg-primary/30',
+  }
+}
+
 export function RepairDetailDialog({
   open,
   repair: propRepair,
@@ -293,6 +335,8 @@ export function RepairDetailDialog({
   const DeviceIcon = deviceTypeConfig[activeRepair.deviceType]?.icon || Smartphone
   const isPaused = activeRepair.status === 'pausado'
   const isCancelled = activeRepair.status === 'cancelado'
+  const isFinished = activeRepair.status === 'listo' || activeRepair.status === 'entregado'
+  const reportedProblem = activeRepair.issue || activeRepair.description || (activeRepair as any).problemDescription
   const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(activeRepair.status)
   const statusGuidance = getRepairStatusGuidance(activeRepair.status)
   const availableTransitions = getAvailableTransitions(activeRepair.status)
@@ -498,6 +542,9 @@ export function RepairDetailDialog({
     finalCost: activeRepair.finalCost,
     estimatedCost: activeRepair.estimatedCost,
     paidAmount: activeRepair.paidAmount,
+    deliveryOutcome: activeRepair.deliveryOutcome,
+    qualityCheck: activeRepair.qualityCheck,
+    closeout: activeRepair.closeout,
   })
   const configuredTaxRate = [0, 5, 10].includes(Number(settings.repairLaborTaxRate))
     ? Number(settings.repairLaborTaxRate) as 0 | 5 | 10
@@ -749,6 +796,8 @@ export function RepairDetailDialog({
     }
   }
 
+  const modalTone = getRepairModalTone(repair)
+
   return (
     <>
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
@@ -757,60 +806,68 @@ export function RepairDetailDialog({
         showCloseButton={false}
         className={cn(
           "flex flex-col p-0 gap-0 overflow-hidden transition-all duration-300",
-          "rounded-2xl border-border/60 shadow-2xl",
+          "rounded-2xl shadow-2xl",
+          modalTone.modalBorder,
           // En móvil ocupa toda la pantalla, estilo app
           "max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none",
           isMaximized
             ? "sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]"
             : "sm:w-[92vw] sm:max-w-5xl sm:h-[85vh] sm:max-h-[85vh]"
         )}>
-        <DialogHeader data-testid="repair-detail-header" className="border-b bg-muted/20 dark:bg-muted/10 backdrop-blur-md px-2.5 py-1.5 sm:px-6 sm:py-2.5 shrink-0">
-          <div className="flex justify-between items-center gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Barra de acento temática superior */}
+        <div className={cn("h-1 w-full shrink-0", modalTone.accentBar)} />
+        <DialogHeader
+          data-testid="repair-detail-header"
+          className={cn(
+            "border-b backdrop-blur-md px-2.5 py-1.5 sm:px-5 sm:py-2 shrink-0 transition-colors",
+            modalTone.headerBg
+          )}
+        >
+          <div className="flex justify-between items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
               <div className={cn(
-                "hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-xs",
+                "hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-2xs",
                 statusConfig[repair.status]?.bgColor || 'bg-slate-500'
               )}>
-                <DeviceIcon className="h-5 w-5" />
+                <DeviceIcon className="h-4 w-4" />
               </div>
-              <div className="min-w-0 space-y-0.5">
+              <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge variant="outline" className="bg-background/90 font-mono text-[10px] sm:text-xs rounded-md px-1.5 py-0 border-border/70">
+                  <Badge variant="outline" className="bg-background/90 font-mono text-[10px] sm:text-xs rounded-md px-1.5 py-0 border-border/70 shrink-0">
                     #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
                   </Badge>
+                  <DialogTitle className="text-sm sm:text-base font-bold tracking-tight text-foreground leading-none truncate inline-flex items-center">
+                    {repair.device}
+                  </DialogTitle>
                   {repair.customer?.name && (
                     <Badge
                       variant="outline"
-                      className="gap-1 text-[10px] sm:text-xs font-bold px-2 py-0 max-w-[150px] sm:max-w-[240px] truncate bg-primary/10 text-primary border-primary/30 dark:bg-primary/20 dark:text-sky-300 dark:border-primary/40 shadow-xs"
+                      className="gap-1 text-[10px] sm:text-xs font-bold px-1.5 py-0 max-w-[140px] sm:max-w-[200px] truncate bg-primary/10 text-primary border-primary/30 dark:bg-primary/20 dark:text-sky-300 dark:border-primary/40 shadow-2xs shrink-0"
                       title={`Cliente: ${repair.customer.name}`}
                     >
                       <User className="h-3 w-3 text-primary shrink-0" />
                       <span className="truncate">{repair.customer.name}</span>
                     </Badge>
                   )}
-                  <Badge className={cn("gap-1 text-[10px] sm:text-xs rounded-md font-semibold px-2 py-0", statusConfig[repair.status]?.color || 'bg-slate-100 text-slate-800')}>
+                  <Badge className={cn("gap-1 text-[10px] sm:text-xs rounded-md font-semibold px-2 py-0 shrink-0", statusConfig[repair.status]?.color || 'bg-slate-100 text-slate-800')}>
                     <StatusIcon className="h-3 w-3" />
                     {statusConfig[repair.status]?.label || repair.status || 'En Proceso'}
                   </Badge>
                   <RepairPaymentIndicator
                     compact
-                    className="max-w-full"
+                    className="max-w-full shrink-0"
                     status={repair.status}
                     finalCost={repair.finalCost}
                     estimatedCost={repair.estimatedCost}
                     paidAmount={repair.paidAmount}
                   />
                   {(repair.priority ? priorityConfig[repair.priority] : null) ? (
-                    <Badge variant="outline" className={cn('max-sm:hidden rounded-md text-[11px] font-semibold py-0', priorityConfig[repair.priority]?.color)}>
+                    <Badge variant="outline" className={cn('max-sm:hidden rounded-md text-[10px] font-semibold py-0 shrink-0', priorityConfig[repair.priority]?.color)}>
                       {priorityConfig[repair.priority]?.label}
                     </Badge>
-                  ) : (
-                    <Badge variant="outline" className="max-sm:hidden bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 rounded-md text-[11px] py-0">
-                      Normal
-                    </Badge>
-                  )}
+                  ) : null}
                   {repair.urgency && urgencyConfig[repair.urgency] && (
-                    <Badge className={cn('max-sm:hidden rounded-md text-[11px] font-semibold py-0', urgencyConfig[repair.urgency]?.color)}>
+                    <Badge className={cn('max-sm:hidden rounded-md text-[10px] font-semibold py-0 shrink-0', urgencyConfig[repair.urgency]?.color)}>
                       {urgencyConfig[repair.urgency]?.label}
                     </Badge>
                   )}
@@ -818,17 +875,34 @@ export function RepairDetailDialog({
                     · {repair.brand} {repair.model}
                   </span>
                 </div>
-                <DialogTitle className="truncate text-sm sm:text-lg font-bold tracking-tight text-foreground leading-snug">
-                  {repair.device}
-                </DialogTitle>
-                <DialogDescription data-testid="repair-detail-device-description" className="flex items-center gap-1.5 text-xs max-sm:hidden sm:gap-2 sm:text-xs flex-wrap text-muted-foreground">
+                {reportedProblem && (
+                  <div className="sm:hidden flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-medium truncate mt-0.5">
+                    <AlertCircle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span className="font-semibold shrink-0">Problema:</span>
+                    <span className="truncate">{reportedProblem}</span>
+                  </div>
+                )}
+                <DialogDescription data-testid="repair-detail-device-description" className="flex items-center gap-1.5 text-xs max-sm:hidden sm:gap-2 flex-wrap text-muted-foreground leading-tight">
                   <span className="font-semibold text-foreground/90">{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
                   <span className="text-muted-foreground/40">•</span>
                   <span>{repair.brand} {repair.model}</span>
+                  {reportedProblem && (
+                    <>
+                      <span className="text-muted-foreground/40">•</span>
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/10 px-1.5 py-0 text-xs font-medium text-amber-900 border border-amber-300/60 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/60 max-w-[280px] sm:max-w-[420px] truncate"
+                        title={`Problema con el que ingresó: ${reportedProblem}`}
+                      >
+                        <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="font-semibold">Problema:</span>
+                        <span className="truncate">{reportedProblem}</span>
+                      </span>
+                    </>
+                  )}
                   {(repair.serialNumber || repair.imei) && (
                     <>
                       <span className="text-muted-foreground/40">•</span>
-                      <span className="max-sm:hidden font-mono text-[11px] bg-muted/60 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
+                      <span className="max-sm:hidden font-mono text-[10px] bg-muted/60 px-1 py-0 rounded border border-border/50 text-foreground/80">
                         IMEI/SN: {repair.serialNumber || repair.imei}
                       </span>
                     </>
@@ -1033,7 +1107,7 @@ export function RepairDetailDialog({
         </DialogHeader>
 
         {/* Stepper de progreso */}
-        <div data-testid="repair-detail-progress" className="border-b bg-background/50 backdrop-blur-xs px-3 py-1.5 max-sm:hidden sm:px-6 sm:py-2 shrink-0">
+        <div data-testid="repair-detail-progress" className="border-b bg-background/50 backdrop-blur-xs px-3 py-1.5 max-sm:hidden sm:px-6 sm:py-1.5 shrink-0">
           {isCancelled ? (
             <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-3 py-1.5">
               <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
@@ -1183,33 +1257,45 @@ export function RepairDetailDialog({
         )}
 
         <ScrollArea className="flex-1 min-h-0 bg-background w-full">
-          <div className="space-y-4 p-3 sm:space-y-5 sm:p-6">
-            {/* Mensaje de Estado de Pago */}
+          <div className="space-y-3 p-3 sm:space-y-4 sm:p-5">
+            {/* Barra compacta y visible de Control de Calidad en estado listo */}
             {repair.status === 'listo' && (
-              <div role="status" className={cn(
-                'rounded-lg border p-4',
-                repair.qualityCheck?.result === 'passed'
-                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30'
-                  : repair.qualityCheck
-                    ? 'border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30'
-                    : 'border-yellow-200 bg-yellow-50 dark:border-yellow-900/50 dark:bg-yellow-900/20',
-              )}>
-                <div className="flex items-start gap-3">
-                  {repair.qualityCheck?.result === 'passed' ? (
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  ) : repair.qualityCheck ? (
-                    <AlertTriangle className="mt-0.5 h-5 w-5 text-rose-600 dark:text-rose-400" />
-                  ) : (
-                    <AlertCircle className="mt-0.5 h-5 w-5 text-yellow-600 dark:text-yellow-500" />
-                  )}
-                  <div>
+              <div
+                role="status"
+                className={cn(
+                  'flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl border shadow-2xs transition-all',
+                  repair.qualityCheck?.result === 'passed'
+                    ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/30'
+                    : repair.qualityCheck
+                      ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900/50 dark:bg-rose-950/30'
+                      : 'border-yellow-200 bg-yellow-50/80 dark:border-yellow-900/50 dark:bg-yellow-900/20',
+                )}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className={cn(
+                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-md shadow-2xs',
+                    repair.qualityCheck?.result === 'passed'
+                      ? 'bg-emerald-600 text-white dark:bg-emerald-500'
+                      : repair.qualityCheck
+                        ? 'bg-rose-600 text-white dark:bg-rose-500'
+                        : 'bg-yellow-500 text-white'
+                  )}>
+                    {repair.qualityCheck?.result === 'passed' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : repair.qualityCheck ? (
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <h4 className={cn(
-                      'font-semibold',
+                      'text-xs sm:text-sm font-bold tracking-tight',
                       repair.qualityCheck?.result === 'passed'
-                        ? 'text-emerald-800 dark:text-emerald-300'
+                        ? 'text-emerald-900 dark:text-emerald-200'
                         : repair.qualityCheck
-                          ? 'text-rose-800 dark:text-rose-300'
-                          : 'text-yellow-800 dark:text-yellow-400',
+                          ? 'text-rose-900 dark:text-rose-200'
+                          : 'text-yellow-900 dark:text-yellow-200',
                     )}>
                       {repair.qualityCheck?.result === 'passed'
                         ? 'Funcionamiento verificado'
@@ -1217,13 +1303,14 @@ export function RepairDetailDialog({
                           ? 'Retiro sin reparación confirmado'
                           : 'Verificación técnica pendiente'}
                     </h4>
+                    <span className="text-muted-foreground/40 hidden sm:inline">•</span>
                     <p className={cn(
-                      'mt-1 text-sm',
+                      'text-xs',
                       repair.qualityCheck?.result === 'passed'
-                        ? 'text-emerald-700 dark:text-emerald-400/90'
+                        ? 'text-emerald-800/90 dark:text-emerald-300/90'
                         : repair.qualityCheck
-                          ? 'text-rose-700 dark:text-rose-400/90'
-                          : 'text-yellow-700 dark:text-yellow-500/90',
+                          ? 'text-rose-800/90 dark:text-rose-300/90'
+                          : 'text-yellow-800/90 dark:text-yellow-400/90',
                     )}>
                       {repair.qualityCheck?.result === 'passed'
                         ? 'El equipo superó la prueba técnica y puede entregarse como reparado.'
@@ -1231,18 +1318,21 @@ export function RepairDetailDialog({
                           ? 'El resultado técnico ya está registrado. Entregá el equipo respetando ese resultado.'
                           : 'Antes de entregar, registrá si el equipo funciona o si se retira sin reparación.'}
                     </p>
-                    <div className="mt-2">
-                      <RepairQualityBadge qualityCheck={repair.qualityCheck} />
-                      {repair.qualityCheck?.checkedBy && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Verificado por {repair.qualityCheck.checkedBy.name} · {new Date(repair.qualityCheck.checkedAt).toLocaleString('es-PY')}
-                        </p>
-                      )}
-                      {repair.qualityCheck?.note && (
-                        <p className="mt-1 text-xs text-muted-foreground">Nota técnica: {repair.qualityCheck.note}</p>
-                      )}
-                    </div>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 pl-8 sm:pl-0">
+                  <RepairQualityBadge qualityCheck={repair.qualityCheck} />
+                  {repair.qualityCheck?.checkedBy && (
+                    <span className="text-[11px] text-muted-foreground hidden md:inline">
+                      Verificado por <strong>{repair.qualityCheck.checkedBy.name}</strong> · {new Date(repair.qualityCheck.checkedAt).toLocaleDateString('es-PY')}
+                    </span>
+                  )}
+                  {repair.qualityCheck?.note && (
+                    <span className="text-[11px] text-muted-foreground italic hidden lg:inline max-w-[200px] truncate" title={`Nota: ${repair.qualityCheck.note}`}>
+                      ({repair.qualityCheck.note})
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -2242,7 +2332,7 @@ export function RepairDetailDialog({
                       repairId={activeRepair.id}
                       onEdit={() => setIsCostsEditorOpen(true)}
                       correctable={isAdmin && activeRepair.status === 'entregado'}
-                      onCorrectInternalCost={(activeRepair.parts || []).some((p) => p.lineType === 'service') ? () => setIsInternalCostCorrectionOpen(true) : undefined}
+                      onCorrectInternalCost={(activeRepair.parts || []).length > 0 ? () => setIsInternalCostCorrectionOpen(true) : undefined}
                       onCorrectFinalPrice={() => setIsFinalPriceCorrectionOpen(true)}
                     />
                     {onQuickPay && financial.canCollect && (
@@ -2472,12 +2562,21 @@ export function RepairDetailDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter data-testid="repair-detail-actions" className="border-t bg-background px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 sm:flex sm:flex-wrap sm:justify-end sm:px-4 sm:py-3 shrink-0">
+        <DialogFooter
+          data-testid="repair-detail-actions"
+          className={cn(
+            "border-t bg-background px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 sm:flex sm:flex-wrap sm:px-4 sm:py-3 shrink-0",
+            !isFinished ? "sm:justify-start sm:gap-2" : "sm:justify-end sm:gap-2"
+          )}
+        >
           <Button variant="outline" onClick={onClose} className="min-h-11 sm:min-h-9">
             Cerrar
           </Button>
 
-          {onQualityCheck && (repair.status === 'reparacion' || repair.status === 'listo') && (
+          {onQualityCheck && (
+            (!isFinished && repair.status !== 'cancelado') ||
+            (isFinished && (repair.status === 'reparacion' || repair.status === 'listo'))
+          ) && (
             <Button
               variant="outline"
               className="min-h-11 gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 sm:min-h-9 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
@@ -2505,50 +2604,49 @@ export function RepairDetailDialog({
             </Button>
           )}
 
-          <>
-              {onQuickPay && financial.canCollect && (
-                <Button
-                  variant="default"
-                  className="min-h-11 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold max-sm:col-span-2 sm:min-h-9"
-                  onClick={() => {
-                    onClose()
-                    onQuickPay(repair)
-                  }}
-                >
-                  <DollarSign className="h-4 w-4" />
-                  {getPaymentActionLabel()}
-                </Button>
-              )}
-              {repair.status === 'listo' && (
-                <Button
-                  variant="outline"
-                  className="min-h-11 gap-2 sm:min-h-9"
-                  onClick={() => {
-                    if (repair.customer?.id) {
-                      window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
-                    }
-                    onClose()
-                  }}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  + Productos en POS
-                </Button>
-              )}
-              {onDeliver && repair.status === 'listo' && (
-                <Button
-                  variant="outline"
-                  className="min-h-11 gap-2 sm:min-h-9"
-                  onClick={() => {
-                    onClose()
-                    onDeliver(repair)
-                  }}
-                >
-                  <PackageCheck className="h-4 w-4" />
-                  <span data-help-id="repair-delivery">Entregar</span>
-                </Button>
-              )}
-            </>
+          {onQuickPay && financial.canCollect && (
+            <Button
+              variant="default"
+              className="min-h-11 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold max-sm:col-span-2 sm:min-h-9"
+              onClick={() => {
+                onClose()
+                onQuickPay(repair)
+              }}
+            >
+              <DollarSign className="h-4 w-4" />
+              {getPaymentActionLabel()}
+            </Button>
+          )}
 
+          {repair.status === 'listo' && (
+            <Button
+              variant="outline"
+              className="min-h-11 gap-2 sm:min-h-9"
+              onClick={() => {
+                if (repair.customer?.id) {
+                  window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                }
+                onClose()
+              }}
+            >
+              <ExternalLink className="h-4 w-4" />
+              + Productos en POS
+            </Button>
+          )}
+
+          {onDeliver && repair.status === 'listo' && (
+            <Button
+              variant="default"
+              className="min-h-11 gap-2 bg-cyan-700 hover:bg-cyan-800 text-white font-semibold sm:min-h-9 shadow-xs"
+              onClick={() => {
+                onClose()
+                onDeliver(repair)
+              }}
+            >
+              <PackageCheck className="h-4 w-4" />
+              <span data-help-id="repair-delivery">Entregar</span>
+            </Button>
+          )}
         </DialogFooter>
 
         <CreateAfterSalesCaseDialog

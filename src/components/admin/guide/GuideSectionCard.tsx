@@ -7,7 +7,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  Copy,
   ExternalLink,
   HelpCircle,
   Lightbulb,
@@ -24,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 import { examplesForVertical, type GuideSection } from '@/lib/guide/types'
 import type { BusinessVertical } from '@/lib/organization/business-profile'
+import { GuideVisualPreview } from './GuideVisualPreview'
 
 function HighlightedText({ text, query }: { text: string; query?: string }): ReactNode {
   if (!query || !query.trim()) return <>{text}</>
@@ -34,7 +34,7 @@ function HighlightedText({ text, query }: { text: string; query?: string }): Rea
       <>
         {parts.map((part, index) =>
           part.toLowerCase() === query.trim().toLowerCase() ? (
-            <mark key={index} className="rounded bg-primary/20 px-0.5 font-semibold text-foreground">
+            <mark key={index} className="rounded bg-amber-200 px-0.5 font-semibold text-amber-950 dark:bg-amber-900/60 dark:text-amber-100">
               {part}
             </mark>
           ) : (
@@ -72,6 +72,8 @@ export function GuideSectionCard({
   const [localOpen, setLocalOpen] = useState(defaultOpen)
   const [copied, setCopied] = useState(false)
 
+  const isOperation = section.group === 'operations'
+  const isAnalytics = section.group === 'analytics'
   const openState = isOpen !== undefined ? isOpen : localOpen
   const examples = examplesForVertical(section, vertical)
 
@@ -136,9 +138,20 @@ export function GuideSectionCard({
   return (
     <Card
       className={cn(
-        'overflow-hidden rounded-xl border border-border/80 bg-card transition-all duration-200',
-        isRead && 'border-emerald-500/30 bg-emerald-50/5 dark:bg-emerald-950/5',
-        openState ? 'shadow-md ring-1 ring-primary/20' : 'hover:border-border hover:shadow-xs',
+        'overflow-hidden rounded-xl border transition-all duration-200',
+        isRead
+          ? 'border-emerald-500/40 bg-emerald-50/5 dark:bg-emerald-950/10'
+          : openState
+            ? isOperation
+              ? 'border-blue-300 border-l-4 border-l-blue-600 bg-card shadow-md dark:border-blue-900 dark:border-l-blue-500'
+              : isAnalytics
+                ? 'border-emerald-300 border-l-4 border-l-emerald-600 bg-card shadow-md dark:border-emerald-900 dark:border-l-emerald-500'
+                : 'border-purple-300 border-l-4 border-l-purple-600 bg-card shadow-md dark:border-purple-900 dark:border-l-purple-500'
+            : isOperation
+              ? 'border-border/80 border-l-4 border-l-blue-500/60 bg-card hover:border-border hover:border-l-blue-600 hover:shadow-xs'
+              : isAnalytics
+                ? 'border-border/80 border-l-4 border-l-emerald-500/60 bg-card hover:border-border hover:border-l-emerald-600 hover:shadow-xs'
+                : 'border-border/80 border-l-4 border-l-purple-500/60 bg-card hover:border-border hover:border-l-purple-600 hover:shadow-xs',
       )}
       id={`guia-${section.id}`}
     >
@@ -149,12 +162,17 @@ export function GuideSectionCard({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/30 sm:p-5">
           <div className="flex min-w-0 items-start gap-3.5">
+            {/* Ícono coloreado según ámbito */}
             <span
               className={cn(
-                'mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors',
+                'mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border transition-colors shadow-2xs',
                 isRead
-                  ? 'bg-emerald-600/10 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-primary/10 text-primary',
+                  ? 'border-emerald-300 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                  : isOperation
+                    ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800/60 dark:bg-blue-950/60 dark:text-blue-400'
+                    : isAnalytics
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-800/60 dark:bg-emerald-950/60 dark:text-emerald-400'
+                      : 'border-purple-200 bg-purple-50 text-purple-600 dark:border-purple-800/60 dark:bg-purple-950/60 dark:text-purple-400',
               )}
             >
               <Icon className="h-5 w-5" aria-hidden />
@@ -165,11 +183,27 @@ export function GuideSectionCard({
                 <h3 className="text-base font-semibold tracking-tight text-foreground">
                   <HighlightedText text={section.title} query={searchQuery} />
                 </h3>
+
+                {/* Badge de ámbito (Operaciones vs Administración) */}
+                <span
+                  className={cn(
+                    'rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                    isOperation
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                      : isAnalytics
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
+                  )}
+                >
+                  {isOperation ? 'Dashboard' : isAnalytics ? 'Análisis' : 'Admin'}
+                </span>
+
                 {section.module && (
-                  <Badge variant="outline" className="border-border/80 bg-muted/30 text-[10px] uppercase tracking-wide">
+                  <Badge variant="outline" className="border-border/80 bg-muted/40 text-[10px] uppercase tracking-wide">
                     Según el plan
                   </Badge>
                 )}
+
                 {isRead && (
                   <Badge variant="secondary" className="border-transparent bg-emerald-100 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                     <Check className="mr-1 h-3 w-3" />
@@ -243,7 +277,14 @@ export function GuideSectionCard({
           {/* Bloque 1: Paso a Paso */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+              <span
+                className={cn(
+                  'flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold',
+                  isOperation
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                    : 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
+                )}
+              >
                 1
               </span>
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -254,7 +295,12 @@ export function GuideSectionCard({
             <ol className="relative ml-2.5 space-y-4 border-l border-border/80 pl-4 sm:ml-3 sm:pl-5">
               {section.steps.map((step, index) => (
                 <li key={step.title} className="relative">
-                  <span className="absolute -left-[21px] top-1.5 flex h-2.5 w-2.5 rounded-full border-2 border-background bg-primary ring-2 ring-primary/20 sm:-left-[25px]" />
+                  <span
+                    className={cn(
+                      'absolute -left-[21px] top-1.5 flex h-2.5 w-2.5 rounded-full border-2 border-background ring-2 sm:-left-[25px]',
+                      isOperation ? 'bg-blue-600 ring-blue-200 dark:ring-blue-900' : 'bg-purple-600 ring-purple-200 dark:ring-purple-900',
+                    )}
+                  />
                   <p className="text-sm font-semibold text-foreground">
                     <HighlightedText text={step.title} query={searchQuery} />
                   </p>
@@ -264,6 +310,13 @@ export function GuideSectionCard({
                 </li>
               ))}
             </ol>
+
+            {/* Visual preview o imagen a nivel sección */}
+            {(section.uiPreview || section.image) && (
+              <div className="pt-2">
+                <GuideVisualPreview preview={section.uiPreview} image={section.image} title={section.title} vertical={vertical} />
+              </div>
+            )}
           </div>
 
           {/* Bloque 2: Caso Práctico Real */}
@@ -286,7 +339,14 @@ export function GuideSectionCard({
                   <ol className="mt-3 space-y-2 pl-2">
                     {example.setup.map((item, index) => (
                       <li key={item} className="flex items-start gap-2.5 text-xs text-muted-foreground sm:text-sm">
-                        <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-bold text-foreground">
+                        <span
+                          className={cn(
+                            'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-[11px] font-bold',
+                            isOperation
+                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                              : 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
+                          )}
+                        >
                           {index + 1}
                         </span>
                         <span className="pt-0.5 leading-relaxed">
@@ -295,6 +355,11 @@ export function GuideSectionCard({
                       </li>
                     ))}
                   </ol>
+
+                  {/* Visual preview o imagen del ejemplo */}
+                  {(example.uiPreview || example.image) && (
+                    <GuideVisualPreview preview={example.uiPreview} image={example.image} title={example.goal} vertical={vertical} />
+                  )}
 
                   <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-50/50 p-2.5 text-xs text-emerald-900 sm:text-sm dark:bg-emerald-950/30 dark:text-emerald-200">
                     <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
@@ -312,7 +377,7 @@ export function GuideSectionCard({
           {section.faq && section.faq.length > 0 && (
             <div className="space-y-3 pt-1">
               <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <HelpCircle className="h-4 w-4 text-primary" aria-hidden />
+                <HelpCircle className="h-4 w-4 text-sky-600 dark:text-sky-400" aria-hidden />
                 <span>Preguntas Frecuentes</span>
               </div>
 
@@ -344,17 +409,22 @@ export function GuideSectionCard({
             </div>
           ))}
 
-          {/* Bloque 5: Botón de Acción Directa a la Pantalla */}
+          {/* Bloque 5: Botón de Acción Directa coloreado según ámbito */}
           {section.href && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-3">
               <Link
                 href={section.href}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs transition-all hover:bg-primary/90 sm:text-sm',
+                  'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:shadow active:scale-95 transition-all sm:text-sm',
+                  isOperation
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : isAnalytics
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-purple-600 hover:bg-purple-700',
                 )}
               >
                 <span>Ir a {section.title}</span>
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                <ExternalLink className="h-4 w-4" aria-hidden />
               </Link>
 
               {onToggleRead && !isRead && (
@@ -363,7 +433,7 @@ export function GuideSectionCard({
                   variant="outline"
                   size="sm"
                   onClick={handleReadClick}
-                  className="h-8 gap-1.5 text-xs"
+                  className="h-9 gap-1.5 rounded-xl border-2 border-emerald-300 font-bold text-xs shadow-2xs hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition-all dark:border-emerald-800 dark:hover:bg-emerald-950/50"
                 >
                   <Check className="h-3.5 w-3.5 text-emerald-600" />
                   Marcar como leída

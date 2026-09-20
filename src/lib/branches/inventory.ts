@@ -170,7 +170,10 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
     }
 
     if (branchScoped) {
-      const effectiveStock = hasVariants && variantStock !== null ? variantStock : 0
+      const fallbackStock = product.stock_quantity !== null && product.stock_quantity !== undefined && Number(product.stock_quantity) > 0
+        ? Number(product.stock_quantity)
+        : 0
+      const effectiveStock = hasVariants && variantStock !== null ? variantStock : fallbackStock
       return {
         ...product,
         stock_quantity: effectiveStock,

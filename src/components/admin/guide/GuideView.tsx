@@ -9,6 +9,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  ChevronRight,
   ChevronsDown,
   ChevronsUp,
   Clock,
@@ -79,6 +80,46 @@ const VERTICAL_OPTIONS: { id: BusinessVertical; label: string; icon: string }[] 
   { id: 'general', label: 'Comercio General', icon: '🏪' },
 ]
 
+const GROUP_HEADER_THEMES: Record<
+  string,
+  {
+    badge: string
+    badgeClass: string
+    icon: LucideIcon
+    titleClass: string
+    borderClass: string
+  }
+> = {
+  operations: {
+    badge: 'DASHBOARD • OPERACIONES',
+    badgeClass: 'border-blue-200 bg-blue-100/90 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300',
+    icon: LayoutDashboard,
+    titleClass: 'text-blue-950 dark:text-blue-200',
+    borderClass: 'border-l-4 border-l-blue-600 pl-3',
+  },
+  administration: {
+    badge: 'ADMIN • GESTIÓN',
+    badgeClass: 'border-purple-200 bg-purple-100/90 text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300',
+    icon: ShieldCheck,
+    titleClass: 'text-purple-950 dark:text-purple-200',
+    borderClass: 'border-l-4 border-l-purple-600 pl-3',
+  },
+  analytics: {
+    badge: 'MÉTRICAS Y FINANZAS',
+    badgeClass: 'border-emerald-200 bg-emerald-100/90 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+    icon: CreditCard,
+    titleClass: 'text-emerald-950 dark:text-emerald-200',
+    borderClass: 'border-l-4 border-l-emerald-600 pl-3',
+  },
+  sistema: {
+    badge: 'CONCEPTOS DEL SISTEMA',
+    badgeClass: 'border-indigo-200 bg-indigo-100/90 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
+    icon: BookOpen,
+    titleClass: 'text-indigo-950 dark:text-indigo-200',
+    borderClass: 'border-l-4 border-l-indigo-600 pl-3',
+  },
+}
+
 const QUICK_SEARCH_CHIPS = ['caja', 'stock', 'roles', 'transferencia', 'publicar tienda', 'reportes']
 
 const DASHBOARD_SECTION_IDS = [
@@ -103,11 +144,11 @@ function iconFor(section: GuideSection): LucideIcon {
   return CONCEPT_ICONS[section.id] ?? Sparkles
 }
 
-export type MainGuideTab = 'all' | 'dashboard' | 'admin' | 'rubro' | 'first-steps' | 'faq'
+export type MainGuideTab = 'summary' | 'all' | 'dashboard' | 'admin' | 'rubro' | 'first-steps' | 'faq'
 
 export function GuideView() {
   const [query, setQuery] = useState('')
-  const [activeTab, setActiveTab] = useState<MainGuideTab>('all')
+  const [activeTab, setActiveTab] = useState<MainGuideTab>('summary')
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
   const [readSections, setReadSections] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -348,123 +389,138 @@ export function GuideView() {
 
           {!searching && (
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="text-[11px] font-medium text-muted-foreground/80">Sugerencias:</span>
+              <span className="text-[11px] font-bold text-muted-foreground">Sugerencias rápidas:</span>
               {QUICK_SEARCH_CHIPS.map((tag) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => setQuery(tag)}
-                  className="rounded-md border border-border/60 bg-muted/20 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-2 border-border/80 bg-background px-2.5 py-1 text-xs font-bold text-foreground shadow-2xs transition-all hover:border-primary/60 hover:bg-primary/5 hover:text-primary hover:shadow-xs active:scale-95"
                 >
-                  {tag}
+                  <span>{tag}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* ── Barra de Navegación Segmentada y Limpia ── */}
-        <div className="rounded-xl border border-border/70 bg-muted/30 p-1">
-          <nav aria-label="Temas de la guía" className="grid grid-cols-2 gap-1 sm:flex sm:flex-wrap sm:items-center">
-            {/* 1. Dashboard / Operaciones */}
+        {/* ── Barra de Navegación Segmentada y Colorida ── */}
+        <div className="rounded-2xl border-2 border-border/80 bg-muted/40 p-1.5 shadow-xs">
+          <nav aria-label="Temas de la guía" className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
+            {/* 0. Resumen General (Limpio e intuitivo) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('summary')}
+              className={cn(
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
+                activeTab === 'summary'
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm border-2 border-slate-900 dark:border-slate-100 ring-2 ring-slate-400/20'
+                  : 'border-2 border-border/80 bg-background text-foreground/80 hover:bg-muted hover:border-border hover:text-foreground hover:shadow-xs',
+              )}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              <span>Resumen</span>
+            </button>
+
+            {/* 1. Dashboard / Operaciones (Azul) */}
             <button
               type="button"
               onClick={() => setActiveTab('dashboard')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
                 activeTab === 'dashboard'
-                  ? 'bg-card text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-blue-600 text-white shadow-sm border-2 border-blue-600 ring-2 ring-blue-400/30'
+                  : 'border-2 border-blue-200/80 bg-blue-50/60 text-blue-900 hover:border-blue-400 hover:bg-blue-100/70 hover:shadow-xs dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-900/50',
               )}
             >
-              <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
+              <LayoutDashboard className={cn('h-3.5 w-3.5', activeTab === 'dashboard' ? 'text-white' : 'text-blue-600 dark:text-blue-400')} />
               <span>Dashboard / Operaciones</span>
-              <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
+              <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-extrabold', activeTab === 'dashboard' ? 'bg-blue-700 text-white' : 'bg-blue-200/90 text-blue-950 dark:bg-blue-900 dark:text-blue-200')}>
                 {dashboardCount}
               </span>
             </button>
 
-            {/* 2. Admin / Gestión */}
+            {/* 2. Admin / Gestión (Violeta) */}
             <button
               type="button"
               onClick={() => setActiveTab('admin')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
                 activeTab === 'admin'
-                  ? 'bg-card text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-purple-600 text-white shadow-sm border-2 border-purple-600 ring-2 ring-purple-400/30'
+                  : 'border-2 border-purple-200/80 bg-purple-50/60 text-purple-900 hover:border-purple-400 hover:bg-purple-100/70 hover:shadow-xs dark:border-purple-900/60 dark:bg-purple-950/40 dark:text-purple-200 dark:hover:bg-purple-900/50',
               )}
             >
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <ShieldCheck className={cn('h-3.5 w-3.5', activeTab === 'admin' ? 'text-white' : 'text-purple-600 dark:text-purple-400')} />
               <span>Admin / Gestión</span>
-              <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
+              <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-extrabold', activeTab === 'admin' ? 'bg-purple-700 text-white' : 'bg-purple-200/90 text-purple-950 dark:bg-purple-900 dark:text-purple-200')}>
                 {adminCount}
               </span>
             </button>
 
-            {/* 3. Inicio por Rubro */}
+            {/* 3. Inicio por Rubro (Ámbar) */}
             <button
               type="button"
               onClick={() => setActiveTab('rubro')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
                 activeTab === 'rubro'
-                  ? 'bg-card text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-amber-500 text-white shadow-sm border-2 border-amber-500 ring-2 ring-amber-400/30'
+                  : 'border-2 border-amber-200/80 bg-amber-50/60 text-amber-900 hover:border-amber-400 hover:bg-amber-100/70 hover:shadow-xs dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/50',
               )}
             >
-              <Store className="h-3.5 w-3.5 text-amber-500" />
+              <Store className={cn('h-3.5 w-3.5', activeTab === 'rubro' ? 'text-white' : 'text-amber-600 dark:text-amber-400')} />
               <span>Inicio por Rubro</span>
-              <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-extrabold', activeTab === 'rubro' ? 'bg-amber-600 text-white' : 'bg-amber-200/90 text-amber-950 dark:bg-amber-900 dark:text-amber-200')}>
                 Guía
               </span>
             </button>
 
-            {/* 4. Primeros pasos */}
+            {/* 4. Primeros pasos (Esmeralda) */}
             <button
               type="button"
               onClick={() => setActiveTab('first-steps')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
                 activeTab === 'first-steps'
-                  ? 'bg-card text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-emerald-600 text-white shadow-sm border-2 border-emerald-600 ring-2 ring-emerald-400/30'
+                  : 'border-2 border-emerald-200/80 bg-emerald-50/60 text-emerald-900 hover:border-emerald-400 hover:bg-emerald-100/70 hover:shadow-xs dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-900/50',
               )}
             >
               <span>🚀 Primeros pasos</span>
             </button>
 
-            {/* 5. Todos */}
+            {/* 5. Todos (Neutro) */}
             <button
               type="button"
               onClick={() => setActiveTab('all')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
                 activeTab === 'all'
-                  ? 'bg-card text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-slate-800 text-white shadow-sm border-2 border-slate-800 ring-2 ring-slate-400/30'
+                  : 'border-2 border-border/80 bg-background text-foreground hover:border-border hover:bg-muted hover:shadow-xs',
               )}
             >
               <span>Todos</span>
-              <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
+              <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-extrabold', activeTab === 'all' ? 'bg-slate-900 text-white' : 'bg-muted text-foreground')}>
                 {available.length}
               </span>
             </button>
 
-            {/* 6. Preguntas Frecuentes */}
+            {/* 6. Preguntas Frecuentes (Cian/Sky) */}
             {faqCount > 0 && (
               <button
                 type="button"
                 onClick={() => setActiveTab('faq')}
                 className={cn(
-                  'flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:justify-start',
+                  'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
                   activeTab === 'faq'
-                    ? 'bg-card text-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'bg-sky-600 text-white shadow-sm border-2 border-sky-600 ring-2 ring-sky-400/30'
+                    : 'border-2 border-sky-200/80 bg-sky-50/60 text-sky-900 hover:border-sky-400 hover:bg-sky-100/70 hover:shadow-xs dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200 dark:hover:bg-sky-900/50',
                 )}
               >
                 <span>Preguntas Frecuentes</span>
-                <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground">
+                <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-extrabold', activeTab === 'faq' ? 'bg-sky-700 text-white' : 'bg-sky-200/90 text-sky-950 dark:bg-sky-900 dark:text-sky-200')}>
                   {faqCount}
                 </span>
               </button>
@@ -488,7 +544,7 @@ export function GuideView() {
             )}
           </div>
 
-          {activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && (
+          {(searching || (activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && activeTab !== 'summary')) && (
             <div className="flex items-center gap-1">
               <Button
                 type="button"
@@ -518,9 +574,16 @@ export function GuideView() {
       {/* ── SECCIÓN 1: DASHBOARD / OPERACIONES ── */}
       {activeTab === 'dashboard' && !searching && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="rounded-xl border border-blue-200/80 border-l-4 border-l-blue-600 bg-blue-50/70 p-4 shadow-xs dark:border-blue-900/60 dark:bg-blue-950/25">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-100/90 px-2 py-0.5 text-[11px] font-bold text-blue-800 dark:border-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                    <LayoutDashboard className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                    DASHBOARD &bull; OPERACIONES
+                  </span>
+                  <span className="text-xs text-blue-700/80 dark:text-blue-300">Mostrador y Salón</span>
+                </div>
                 <h2 className="text-sm font-bold text-foreground sm:text-base">
                   Operaciones Diarias (Mostrador y Salón)
                 </h2>
@@ -531,20 +594,20 @@ export function GuideView() {
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href="/dashboard/pos"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 active:scale-95 transition-all"
                 >
                   <span>Punto de Venta POS</span>
                   <ArrowRight className="h-3 w-3" />
                 </Link>
                 <Link
                   href="/dashboard/pos/caja"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-blue-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-blue-400 hover:bg-blue-100/60 active:scale-95 transition-all dark:border-blue-800/80 dark:hover:bg-blue-950/50"
                 >
                   <span>Cajas del Día</span>
                 </Link>
                 <Link
                   href="/dashboard/products"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-blue-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-blue-400 hover:bg-blue-100/60 active:scale-95 transition-all dark:border-blue-800/80 dark:hover:bg-blue-950/50"
                 >
                   <span>Catálogo</span>
                 </Link>
@@ -557,9 +620,16 @@ export function GuideView() {
       {/* ── SECCIÓN 2: ADMIN / GESTIÓN ── */}
       {activeTab === 'admin' && !searching && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="rounded-xl border border-purple-200/80 border-l-4 border-l-purple-600 bg-purple-50/70 p-4 shadow-xs dark:border-purple-900/60 dark:bg-purple-950/25">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-100/90 px-2 py-0.5 text-[11px] font-bold text-purple-800 dark:border-purple-800 dark:bg-purple-900/60 dark:text-purple-200">
+                    <ShieldCheck className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                    ADMIN &bull; GESTIÓN
+                  </span>
+                  <span className="text-xs text-purple-700/80 dark:text-purple-300">Dueño y Administración</span>
+                </div>
                 <h2 className="text-sm font-bold text-foreground sm:text-base">
                   Panel de Administración y Control
                 </h2>
@@ -570,19 +640,20 @@ export function GuideView() {
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href="/admin/users"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-purple-700 active:scale-95 transition-all"
                 >
                   <span>Equipo</span>
+                  <ArrowRight className="h-3 w-3" />
                 </Link>
                 <Link
                   href="/admin/finances"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-purple-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-purple-400 hover:bg-purple-100/60 active:scale-95 transition-all dark:border-purple-800/80 dark:hover:bg-purple-950/50"
                 >
                   <span>Finanzas</span>
                 </Link>
                 <Link
                   href="/admin/website"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-purple-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-purple-400 hover:bg-purple-100/60 active:scale-95 transition-all dark:border-purple-800/80 dark:hover:bg-purple-950/50"
                 >
                   <span>Tienda Web</span>
                 </Link>
@@ -596,11 +667,11 @@ export function GuideView() {
       {activeTab === 'rubro' && !searching ? (
         <div className="space-y-6">
           {/* Tarjeta de encabezado del rubro */}
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 shadow-xs">
+          <div className="rounded-xl border border-amber-200/80 border-l-4 border-l-amber-500 bg-amber-50/50 p-5 shadow-xs dark:border-amber-900/50 dark:bg-amber-950/20">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-primary text-primary-foreground">{verticalRec.badge}</Badge>
+                  <Badge className="bg-amber-500 text-white hover:bg-amber-600">{verticalRec.badge}</Badge>
                   <span className="text-xs text-muted-foreground">• Rubro seleccionado</span>
                 </div>
                 <h2 className="text-lg font-bold text-foreground sm:text-xl">{verticalRec.title}</h2>
@@ -765,7 +836,9 @@ export function GuideView() {
       ) : null}
 
       {/* ── Primeros Pasos ── */}
-      {(activeTab === 'all' || activeTab === 'first-steps') && !searching && <FirstStepsPanel />}
+      {(activeTab === 'all' || activeTab === 'first-steps' || activeTab === 'summary') && !searching && (
+        <FirstStepsPanel vertical={selectedVertical} />
+      )}
 
       {/* ── Estado de búsqueda ── */}
       {searching && (
@@ -816,44 +889,386 @@ export function GuideView() {
             )}
           </div>
         </section>
+      ) : activeTab === 'summary' && !searching ? (
+        /* ── VISTA RESUMEN DEL SISTEMA (INTUITIVA Y LIMPIA) ── */
+        <section className="space-y-6">
+          {/* Encabezado descriptivo del Resumen */}
+          <div className="flex flex-col gap-1 rounded-xl border border-border/70 bg-card p-4 sm:p-5 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <LayoutDashboard className="h-3.5 w-3.5" />
+              </span>
+              <h2 className="text-base font-bold text-foreground sm:text-lg">
+                Resumen Operativo y Estructura del Sistema
+              </h2>
+            </div>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              Tu plataforma está organizada en dos grandes mundos diseñados para roles distintos:{' '}
+              <strong className="text-blue-600 dark:text-blue-400">Operaciones Diarias</strong> (caja y mostrador) y{' '}
+              <strong className="text-purple-600 dark:text-purple-400">Panel de Administración</strong> (gestión del negocio).
+            </p>
+          </div>
+
+          {/* Grid de los 2 Pilares Principales */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* TARJETA 1: DASHBOARD / OPERACIONES */}
+            <div className="flex flex-col justify-between rounded-2xl border border-blue-200/90 border-l-4 border-l-blue-600 bg-gradient-to-b from-blue-50/60 via-card to-card p-5 sm:p-6 shadow-xs dark:border-blue-900/60 dark:from-blue-950/25">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100/90 px-2.5 py-0.5 text-[11px] font-bold text-blue-800 dark:border-blue-800 dark:bg-blue-900/70 dark:text-blue-200">
+                    <LayoutDashboard className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    OPERACIONES • MOSTRADOR Y SALÓN
+                  </span>
+                  <Badge variant="secondary" className="border-blue-200 bg-blue-100/60 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200 text-xs font-semibold">
+                    {dashboardCount} {dashboardCount === 1 ? 'módulo' : 'módulos'}
+                  </Badge>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-foreground sm:text-lg">
+                    Operaciones Diarias de tu Negocio
+                  </h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                    Para cajeros, vendedores, personal de salón y técnicos. Todo lo necesario para vender en el día a día sin demoras:
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                      <span>Cobros rápidos en el POS con lector de código de barras o búsqueda.</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                      <span>Apertura, arqueos ciegos y cierre diario de caja.</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                      <span>Control de stock en tiempo real y alertas de productos bajos.</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                      <span>Fichas de clientes, historial de compras y cuentas corrientes.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Módulos de Operaciones disponibles */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Módulos activos en tu cuenta:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {dashboardSections.map((s) => {
+                      const Icon = iconFor(s)
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('dashboard')
+                            setExpandedMap({ [s.id]: true })
+                          }}
+                          className="group inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-blue-200/90 bg-card px-3 py-2 text-xs font-bold text-foreground shadow-2xs transition-all hover:-translate-y-0.5 hover:border-blue-500 hover:bg-blue-50/80 hover:shadow-xs active:translate-y-0 active:scale-95 dark:border-blue-800/80 dark:hover:border-blue-400 dark:hover:bg-blue-950/50"
+                        >
+                          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
+                            <Icon className="h-3.5 w-3.5" />
+                          </span>
+                          <span>{s.title}</span>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-blue-100 pt-4 dark:border-blue-900/60">
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab('dashboard')}
+                  className="h-9 gap-2 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white shadow-sm hover:bg-blue-700 hover:shadow active:scale-95 transition-all"
+                >
+                  <span>Ver Guía de Operaciones</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+                <Link
+                  href="/dashboard/pos"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border-2 border-blue-300 bg-white px-3.5 text-xs font-bold text-blue-800 shadow-2xs transition-all hover:border-blue-500 hover:bg-blue-50 active:scale-95 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200 dark:hover:bg-blue-900/50"
+                >
+                  <span>Ir al Punto de Venta (POS)</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* TARJETA 2: ADMIN / GESTIÓN */}
+            <div className="flex flex-col justify-between rounded-2xl border border-purple-200/90 border-l-4 border-l-purple-600 bg-gradient-to-b from-purple-50/60 via-card to-card p-5 sm:p-6 shadow-xs dark:border-purple-900/60 dark:from-purple-950/25">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-100/90 px-2.5 py-0.5 text-[11px] font-bold text-purple-800 dark:border-purple-800 dark:bg-purple-900/70 dark:text-purple-200">
+                    <ShieldCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                    ADMINISTRACIÓN • GESTIÓN Y CONTROL
+                  </span>
+                  <Badge variant="secondary" className="border-purple-200 bg-purple-100/60 text-purple-900 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200 text-xs font-semibold">
+                    {adminCount} {adminCount === 1 ? 'módulo' : 'módulos'}
+                  </Badge>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-foreground sm:text-lg">
+                    Panel de Control y Administración
+                  </h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                    Para dueños, socios, administradores y contadores. Configuración estratégica, seguridad y rentabilidad del negocio:
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
+                      <span>Invitación de equipo y permisos seguros por rol (vendedor, técnico, admin).</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
+                      <span>Gestión de sucursales, depósitos e impresoras fiscales.</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
+                      <span>Control de finanzas, egresos, rentabilidad y auditoría.</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
+                      <span>Publicación de catálogo en la tienda online y Marketplace.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Módulos de Administración disponibles */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Módulos activos en tu cuenta:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {adminSections.map((s) => {
+                      const Icon = iconFor(s)
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('admin')
+                            setExpandedMap({ [s.id]: true })
+                          }}
+                          className="group inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-purple-200/90 bg-card px-3 py-2 text-xs font-bold text-foreground shadow-2xs transition-all hover:-translate-y-0.5 hover:border-purple-500 hover:bg-purple-50/80 hover:shadow-xs active:translate-y-0 active:scale-95 dark:border-purple-800/80 dark:hover:border-purple-400 dark:hover:bg-purple-950/50"
+                        >
+                          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300">
+                            <Icon className="h-3.5 w-3.5" />
+                          </span>
+                          <span>{s.title}</span>
+                          <ChevronRight className="h-3 w-3 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-purple-600" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-purple-100 pt-4 dark:border-purple-900/60">
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab('admin')}
+                  className="h-9 gap-2 rounded-xl bg-purple-600 px-4 text-xs font-bold text-white shadow-sm hover:bg-purple-700 hover:shadow active:scale-95 transition-all"
+                >
+                  <span>Ver Guía de Administración</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+                <Link
+                  href="/admin/users"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border-2 border-purple-300 bg-white px-3.5 text-xs font-bold text-purple-800 shadow-2xs transition-all hover:border-purple-500 hover:bg-purple-50 active:scale-95 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-200 dark:hover:bg-purple-900/50"
+                >
+                  <span>Ir a Equipo y Usuarios</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Fila Inferior: Estrategia por Rubro + Dudas Frecuentes */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* Tarjeta Rubro */}
+            <div className="flex flex-col justify-between rounded-2xl border border-amber-200/90 border-l-4 border-l-amber-500 bg-gradient-to-b from-amber-50/50 via-card to-card p-5 shadow-xs dark:border-amber-900/50 dark:from-amber-950/20">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-100/90 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-900/70 dark:text-amber-200">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    RECOMENDACIONES POR RUBRO
+                  </span>
+                  <Badge className="bg-amber-500 text-white hover:bg-amber-600 text-[10px]">
+                    {verticalRec.badge}
+                  </Badge>
+                </div>
+
+                <div>
+                  <h4 className="text-base font-bold text-foreground sm:text-lg">
+                    Plan Recomendado para {verticalRec.title}
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm line-clamp-2">
+                    {verticalRec.description}
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  {verticalRec.startingSteps.slice(0, 2).map((step) => (
+                    <div key={step.step} className="flex items-center gap-2.5 text-xs text-foreground">
+                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-900 dark:bg-amber-950 dark:text-amber-300 text-[10px]">
+                        {step.step}
+                      </span>
+                      <span className="truncate font-medium">{step.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5 border-t border-amber-100 pt-3 dark:border-amber-900/60">
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab('rubro')}
+                  className="h-9 gap-2 rounded-xl border-2 border-amber-400/90 bg-amber-100 px-4 text-xs font-bold text-amber-950 shadow-2xs hover:border-amber-500 hover:bg-amber-200/80 active:scale-95 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200 transition-all"
+                >
+                  <span>Ver Estrategia Completa de tu Rubro</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Tarjeta Preguntas Frecuentes */}
+            <div className="flex flex-col justify-between rounded-2xl border border-sky-200/90 border-l-4 border-l-sky-500 bg-gradient-to-b from-sky-50/50 via-card to-card p-5 shadow-xs dark:border-sky-900/50 dark:from-sky-950/20">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-100/90 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 dark:border-sky-800 dark:bg-sky-900/70 dark:text-sky-200">
+                    <HelpCircle className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                    DUDAS MÁS HABITUALES
+                  </span>
+                  <Badge variant="secondary" className="border-sky-200 bg-sky-100/60 text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200 text-xs font-semibold">
+                    {faqCount} dudas resueltas
+                  </Badge>
+                </div>
+
+                <div>
+                  <h4 className="text-base font-bold text-foreground sm:text-lg">
+                    Respuestas Rápidas para Empezar
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                    Soluciones inmediatas a las dudas frecuentes de configuración y uso:
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  {allFaqs.slice(0, 3).map((f, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('faq')
+                        setQuery(f.question)
+                      }}
+                      className="group flex cursor-pointer w-full items-center justify-between gap-2 rounded-xl border-2 border-sky-200/80 bg-white p-2.5 text-xs font-semibold text-foreground shadow-2xs transition-all hover:border-sky-400 hover:bg-sky-50/80 active:scale-[0.99] dark:border-sky-900/80 dark:bg-card dark:hover:bg-sky-950/50"
+                    >
+                      <span className="line-clamp-1 text-left">{f.question}</span>
+                      <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-sky-600 transition-transform group-hover:translate-x-0.5 dark:text-sky-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5 border-t border-sky-100 pt-3 dark:border-sky-900/60">
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab('faq')}
+                  className="h-9 gap-2 rounded-xl border-2 border-sky-400/90 bg-sky-100 px-4 text-xs font-bold text-sky-950 shadow-2xs hover:border-sky-500 hover:bg-sky-200/80 active:scale-95 dark:border-sky-700 dark:bg-sky-950/60 dark:text-sky-200 transition-all"
+                >
+                  <span>Ver Todas las Preguntas ({faqCount})</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Banner inferior para explorar manual exhaustivo */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border-2 border-border/80 bg-muted/30 p-4 shadow-xs">
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-foreground sm:text-sm">
+                  ¿Querés leer el manual completo módulo por módulo?
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Explorá todas las secciones con sus pasos detallados, ejemplos reales y buenas prácticas.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className="h-9 gap-2 rounded-xl border-2 border-border/90 bg-background px-4 text-xs font-bold text-foreground shadow-xs hover:border-primary hover:bg-accent active:scale-95 transition-all self-start sm:self-auto"
+            >
+              <span>Explorar Guía Completa ({available.length})</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </section>
       ) : activeTab !== 'rubro' ? (
         /* ── Lista de Secciones ── */
-        groups.map((group) => (
-          <section key={group.id} id={`guia-grupo-${group.id}`} className="space-y-3 scroll-mt-20">
-            <div className="border-b border-border/60 pb-2">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold tracking-tight text-foreground sm:text-lg">{group.label}</h2>
-                <Badge variant="secondary" className="text-xs">
-                  {group.sections.length} {group.sections.length === 1 ? 'sección' : 'secciones'}
-                </Badge>
+        groups.map((group) => {
+          const theme = GROUP_HEADER_THEMES[group.id]
+          const HeaderIcon = theme?.icon
+
+          return (
+            <section key={group.id} id={`guia-grupo-${group.id}`} className="space-y-3 scroll-mt-20">
+              <div className={cn('border-b border-border/60 pb-2.5 pt-1', theme?.borderClass)}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {HeaderIcon && <HeaderIcon className="h-4 w-4 text-muted-foreground" aria-hidden />}
+                    <h2 className={cn('text-base font-bold tracking-tight text-foreground sm:text-lg', theme?.titleClass)}>
+                      {group.label}
+                    </h2>
+                    {theme && (
+                      <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-wide', theme.badgeClass)}>
+                        {theme.badge}
+                      </span>
+                    )}
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {group.sections.length} {group.sections.length === 1 ? 'sección' : 'secciones'}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{group.description}</p>
               </div>
-              <p className="text-xs text-muted-foreground sm:text-sm">{group.description}</p>
-            </div>
 
-            <div className="space-y-3">
-              {group.sections.map((section) => {
-                const isControlledOpen = expandedMap[section.id]
-                const isOpen = isControlledOpen !== undefined ? isControlledOpen : searching
-                const isRead = readSections.includes(section.id)
+              <div className="space-y-3">
+                {group.sections.map((section) => {
+                  const isControlledOpen = expandedMap[section.id]
+                  const isOpen = isControlledOpen !== undefined ? isControlledOpen : searching
+                  const isRead = readSections.includes(section.id)
 
-                return (
-                  <GuideSectionCard
-                    key={section.id}
-                    section={section}
-                    icon={iconFor(section)}
-                    vertical={selectedVertical}
-                    defaultOpen={searching}
-                    isOpen={isOpen}
-                    onToggle={() => handleToggleSection(section.id)}
-                    searchQuery={searching ? query : undefined}
-                    isRead={isRead}
-                    onToggleRead={toggleReadSection}
-                  />
-                )
-              })}
-            </div>
-          </section>
-        ))
+                  return (
+                    <GuideSectionCard
+                      key={section.id}
+                      section={section}
+                      icon={iconFor(section)}
+                      vertical={selectedVertical}
+                      defaultOpen={searching}
+                      isOpen={isOpen}
+                      onToggle={() => handleToggleSection(section.id)}
+                      searchQuery={searching ? query : undefined}
+                      isRead={isRead}
+                      onToggleRead={toggleReadSection}
+                    />
+                  )
+                })}
+              </div>
+            </section>
+          )
+        })
       ) : null}
     </div>
   )

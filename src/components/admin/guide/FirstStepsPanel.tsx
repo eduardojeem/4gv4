@@ -7,7 +7,10 @@ import {
   ArrowRight,
   CheckCircle2,
   Circle,
+  Eye,
+  EyeOff,
   Filter,
+  ImageIcon,
   PartyPopper,
   RefreshCw,
   Rocket,
@@ -20,8 +23,20 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
-import { assessFirstSteps, filterFirstSteps, summarizeFirstSteps, type FirstStepsInput } from '@/lib/guide/first-steps'
+import { assessFirstSteps, filterFirstSteps, summarizeFirstSteps, type FirstStepsInput, type FirstStepKey } from '@/lib/guide/first-steps'
+import type { BusinessVertical } from '@/lib/organization/business-profile'
+import type { GuideUIPreviewType } from '@/lib/guide/types'
+import { GuideVisualPreview } from './GuideVisualPreview'
 import { cn } from '@/lib/utils'
+
+const STEP_PREVIEWS: Record<FirstStepKey, GuideUIPreviewType> = {
+  negocio: 'business',
+  productos: 'inventory',
+  caja: 'caja',
+  venta: 'sale',
+  tienda: 'website',
+  equipo: 'users',
+}
 
 type LoadResult =
   | { kind: 'ready'; input: FirstStepsInput }
@@ -42,14 +57,20 @@ async function loadFirstSteps(): Promise<LoadResult> {
 
 export type StepFilter = 'all' | 'pending' | 'completed'
 
-export function FirstStepsPanel() {
+export function FirstStepsPanel({ vertical }: { vertical?: BusinessVertical }) {
   const [input, setInput] = useState<FirstStepsInput | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'empty'>('loading')
   const [reloads, setReloads] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [stepFilter, setStepFilter] = useState<StepFilter>('all')
+  const [expandedPreviews, setExpandedPreviews] = useState<Record<string, boolean>>({})
   const { hasPermission, isAdmin } = useAuth()
-  const { effectiveModules } = useSubscriptionStatus()
+  const { effectiveModules, businessVertical } = useSubscriptionStatus()
+  const currentVertical = vertical || (businessVertical as BusinessVertical) || 'electronics'
+
+  const togglePreview = useCallback((key: string) => {
+    setExpandedPreviews((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
 
   useEffect(() => {
     let vigente = true
@@ -171,48 +192,73 @@ export function FirstStepsPanel() {
               </div>
             )}
 
-            {/* Filtros de pasos */}
+            {/* Filtros de pasos y toggle de ejemplos */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Filter className="h-3.5 w-3.5" />
                 <span>Mostrar:</span>
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setStepFilter('all')}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
+                      stepFilter === 'all'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    Todos ({assessment.total})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStepFilter('pending')}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
+                      stepFilter === 'pending'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    Pendientes ({pendingCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStepFilter('completed')}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
+                      stepFilter === 'completed'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    Listos ({assessment.done})
+                  </button>
+                </div>
+
+                <div className="hidden h-4 w-px bg-border/60 sm:block" />
+
                 <button
                   type="button"
-                  onClick={() => setStepFilter('all')}
-                  className={cn(
-                    'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
-                    stepFilter === 'all'
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
+                  onClick={() => {
+                    const allOpen = visibleSteps.every((s) => expandedPreviews[s.key])
+                    const next: Record<string, boolean> = {}
+                    visibleSteps.forEach((s) => {
+                      next[s.key] = !allOpen
+                    })
+                    setExpandedPreviews(next)
+                  }}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-muted/50 transition-all shadow-2xs"
+                  title="Abrir o cerrar todos los ejemplos visuales"
                 >
-                  Todos ({assessment.total})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStepFilter('pending')}
-                  className={cn(
-                    'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
-                    stepFilter === 'pending'
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                >
-                  Pendientes ({pendingCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStepFilter('completed')}
-                  className={cn(
-                    'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
-                    stepFilter === 'completed'
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                >
-                  Listos ({assessment.done})
+                  <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                  <span>
+                    {visibleSteps.length > 0 && visibleSteps.every((s) => expandedPreviews[s.key])
+                      ? 'Ocultar ejemplos'
+                      : 'Ver ejemplos visuales'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -262,16 +308,45 @@ export function FirstStepsPanel() {
                           </div>
                           <p className="mt-0.5 text-sm text-muted-foreground">{step.detail}</p>
                           {!step.done && (
-                            <>
-                              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.why}</p>
+                            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.why}</p>
+                          )}
+                          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                            {!step.done && (
                               <Link
                                 href={step.action.href}
-                                className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 hover:underline"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 hover:underline"
                               >
                                 {step.action.label}
                                 <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                               </Link>
-                            </>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => togglePreview(step.key)}
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:border-primary/60 hover:text-foreground hover:bg-muted/60 transition-all shadow-2xs"
+                            >
+                              {expandedPreviews[step.key] ? (
+                                <>
+                                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span>Ocultar ejemplo</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="h-3.5 w-3.5 text-primary" />
+                                  <span>Ver ejemplo visual</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {expandedPreviews[step.key] && (
+                            <div className="mt-3">
+                              <GuideVisualPreview
+                                preview={STEP_PREVIEWS[step.key]}
+                                title={step.label}
+                                vertical={currentVertical}
+                              />
+                            </div>
                           )}
                         </div>
                       </div>

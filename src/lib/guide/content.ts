@@ -253,6 +253,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'operations',
     href: '/dashboard/pos',
     module: 'pos',
+    uiPreview: 'pos',
     keywords: ['pos', 'punto de venta', 'vender', 'cobrar', 'ticket', 'lector', 'codigo de barras', 'caja rapida'],
     steps: [
       {
@@ -275,6 +276,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     examples: [
       {
         goal: 'Cobrar una venta rápida combinando efectivo y transferencia',
+        uiPreview: 'pos',
         setup: [
           'Escaneás los productos en el POS.',
           'Seleccionás pago mixto: indicás Gs. 50.000 en efectivo y el saldo en transferencia bancaria.',
@@ -300,6 +302,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'operations',
     href: '/dashboard/pos/caja',
     module: 'pos',
+    uiPreview: 'caja',
     keywords: ['caja', 'cajas', 'arqueo', 'cierre', 'apertura', 'fondo fijo', 'turno', 'sobrante', 'faltante', 'caja chica'],
     steps: [
       {
@@ -404,39 +407,59 @@ export const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: 'repairs',
     title: 'Reparaciones y Servicio Técnico',
-    summary: 'Órdenes de servicio técnico con ticket QR, diagnóstico, repuestos utilizados y avisos automáticos.',
+    summary: 'Órdenes de servicio técnico con ticket QR, diagnóstico, repuestos utilizados, control de calidad y entrega con garantía.',
     group: 'operations',
     href: '/dashboard/repairs',
     module: 'repairs',
-    keywords: ['reparaciones', 'servicio tecnico', 'taller', 'orden de trabajo', 'diagnostico', 'repuestos', 'tecnico'],
+    uiPreview: 'repairs',
+    keywords: ['reparaciones', 'servicio tecnico', 'taller', 'orden de trabajo', 'diagnostico', 'repuestos', 'tecnico', 'garantia', 'entrega', 'imei', 'presupuesto'],
     steps: [
       {
-        title: 'Ingreso del equipo',
-        description: 'Se registra marca, modelo, número de serie/IMEI, patrón de desbloqueo, accesorios y falla declarada.',
+        title: '1. Ingreso del equipo y comprobante QR',
+        description: 'Se registra al cliente con su WhatsApp, datos del equipo (marca, modelo, número de serie/IMEI), accesorios recibidos, patrón/clave y fotos del estado físico previo para evitar reclamos.',
       },
       {
-        title: 'Diagnóstico y presupuesto',
-        description: 'El técnico asignado detalla los repuestos a utilizar y el costo de mano de obra para que el cliente lo apruebe.',
+        title: '2. Diagnóstico y presupuesto por WhatsApp',
+        description: 'El técnico asignado inspecciona la falla, añade los repuestos desde el inventario (que quedan reservados) y suma la mano de obra. Con un solo clic envía el presupuesto al cliente para su aprobación.',
       },
       {
-        title: 'Seguimiento y aviso por WhatsApp',
-        description: 'El cliente puede escanear su ticket con código QR para ver el avance, o recibir un mensaje automático cuando esté listo.',
+        title: '3. Reparación en taller y control de calidad',
+        description: 'Tras la aprobación, la orden pasa a «En Reparación», descontando los repuestos del stock de taller. Al concluir el arreglo, se completa el checklist de control de calidad funcional.',
+      },
+      {
+        title: '4. Notificación automática de equipo listo',
+        description: 'Al marcar la orden como «Listo para Entrega», el sistema dispara automáticamente un mensaje por WhatsApp avisándole al cliente que ya puede retirar junto con el monto final.',
+      },
+      {
+        title: '5. Cobro en mostrador y entrega con garantía',
+        description: 'Al retirar, el cajero cobra la orden en el Punto de Venta (efectivo, QR, tarjeta), el cobro impacta en el arqueo de caja diario y se emite el comprobante con la garantía escrita.',
       },
     ],
     examples: [
       {
-        goal: 'Presupuestar una reparación de celular separando repuesto y mano de obra',
+        goal: 'Gestionar una reparación completa: desde que el cliente deja el equipo hasta que se le entrega reparado, cobrado y con garantía',
         setup: [
-          'El técnico abre la orden de trabajo en Reparaciones.',
-          'Agrega el módulo de repuesto desde el inventario y carga el costo de servicio técnico.',
-          'Le envía el presupuesto por WhatsApp con un solo clic al cliente.',
+          'Ingreso: Cargás la orden en Reparaciones con el WhatsApp del cliente, modelo, IMEI y fotos del estado físico; se imprime el ticket de ingreso con código QR.',
+          'Diagnóstico: El técnico examina la falla, selecciona los repuestos desde el catálogo de stock y carga el costo de mano de obra. Envía el presupuesto vía WhatsApp con un clic.',
+          'Aprobación y Taller: El cliente aprueba por WhatsApp. El técnico cambia la orden a «En Reparación» (los repuestos se descuentan del inventario) y realiza el checklist de calidad funcional.',
+          'Aviso de Retiro: Al finalizar, pasa el estado a «Listo para Entrega»; el sistema notifica automáticamente por WhatsApp al cliente que su equipo está terminado.',
+          'Cobro y Entrega: El cliente acude al local, abona con QR en el mostrador y se le entrega su equipo con comprobante de pago y certificado de 90 días de garantía.',
         ],
-        result: 'El cliente aprueba con claridad y el repuesto queda descontado del stock del taller.',
-        vertical: 'electronics',
+        result: 'Trazabilidad total en 5 etapas: el cliente estuvo informado en todo momento sin tener que llamar al local, los repuestos salieron de inventario y el dinero ingresó a la caja del día.',
+      },
+      {
+        goal: 'Recibir un equipo registrando rayones o golpes previos para evitar reclamos estéticos al momento de la entrega',
+        setup: [
+          'En el formulario de ingreso, tomás fotos de la pantalla, esquinas y tapa trasera del equipo.',
+          'Marcás en las observaciones: «Equipo ingresa con golpe previo en esquina inferior derecha y sin bandeja SIM».',
+          'El comprobante impreso con código QR y el ticket digital detallan el estado estético inicial para conformidad del cliente.',
+        ],
+        result: 'Protección total para el taller: se evitan reclamos infundados de clientes por daños estéticos que el equipo ya traía antes de ingresar al servicio técnico.',
       },
     ],
     tips: [
       'Imprimir el ticket con código QR de la orden de reparación genera confianza y evita que los clientes llamen reiteradamente a preguntar el estado.',
+      'Configurá siempre el plazo de garantía de servicio técnico (ej: 60 a 90 días): queda impreso en el ticket de entrega y protege legalmente a tu negocio.',
     ],
   },
   {
@@ -591,6 +614,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     href: '/admin/inventory',
     permissions: ['products.read'],
     module: 'inventory_admin',
+    uiPreview: 'inventory',
     keywords: ['inventario', 'stock', 'producto', 'productos', 'variantes', 'talles', 'colores', 'proveedor', 'movimiento', 'reposicion'],
     steps: [
       {
@@ -682,6 +706,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'administration',
     href: '/admin/users',
     permissions: ['users.read'],
+    uiPreview: 'users',
     keywords: ['usuario', 'usuarios', 'equipo', 'invitar', 'cliente', 'clientes', 'contacto', 'ultimo acceso', 'ultima compra'],
     steps: [
       {
@@ -770,6 +795,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'administration',
     href: '/admin/website',
     permissions: ['settings.read'],
+    uiPreview: 'website',
     keywords: ['tienda', 'sitio web', 'publicar', 'marketplace', 'whatsapp', 'carrito', 'portada', 'logo', 'pagos', 'delivery'],
     steps: [
       {

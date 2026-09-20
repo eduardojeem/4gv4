@@ -9,6 +9,12 @@ import { Product, ProductFilters as BaseProductFilters, ProductAlert, Category, 
 export interface DashboardFilters extends BaseProductFilters {
   quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants' | null
   item_type?: 'all' | 'products' | 'services'
+  /**
+   * El alcance de la pantalla: productos fisicos o servicios. Va aparte de
+   * `quick_filter` porque el tipo tiene que sobrevivir a un filtro de stock:
+   * antes, pedir «bajo stock» volvia a mezclar los servicios en la lista.
+   */
+  catalog_kind?: 'part' | 'service'
 }
 
 // Sort configuration

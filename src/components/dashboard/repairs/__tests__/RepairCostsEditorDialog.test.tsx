@@ -22,7 +22,14 @@ describe('RepairCostsEditorDialog', () => {
     const user = userEvent.setup()
     render(<RepairCostsEditorDialog open repair={repair} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
 
-    expect(screen.getByRole('dialog')).toHaveClass('max-w-[1400px]', 'h-[96dvh]')
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveClass('max-w-[1140px]', 'h-[88dvh]')
+    const expandBtn = screen.getByRole('button', { name: /Agrandar modal/i })
+    await user.click(expandBtn)
+    expect(dialog).toHaveClass('max-w-[1440px]', 'h-[96dvh]')
+    await user.click(screen.getByRole('button', { name: /Reducir tamaño/i }))
+    expect(dialog).toHaveClass('max-w-[1140px]', 'h-[88dvh]')
+
     expect(screen.getByText('Ana · Marca Modelo')).toBeVisible()
     expect(screen.getByText('Paso 1 de 2')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled()

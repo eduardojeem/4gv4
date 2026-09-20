@@ -282,17 +282,17 @@ export function RepairPartsEditor({
         <div className="space-y-3">
           {/* Vista Escritorio: Tabla */}
           <div className="hidden overflow-x-auto rounded-xl border md:block bg-card">
-            <table className="w-full min-w-[850px] text-sm">
-              <thead className="bg-muted/50 text-xs font-semibold uppercase text-muted-foreground">
+            <table className="w-full min-w-[620px] text-xs">
+              <thead className="bg-muted/50 text-[11px] font-semibold uppercase text-muted-foreground">
                 <tr>
-                  <th className="p-2.5 text-left">Concepto</th>
-                  <th className="p-2.5 text-center w-24">Cantidad</th>
-                  {canViewCost && <th className="p-2.5 text-right w-36">Costo interno</th>}
-                  <th className="p-2.5 text-right w-40">Precio al cliente</th>
-                  <th className="p-2.5 text-right w-32">Descuento</th>
-                  <th className="p-2.5 text-center w-16">IVA</th>
-                  <th className="p-2.5 text-right w-32">Subtotal</th>
-                  <th className="p-2.5 w-12">
+                  <th className="p-2 text-left">Concepto</th>
+                  <th className="p-2 text-center w-20">Cantidad</th>
+                  {canViewCost && <th className="p-2 text-right w-28">Costo interno</th>}
+                  <th className="p-2 text-right w-32">Precio al cliente</th>
+                  <th className="p-2 text-right w-24">Descuento</th>
+                  <th className="p-2 text-center w-14">IVA</th>
+                  <th className="p-2 text-right w-28">Subtotal</th>
+                  <th className="p-2 w-10">
                     <span className="sr-only">Acciones</span>
                   </th>
                 </tr>
@@ -303,7 +303,7 @@ export function RepairPartsEditor({
                     key={part.key}
                     className={invalidPartKeys.has(part.key) ? 'bg-destructive/5' : 'hover:bg-muted/20'}
                   >
-                    <td className="p-2.5 font-medium">
+                    <td className="p-2 font-medium">
                       <span className="mb-1 inline-flex rounded-md border bg-muted px-1.5 py-0.5 text-[10px] uppercase font-semibold text-muted-foreground">
                         {part.lineType === 'service'
                           ? 'Servicio'
@@ -331,7 +331,7 @@ export function RepairPartsEditor({
                         </>
                       )}
                     </td>
-                    <td className="p-2.5">
+                    <td className="p-2">
                       <NumericField
                         label={`Cantidad de ${part.name}`}
                         value={part.quantity}
@@ -340,7 +340,7 @@ export function RepairPartsEditor({
                       />
                     </td>
                     {canViewCost && (
-                      <td className="p-2.5 tabular-nums text-right">
+                      <td className="p-2 tabular-nums text-right">
                         {part.productId ? (
                           <div className="font-mono text-slate-700 dark:text-slate-300">
                             {formatCurrency(part.unitCost)}
@@ -356,7 +356,7 @@ export function RepairPartsEditor({
                         )}
                       </td>
                     )}
-                    <td className="p-2.5 text-right">
+                    <td className="p-2 text-right">
                       {part.lineType === 'included_material' ? (
                         <div>
                           <strong className="tabular-nums font-mono text-xs">{formatCurrency(0)}</strong>
@@ -378,7 +378,7 @@ export function RepairPartsEditor({
                         </p>
                       )}
                     </td>
-                    <td className="p-2.5 text-right">
+                    <td className="p-2 text-right">
                       {part.lineType === 'included_material' ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
@@ -391,11 +391,11 @@ export function RepairPartsEditor({
                         />
                       )}
                     </td>
-                    <td className="p-2.5 text-center font-mono">{part.taxRate}%</td>
-                    <td className="p-2.5 text-right font-bold tabular-nums text-sm">
+                    <td className="p-2 text-center font-mono">{part.taxRate}%</td>
+                    <td className="p-2 text-right font-bold tabular-nums text-sm">
                       {formatCurrency(Math.max(0, part.quantity * part.unitPrice - part.discountAmount))}
                     </td>
-                    <td className="p-2.5 text-center">
+                    <td className="p-2 text-center">
                       <Button
                         type="button"
                         variant="ghost"

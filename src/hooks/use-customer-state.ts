@@ -64,6 +64,8 @@ export interface Customer {
   assigned_salesperson: string
   last_purchase_amount: number
   total_spent_this_year: number
+  purchase_spend?: number
+  repair_spend?: number
   /** true cuando los totales ya salen de las operaciones reales y no de las columnas viejas. */
   spend_synced?: boolean
   avatar?: string
@@ -289,6 +291,11 @@ export function useCustomerState() {
 
         // If there are more pages, fetch in parallel in the background
         if (totalPages > 1) {
+          // La primera pantalla no debe competir con cientos de requests y
+          // renders. Dejamos respirar al navegador antes de hidratar el resto
+          // del padrón; la lista inicial ya está disponible para trabajar.
+          await new Promise<void>((resolve) => setTimeout(resolve, 800))
+          if (!isMounted) return
           const remainingPages = Array.from({ length: totalPages - 1 }, (_, index) => index + 2)
           const remainingBatches = await Promise.allSettled(
             remainingPages.map(async (page) => {

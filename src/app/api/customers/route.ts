@@ -3,10 +3,13 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { loadCustomerSpend } from '@/lib/customers/customer-spend-server'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
 import {
   buildCustomerIdentity,
+  buildCustomerIdentityForUpdate,
   normalizeCustomerStatus,
   normalizeCustomerType,
   statusForDatabase,
@@ -183,35 +186,110 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const customerType = searchParams.get('customer_type')
     const segment = searchParams.get('segment')
     const city = searchParams.get('city')
+    const salesperson = searchParams.get('assigned_salesperson')
+    const minCreditScore = Number(searchParams.get('credit_score_min') || 0)
+    const maxCreditScore = Number(searchParams.get('credit_score_max') || 10)
+    const minLoyaltyPoints = Number(searchParams.get('loyalty_points_min') || 0)
+    const minCreditLimit = Number(searchParams.get('has_credit_limit') || 0)
+    const hasDebt = searchParams.get('has_debt') === 'true'
+    const tags = searchParams.getAll('tag').filter(Boolean)
+    const registeredFrom = searchParams.get('registered_from')
+    const registeredTo = searchParams.get('registered_to')
+    const minPurchases = Number(searchParams.get('purchases_min') || 0)
+    const minSpent = Number(searchParams.get('spent_min') || 0)
+    const minLifetime = Number(searchParams.get('lifetime_value_min') || 0)
+    const maxLifetime = Number(searchParams.get('lifetime_value_max') || Number.MAX_SAFE_INTEGER)
+    const sort = searchParams.get('sort') || 'created_at'
+    const ascending = searchParams.get('order') === 'asc'
+    const sortColumns: Record<string, string> = {
+      created_at: 'created_at', name: 'name', email: 'email', phone: 'phone',
+      status: 'status', last_activity: 'updated_at',
+    }
+    if (!sortColumns[sort] && sort !== 'lifetime_value' && sort !== 'total_purchases') {
+      return NextResponse.json({ success: false, error: 'Orden de clientes inválido.' }, { status: 400 })
+    }
     const from = (page - 1) * limit
     const to = from + limit - 1
     const supabase = await createClient()
 
-    let query = supabase
-      .from('customers')
-      .select('*', { count: 'exact' })
-      .eq('organization_id', organization.id)
+    const buildQuery = () => {
+      let query = supabase.from('customers').select('*', { count: 'exact' }).eq('organization_id', organization.id)
 
-    if (idParam) query = query.eq('id', idParam)
+      if (idParam) query = query.eq('id', idParam)
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
+      if (search) query = query.or(`name.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,company.ilike.%${search}%,company_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
+
+      if (status && status !== 'all') query = query.eq('status', statusForDatabase(status))
+      if (customerType && customerType !== 'all') query = query.eq('customer_type', customerType)
+      if (segment && segment !== 'all') query = query.eq('segment', segment)
+      if (city && city !== 'all') query = query.ilike('city', sanitizeSearchTerm(city) || city)
+      if (salesperson && salesperson !== 'all') query = query.ilike('assigned_salesperson', sanitizeSearchTerm(salesperson) || salesperson)
+      if (Number.isFinite(minCreditScore) && minCreditScore > 0) query = query.gte('credit_score', minCreditScore)
+      if (Number.isFinite(maxCreditScore) && maxCreditScore < 10) query = query.lte('credit_score', maxCreditScore)
+      if (Number.isFinite(minLoyaltyPoints) && minLoyaltyPoints > 0) query = query.gte('loyalty_points', minLoyaltyPoints)
+      if (Number.isFinite(minCreditLimit) && minCreditLimit > 0) query = query.gt('credit_limit', 0)
+      if (hasDebt) query = query.or('pending_amount.gt.0,current_balance.gt.0')
+      if (tags.length > 0) query = query.overlaps('tags', tags)
+      if (registeredFrom) query = query.gte('created_at', registeredFrom)
+      if (registeredTo) query = query.lte('created_at', registeredTo)
+      return query.order(sortColumns[sort] || 'created_at', { ascending }).order('id', { ascending })
     }
 
-    if (status && status !== 'all') query = query.eq('status', statusForDatabase(status))
-    if (customerType && customerType !== 'all') query = query.eq('customer_type', customerType)
-    if (segment && segment !== 'all') query = query.eq('segment', segment)
-    if (city && city !== 'all') query = query.eq('city', city)
+    const spendSort = sort === 'lifetime_value' || sort === 'total_purchases'
+    const needsSpendFilter = minPurchases > 0 || minSpent > 0 || minLifetime > 0 || maxLifetime < Number.MAX_SAFE_INTEGER
+    let data: Record<string, unknown>[] = []
+    let count = 0
+    if (needsSpendFilter || spendSort) {
+      const admin = createAdminSupabase()
+      let matched = 0
+      const sortable: Array<{ row: Record<string, unknown>; value: number }> = []
+      for (let offset = 0; ; offset += 200) {
+        const result = await buildQuery().range(offset, offset + 199)
+        if (result.error) throw result.error
+        const candidates = result.data ?? []
+        if (candidates.length === 0) break
+        const spend = await loadCustomerSpend(admin, organization.id, candidates.map((row) => row.id))
+        for (const row of candidates) {
+          const metrics = spend[row.id]
+          const purchases = metrics?.purchaseCount ?? 0
+          const total = metrics?.total ?? 0
+          if (purchases >= minPurchases && total >= Math.max(minSpent, minLifetime) && total <= maxLifetime) {
+            if (spendSort) sortable.push({ row, value: sort === 'total_purchases' ? purchases : total })
+            else if (matched >= from && matched <= to) data.push(row)
+            matched += 1
+          }
+        }
+        if (candidates.length < 200) break
+      }
+      count = matched
+      if (spendSort) {
+        sortable.sort((left, right) => (left.value - right.value) * (ascending ? 1 : -1)
+          || String(left.row.id).localeCompare(String(right.row.id)))
+        data = sortable.slice(from, to + 1).map((item) => item.row)
+      }
+    } else {
+      const result = await buildQuery().range(from, to)
+      if (result.error) throw result.error
+      data = result.data ?? []
+      count = result.count ?? 0
+    }
 
-    const { data, error, count } = await query
-      .range(from, to)
-      .order('created_at', { ascending: false })
 
-    if (error) throw error
+    let summary: { total: number; active: number } | undefined
+    if (!idParam && searchParams.get('summary') !== '0') {
+      const [totalResult, activeResult] = await Promise.all([
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id),
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', ['activo', 'active']),
+      ])
+      if (totalResult.error) throw totalResult.error
+      if (activeResult.error) throw activeResult.error
+      summary = { total: totalResult.count ?? 0, active: activeResult.count ?? 0 }
+    }
 
     return NextResponse.json({
       success: true,
       data: (data ?? []).map(normalizeCustomerResponse),
+      summary,
       pagination: {
         page,
         limit,
@@ -308,7 +386,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
 
     const normalizedUpdates = {
       ...updates,
-      ...buildCustomerIdentity({ ...current, ...updates }),
+      ...buildCustomerIdentityForUpdate(current, updates),
       ...(updates.customer_type !== undefined
         ? { customer_type: normalizeCustomerType(updates.customer_type) }
         : {}),

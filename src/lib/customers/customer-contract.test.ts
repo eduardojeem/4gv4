@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCustomerIdentity,
+  buildCustomerIdentityForUpdate,
   classificationForFormType,
   normalizeCustomerStatus,
   statusForDatabase,
@@ -55,6 +56,31 @@ describe('customer contract', () => {
       company: 'JP SA',
       company_name: 'JP SA',
     })
+  })
+
+  it('replaces stale split names when only the full name changes', () => {
+    expect(buildCustomerIdentityForUpdate(
+      { name: 'Ana Gómez', first_name: 'Ana', last_name: 'Gómez' },
+      { name: 'Lucía Pérez' }
+    )).toMatchObject({ name: 'Lucía Pérez', first_name: 'Lucía', last_name: 'Pérez' })
+  })
+
+  it('updates either company alias without restoring the previous value', () => {
+    expect(buildCustomerIdentityForUpdate(
+      { name: 'Ana Gómez', company: 'Anterior SA', company_name: 'Anterior SA' },
+      { company: 'Nueva SA' }
+    )).toMatchObject({ company: 'Nueva SA', company_name: 'Nueva SA' })
+    expect(buildCustomerIdentityForUpdate(
+      { name: 'Ana Gómez', company: 'Anterior SA', company_name: 'Anterior SA' },
+      { company_name: null }
+    )).toMatchObject({ company: null, company_name: null })
+  })
+
+  it('retains the surname when only the first name changes', () => {
+    expect(buildCustomerIdentityForUpdate(
+      { name: 'Ana Gómez', first_name: 'Ana', last_name: 'Gómez' },
+      { first_name: 'Lucía' }
+    )).toMatchObject({ name: 'Lucía Gómez', first_name: 'Lucía', last_name: 'Gómez' })
   })
 
   it.each([

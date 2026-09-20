@@ -35,4 +35,25 @@ describe('POST /api/repairs/:id/costs/final-correction', () => {
     expect(body).toMatchObject({ code: 'REPAIR_FINAL_PRICE_BELOW_PAID', overpaymentAmount: 50_000 })
     expect(fetchRepair).not.toHaveBeenCalled()
   })
+
+  it('accepts 0 as newFinalTotal for free/warranty corrections', async () => {
+    const { POST } = await import('./route')
+    const response = await POST({
+      json: async () => ({
+        newFinalTotal: 0,
+        reason: 'Garantia de reparacion sin costo',
+        idempotencyKey: 'final-fix-zero-123',
+      }),
+    } as never, { params: Promise.resolve({ id: 'repair-1' }) })
+    expect(response.status).toBe(200)
+    expect(rpc).toHaveBeenCalledWith('correct_delivered_repair_final_price', {
+      p_repair_id: 'repair-1',
+      p_organization_id: 'org-1',
+      p_branch_id: 'branch-1',
+      p_actor_id: 'user-1',
+      p_new_final_total: 0,
+      p_reason: 'Garantia de reparacion sin costo',
+      p_idempotency_key: 'final-fix-zero-123',
+    })
+  })
 })

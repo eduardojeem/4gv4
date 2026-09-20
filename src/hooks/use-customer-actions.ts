@@ -14,6 +14,7 @@ import { logger } from "@/lib/logging"
 
 interface UseCustomerActionsProps {
   setState: Dispatch<SetStateAction<CustomerState>>
+  onRefresh?: () => Promise<Customer[] | undefined>
 }
 
 async function readApiResponse(response: Response) {
@@ -58,7 +59,7 @@ function toCustomerPayload(customerData: Partial<Customer>) {
 }
 
 export function useCustomerActions(props?: UseCustomerActionsProps) {
-  const { setState } = props || {}
+  const { setState, onRefresh } = props || {}
 
   const updateFilters = useCallback((newFilters: Partial<CustomerFilters>) => {
     if (setState) {
@@ -95,6 +96,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   }, [setState])
 
   const refreshCustomers = useCallback(async (): Promise<Customer[] | undefined> => {
+    if (onRefresh) return onRefresh()
     try {
       // La API topea el limite en 200 por pagina: pedir 1000 devolvia solo los
       // primeros 200 y, como el filtrado es en memoria, el resto de los
@@ -177,7 +179,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.error(appError.message)
       throw appError
     }
-  }, [setState])
+  }, [setState, onRefresh])
 
   const createCustomer = useCallback(async (customerData: Partial<Customer>) => {
     try {
@@ -197,6 +199,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       }
 
       toast.success("Cliente creado exitosamente")
+      if (onRefresh) void onRefresh()
       return { success: true, customer }
     } catch (error: any) {
       const appError = error instanceof AppError ? error : new AppError(
@@ -209,7 +212,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.error(appError.message)
       return { success: false, error: appError }
     }
-  }, [setState])
+  }, [setState, onRefresh])
 
   const updateCustomer = useCallback(async (id: string, customerData: Partial<Customer>) => {
     try {
@@ -333,18 +336,14 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     customerIds: string[],
     updates: Partial<Customer>
   ) => {
-    const MAX_BULK_UPDATE = 50
     try {
-      if (customerIds.length > MAX_BULK_UPDATE) {
-        toast.error(`No se pueden actualizar mas de ${MAX_BULK_UPDATE} clientes a la vez`)
-        return { success: false, error: `Limite de ${MAX_BULK_UPDATE} registros excedido` }
+      for (let index = 0; index < customerIds.length; index += 10) {
+        await Promise.all(customerIds.slice(index, index + 10).map(async (id) => readApiResponse(await fetch('/api/customers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...toCustomerPayload(updates), id }),
+        }))))
       }
-
-      await Promise.all(customerIds.map(async (id) => readApiResponse(await fetch('/api/customers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...toCustomerPayload(updates), id }),
-      }))))
 
       await refreshCustomers()
       toast.success(`${customerIds.length} cliente(s) actualizado(s)`)
@@ -356,17 +355,13 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   }, [refreshCustomers])
 
   const bulkDelete = useCallback(async (customerIds: string[]) => {
-    const MAX_BULK_DELETE = 50
     try {
-      if (customerIds.length > MAX_BULK_DELETE) {
-        toast.error(`No se pueden eliminar mas de ${MAX_BULK_DELETE} clientes a la vez`)
-        return { success: false, error: `Limite de ${MAX_BULK_DELETE} registros excedido` }
+      let deleted = 0
+      for (let index = 0; index < customerIds.length; index += 50) {
+        const ids = customerIds.slice(index, index + 50)
+        const result = await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(ids.join(','))}`, { method: 'DELETE' }))
+        deleted += Number(result.deleted ?? 0)
       }
-
-      // El servidor devuelve cuantos borro realmente: un id de otra
-      // organizacion se filtra y no debe contarse como eliminado.
-      const result = await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(customerIds.join(','))}`, { method: 'DELETE' }))
-      const deleted = Number(result.deleted ?? customerIds.length)
       await refreshCustomers()
       toast.success(`${deleted} cliente(s) eliminado(s)`)
       return { success: true, deleted }

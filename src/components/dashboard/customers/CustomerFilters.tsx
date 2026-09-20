@@ -12,10 +12,10 @@ import { Slider } from '@/components/ui/slider'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { 
-  Filter, X, Calendar as CalendarIcon, 
+  Filter, X, Calendar as CalendarIcon,
   ChevronDown, Star, MapPin,
   Users, TrendingUp, Zap, Settings2,
-  Grid, List, Check, Sparkles, Building,
+  Check, Sparkles, Building,
   Plus, Minus, UserCheck, CreditCard, DollarSign
 } from 'lucide-react'
 import { ImprovedSearchBar } from './ImprovedSearchBar'
@@ -40,6 +40,8 @@ interface CustomerFiltersProps {
   onRefresh?: () => Promise<void> | void
   compact?: boolean
   onCustomerSelect?: (customer: Customer) => void
+  totalCount?: number
+  loadAllCustomersForExport?: () => Promise<Customer[]>
 }
 
 export function CustomerFilters({
@@ -51,9 +53,11 @@ export function CustomerFilters({
   onAddCustomer,
   onRefresh,
   compact,
-  onCustomerSelect
+  onCustomerSelect,
+  totalCount,
+  loadAllCustomersForExport,
 }: CustomerFiltersProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [searchValue, setSearchValue] = useState(filters.search)
   const [showDataDialog, setShowDataDialog] = useState(false)
   const [dataDialogTab, setDataDialogTab] = useState<'export' | 'import'>('export')
@@ -77,53 +81,16 @@ export function CustomerFilters({
     onFiltersChange({ search: value })
   }, [onFiltersChange])
 
-  const handleFilterChange = useCallback((key: keyof CustomerFiltersType, value: any) => {
+  const handleFilterChange = useCallback((key: keyof CustomerFiltersType, value: CustomerFiltersType[keyof CustomerFiltersType]) => {
     onFiltersChange({ [key]: value })
   }, [onFiltersChange])
-
-  // Dynamic unique cities extracted from actual customer records
-  const dynamicCities = useMemo(() => {
-    const citySet = new Set<string>()
-    customers.forEach(c => {
-      if (c.city && c.city.trim() !== "" && c.city.toLowerCase() !== "all") {
-        citySet.add(c.city.trim())
-      }
-    })
-    return Array.from(citySet).sort((a, b) => a.localeCompare(b, 'es'))
-  }, [customers])
-
-  // Dynamic unique salespersons extracted from actual customer records
-  const dynamicSalespersons = useMemo(() => {
-    const spSet = new Set<string>()
-    customers.forEach(c => {
-      if (c.assigned_salesperson && c.assigned_salesperson.trim() !== "" && c.assigned_salesperson.toLowerCase() !== "sin asignar") {
-        spSet.add(c.assigned_salesperson.trim())
-      }
-    })
-    return Array.from(spSet).sort((a, b) => a.localeCompare(b, 'es'))
-  }, [customers])
-
-  // Metrics for quick filter counter badges
-  const filterCounts = useMemo(() => {
-    return {
-      withDebt: customers.filter(c => (c.pending_amount || 0) > 0 || (c.current_balance || 0) > 0).length,
-      hasCredit: customers.filter(c => (c.credit_limit || 0) > 0).length,
-      vip: customers.filter(c => c.customer_type === 'premium' || c.segment === 'vip').length,
-      wholesale: customers.filter(c => c.customer_type === 'wholesale' || c.customer_type === 'empresa').length,
-      active: customers.filter(c => c.status === 'active').length,
-      highValue: customers.filter(c => (c.lifetime_value || 0) >= 1000000).length,
-      newCustomers: customers.filter(c => c.segment === 'new').length,
-      frequent: customers.filter(c => (c.total_purchases || 0) >= 3).length,
-    }
-  }, [customers])
 
   // Quick smart filter definitions with active detection and toggle
   const quickFilters = [
     {
       id: "with_debt",
-      label: "Con Deuda",
+      label: "Saldo registrado",
       icon: DollarSign,
-      count: filterCounts.withDebt,
       isActive: Boolean(filters.has_debt),
       action: () => {
         handleFilterChange("has_debt", !filters.has_debt)
@@ -133,7 +100,6 @@ export function CustomerFilters({
       id: "has_credit",
       label: "Línea de Crédito",
       icon: CreditCard,
-      count: filterCounts.hasCredit,
       isActive: Boolean(filters.has_credit_limit),
       action: () => {
         handleFilterChange("has_credit_limit", !filters.has_credit_limit)
@@ -143,7 +109,6 @@ export function CustomerFilters({
       id: "vip",
       label: "VIP / Premium",
       icon: Star,
-      count: filterCounts.vip,
       isActive: filters.customer_type === "premium" || filters.segment === "vip",
       action: () => {
         if (filters.customer_type === "premium") {
@@ -157,7 +122,6 @@ export function CustomerFilters({
       id: "wholesale",
       label: "Empresas / Mayoristas",
       icon: Building,
-      count: filterCounts.wholesale,
       isActive: filters.customer_type === "empresa" || filters.customer_type === "wholesale",
       action: () => {
         if (filters.customer_type === "empresa" || filters.customer_type === "wholesale") {
@@ -171,7 +135,6 @@ export function CustomerFilters({
       id: "active",
       label: "Activos",
       icon: UserCheck,
-      count: filterCounts.active,
       isActive: filters.status === "active",
       action: () => {
         handleFilterChange("status", filters.status === "active" ? "all" : "active")
@@ -181,7 +144,6 @@ export function CustomerFilters({
       id: "high_value",
       label: "Alto Valor",
       icon: TrendingUp,
-      count: filterCounts.highValue,
       isActive: filters.spent_min >= 1000000,
       action: () => {
         handleFilterChange("spent_min", filters.spent_min >= 1000000 ? 0 : 1000000)
@@ -191,7 +153,6 @@ export function CustomerFilters({
       id: "frequent",
       label: "Frecuentes (3+)",
       icon: Users,
-      count: filterCounts.frequent,
       isActive: filters.purchases_min >= 3,
       action: () => {
         handleFilterChange("purchases_min", filters.purchases_min >= 3 ? 0 : 3)
@@ -201,7 +162,6 @@ export function CustomerFilters({
       id: "new",
       label: "Nuevos",
       icon: Zap,
-      count: filterCounts.newCustomers,
       isActive: filters.segment === "new",
       action: () => {
         handleFilterChange("segment", filters.segment === "new" ? "all" : "new")
@@ -248,6 +208,12 @@ export function CustomerFilters({
     if (filters.loyalty_points_min > 0) count++
     return count
   }, [filters])
+
+  const activeMoreFiltersCount = activeAdvancedCount
+    + Number(filters.status !== 'all')
+    + Number(filters.customer_type !== 'all')
+    + Number(filters.segment !== 'all')
+    + Number(filters.city !== 'all')
 
   const activeFiltersCount = useMemo(() => {
     let count = 0
@@ -376,7 +342,7 @@ export function CustomerFilters({
     if (filters.has_debt) {
       chips.push({
         id: "has_debt",
-        label: "Con Deuda Pendiente",
+        label: "Con saldo registrado",
         onRemove: () => handleFilterChange("has_debt", false)
       })
     }
@@ -401,127 +367,57 @@ export function CustomerFilters({
   return (
     <>
     <Card className="border border-slate-200/80 dark:border-white/10 shadow-sm bg-white dark:bg-[#0d1117] rounded-2xl overflow-hidden transition-all">
-      {/* ─── Header: Título, Modos de Vista y Toggle Avanzado ─── */}
-      <CardHeader className={compact ? "p-3.5 pb-2" : "p-5 pb-3"}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm shadow-blue-500/20">
-              <Filter className="h-4.5 w-4.5" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                Filtros Inteligentes
-              </span>
-              {activeFiltersCount > 0 && (
-                <Badge className="bg-blue-600 hover:bg-blue-600 text-white border-0 text-xs px-2 py-0.5 font-bold shadow-xs">
-                  {activeFiltersCount} activo{activeFiltersCount !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </div>
+      <CardHeader className={cn('px-4 pb-2 pt-4 sm:px-5', compact && 'pt-3')}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white sm:text-base">
+            <Filter className="h-4 w-4 shrink-0 text-blue-600" />
+            <span>Filtros Inteligentes</span>
+            {activeFiltersCount > 0 && <Badge variant="secondary" className="text-xs">{activeFiltersCount}</Badge>}
           </CardTitle>
-
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 rounded-xl p-1 border border-slate-200/60 dark:border-white/5">
-              <Button
-                variant={viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => onViewModeChange("table")}
-                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === "table" 
-                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white" 
-                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-transparent"
-                }`}
-                aria-label="Vista de tabla"
-              >
-                <List className="h-3.5 w-3.5 mr-1" />
-                <span className="hidden sm:inline">Tabla</span>
-              </Button>
-              <Button
-                variant={viewMode === "grid" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => onViewModeChange("grid")}
-                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === "grid" 
-                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white" 
-                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-transparent"
-                }`}
-                aria-label="Vista de cuadrícula"
-              >
-                <Grid className="h-3.5 w-3.5 mr-1" />
-                <span className="hidden sm:inline">Tarjetas</span>
-              </Button>
-              <Button
-                variant={viewMode === "timeline" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => onViewModeChange("timeline")}
-                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === "timeline" 
-                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white" 
-                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-transparent"
-                }`}
-                aria-label="Vista de línea de tiempo"
-              >
-                <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-                <span className="hidden sm:inline">Timeline</span>
-              </Button>
-            </div>
-
-            {/* Toggle Avanzado */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className={cn(
-                "h-8 gap-1.5 rounded-xl border font-medium text-xs transition-all",
-                showAdvanced || activeAdvancedCount > 0
-                  ? "border-blue-300 bg-blue-50/70 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/15 dark:text-blue-300 font-semibold"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
-              )}
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              <span>Avanzado</span>
-              {activeAdvancedCount > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
-                  {activeAdvancedCount}
-                </span>
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showAdvanced ? 'rotate-180' : ''}`} />
-            </Button>
-            
-            {/* Limpiar Filtros */}
-            {activeFiltersCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="h-8 gap-1 rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 text-xs font-semibold transition-all"
-                title="Restablecer todos los filtros"
-              >
-                <X className="h-3.5 w-3.5" />
-                <span>Limpiar</span>
-              </Button>
-            )}
-          </div>
+          <ImprovedActionButtons
+            onAddCustomer={onAddCustomer}
+            onExport={() => { setDataDialogTab('export'); setShowDataDialog(true) }}
+            onImport={() => { setDataDialogTab('import'); setShowDataDialog(true) }}
+            onRefresh={() => { if (onRefresh) void Promise.resolve(onRefresh()) }}
+            viewMode={viewMode}
+            onViewModeChange={onViewModeChange}
+            compact
+          />
         </div>
       </CardHeader>
-      
-      <CardContent className={compact ? "p-3.5 pt-0 space-y-4" : "p-5 pt-0 space-y-5"}>
-        {/* ─── 1. Filtros Rápidos (Pills con estado activo y toggle) ─── */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-              Filtros Rápidos
-            </Label>
-            {activeFiltersCount > 0 && (
-              <span className="text-xs text-slate-500">
-                Mostrando clientes coincidentes
-              </span>
-            )}
-          </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+      <CardContent className="space-y-3 px-4 pb-4 pt-0 sm:px-5">
+        {/* La búsqueda es la acción principal. */}
+        <ImprovedSearchBar
+          value={searchValue}
+          onChange={handleSearchChange}
+          onSearch={handleSearchSubmit}
+          customers={customers}
+          isSearching={false}
+          placeholder="Buscar por nombre, CI/RUC, teléfono, email, código o notas..."
+          onQuickFilter={(filter) => {
+            if (filter.includes('customer_type:')) {
+              handleFilterChange('customer_type', filter.split(':')[1])
+            } else if (filter.includes('city:')) {
+              handleFilterChange('city', filter.split(':')[1])
+            } else if (filter.includes('status:')) {
+              handleFilterChange('status', filter.split(':')[1])
+            } else if (filter.includes('purchases>=')) {
+              const value = Number(filter.split('>=')[1])
+              handleFilterChange('purchases_min', isNaN(value) ? 0 : value)
+            } else if (filter.includes('spent>=')) {
+              const value = Number(filter.split('>=')[1])
+              handleFilterChange('spent_min', isNaN(value) ? 0 : value)
+            }
+          }}
+          onCustomerSelect={onCustomerSelect}
+        />
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+            Accesos rápidos
+          </Label>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
             {quickFilters.map((filter) => {
               const Icon = filter.icon
               const active = filter.isActive
@@ -530,24 +426,18 @@ export function CustomerFilters({
                 <button
                   key={filter.id}
                   type="button"
+                  title={filter.id === 'with_debt' ? 'Filtra por el saldo guardado en la ficha; la deuda exacta se consulta en el detalle del cliente.' : undefined}
                   onClick={filter.action}
                   className={cn(
-                    "flex items-center gap-1.5 shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 border",
+                    "flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
                     active
                       ? "bg-slate-900 text-white border-slate-900 shadow-sm dark:bg-white dark:text-slate-900 dark:border-white"
                       : "bg-slate-50 text-slate-700 border-slate-200/80 hover:bg-slate-100 hover:border-slate-300 dark:bg-white/5 dark:text-slate-300 dark:border-white/10 dark:hover:bg-white/10"
                   )}
+                  aria-pressed={active}
                 >
                   <Icon className={cn("h-3.5 w-3.5", active ? "text-white dark:text-slate-900" : "text-slate-500 dark:text-slate-400")} />
                   <span>{filter.label}</span>
-                  <span className={cn(
-                    "ml-1 rounded-full px-1.5 py-0.2 text-[10px] font-bold",
-                    active
-                      ? "bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900"
-                      : "bg-slate-200/80 text-slate-600 dark:bg-white/10 dark:text-slate-400"
-                  )}>
-                    {filter.count}
-                  </span>
                   {active && <Check className="h-3 w-3 ml-0.5 animate-in zoom-in-50 duration-200" />}
                 </button>
               )
@@ -555,38 +445,7 @@ export function CustomerFilters({
           </div>
         </div>
 
-        {/* ─── 2. Búsqueda Inteligente ─── */}
-        <div className="space-y-1.5">
-          <ImprovedSearchBar
-            value={searchValue}
-            onChange={handleSearchChange}
-            onSearch={handleSearchSubmit}
-            customers={customers}
-            isSearching={false}
-            placeholder="Buscar por nombre, CI/RUC, teléfono, email, código o notas..."
-            onQuickFilter={(filter) => {
-              if (filter.includes('customer_type:')) {
-                const type = filter.split(':')[1]
-                handleFilterChange('customer_type', type)
-              } else if (filter.includes('city:')) {
-                const city = filter.split(':')[1]
-                handleFilterChange('city', city)
-              } else if (filter.includes('status:')) {
-                const status = filter.split(':')[1]
-                handleFilterChange('status', status)
-              } else if (filter.includes('purchases>=')) {
-                const v = Number(filter.split('>=')[1])
-                handleFilterChange('purchases_min', isNaN(v) ? 0 : v)
-              } else if (filter.includes('spent>=')) {
-                const v = Number(filter.split('>=')[1])
-                handleFilterChange('spent_min', isNaN(v) ? 0 : v)
-              }
-            }}
-            onCustomerSelect={onCustomerSelect}
-          />
-        </div>
-
-        {/* ─── 2.5 Chips de Filtros Activos Inline ─── */}
+        {/* Los filtros aplicados permanecen visibles aun con los controles cerrados. */}
         <AnimatePresence>
           {activeChips.length > 0 && (
             <motion.div
@@ -615,20 +474,42 @@ export function CustomerFilters({
                   </button>
                 </Badge>
               ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="h-6 px-2 text-[11px] text-slate-500 hover:text-rose-600 font-semibold"
-              >
-                Limpiar todo
-              </Button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ─── 3. Filtros Básicos (Selects con íconos descriptivos) ─── */}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-white/10">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 px-2 text-xs"
+            aria-expanded={showMoreFilters}
+            aria-controls="customer-extra-filters"
+            onClick={() => setShowMoreFilters((open) => !open)}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Más filtros
+            {activeMoreFiltersCount > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{activeMoreFiltersCount}</Badge>}
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showMoreFilters && 'rotate-180')} />
+          </Button>
+          {activeFiltersCount > 0 && (
+            <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-xs text-rose-600">
+              <X className="mr-1 h-3.5 w-3.5" /> Limpiar filtros
+            </Button>
+          )}
+        </div>
+
+        <AnimatePresence>
+          {showMoreFilters && (
+            <motion.div
+              id="customer-extra-filters"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-4 overflow-hidden border-t border-slate-100 pt-3 dark:border-white/10"
+            >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Estado */}
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
@@ -769,49 +650,22 @@ export function CustomerFilters({
               <MapPin className="h-3.5 w-3.5 text-rose-500" />
               Ciudad
             </Label>
-            <Select
-              value={filters.city}
-              onValueChange={(value) => handleFilterChange("city", value)}
-            >
-              <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white dark:border-white/10 dark:bg-white/5 text-xs font-medium">
-                <SelectValue placeholder="Todas las ciudades" />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl border-slate-200 dark:border-white/10 max-h-56">
-                <SelectItem value="all">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                    <span>Todas las ciudades ({customers.length})</span>
-                  </div>
-                </SelectItem>
-                {dynamicCities.map(city => {
-                  const count = customers.filter(c => c.city?.trim() === city).length
-                  return (
-                    <SelectItem key={city} value={city}>
-                      <div className="flex items-center justify-between w-full gap-4">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-3.5 w-3.5 text-rose-500" />
-                          <span>{city}</span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-mono">({count})</span>
-                      </div>
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
+            <Input
+              key={filters.city}
+              defaultValue={filters.city === 'all' ? '' : filters.city}
+              placeholder="Escribí una ciudad y presioná Enter"
+              aria-label="Filtrar por ciudad"
+              className="h-10 rounded-xl"
+              onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }}
+              onBlur={(event) => {
+                const city = event.currentTarget.value.trim() || 'all'
+                if (city !== filters.city) handleFilterChange('city', city)
+              }}
+            />
           </div>
-        </div>
+              </div>
 
-        {/* ─── 4. Filtros Avanzados (Desplegable) ─── */}
-        <AnimatePresence>
-          {showAdvanced && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="space-y-4 pt-3 border-t border-slate-100 dark:border-white/5"
-            >
-              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 dark:border-white/10 md:grid-cols-2 lg:grid-cols-3">
                 {/* Rango de Fechas con Presets */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -897,22 +751,18 @@ export function CustomerFilters({
                     <Users className="h-3.5 w-3.5 text-indigo-500" />
                     Vendedor Asignado
                   </Label>
-                  <Select
-                    value={filters.assigned_salesperson}
-                    onValueChange={(value) => handleFilterChange("assigned_salesperson", value)}
-                  >
-                    <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-slate-50/50 hover:bg-white dark:border-white/10 dark:bg-white/5 text-xs font-medium">
-                      <SelectValue placeholder="Todos los vendedores" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border-slate-200 dark:border-white/10">
-                      <SelectItem value="all">Todos los vendedores</SelectItem>
-                      {dynamicSalespersons.map(sp => (
-                        <SelectItem key={sp} value={sp}>
-                          {sp}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    key={filters.assigned_salesperson}
+                    defaultValue={filters.assigned_salesperson === 'all' ? '' : filters.assigned_salesperson}
+                    placeholder="Nombre del vendedor"
+                    aria-label="Filtrar por vendedor asignado"
+                    className="h-10 rounded-xl"
+                    onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }}
+                    onBlur={(event) => {
+                      const salesperson = event.currentTarget.value.trim() || 'all'
+                      if (salesperson !== filters.assigned_salesperson) handleFilterChange('assigned_salesperson', salesperson)
+                    }}
+                  />
                 </div>
 
                 {/* Puntuación de Crédito (0-10) */}
@@ -929,7 +779,7 @@ export function CustomerFilters({
                   <div className="pt-2 px-1">
                     <Slider
                       value={filters.credit_score_range}
-                      onValueChange={(value) => handleFilterChange("credit_score_range", value)}
+                      onValueChange={(value) => handleFilterChange("credit_score_range", [value[0] ?? 0, value[1] ?? 10] as [number, number])}
                       max={10}
                       min={0}
                       step={0.5}
@@ -1047,42 +897,6 @@ export function CustomerFilters({
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* ─── 5. Footer con Contador y Botones de Acción ─── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/5">
-          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-blue-500" />
-            <span>
-              {activeFiltersCount > 0 ? (
-                <>
-                  <strong className="text-slate-900 dark:text-white font-semibold">{activeFiltersCount}</strong> filtro{activeFiltersCount !== 1 ? 's' : ''} aplicado{activeFiltersCount !== 1 ? 's' : ''}
-                </>
-              ) : (
-                "Mostrando todos los clientes"
-              )}
-            </span>
-          </div>
-          
-          <ImprovedActionButtons
-            onAddCustomer={onAddCustomer}
-            onExport={() => {
-              setDataDialogTab('export')
-              setShowDataDialog(true)
-            }}
-            onImport={() => {
-              setDataDialogTab('import')
-              setShowDataDialog(true)
-            }}
-            onRefresh={() => {
-              if (onRefresh) {
-                void Promise.resolve(onRefresh())
-              }
-            }}
-            viewMode={viewMode}
-            onViewModeChange={onViewModeChange}
-            compact={compact}
-          />
-        </div>
       </CardContent>
     </Card>
 
@@ -1091,6 +905,8 @@ export function CustomerFilters({
       isOpen={showDataDialog}
       onClose={() => setShowDataDialog(false)}
       customers={customers}
+      totalCount={totalCount}
+      loadAllCustomers={loadAllCustomersForExport}
       defaultTab={dataDialogTab}
       onImport={async (file) => {
         try {
@@ -1106,8 +922,8 @@ export function CustomerFilters({
           }
           
           return result
-        } catch (error: any) {
-          const errorMessage = error.message || 'Error inesperado al importar'
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'Error inesperado al importar'
           toast.error(errorMessage)
           return { success: false, error: errorMessage }
         }

@@ -344,12 +344,12 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
   { organization },
   routeContext?: unknown
 ) => {
+  const { params } = routeContext as ProductRouteContext
+  const { id } = await params
   try {
-    const { params } = routeContext as ProductRouteContext
-    const { id } = await params
-    const supabase = await createClient()
+    const adminSupabase = createAdminSupabase()
 
-    const { data: existing, error: existingError } = await supabase
+    const { data: existing, error: existingError } = await adminSupabase
       .from('products')
       .select('id,name,sku')
       .eq('id', id)
@@ -368,15 +368,55 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       )
     }
 
-    const { error } = await supabase
+    // Verificar si el producto tiene historial de transacciones (ventas, pedidos, repuestos de taller)
+    const [
+      { count: salesCount },
+      { count: ordersCount },
+      { count: repairPartsCount },
+      { count: repairCostsCount },
+    ] = await Promise.all([
+      adminSupabase.from('sale_items').select('id', { count: 'exact', head: true }).eq('product_id', id),
+      adminSupabase.from('order_items').select('id', { count: 'exact', head: true }).eq('product_id', id),
+      adminSupabase.from('repair_parts').select('id', { count: 'exact', head: true }).eq('product_id', id),
+      adminSupabase.from('repair_item_costs').select('id', { count: 'exact', head: true }).eq('product_id', id),
+    ])
+
+    const hasTransactions =
+      (salesCount ?? 0) > 0 ||
+      (ordersCount ?? 0) > 0 ||
+      (repairPartsCount ?? 0) > 0 ||
+      (repairCostsCount ?? 0) > 0
+
+    if (hasTransactions) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `"${existing.name}" no se puede eliminar porque tiene ventas o reparaciones asociadas. Podés desactivarlo para que no aparezca en ventas ni catálogo.`,
+          code: 'PRODUCT_HAS_TRANSACTIONS',
+        },
+        { status: 409 }
+      )
+    }
+
+    // Limpiar tablas auxiliares dependientes sin historial transaccional
+    await Promise.allSettled([
+      adminSupabase.from('cart_items').delete().eq('product_id', id),
+      adminSupabase.from('branch_variant_inventory').delete().eq('product_id', id),
+      adminSupabase.from('branch_inventory').delete().eq('product_id', id),
+      adminSupabase.from('variant_inventory_movements').delete().eq('product_id', id),
+      adminSupabase.from('product_movements').delete().eq('product_id', id),
+      adminSupabase.from('product_variants').delete().eq('product_id', id),
+    ])
+
+    const { error: deleteError } = await adminSupabase
       .from('products')
       .delete()
       .eq('id', id)
       .eq('organization_id', organization.id)
 
-    if (error) {
-      logger.error('Failed to delete product by id', { productId: id, error: error.message })
-      throw error
+    if (deleteError) {
+      logger.error('Failed to delete product by id', { productId: id, error: deleteError.message, code: deleteError.code })
+      throw deleteError
     }
 
     return NextResponse.json({
@@ -386,11 +426,26 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
         deleted_product: existing,
       },
     })
-  } catch (error) {
-    logger.error('Product delete by id API error', { error })
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string; details?: string }
+    logger.error('Product delete by id API error', { productId: id, error: err?.message || error })
+
+    const isFkConstraint =
+      err?.code === '23503' ||
+      (typeof err?.message === 'string' && /foreign key|referenc|constraint/i.test(err.message))
+
+    const message = isFkConstraint
+      ? 'No se puede eliminar el producto porque está referenciado en otros registros del sistema (ventas, compras o movimientos). Podés desactivarlo u ocultarlo del catálogo.'
+      : (err?.message || 'Error al eliminar el producto')
+
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
+      {
+        success: false,
+        error: message,
+        code: err?.code || 'DELETE_PRODUCT_FAILED',
+        details: err?.details || err?.message,
+      },
+      { status: isFkConstraint ? 409 : 500 }
     )
   }
 })

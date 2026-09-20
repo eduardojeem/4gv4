@@ -115,6 +115,13 @@ export function usePOSProducts() {
   // Función para actualizar un producto específico en tiempo real
   const updateProductInState = useCallback((updatedProduct: Product) => {
     setProducts(prevProducts => {
+      // Si el producto fue desactivado, se retira del catálogo activo del POS
+      if (updatedProduct.is_active === false) {
+        const newProducts = prevProducts.filter(p => p.id !== updatedProduct.id)
+        setProductsCache(selectedBranchId, newProducts)
+        return newProducts
+      }
+
       const productIndex = prevProducts.findIndex(p => p.id === updatedProduct.id)
       
       if (productIndex >= 0) {
@@ -192,11 +199,10 @@ export function usePOSProducts() {
       const cacheKey = getBranchCacheKey(selectedBranchId)
       if (!productsFetchPromisesByBranch[cacheKey]) {
         productsFetchPromisesByBranch[cacheKey] = (async () => {
-          // NOTE: no filtramos por is_active. is_active controla la visibilidad
-          // en el catálogo PÚBLICO; en el POS (venta interna) se debe poder
-          // vender cualquier producto aunque esté oculto del público.
+          // El POS solo ofrece productos activos; los inactivos están
+          // dados de baja comercialmente y no deben figurar en la caja.
           const loadPage = async (page: number) => {
-            const response = await fetch(`/api/products?page=${page}&per_page=100&strict_branch_stock=true`, {
+            const response = await fetch(`/api/products?page=${page}&per_page=100&strict_branch_stock=true&is_active=true`, {
               headers: branchHeaders(selectedBranchId),
               cache: 'no-store',
             })
@@ -217,10 +223,12 @@ export function usePOSProducts() {
           const firstPage = await loadPage(1)
           let dbProducts = [...firstPage.products]
           const publishProducts = (rows: Array<PosProductRow & { category?: { name?: string } | null }>) => {
-            const mapped = rows.map((product) => mapProductForPOS({
-              ...product,
-              categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
-            } as PosProductRow))
+            const mapped = rows
+              .filter((product) => product.is_active !== false)
+              .map((product) => mapProductForPOS({
+                ...product,
+                categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
+              } as PosProductRow))
             setProducts(mapped)
             setProductsCache(selectedBranchId, mapped)
             return mapped
@@ -266,11 +274,15 @@ export function usePOSProducts() {
 
   // Función para buscar producto por código de barras
   const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
-    return products.find(product => product.barcode === barcode) ?? null
+    return products.find(product => product.barcode === barcode && product.is_active !== false) ?? null
   }, [products])
 
   // Función para agregar producto al carrito
   const addToCart = useCallback((product: UnifiedProduct, quantity: number = 1) => {
+    if (product.is_active === false) {
+      setError('El producto se encuentra inactivo')
+      return false
+    }
     if (quantity <= 0) return false
     if (quantity > (product.stock_quantity || 0)) {
       setError(`Stock insuficiente. Disponible: ${product.stock_quantity || 0}`)
@@ -462,6 +474,8 @@ export function usePOSProducts() {
   // Productos filtrados
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
+      if (product.is_active === false) return false
+
       const matchesSearch = searchTerm === '' || 
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Info, Plus, RefreshCw, Warehouse, X, Maximize2, Minimize2, Wallet } from "lucide-react";
+import { AlertCircle, Plus, RefreshCw, Warehouse, X, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,8 +63,15 @@ import { useBranch } from "@/contexts/branch-context";
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
-/** Con lo que abre el listado: productos físicos, sin los servicios. */
-const PRODUCTS_ONLY_FILTERS = { quick_filter: "products" } as const;
+/**
+ * El alcance con el que abre el listado: productos físicos y activos.
+ *
+ * Los servicios (mano de obra, reparaciones) se miran aparte y antes venían
+ * mezclados; los desactivados son los que ya no se venden y sólo estorban al
+ * buscar. Es un alcance, no un filtro rápido: sobrevive a «bajo stock» y a
+ * «agotados», y se sale de él con «Todo el catálogo».
+ */
+const PRODUCTS_SECTION_SCOPE = { catalog_kind: "part", is_active: true } as const;
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -142,9 +149,7 @@ export default function ProductsPage() {
     alerts,
     serverPaginated: true,
     serverTotalItems: totalProducts,
-    // La pantalla es de productos: los servicios (mano de obra, reparaciones)
-    // se miran aparte y antes venían mezclados en la misma lista.
-    initialFilters: PRODUCTS_ONLY_FILTERS,
+    initialFilters: PRODUCTS_SECTION_SCOPE,
   });
 
   const [isPending, startTransition] = useTransition();
@@ -205,6 +210,13 @@ export default function ProductsPage() {
     inventory_value: dashboardStats?.totalStockValue ?? metrics.inventory_value,
   }), [dashboardStats, metrics]);
 
+  // Lo que hay en la pagina actual, para el desglose de arriba de la tabla.
+  const serviciosEnPantalla = useMemo(
+    () => paginatedProducts.filter(isServiceLikeProduct).length,
+    [paginatedProducts],
+  );
+  const productosEnPantalla = paginatedProducts.length - serviciosEnPantalla;
+
   const globalQuickFilterCounts = useMemo<QuickFilterCounts | undefined>(() => {
     if (!dashboardStats) return undefined;
     return {
@@ -257,13 +269,15 @@ export default function ProductsPage() {
           : undefined;
 
     // Productos o servicios lo resuelve el servidor: asi el total y las paginas
-    // coinciden con lo que se ve.
+    // coinciden con lo que se ve. El alcance de la seccion (`catalog_kind`) es
+    // el que manda; el filtro rapido viejo se sigue entendiendo.
     const quickFilterCatalogKind =
-      filters.quick_filter === "products"
-        ? ("part" as const)
-        : filters.quick_filter === "services"
-          ? ("service" as const)
-          : undefined;
+      filters.catalog_kind
+        ?? (filters.quick_filter === "products"
+          ? ("part" as const)
+          : filters.quick_filter === "services"
+            ? ("service" as const)
+            : undefined);
 
     return {
       search: serverSearch || "",
@@ -316,7 +330,10 @@ export default function ProductsPage() {
         prev.stockStatus === next.stockStatus &&
         prev.priceMin === next.priceMin &&
         prev.priceMax === next.priceMax &&
-        prev.isActive === next.isActive
+        prev.isActive === next.isActive &&
+        // Sin comparar el tipo, pasar de «productos» a «servicios» (que no
+        // cambia ningun otro campo) no llegaba nunca al servidor.
+        prev.catalogKind === next.catalogKind
       ) {
         return prev;
       }
@@ -701,14 +718,16 @@ export default function ProductsPage() {
         toast.info("Mostrando catálogo completo para analizar valor total");
         break;
       case "active":
-        handleQuickFilter("active");
+        // La tarjeta pide ver los activos, no alternar el filtro: si la
+        // pantalla ya abre en activos, tocarla no tiene que apagarlo.
+        handleFilterChange({ is_active: true, quick_filter: null });
         toast.info("Mostrando productos activos");
         break;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50/50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4 sm:p-6 lg:p-8 transition-colors duration-300">
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 dark:bg-gray-950">
       <div className="max-w-[1800px] mx-auto space-y-5">
         {!isMaximizedSpace ? (
           <>
@@ -716,27 +735,21 @@ export default function ProductsPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-white dark:via-gray-200 dark:to-gray-400 bg-clip-text text-transparent">
-                  Gestión de Productos
+                {/* El titulo en degradado y la bajada «Dashboard moderno y
+                    funcional» no decian nada: ahora la bajada cuenta con que
+                    abre la pantalla, que es lo que hay que saber. */}
+                <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl dark:text-gray-50">
+                  Productos
                 </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Dashboard moderno y funcional
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Catálogo e inventario. La lista abre con tus productos activos; los
+                  servicios y los desactivados se ven con los filtros de arriba.
                 </p>
               </div>
 
               <div className="flex items-center gap-2.5">
-                {/* Botón Más Espacio al lado de ¿Cómo funciona? */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsMaximizedSpace(!isMaximizedSpace)}
-                  className="h-10 px-3.5 text-xs font-semibold rounded-xl gap-1.5 transition-all shadow-xs border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                  title="Ocultar paneles superiores para que los productos ocupen más espacio"
-                >
-                  <Maximize2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span>Más espacio</span>
-                </Button>
+                {/* «Más espacio» ya está en la barra de acciones, al lado de
+                    las vistas: tenerlo dos veces solo llenaba el encabezado. */}
 
                 {/* Acceso directo a los predeterminados de productos a credito */}
                 <Button
@@ -759,7 +772,7 @@ export default function ProductsPage() {
                   <Button
                     size="lg"
                     onClick={() => setCreateModalOpen(true)}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 cursor-pointer"
+                    className="cursor-pointer bg-blue-600 shadow-xs transition-colors hover:bg-blue-700"
                   >
                     <Plus className="h-5 w-5 mr-2" />
                     Nuevo Producto
@@ -877,6 +890,8 @@ export default function ProductsPage() {
           showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
           counts={globalQuickFilterCounts}
           activeFilter={filters.quick_filter}
+          catalogKind={filters.catalog_kind ?? null}
+          isActive={filters.is_active ?? null}
           onFilterClick={handleQuickFilter}
         />
 
@@ -938,15 +953,13 @@ export default function ProductsPage() {
                     )}
                   </div>
 
-                  {/* Micro desglose de lo que se ve en pantalla */}
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <Badge variant="outline" className="px-2 py-0 h-5 font-semibold border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/40">
-                      📦 {paginatedProducts.filter(p => !isServiceLikeProduct(p)).length} productos
-                    </Badge>
-                    <Badge variant="outline" className="px-2 py-0 h-5 font-bold border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-purple-50/60 dark:bg-purple-950/40">
-                      ⚙️ {paginatedProducts.filter(isServiceLikeProduct).length} servicios
-                    </Badge>
-                  </div>
+                  {/* El desglose solo cuando hay de los dos: con el alcance en
+                      productos, «⚙️ 0 servicios» era un badge que nunca cambiaba. */}
+                  {serviciosEnPantalla > 0 && productosEnPantalla > 0 && (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {productosEnPantalla} productos · {serviciosEnPantalla} servicios
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-xs">

@@ -9,6 +9,14 @@ import type { BusinessVertical, OrganizationModule } from '@/lib/organization/bu
  * mandando a pedirle a soporte los permisos que hoy se asignan con un casillero.
  */
 
+export type GuideImage = {
+  src: string
+  alt: string
+  caption?: string
+}
+
+export type GuideUIPreviewType = 'pos' | 'caja' | 'inventory' | 'users' | 'website' | 'business' | 'sale' | 'repairs'
+
 /** Un caso concreto, para quien aprende mirando un ejemplo antes que leyendo. */
 export type GuideExample = {
   /** Lo que la persona quiere lograr, en sus palabras. */
@@ -19,11 +27,16 @@ export type GuideExample = {
   result: string
   /** Rubro al que aplica el ejemplo; sin esto, sirve para cualquiera. */
   vertical?: BusinessVertical
+  /** Imagen o captura ilustrativa del ejemplo */
+  image?: GuideImage
+  /** Previsualización de interfaz interactiva en Tailwind */
+  uiPreview?: GuideUIPreviewType
 }
 
 export type GuideStep = {
   title: string
   description: string
+  image?: GuideImage
 }
 
 export type GuideFaq = {
@@ -54,6 +67,10 @@ export type GuideSection = {
   permissions?: string[]
   /** Módulo del plan que tiene que estar activo. */
   module?: OrganizationModule
+  /** Imagen o captura ilustrativa de la sección */
+  image?: GuideImage
+  /** Previsualización de interfaz interactiva en Tailwind */
+  uiPreview?: GuideUIPreviewType
 }
 
 export const GUIDE_GROUPS: { id: GuideGroupId; label: string; description: string }[] = [

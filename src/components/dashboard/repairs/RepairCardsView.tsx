@@ -36,6 +36,9 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
           finalCost: repair.finalCost,
           estimatedCost: repair.estimatedCost,
           paidAmount: repair.paidAmount,
+          deliveryOutcome: repair.deliveryOutcome,
+          qualityCheck: repair.qualityCheck,
+          closeout: repair.closeout,
         })
         const isDelivered = repair.status === 'entregado'
         const ws = getWarrantyStatus(repair.warrantyExpiresAt)
@@ -73,18 +76,18 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, 
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="h-7 w-7 shadow-sm bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm"
+                  className="h-7 w-7 rounded-lg shadow-xs bg-background/90 hover:bg-background border border-border/60 backdrop-blur-sm transition-all cursor-pointer"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreVertical className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-48 rounded-xl p-1 shadow-lg border border-border/70">
                 <DropdownMenuItem onClick={() => onView?.(repair)}>
                   <Eye className="mr-2 h-3.5 w-3.5" />
                   Ver detalles
                 </DropdownMenuItem>
-                {onEdit && !isDelivered && repair.status !== 'cancelado' && (
+                {onEdit && repair.status !== 'cancelado' && (
                   <DropdownMenuItem onClick={() => onEdit(repair)}>
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     Editar

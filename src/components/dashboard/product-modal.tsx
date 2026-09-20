@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3 } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, ArrowRight } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
-import { formatPrice } from '@/lib/utils'
+import { formatPrice, cn } from '@/lib/utils'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
@@ -217,6 +217,17 @@ export function normalizeProductVariantsForForm(product: any): {
   }
 }
 
+export const PRODUCT_TABS = [
+  { id: 'basic', label: 'Información Básica', shortLabel: 'Básica', step: 1 },
+  { id: 'pricing', label: 'Precios y Ofertas', shortLabel: 'Precios', step: 2 },
+  { id: 'inventory', label: 'Inventario', shortLabel: 'Inventario', step: 3 },
+  { id: 'variants', label: 'Variantes', shortLabel: 'Variantes', step: 4 },
+  { id: 'post-sale', label: 'Postventa', shortLabel: 'Postventa', step: 5 },
+  { id: 'images', label: 'Imágenes', shortLabel: 'Imágenes', step: 6 },
+] as const
+
+export type ProductModalTabId = typeof PRODUCT_TABS[number]['id']
+
 export function ProductModal({
   product,
   isOpen,
@@ -227,7 +238,19 @@ export function ProductModal({
   suppliers,
   onCatalogChange
 }: ProductModalProps) {
-  const [activeTab, setActiveTab] = useState('basic')
+  const [activeTab, setActiveTab] = useState<string>('basic')
+  const currentStepIndex = Math.max(0, PRODUCT_TABS.findIndex(t => t.id === activeTab))
+  const prevTab = currentStepIndex > 0 ? PRODUCT_TABS[currentStepIndex - 1] : null
+  const nextTab = currentStepIndex < PRODUCT_TABS.length - 1 ? PRODUCT_TABS[currentStepIndex + 1] : null
+
+  const goToPrevTab = () => {
+    if (prevTab) setActiveTab(prevTab.id)
+  }
+
+  const goToNextTab = () => {
+    if (nextTab) setActiveTab(nextTab.id)
+  }
+
   const [saveFeedback, setSaveFeedback] = useState<ProductSaveFeedback | null>(null)
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
   // Se avisa cuando se recupero un borrador: si el formulario aparece lleno sin
@@ -387,6 +410,7 @@ export function ProductModal({
   const sku = watch('sku')
   const watchedName = watch('name')
   const watchedCategoryId = watch('category_id')
+  const watchedImages = watch('images') || []
   const variantConfig = watch(['has_variants', 'variant_attribute_config', 'variants'])
   const variantValue = {
     hasVariants: Boolean(variantConfig[0]),
@@ -693,7 +717,9 @@ export function ProductModal({
       // Asegurar tipos numéricos
       purchase_price: Number(data.purchase_price),
       sale_price: Number(data.sale_price),
-      stock_quantity: Number(data.stock_quantity),
+      stock_quantity: Boolean(data.has_variants && Array.isArray(data.variants) && data.variants.length > 0)
+        ? data.variants.reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0)
+        : Number(data.stock_quantity),
       min_stock: Number(data.min_stock),
       is_active: data.is_active ?? true,
       visibility: data.visibility || 'public',
@@ -810,6 +836,25 @@ export function ProductModal({
     onClose()
   }
 
+  const cleanupNewImage = async (url: string) => {
+    const filePath = newlyUploadedImages.current.get(url)
+    if (!filePath) return
+
+    const result = await removeFile('product-images', filePath)
+    if (result.success) {
+      newlyUploadedImages.current.delete(url)
+    } else {
+      console.warn('Could not remove unused product image:', result.error)
+    }
+  }
+
+  const cleanupAllNewImages = async () => {
+    await Promise.all(
+      [...newlyUploadedImages.current.keys()].map(cleanupNewImage)
+    )
+    newlyUploadedImages.current.clear()
+  }
+
   const discardChangesAndClose = async () => {
     setShowDiscardConfirmation(false)
     await cleanupAllNewImages()
@@ -857,20 +902,54 @@ export function ProductModal({
     return uploadedUrls
   }
 
-  const cleanupNewImage = async (url: string) => {
-    const filePath = newlyUploadedImages.current.get(url)
-    if (!filePath) return
+  const renderStepNavigation = (currentTabId: ProductModalTabId) => {
+    const idx = PRODUCT_TABS.findIndex(t => t.id === currentTabId)
+    const prev = idx > 0 ? PRODUCT_TABS[idx - 1] : null
+    const next = idx < PRODUCT_TABS.length - 1 ? PRODUCT_TABS[idx + 1] : null
 
-    const result = await removeFile('product-images', filePath)
-    if (result.success) {
-      newlyUploadedImages.current.delete(url)
-    } else {
-      console.warn('Could not remove unused product image:', result.error)
-    }
-  }
+    return (
+      <div className="mt-8 pt-4 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+        {prev ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setActiveTab(prev.id)}
+            className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold gap-1.5"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Anterior:</span> {prev.shortLabel}
+          </Button>
+        ) : (
+          <div />
+        )}
 
-  const cleanupAllNewImages = async () => {
-    await Promise.all([...newlyUploadedImages.current.keys()].map(cleanupNewImage))
+        <div className="flex items-center gap-2">
+          {next ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setActiveTab(next.id)}
+              className="bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-xl px-4 py-2 text-xs font-semibold shadow-xs gap-1.5"
+            >
+              <span className="hidden sm:inline">Siguiente:</span> {next.shortLabel}
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => form.handleSubmit(onSubmit, onInvalidSubmit)()}
+              disabled={isSubmitting || isUploadingImages || !isExistingVariantDataReady}
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-xs font-semibold shadow-md shadow-blue-500/20 gap-1.5"
+            >
+              <Check className="h-4 w-4" />
+              Finalizar y Guardar
+            </Button>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -931,26 +1010,80 @@ export function ProductModal({
                       </Badge>
                     )}
                     {!product && (
-                      <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800 px-2.5 py-1 text-xs font-semibold">
-                        ✦ Nuevo
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <div className="hidden sm:flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+                          <span className="flex h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse" />
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            Paso {currentStepIndex + 1} de {PRODUCT_TABS.length}:
+                          </span>
+                          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                            {PRODUCT_TABS[currentStepIndex]?.shortLabel}
+                          </span>
+                          <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden ml-0.5">
+                            <div
+                              className="h-full bg-blue-600 dark:bg-blue-400 rounded-full transition-all duration-300"
+                              style={{ width: `${((currentStepIndex + 1) / PRODUCT_TABS.length) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800 px-2.5 py-1 text-xs font-semibold">
+                          ✦ Nuevo
+                        </Badge>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Tips rápidos para producto nuevo */}
+                {/* Asistente guiado rápido para producto nuevo */}
                 {!product && (
                   <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[
-                      { icon: '🔑', tip: 'SKU, Nombre, Categoría y Precio de venta son obligatorios' },
-                      { icon: '💡', tip: 'Podés agregar imágenes, variantes y configurar cuotas después' },
-                      { icon: '👁️', tip: 'El producto aparecerá en tu tienda pública si está "Activo" y "Público"' },
-                    ].map(({ icon, tip }) => (
-                      <div key={tip} className="flex items-start gap-2 rounded-lg bg-white/70 dark:bg-slate-800/50 border border-blue-100/80 dark:border-blue-900/40 px-3 py-2">
-                        <span className="text-base leading-none mt-0.5 flex-shrink-0">{icon}</span>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">{tip}</p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('basic')}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all border ${
+                        activeTab === 'basic'
+                          ? 'bg-white dark:bg-slate-800 border-blue-500 text-blue-950 dark:text-blue-100 shadow-xs ring-2 ring-blue-500/20'
+                          : 'bg-white/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-[10px] shrink-0">1</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold leading-tight">Datos Básicos</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Nombre, SKU y Categoría</p>
                       </div>
-                    ))}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('pricing')}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all border ${
+                        activeTab === 'pricing'
+                          ? 'bg-white dark:bg-slate-800 border-emerald-500 text-emerald-950 dark:text-emerald-100 shadow-xs ring-2 ring-emerald-500/20'
+                          : 'bg-white/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-[10px] shrink-0">2</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold leading-tight">Precios (Gs)</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Venta al público y costo</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('images')}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all border ${
+                        activeTab === 'images'
+                          ? 'bg-white dark:bg-slate-800 border-purple-500 text-purple-950 dark:text-purple-100 shadow-xs ring-2 ring-purple-500/20'
+                          : 'bg-white/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-white font-bold text-[10px] shrink-0">3</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold leading-tight">Fotos y Galería</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Subir fotos del producto</p>
+                      </div>
+                    </button>
                   </div>
                 )}
               </div>
@@ -987,73 +1120,178 @@ export function ProductModal({
 
             <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="flex min-h-0 flex-col md:flex-row flex-1 overflow-hidden">
               {/* Sidebar */}
-              <div className="w-full md:w-64 bg-slate-50/50 dark:bg-slate-900/30 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-3 md:p-5 overflow-hidden md:overflow-y-auto shrink-0 flex flex-col gap-6">
-                  <TabsList className="grid grid-cols-3 md:flex md:flex-col h-auto bg-transparent w-full gap-2 md:gap-1 p-0 text-slate-500 dark:text-slate-400">
+              <div className="w-full md:w-64 lg:w-72 bg-slate-50/80 dark:bg-slate-900/50 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-3 md:p-4 overflow-hidden md:overflow-y-auto shrink-0 flex flex-col gap-4">
+                  <div className="hidden md:flex items-center justify-between px-1">
+                    <span className="text-[11px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+                      Secciones
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                      Paso a paso
+                    </span>
+                  </div>
+
+                  <TabsList className="grid grid-cols-3 md:flex md:flex-col h-auto bg-transparent w-full gap-2 p-0">
+                    {/* 1. Información Básica */}
                     <TabsTrigger
                       value="basic"
-                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-blue-500 dark:data-[state=active]:border-blue-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-blue-500/20 data-[state=active]:text-blue-900 dark:data-[state=active]:text-blue-100"
                     >
-                      <Tag className="h-4 w-4" />
-                      <span className="hidden md:inline">Información Básica</span>
-                      <span className="md:hidden">Básica</span>
-                      {tabErrorMap.basic && (
-                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                      )}
+                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/50 group-data-[state=active]:bg-blue-600 group-data-[state=active]:text-white group-data-[state=active]:border-blue-600 group-data-[state=active]:shadow-xs">
+                        <Tag className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-blue-600 dark:group-data-[state=active]:text-blue-400 truncate">
+                            <span className="hidden md:inline">Información Básica</span>
+                            <span className="md:hidden">Básica</span>
+                          </span>
+                          {tabErrorMap.basic && (
+                            <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                          )}
+                        </div>
+                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                          SKU, nombre y marca
+                        </span>
+                      </div>
                     </TabsTrigger>
+
+                    {/* 2. Precios y Ofertas (con Gs destacado) */}
                     <TabsTrigger
                       value="pricing"
-                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-emerald-500 dark:data-[state=active]:border-emerald-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-emerald-500/20 data-[state=active]:text-emerald-900 dark:data-[state=active]:text-emerald-100"
                     >
-                      <GSIcon className="h-4 w-4" />
-                      <span className="hidden md:inline">Precios y Ofertas</span>
-                      <span className="md:hidden">Precios</span>
-                      {tabErrorMap.pricing && (
-                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                      )}
+                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 font-black text-xs tracking-tight transition-all bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/50 group-data-[state=active]:bg-emerald-600 group-data-[state=active]:text-white group-data-[state=active]:border-emerald-600 group-data-[state=active]:shadow-xs">
+                        Gs
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-emerald-600 dark:group-data-[state=active]:text-emerald-400 truncate">
+                            <span className="hidden md:inline">Precios y Ofertas</span>
+                            <span className="md:hidden">Precios</span>
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {hasOffer && (
+                              <span className="hidden md:inline-flex text-[9px] font-bold px-1 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                                Oferta
+                              </span>
+                            )}
+                            {tabErrorMap.pricing && (
+                              <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            )}
+                          </div>
+                        </div>
+                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                          Venta, costo y promos
+                        </span>
+                      </div>
                     </TabsTrigger>
+
+                    {/* 3. Inventario */}
                     <TabsTrigger
                       value="inventory"
-                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-amber-500 dark:data-[state=active]:border-amber-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-amber-500/20 data-[state=active]:text-amber-900 dark:data-[state=active]:text-amber-100"
                     >
-                      <Warehouse className="h-4 w-4" />
-                      <span className="hidden md:inline">Inventario</span>
-                      <span className="md:hidden">Stock</span>
-                      {tabErrorMap.inventory && (
-                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                      )}
+                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-amber-500/15 text-amber-700 dark:bg-amber-500/25 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50 group-data-[state=active]:bg-amber-600 group-data-[state=active]:text-white group-data-[state=active]:border-amber-600 group-data-[state=active]:shadow-xs">
+                        <Warehouse className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-amber-600 dark:group-data-[state=active]:text-amber-400 truncate">
+                            <span className="hidden md:inline">Inventario</span>
+                            <span className="md:hidden">Stock</span>
+                          </span>
+                          {tabErrorMap.inventory && (
+                            <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                          )}
+                        </div>
+                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                          Stock físico y control
+                        </span>
+                      </div>
                     </TabsTrigger>
+
+                    {/* 4. Variantes */}
                     <TabsTrigger
                       value="variants"
-                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-indigo-500 dark:data-[state=active]:border-indigo-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-indigo-500/20 data-[state=active]:text-indigo-900 dark:data-[state=active]:text-indigo-100"
                     >
-                      <Layers3 className="h-4 w-4" />
-                      <span className="hidden md:inline">Variantes</span>
-                      <span className="md:hidden">Variantes</span>
-                      {tabErrorMap.variants && (
-                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                      )}
+                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-indigo-500/15 text-indigo-700 dark:bg-indigo-500/25 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 group-data-[state=active]:bg-indigo-600 group-data-[state=active]:text-white group-data-[state=active]:border-indigo-600 group-data-[state=active]:shadow-xs">
+                        <Layers3 className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-indigo-600 dark:group-data-[state=active]:text-indigo-400 truncate">
+                            Variantes
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {Boolean(variantValue.variants?.length) && (
+                              <span className="hidden md:inline-flex text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                                {variantValue.variants.length}
+                              </span>
+                            )}
+                            {tabErrorMap.variants && (
+                              <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            )}
+                          </div>
+                        </div>
+                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                          Talles, colores y opciones
+                        </span>
+                      </div>
                     </TabsTrigger>
+
+                    {/* 5. Postventa */}
                     <TabsTrigger
                       value="post-sale"
-                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-teal-500 dark:data-[state=active]:border-teal-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-teal-500/20 data-[state=active]:text-teal-900 dark:data-[state=active]:text-teal-100"
                     >
-                      <RefreshCw className="h-4 w-4" />
-                      <span className="hidden md:inline">Postventa</span>
-                      <span className="md:hidden">Postventa</span>
-                      {tabErrorMap.postSale && (
-                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                      )}
+                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-teal-500/15 text-teal-700 dark:bg-teal-500/25 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/50 group-data-[state=active]:bg-teal-600 group-data-[state=active]:text-white group-data-[state=active]:border-teal-600 group-data-[state=active]:shadow-xs">
+                        <RefreshCw className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-teal-600 dark:group-data-[state=active]:text-teal-400 truncate">
+                            Postventa
+                          </span>
+                          {tabErrorMap.postSale && (
+                            <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                          )}
+                        </div>
+                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                          Garantía y devoluciones
+                        </span>
+                      </div>
                     </TabsTrigger>
+
+                    {/* 6. Imágenes */}
                     <TabsTrigger
                       value="images"
-                      className="w-full justify-center md:justify-start gap-2.5 px-3 py-2.5 text-xs md:text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-purple-500 dark:data-[state=active]:border-purple-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-purple-500/20 data-[state=active]:text-purple-900 dark:data-[state=active]:text-purple-100"
                     >
-                      <Upload className="h-4 w-4" />
-                      <span className="hidden md:inline">Imágenes</span>
-                      <span className="md:hidden">Fotos</span>
-                      {tabErrorMap.images && (
-                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                      )}
+                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-purple-500/15 text-purple-700 dark:bg-purple-500/25 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/50 group-data-[state=active]:bg-purple-600 group-data-[state=active]:text-white group-data-[state=active]:border-purple-600 group-data-[state=active]:shadow-xs">
+                        <Upload className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-purple-600 dark:group-data-[state=active]:text-purple-400 truncate">
+                            <span className="hidden md:inline">Imágenes</span>
+                            <span className="md:hidden">Fotos</span>
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {Boolean(watchedImages?.length) && (
+                              <span className="hidden md:inline-flex text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                                {watchedImages.length}
+                              </span>
+                            )}
+                            {tabErrorMap.images && (
+                              <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            )}
+                          </div>
+                        </div>
+                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
+                          Galería y fotos
+                        </span>
+                      </div>
                     </TabsTrigger>
                   </TabsList>
 
@@ -1093,35 +1331,48 @@ export function ProductModal({
               </div>
 
             {/* Main Content */}
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
-              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                <span><strong className="font-medium text-red-600 dark:text-red-400">• Obligatorio</strong> para crear el producto</span>
-                <span><strong className="font-medium">• Opcional</strong> se puede completar después</span>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50/40 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
+                <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+                    <strong className="font-semibold text-slate-700 dark:text-slate-300">Obligatorio</strong> para guardar
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
+                    <span>Opcional</span>
+                  </span>
+                </div>
+                {!product && (
+                  <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
+                    Modo guiado · Paso {currentStepIndex + 1} de {PRODUCT_TABS.length}
+                  </span>
+                )}
               </div>
 
                 {/* Basic Info */}
-                <TabsContent value="basic" className="space-y-6 py-4">
+                <TabsContent value="basic" className="space-y-6 py-2">
                   {/* Tip contextual - Pestaña Básica */}
-                  <div className="flex items-start gap-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 px-4 py-3">
-                    <span className="text-xl flex-shrink-0 mt-0.5">📋</span>
+                  <div className="flex items-start gap-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/25 border border-blue-200/60 dark:border-blue-800/40 p-3.5 shadow-2xs">
+                    <div className="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Tag className="h-3.5 w-3.5" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">Información Básica</p>
-                      <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80 leading-relaxed">
-                        El <strong>SKU</strong> es el código único que identifica al producto en tu sistema.
-                        Usá el botón <span className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-white/80 dark:bg-slate-800/80 rounded border border-blue-200 dark:border-blue-700 text-[10px] font-mono">✦ auto</span> para generar uno automáticamente.
-                        La <strong>Categoría</strong> ayuda a organizar tu catálogo y mejora la búsqueda en tu tienda.
+                      <p className="text-xs font-bold text-blue-950 dark:text-blue-200 mb-0.5">Información Básica del Producto</p>
+                      <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 leading-relaxed">
+                        El <strong>SKU</strong> es el identificador único en tu sistema. Usá el botón <span className="inline-flex items-center px-1 py-0.5 bg-white/90 dark:bg-slate-800 rounded border border-blue-200 dark:border-blue-700 text-[10px] font-mono font-semibold">✦ auto</span> para generarlo de forma automática.
                       </p>
                     </div>
                   </div>
 
-                  <Card className="border-0 shadow-none bg-transparent md:border md:border-blue-100 md:dark:border-blue-900/50 md:bg-gradient-to-br md:from-white md:to-blue-50/30 md:dark:from-slate-800 md:dark:to-slate-800/50">
-                    <CardHeader className="pb-3 px-0 md:px-6">
-                      <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        Información del Producto
+                        Identificación y Clasificación
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
+                    <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-5">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -1495,28 +1746,31 @@ export function ProductModal({
                       />
                     </CardContent>
                   </Card>
+
+                  {renderStepNavigation('basic')}
                 </TabsContent>
 
                 {/* Pricing */}
-                <TabsContent value="pricing" className="space-y-6 py-4">
+                <TabsContent value="pricing" className="space-y-6 py-2">
                   {/* Tip contextual - Pestaña Precios */}
-                  <div className="flex items-start gap-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 px-4 py-3">
-                    <span className="text-xl flex-shrink-0 mt-0.5">💰</span>
+                  <div className="flex items-start gap-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200/60 dark:border-emerald-800/40 p-3.5 shadow-2xs">
+                    <div className="h-7 w-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 font-extrabold text-xs shadow-xs">
+                      Gs
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 mb-1">Precios y Ofertas</p>
-                      <ul className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 leading-relaxed space-y-0.5">
-                        <li>• <strong>Precio de venta</strong>: el que ven tus clientes en la tienda. Es obligatorio.</li>
-                        <li>• <strong>Precio mayorista</strong>: se aplica automáticamente a clientes mayoristas.</li>
-                        <li>• <strong>Oferta</strong>: activala y ponele un precio especial por tiempo limitado.</li>
-                        <li>• <strong>Cuotas</strong>: mostrá planes de financiación en la ficha del producto.</li>
+                      <p className="text-xs font-bold text-emerald-950 dark:text-emerald-200 mb-0.5">Precios, Costos y Promociones</p>
+                      <ul className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 leading-relaxed space-y-0.5">
+                        <li>• <strong>Precio de venta</strong>: visible al público en tu tienda (obligatorio).</li>
+                        <li>• <strong>Precio mayorista</strong>: tarifa especial asignada automáticamente a compras por mayor.</li>
+                        <li>• <strong>Oferta y Financiación</strong>: activá precios promocionales y cuotas sin salir del producto.</li>
                       </ul>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-8 w-1 bg-blue-500 rounded-full" />
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Precios Base</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-6 w-1 bg-emerald-500 rounded-full" />
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Precios Base</h3>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2300,16 +2554,20 @@ export function ProductModal({
                       </CardContent>
                     </Card>
                   </div>
+
+                  {renderStepNavigation('pricing')}
                 </TabsContent>
 
                 {/* Inventory */}
-                <TabsContent value="inventory" className="space-y-4">
+                <TabsContent value="inventory" className="space-y-6 py-2">
                   {/* Tip contextual - Inventario */}
-                  <div className="flex items-start gap-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 px-4 py-3">
-                    <span className="text-xl flex-shrink-0 mt-0.5">📦</span>
+                  <div className="flex items-start gap-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/60 dark:border-amber-800/40 p-3.5 shadow-2xs">
+                    <div className="h-7 w-7 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Warehouse className="h-3.5 w-3.5" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">Control de Inventario</p>
-                      <ul className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed space-y-0.5">
+                      <p className="text-xs font-bold text-amber-950 dark:text-amber-200 mb-0.5">Control de Inventario y Stock</p>
+                      <ul className="text-[11px] text-amber-800/80 dark:text-amber-300/80 leading-relaxed space-y-0.5">
                         <li>• <strong>Stock actual</strong>: cuántas unidades tenés disponibles hoy.</li>
                         <li>• <strong>Stock mínimo</strong>: recibirás alertas cuando baje de este valor.</li>
                         <li>• <strong>Stock máximo</strong>: referencia para reordenar stock (opcional).</li>
@@ -2317,10 +2575,10 @@ export function ProductModal({
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
-                      <CardHeader className="pb-3 px-0 md:px-6">
-                        <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                          <Warehouse className="h-4 w-4" />
+                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                          <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                           Stock Actual <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
@@ -2404,17 +2662,20 @@ export function ProductModal({
                       </CardContent>
                     </Card>
                   </div>
+
+                  {renderStepNavigation('inventory')}
                 </TabsContent>
 
-                <TabsContent value="variants" className="space-y-5 py-4">
+                <TabsContent value="variants" className="space-y-5 py-2">
                   {/* Tip contextual - Variantes */}
-                  <div className="flex items-start gap-3 rounded-xl bg-violet-50/80 dark:bg-violet-950/30 border border-violet-200/60 dark:border-violet-800/40 px-4 py-3">
-                    <span className="text-xl flex-shrink-0 mt-0.5">🎨</span>
+                  <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/25 border border-indigo-200/60 dark:border-indigo-800/40 p-3.5 shadow-2xs">
+                    <div className="h-7 w-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Layers3 className="h-3.5 w-3.5" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-violet-800 dark:text-violet-300 mb-1">Variantes del Producto</p>
-                      <p className="text-[11px] text-violet-700/80 dark:text-violet-400/80 leading-relaxed">
-                        Usá variantes para manejar <strong>colores, talles, tamaños</strong> u otras opciones sin crear un producto separado por cada una.
-                        Cada variante tiene su propio stock, precio y SKU derivado. Activá la opción solo si el producto tiene opciones distintas.
+                      <p className="text-xs font-bold text-indigo-950 dark:text-indigo-200 mb-0.5">Variantes del Producto</p>
+                      <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
+                        Usá variantes para manejar <strong>colores, talles o especificaciones</strong>. Cada variante tiene su propio stock, precio y SKU derivado.
                       </p>
                     </div>
                   </div>
@@ -2462,26 +2723,29 @@ export function ProductModal({
                     }}
                   />
                   <ProductVariantReview value={variantValue} />
+
+                  {renderStepNavigation('variants')}
                 </TabsContent>
 
                 {/* Post-Sale */}
-                <TabsContent value="post-sale" className="space-y-4 py-4">
+                <TabsContent value="post-sale" className="space-y-4 py-2">
                   {/* Tip contextual - Postventa */}
-                  <div className="flex items-start gap-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-800/40 px-4 py-3">
-                    <span className="text-xl flex-shrink-0 mt-0.5">🛡️</span>
+                  <div className="flex items-start gap-3 rounded-2xl bg-teal-50/70 dark:bg-teal-950/25 border border-teal-200/60 dark:border-teal-800/40 p-3.5 shadow-2xs">
+                    <div className="h-7 w-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-rose-800 dark:text-rose-300 mb-1">Garantía y Política Postventa</p>
-                      <p className="text-[11px] text-rose-700/80 dark:text-rose-400/80 leading-relaxed">
-                        Esta información se muestra en la ficha pública del producto y genera <strong>confianza en el comprador</strong>.
-                        Configurá la garantía en meses, los días de devolución y las políticas de cambio. Son <em>completamente opcionales</em> pero recomendados.
+                      <p className="text-xs font-bold text-teal-950 dark:text-teal-200 mb-0.5">Garantía y Políticas de Postventa</p>
+                      <p className="text-[11px] text-teal-800/80 dark:text-teal-300/80 leading-relaxed">
+                        Esta información genera <strong>confianza y respaldo</strong> en tus compradores. Configurá meses de garantía y plazos de devolución o cambio (opcional).
                       </p>
                     </div>
                   </div>
-                  <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
-                    <CardHeader className="pb-3 px-0 md:px-6">
-                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                        <RefreshCw className="h-4 w-4" />
-                        Garantia del Producto
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+                        <RefreshCw className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                        Garantía y Cobertura
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
@@ -2730,30 +2994,33 @@ export function ProductModal({
                       />
                     </CardContent>
                   </Card>
+
+                  {renderStepNavigation('post-sale')}
                 </TabsContent>
 
                 {/* Images */}
-                <TabsContent value="images" className="space-y-4 py-4">
+                <TabsContent value="images" className="space-y-5 py-2">
                   {/* Tip contextual - Imágenes */}
-                  <div className="flex items-start gap-3 rounded-xl bg-sky-50/80 dark:bg-sky-950/30 border border-sky-200/60 dark:border-sky-800/40 px-4 py-3">
-                    <span className="text-xl flex-shrink-0 mt-0.5">📸</span>
+                  <div className="flex items-start gap-3 rounded-2xl bg-purple-50/70 dark:bg-purple-950/25 border border-purple-200/60 dark:border-purple-800/40 p-3.5 shadow-2xs">
+                    <div className="h-7 w-7 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Upload className="h-3.5 w-3.5" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-sky-800 dark:text-sky-300 mb-1">Imágenes del Producto</p>
-                      <ul className="text-[11px] text-sky-700/80 dark:text-sky-400/80 leading-relaxed space-y-0.5">
-                        <li>• Subí hasta <strong>5 imágenes</strong>. La primera será la imagen principal de la ficha.</li>
-                        <li>• Formatos soportados: <strong>JPG, PNG y WebP</strong>. Tamaño máximo 5 MB por imagen.</li>
-                        <li>• 💡 <em>Tip</em>: fotos con fondo blanco y buena luz aumentan las conversiones.</li>
+                      <p className="text-xs font-bold text-purple-950 dark:text-purple-200 mb-0.5">Galería de Imágenes del Producto</p>
+                      <ul className="text-[11px] text-purple-800/80 dark:text-purple-300/80 leading-relaxed space-y-0.5">
+                        <li>• Subí hasta <strong>5 imágenes</strong>. La primera será la portada principal en el catálogo y POS.</li>
+                        <li>• Formatos JPG, PNG y WebP (hasta 5 MB por imagen). Fotos con buena luz mejoran las ventas.</li>
                       </ul>
                     </div>
                   </div>
-                  <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
-                    <CardHeader className="px-0 md:px-6">
-                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                        <Upload className="h-4 w-4" />
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+                        <Upload className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                         Imágenes del Producto <FieldRequirement />
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
+                    <CardContent className="p-4 sm:p-6">
                       <FormField
                         control={form.control}
                         name="images"
@@ -2777,12 +3044,14 @@ export function ProductModal({
                       />
                     </CardContent>
                   </Card>
+
+                  {renderStepNavigation('images')}
                 </TabsContent>
             </div>
           </Tabs>
 
             {/* Footer */}
-            <div className="sticky bottom-0 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 px-4 py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0 z-10">
+            <div className="sticky bottom-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200/90 dark:border-slate-800 px-4 py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0 z-10">
               <div
                 id="product-form-status"
                 role="status"
@@ -2793,15 +3062,43 @@ export function ProductModal({
                 ) : (
                   <AlertCircle className="h-4 w-4 shrink-0" />
                 )}
-                <span>{submitState.status}</span>
+                <span className="font-medium text-xs sm:text-sm">{submitState.status}</span>
               </div>
-              <div className="flex gap-3 w-full sm:w-auto sm:ml-auto">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto sm:ml-auto">
+                {/* Botón paso anterior en footer */}
+                {prevTab && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={goToPrevTab}
+                    className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium px-3 text-xs sm:text-sm"
+                    title={`Volver a ${prevTab.label}`}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    <span>Anterior</span>
+                  </Button>
+                )}
+
+                {/* Botón paso siguiente en footer */}
+                {nextTab && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={goToNextTab}
+                    className="border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-xl font-medium px-3 text-xs sm:text-sm"
+                    title={`Avanzar a ${nextTab.label}`}
+                  >
+                    <span>Siguiente</span>
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                )}
+
                 <Button
                   type="button"
                   variant="outline"
                   onClick={requestClose}
                   disabled={isSubmitting || isUploadingImages}
-                  className="min-w-[100px] flex-1 sm:flex-none border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium"
+                  className="min-w-[80px] border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium text-xs sm:text-sm"
                 >
                   Cancelar
                 </Button>
@@ -2809,7 +3106,7 @@ export function ProductModal({
                   type="submit"
                   disabled={isSubmitting || isUploadingImages || !isExistingVariantDataReady}
                   aria-describedby="product-form-status"
-                  className={`min-w-[180px] flex-1 sm:flex-none text-white rounded-xl font-medium transition-all ${
+                  className={`min-w-[150px] sm:min-w-[180px] text-white rounded-xl font-medium transition-all text-xs sm:text-sm ${
                     submitState.ready
                       ? 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 dark:bg-blue-600 dark:hover:bg-blue-500'
                       : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20 dark:bg-amber-600 dark:hover:bg-amber-500'

@@ -39,10 +39,10 @@ describe('el contexto de auth no se mueve al volver a la pestaña', () => {
     expect(cuerpo).toMatch(/\}, \[fetchUserProfile, resolveStableProfile\]\)/)
   })
 
-  it('sigue cortando el refresco de token sin recargar el perfil', () => {
-    // Lo de antes no se pierde: sin este corte, cada vuelta a la pestaña pegaba
-    // a /api/auth/profile y armaba un `user` nuevo.
-    expect(CONTEXTO).toContain("if (event === 'TOKEN_REFRESHED' && nextUser && latestUserRef.current?.id === nextUser.id)")
+  it('conserva el perfil si la misma sesión se confirma al volver a la pestaña', () => {
+    expect(CONTEXTO).toContain('shouldReuseAuthenticatedUser(')
+    expect(CONTEXTO).toContain('nextSession.access_token === sessionRef.current?.access_token')
+    expect(CONTEXTO).toContain('sessionRef.current?.access_token !== nextSession.access_token')
   })
 
   it('nadie lee la sesión desde useAuth', () => {

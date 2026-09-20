@@ -31,7 +31,6 @@ import {
   PhoneForwarded,
   MapPin,
   Edit,
-  X,
   Star,
   Calendar,
   Wallet,
@@ -39,7 +38,6 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
-  AlertCircle
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomers } from '@/contexts/CustomerContext'
@@ -348,7 +346,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
                   {mode === 'create'
-                    ? 'Completa los datos de contacto, RUC/CI y condiciones comerciales'
+                    ? 'Cargá el contacto principal; los demás datos son opcionales'
                     : mode === 'edit'
                       ? 'Edita la información del cliente'
                       : 'Ficha y resumen del cliente'
@@ -710,7 +708,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           ) : (
             // Formulario de edición/creación
             <CustomerFormSimple
+              key={mode === 'edit' ? customer?.id : 'new-customer'}
               showStoreInvite={mode === 'create'}
+              progressiveDisclosure={mode === 'create'}
               customerId={mode === 'edit' ? customer?.id : null}
               initialData={getInitialFormData()}
               onSubmit={handleFormSubmit}

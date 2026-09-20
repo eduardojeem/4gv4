@@ -58,4 +58,18 @@ describe('RepairCard payment status', () => {
     rerender(<RepairCard repair={{ ...repair, status: 'entregado', qualityCheck: { id: 'q2', result: 'unrepairable', checklist: { powersOn: false, reportedIssueResolved: false, basicFunctions: false, physicalCondition: true, accessoriesVerified: true }, checkedAt: '2026-09-13T20:00:00Z' } }} />)
     expect(screen.queryByText('No fue posible reparar')).not.toBeInTheDocument()
   })
+
+  it('renders correctly in compact mode for kanban boards', () => {
+    render(<RepairCard repair={repair} compact />)
+    expect(screen.getByLabelText('Estado financiero de la reparación')).toBeVisible()
+    expect(screen.getByText('Teléfono')).toBeVisible()
+    expect(screen.getByText('#R-200')).toBeVisible()
+  })
+
+  it('shows Entregado · sin costo for delivered repairs with price 0 and no debt', () => {
+    render(<RepairCard repair={{ ...repair, finalCost: 0, estimatedCost: 0, paidAmount: 0 }} />)
+    expect(screen.getByText('Entregado · sin costo')).toBeVisible()
+    expect(screen.queryByText('Entregado con saldo pendiente')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Falta/)).not.toBeInTheDocument()
+  })
 })

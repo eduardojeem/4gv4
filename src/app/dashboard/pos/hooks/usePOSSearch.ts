@@ -369,10 +369,10 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   }, [])
 
   // --- Categorías y rango de precios derivados del catálogo ---
-  const catalogCounts = useMemo(() => countByCatalogView(products), [products])
+  const catalogCounts = useMemo(() => countByCatalogView(products.filter(p => p.is_active !== false)), [products])
 
   const viewProducts = useMemo(
-    () => products.filter((product) => matchesCatalogView(product, catalogView)),
+    () => products.filter((product) => product.is_active !== false && matchesCatalogView(product, catalogView)),
     [products, catalogView]
   )
 
@@ -384,13 +384,14 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   }, [viewProducts])
 
   const priceRangeLimits = useMemo(() => {
-    if (products.length === 0) return { min: 0, max: 0 }
-    const prices = products.map(p => p.sale_price)
+    const activeProducts = products.filter(p => p.is_active !== false)
+    if (activeProducts.length === 0) return { min: 0, max: 0 }
+    const prices = activeProducts.map(p => p.sale_price)
     return { min: Math.min(...prices), max: Math.max(...prices) }
   }, [products])
 
   const financedProductsCount = useMemo(
-    () => products.filter(hasProductCredit).length,
+    () => products.filter(p => p.is_active !== false && hasProductCredit(p)).length,
     [products]
   )
 
@@ -398,6 +399,8 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   // Primero todo lo que coincide con búsqueda y filtros; después la vista.
   const matchingList = useMemo(() => {
     return products.filter(product => {
+      if (product.is_active === false) return false
+
       const searchLower = debouncedSearchTerm.toLowerCase()
       const categoryName =
         (typeof product.category === 'object'

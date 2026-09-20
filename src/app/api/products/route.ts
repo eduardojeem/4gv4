@@ -321,7 +321,11 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
             ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
             : null
 
-          const branchStock = Number(stockMap.get(product.id) || 0)
+          const branchStock = stockMap.has(product.id)
+            ? Number(stockMap.get(product.id) || 0)
+            : (product.stock_quantity !== null && product.stock_quantity !== undefined && Number(product.stock_quantity) > 0
+                ? Number(product.stock_quantity)
+                : 0)
           const effectiveStock = hasVariants && variantStock !== null && (branchStock === 0 || !stockMap.has(product.id))
             ? variantStock
             : branchStock
@@ -1057,7 +1061,12 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
       .from('products')
-      .select('*')
+      .select(`
+        *,
+        category:categories(id, name, description),
+        supplier:suppliers(id, name, contact_name, phone, address),
+        variants:product_variants(*)
+      `)
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
       .single()
@@ -1074,13 +1083,49 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     logger.info('Product updated', { productId: product.id, userId: user.id })
 
-    const responseProduct = branchScope.branchId && desiredStockQuantity !== undefined
+    let branchStockMap: Map<string, number> | undefined
+    let branchThresholdMap: Map<string, { minStock: number | null; maxStock: number | null }> | undefined
+    if (branchScope.branchId) {
+      if (desiredStockQuantity !== undefined) {
+        branchStockMap = new Map([[String(product.id), Number(desiredStockQuantity)]])
+      } else {
+        const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
+        const branchStockResult = await loadBranchInventoryStockMap(
+          branchInventoryClient,
+          branchScope.branchId,
+          [String(product.id)]
+        )
+        if (!branchStockResult.failed) {
+          branchStockMap = branchStockResult.stockMap
+          branchThresholdMap = branchStockResult.thresholdMap
+        }
+      }
+    }
+
+    let responseProduct = branchScope.branchId && branchStockMap
       ? applyBranchInventoryToProducts(
           [product as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
-          new Map([[String(product.id), Number(desiredStockQuantity)]]),
-          true
+          branchStockMap,
+          true,
+          branchThresholdMap
         )[0]
       : product
+
+    const rawVariants = Array.isArray((responseProduct as any).variants) ? (responseProduct as any).variants : []
+    const hasVariants = Boolean((responseProduct as any).has_variants || rawVariants.length > 0)
+    if (hasVariants && rawVariants.length > 0) {
+      const variantStock = rawVariants.reduce(
+        (sum: number, v: any) => (v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum),
+        0
+      )
+      const currentStock = Number((responseProduct as any).stock_quantity || 0)
+      if (currentStock === 0 && variantStock > 0) {
+        responseProduct = {
+          ...responseProduct,
+          stock_quantity: variantStock,
+        }
+      }
+    }
     
     revalidateProductStorefront(organization.slug, organization.id, String(product.id))
 
@@ -1110,10 +1155,57 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       )
     }
     
-    const ids = idsParam.split(',')
-    const supabase = await createClient()
+    const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean)
+    if (ids.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Product IDs are required' },
+        { status: 400 }
+      )
+    }
+
+    const adminSupabase = createAdminSupabase()
+
+    // Verificar si alguno de los productos tiene transacciones
+    const [
+      { count: salesCount },
+      { count: ordersCount },
+      { count: repairPartsCount },
+      { count: repairCostsCount },
+    ] = await Promise.all([
+      adminSupabase.from('sale_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('order_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('repair_parts').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('repair_item_costs').select('id', { count: 'exact', head: true }).in('product_id', ids),
+    ])
+
+    const hasTransactions =
+      (salesCount ?? 0) > 0 ||
+      (ordersCount ?? 0) > 0 ||
+      (repairPartsCount ?? 0) > 0 ||
+      (repairCostsCount ?? 0) > 0
+
+    if (hasTransactions) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Algunos productos seleccionados tienen ventas o reparaciones asociadas. Te sugerimos desactivarlos para preservar el historial.',
+          code: 'PRODUCTS_HAVE_TRANSACTIONS',
+        },
+        { status: 409 }
+      )
+    }
+
+    // Limpiar tablas auxiliares dependientes sin transacciones
+    await Promise.allSettled([
+      adminSupabase.from('cart_items').delete().in('product_id', ids),
+      adminSupabase.from('branch_variant_inventory').delete().in('product_id', ids),
+      adminSupabase.from('branch_inventory').delete().in('product_id', ids),
+      adminSupabase.from('variant_inventory_movements').delete().in('product_id', ids),
+      adminSupabase.from('product_movements').delete().in('product_id', ids),
+      adminSupabase.from('product_variants').delete().in('product_id', ids),
+    ])
     
-    const { error } = await supabase
+    const { error } = await adminSupabase
       .from('products')
       .delete()
       .in('id', ids)
@@ -1130,11 +1222,26 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       success: true,
       message: `Successfully deleted ${ids.length} product(s)`
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string; details?: string }
     logger.error('Product deletion error', { error })
+
+    const isFkConstraint =
+      err?.code === '23503' ||
+      (typeof err?.message === 'string' && /foreign key|referenc|constraint/i.test(err.message))
+
+    const message = isFkConstraint
+      ? 'No se pudieron eliminar los productos porque tienen registros relacionados en el sistema. Podés desactivarlos.'
+      : (err?.message || 'Error al eliminar los productos')
+
     return NextResponse.json(
-      { success: false, error: 'Failed to delete products' },
-      { status: 500 }
+      {
+        success: false,
+        error: message,
+        code: err?.code || 'DELETE_PRODUCTS_FAILED',
+        details: err?.details || err?.message,
+      },
+      { status: isFkConstraint ? 409 : 500 }
     )
   }
 })

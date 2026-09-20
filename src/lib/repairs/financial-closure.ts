@@ -62,6 +62,10 @@ export type RepairPaymentSummaryInput = {
   finalCost?: number | null
   estimatedCost?: number | null
   paidAmount?: number | null
+  status?: string
+  deliveryOutcome?: string | null
+  qualityCheck?: { result?: string | null } | null
+  closeout?: { outcome?: string | null; finalCharge?: number | null } | null
 }
 
 export type RepairFinancialPresentationInput = RepairPaymentSummaryInput & {
@@ -77,9 +81,47 @@ export function parseRepairDeliveryRequest(input: unknown) {
 }
 
 export function getRepairPaymentSummary(input: RepairPaymentSummaryInput) {
+  const isUnrepaired =
+    input.status === 'cancelado' ||
+    input.deliveryOutcome === 'withdrawn' ||
+    input.deliveryOutcome === 'unrepairable' ||
+    input.qualityCheck?.result === 'unrepairable' ||
+    input.qualityCheck?.result === 'withdrawn' ||
+    input.closeout?.outcome === 'withdrawn' ||
+    input.closeout?.outcome === 'unrepairable'
+
+  const paid = Math.max(0, Number(input.paidAmount) || 0)
+
+  if (isUnrepaired) {
+    // Si la reparación fue retirada o cancelada sin solucionar el problema,
+    // el presupuesto estimado original NO constituye una deuda pendiente.
+    // Solo se cobra si hubo un cargo explícito de revisión/cierre (closeout.finalCharge).
+    const explicitCharge = input.closeout
+      ? Math.max(0, Number(input.closeout.finalCharge) || 0)
+      : (input.deliveryOutcome && input.finalCost !== null && input.finalCost !== undefined && input.finalCost !== input.estimatedCost)
+        ? Math.max(0, Number(input.finalCost) || 0)
+        : 0
+
+    const total = explicitCharge
+    const balance = Math.max(0, total - paid)
+    const status: RepairPaymentStatus = paid <= 0
+      ? (total > 0 ? 'pendiente' : 'pagado')
+      : balance <= 0
+        ? 'pagado'
+        : 'parcial'
+
+    return {
+      total,
+      paid,
+      balance,
+      status,
+      priceDefined: true as const,
+      isUnrepaired: true as const,
+    }
+  }
+
   const priceDefined = (input.finalCost !== null && input.finalCost !== undefined)
     || Number(input.estimatedCost) > 0
-  const paid = Math.max(0, Number(input.paidAmount) || 0)
   if (!priceDefined) {
     return {
       total: null,
@@ -87,16 +129,16 @@ export function getRepairPaymentSummary(input: RepairPaymentSummaryInput) {
       balance: null,
       status: paid > 0 ? 'parcial' as const : 'pendiente' as const,
       priceDefined: false as const,
-    }
+      }
   }
 
   const total = Math.max(0, Number(input.finalCost ?? input.estimatedCost) || 0)
   const balance = Math.max(0, total - paid)
-  const status: RepairPaymentStatus = paid <= 0
-    ? 'pendiente'
-    : balance <= 0
-      ? 'pagado'
-      : 'parcial'
+  const status: RepairPaymentStatus = balance <= 0
+    ? 'pagado'
+    : paid > 0
+      ? 'parcial'
+      : 'pendiente'
 
   return { total, paid, balance, status, priceDefined: true as const }
 }
@@ -104,6 +146,43 @@ export function getRepairPaymentSummary(input: RepairPaymentSummaryInput) {
 export function getRepairFinancialPresentation(input: RepairFinancialPresentationInput) {
   const summary = getRepairPaymentSummary(input)
   const delivered = input.status === 'entregado'
+  const isUnrepaired = 'isUnrepaired' in summary && Boolean(summary.isUnrepaired)
+
+  if (isUnrepaired) {
+    if (summary.total === 0) {
+      if (summary.paid > 0) {
+        return {
+          ...summary,
+          delivered,
+          isUnrepaired: true as const,
+          label: delivered ? 'Retirado · anticipo a favor' : 'Anticipo registrado',
+          canCollect: false,
+        }
+      }
+      return {
+        ...summary,
+        delivered,
+        isUnrepaired: true as const,
+        label: input.status === 'cancelado'
+          ? 'Cancelado · sin costo'
+          : (input.deliveryOutcome === 'unrepairable' || input.qualityCheck?.result === 'unrepairable')
+            ? 'Sin reparar · sin costo'
+            : 'Retirado sin reparar',
+        canCollect: false,
+      }
+    }
+  }
+
+  if (summary.priceDefined && summary.total === 0 && summary.paid === 0) {
+    return {
+      ...summary,
+      delivered,
+      isUnrepaired: false as const,
+      label: delivered ? 'Entregado · sin costo' : 'Sin costo',
+      canCollect: false,
+    }
+  }
+
   const financialLabel = summary.status === 'pagado'
     ? 'pagado'
     : summary.status === 'parcial'
@@ -113,6 +192,7 @@ export function getRepairFinancialPresentation(input: RepairFinancialPresentatio
   return {
     ...summary,
     delivered,
+    isUnrepaired: false as const,
     label: summary.priceDefined
       ? (delivered ? `Entregado · ${financialLabel}` : financialLabel)
       : (summary.paid > 0 ? 'Anticipo recibido · precio pendiente' : 'Precio pendiente'),

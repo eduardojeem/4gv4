@@ -48,6 +48,14 @@ export function applyFilters(products: Product[], filters: DashboardFilters): Pr
     }
   }
 
+  // Tipo de catalogo: es el alcance de la pantalla y vive aparte del filtro
+  // rapido, para que pedir «bajo stock» no vuelva a mezclar los servicios.
+  if (filters.catalog_kind) {
+    filtered = filters.catalog_kind === 'service'
+      ? filtered.filter(isServiceLikeProduct)
+      : filtered.filter(p => !isServiceLikeProduct(p))
+  }
+
   // Category filter
   if (filters.category_id) {
     filtered = filtered.filter(p => p.category_id === filters.category_id)
@@ -132,12 +140,24 @@ export function getMinStockThreshold(product: Pick<StockShape, 'min_stock'>): nu
   return Number(product.min_stock ?? 0)
 }
 
-export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'>): boolean {
+export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { variants?: any[] }): boolean {
+  if (product.variants && product.variants.length > 0) {
+    const totalVariantStock = product.variants.reduce((acc: number, v: any) => {
+      const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
+      return acc + (Number.isFinite(qty) ? qty : 0)
+    }, 0)
+    return totalVariantStock <= 0
+  }
   return Number(product.stock_quantity ?? 0) <= 0
 }
 
-export function isLowStock(product: StockShape): boolean {
-  const stock = Number(product.stock_quantity ?? 0)
+export function isLowStock(product: StockShape & { variants?: any[] }): boolean {
+  const stock = (product.variants && product.variants.length > 0)
+    ? product.variants.reduce((acc: number, v: any) => {
+        const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
+        return acc + (Number.isFinite(qty) ? qty : 0)
+      }, 0)
+    : Number(product.stock_quantity ?? 0)
   return stock > 0 && stock <= getMinStockThreshold(product)
 }
 

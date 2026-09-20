@@ -120,4 +120,82 @@ describe('repair financial closure contracts', () => {
       status: 'entregado', finalCost: 100_000, estimatedCost: 80_000, paidAmount: 100_000,
     })).toMatchObject({ label: 'Entregado · pagado', canCollect: false, balance: 0 })
   })
+
+  it('does not show pending balance when a repair is withdrawn without repair', () => {
+    expect(getRepairFinancialPresentation({
+      status: 'entregado',
+      deliveryOutcome: 'withdrawn',
+      estimatedCost: 150_000,
+      finalCost: 150_000,
+      paidAmount: 0,
+    })).toMatchObject({
+      label: 'Retirado sin reparar',
+      canCollect: false,
+      balance: 0,
+      total: 0,
+    })
+
+    expect(getRepairFinancialPresentation({
+      status: 'entregado',
+      deliveryOutcome: 'unrepairable',
+      estimatedCost: 200_000,
+      paidAmount: 0,
+    })).toMatchObject({
+      label: 'Sin reparar · sin costo',
+      canCollect: false,
+      balance: 0,
+      total: 0,
+    })
+
+    expect(getRepairFinancialPresentation({
+      status: 'cancelado',
+      estimatedCost: 180_000,
+      paidAmount: 0,
+    })).toMatchObject({
+      label: 'Cancelado · sin costo',
+      canCollect: false,
+      balance: 0,
+      total: 0,
+    })
+  })
+
+  it('marks repairs with price 0 as sin costo without debt', () => {
+    expect(getRepairPaymentSummary({
+      finalCost: 0,
+      estimatedCost: 0,
+      paidAmount: 0,
+    })).toEqual({
+      total: 0,
+      paid: 0,
+      balance: 0,
+      status: 'pagado',
+      priceDefined: true,
+    })
+
+    expect(getRepairFinancialPresentation({
+      status: 'entregado',
+      finalCost: 0,
+      estimatedCost: 0,
+      paidAmount: 0,
+    })).toMatchObject({
+      label: 'Entregado · sin costo',
+      canCollect: false,
+      balance: 0,
+      total: 0,
+      status: 'pagado',
+    })
+
+    expect(getRepairFinancialPresentation({
+      status: 'en_reparacion',
+      finalCost: 0,
+      estimatedCost: 0,
+      paidAmount: 0,
+    })).toMatchObject({
+      label: 'Sin costo',
+      canCollect: false,
+      balance: 0,
+      total: 0,
+      status: 'pagado',
+    })
+  })
 })

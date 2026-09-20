@@ -15,7 +15,9 @@ import {
   HelpCircle,
   ShieldCheck,
   Wallet,
-  Scale
+  Scale,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
@@ -89,6 +91,7 @@ function RepairCostsEditorForm({
   const { isAdmin } = useAuth()
   const canViewCost = useCanViewCost()
   const [step, setStep] = useState<'edit' | 'preview'>('edit')
+  const [isExpanded, setIsExpanded] = useState(false)
   const [laborAmount, setLaborAmount] = useState(repair.laborCost || 0)
   const [parts, setParts] = useState<EditableRepairPart[]>(
     repair.parts.map((part, index) => ({
@@ -177,15 +180,41 @@ function RepairCostsEditorForm({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent className="flex h-[96dvh] max-h-[96dvh] w-[calc(100%-1rem)] max-w-[1400px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1400px] lg:w-[calc(100%-2rem)]">
+      <DialogContent
+        className={cn(
+          "flex flex-col gap-0 overflow-hidden p-0 duration-200",
+          isExpanded
+            ? "h-[96dvh] max-h-[96dvh] w-[calc(100%-1rem)] max-w-[1440px] sm:max-w-[1440px] lg:w-[calc(100%-2rem)]"
+            : "h-[88dvh] max-h-[88dvh] w-[calc(100%-1.5rem)] max-w-[1140px] sm:max-w-[1140px]"
+        )}
+      >
+        {/* Acciones de cabecera: Paso actual y botón destacado para Agrandar / Reducir modal */}
+        <div className="absolute top-3 right-12 z-50 flex items-center gap-2">
+          <span className="rounded-full border border-border/80 bg-muted px-2.5 py-1 text-xs font-semibold text-foreground/80 shadow-2xs">
+            Paso {step === 'edit' ? '1' : '2'} de 2
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="h-8 px-2.5 rounded-lg border-cyan-400/80 dark:border-cyan-700 bg-cyan-50/90 dark:bg-cyan-950/80 text-cyan-900 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900 font-semibold text-xs shadow-xs gap-1.5 transition-all"
+            title={isExpanded ? 'Reducir tamaño del modal' : 'Agrandar modal a tamaño completo'}
+            aria-label={isExpanded ? 'Reducir tamaño del modal' : 'Agrandar modal a tamaño completo'}
+          >
+            {isExpanded ? <Minimize2 className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-300" /> : <Maximize2 className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-300" />}
+            <span className="font-semibold">{isExpanded ? 'Reducir' : 'Agrandar modal'}</span>
+          </Button>
+        </div>
+
         {/* Cabecera del diálogo */}
-        <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-6">
+        <DialogHeader className="border-b px-4 py-3 sm:px-6 sm:py-3.5 pr-56 sm:pr-64 text-left">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <DialogTitle className="text-lg sm:text-xl font-bold">
                 {step === 'edit' ? 'Editar costos y repuestos' : 'Vista previa de costos'}
               </DialogTitle>
-              <DialogDescription className="mt-1 text-xs sm:text-sm">
+              <DialogDescription className="mt-0.5 text-xs sm:text-sm">
                 {repair.customer.name} · {deviceLabel}
               </DialogDescription>
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -208,20 +237,17 @@ function RepairCostsEditorForm({
                 </Button>
               </div>
             </div>
-            <span className="rounded-full border bg-muted px-3 py-1 text-xs font-medium">
-              Paso {step === 'edit' ? '1' : '2'} de 2
-            </span>
           </div>
-          <div aria-label="Progreso" className="mt-4 grid grid-cols-2 gap-2 text-xs font-medium">
+          <div aria-label="Progreso" className="mt-3 grid grid-cols-2 gap-2 text-xs font-medium">
             <Step number={1} label="Editar costos" active />
             <Step number={2} label="Confirmar" active={step === 'preview'} />
           </div>
         </DialogHeader>
 
         {/* Cuerpo del Diálogo */}
-        <div className="flex-1 overflow-y-auto bg-muted/20 p-3 sm:p-5">
+        <div className="flex-1 overflow-y-auto bg-muted/20 p-3 sm:p-4 md:p-5">
           {step === 'edit' ? (
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,2.2fr)_minmax(340px,0.8fr)]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_350px] items-start">
               <div className="min-w-0 space-y-4">
                 {/* Formulario de Servicio Manual */}
                 {manualServiceOpen && (

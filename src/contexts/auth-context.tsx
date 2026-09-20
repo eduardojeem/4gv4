@@ -7,6 +7,7 @@ import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/rol
 import { normalizeRole } from '../lib/auth/role-utils'
 import { toast } from 'sonner'
 import { logAuthEventClient } from '@/lib/auth-event-client'
+import { shouldReuseAuthenticatedUser } from '@/lib/auth/auth-event-stability'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
@@ -647,16 +648,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const nextUser = nextSession?.user
 
-        // Supabase refresca el token solo al volver a una pestaña (el SDK
-        // chequea visibilidad y refresca si corresponde), y eso dispara este
-        // mismo evento con event === 'TOKEN_REFRESHED'. Si sigue siendo el
-        // mismo usuario, no hay nada que recargar: antes esto pegaba a
-        // /api/auth/profile y armaba un `user` nuevo en cada cambio de
-        // pestaña, re-renderizando los 50+ componentes que leen useAuth()
-        // solo por eso. Se actualiza igual el token (session sí cambió de
-        // verdad), pero sin tocar perfil/rol/permisos, que no cambiaron.
-        if (event === 'TOKEN_REFRESHED' && nextUser && latestUserRef.current?.id === nextUser.id) {
-          setSession(nextSession)
+        // Al volver a la pestaña Supabase puede emitir TOKEN_REFRESHED o
+        // SIGNED_IN para la misma sesión. Conservar el perfil evita reconstruir
+        // el contexto y remostrar loaders; USER_UPDATED y otro usuario sí lo
+        // recargan. La sesión se actualiza igualmente para mantener el token.
+        if (shouldReuseAuthenticatedUser(
+          event,
+          nextUser?.id ?? null,
+          latestUserRef.current?.id ?? null,
+          Boolean(nextSession?.access_token && nextSession.access_token === sessionRef.current?.access_token),
+        )) {
+          if (nextSession && sessionRef.current?.access_token !== nextSession.access_token) {
+            sessionRef.current = nextSession
+            setSession(nextSession)
+          }
           return
         }
 

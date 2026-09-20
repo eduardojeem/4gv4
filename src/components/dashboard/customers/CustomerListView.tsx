@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -91,8 +91,11 @@ interface CustomerListViewProps {
    */
   searchTerm?: string
   onSearchChange?: (term: string) => void
+  sortField: string
+  sortOrder: 'asc' | 'desc'
+  onSortChange: (field: string, order: 'asc' | 'desc') => void
 }
-type SortField = 'name' | 'email' | 'phone' | 'status' | 'lifetime_value' | 'last_activity' | 'total_purchases'
+type SortField = 'created_at' | 'name' | 'email' | 'phone' | 'status' | 'lifetime_value' | 'last_activity' | 'total_purchases'
 type SortOrder = 'asc' | 'desc'
 
 const NUMERIC_SORT_FIELDS = new Set<SortField>(['lifetime_value', 'total_purchases'])
@@ -151,7 +154,10 @@ export function CustomerListView({
   onBulkStatusChange,
   compact = false,
   searchTerm: controlledSearchTerm,
-  onSearchChange
+  onSearchChange,
+  sortField,
+  sortOrder,
+  onSortChange,
 }: CustomerListViewProps) {
   const { isAdmin, isManager } = useAuth()
   const canDelete = isAdmin || isManager
@@ -159,22 +165,16 @@ export function CustomerListView({
 
   // Lo que se esta escribiendo, que no es lo mismo que lo que se esta buscando:
   // la lista se rearma al confirmar —Enter o la lupa—, no en cada tecla.
-  const [draft, setDraft] = useState(controlledSearchTerm ?? '')
+  const [draftState, setDraftState] = useState({ base: controlledSearchTerm ?? '', value: controlledSearchTerm ?? '' })
+  const draft = draftState.base === (controlledSearchTerm ?? '') ? draftState.value : (controlledSearchTerm ?? '')
+  const setDraft = (value: string) => setDraftState({ base: controlledSearchTerm ?? '', value })
   const [localSearchTerm, setLocalSearchTerm] = useState('')
   const searchTerm = isControlled ? controlledSearchTerm ?? '' : localSearchTerm
-
-  // Si el termino cambia desde afuera —el otro campo, o limpiar filtros—, este
-  // se pone al dia en vez de quedar mostrando lo anterior.
-  useEffect(() => {
-    if (isControlled) setDraft(controlledSearchTerm ?? '')
-  }, [controlledSearchTerm, isControlled])
 
   const submitSearch = (value: string) => {
     if (isControlled) onSearchChange?.(value)
     else setLocalSearchTerm(value)
   }
-  const [sortField, setSortField] = useState<SortField>('name')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const effectiveViewMode = viewMode === 'grid' ? 'grid' : 'table'
 
   // Filtrar y ordenar clientes
@@ -183,7 +183,7 @@ export function CustomerListView({
     // y ordeno por relevancia. Volver a filtrar aca solo podria sacar gente.
     const filtered = isControlled || !searchTerm ? [...customers] : searchCustomers(customers, searchTerm)
 
-    return filtered.sort((a, b) => compareCustomers(a, b, sortField, sortOrder))
+    return isControlled ? filtered : filtered.sort((a, b) => compareCustomers(a, b, sortField as SortField, sortOrder))
   }, [customers, searchTerm, sortField, sortOrder, isControlled])
 
   // `useCustomerState` ya sincroniza estos importes con `/api/customers/spend`.
@@ -196,23 +196,19 @@ export function CustomerListView({
       total: customer.lifetime_value || 0,
       lastAmount: customer.last_purchase_amount || 0,
       lastDate: customer.last_activity || null,
-      purchaseTotal: customer.lifetime_value || 0,
-      repairTotal: 0,
+      purchaseTotal: customer.purchase_spend || 0,
+      repairTotal: customer.repair_spend || 0,
       yearTotal: customer.total_spent_this_year || 0,
     }]),
   ), [processedCustomers])
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortOrder('asc')
-    }
+    onSortChange(field, sortField === field && sortOrder === 'asc' ? 'desc' : 'asc')
   }
 
-  const allSelected = selectedCustomers.length === processedCustomers.length && processedCustomers.length > 0
-  const someSelected = selectedCustomers.length > 0 && selectedCustomers.length < processedCustomers.length
+  const selectedOnPage = processedCustomers.filter((customer) => selectedCustomers.includes(customer.id)).length
+  const allSelected = processedCustomers.length > 0 && selectedOnPage === processedCustomers.length
+  const someSelected = selectedOnPage > 0 && !allSelected
 
   return (
     <div className="space-y-4">
@@ -254,7 +250,7 @@ export function CustomerListView({
 
           {/* Contador de resultados */}
           <div className="text-sm text-muted-foreground">
-            {processedCustomers.length} cliente{processedCustomers.length !== 1 ? 's' : ''}
+            {processedCustomers.length} en esta página
             {selectedCustomers.length > 0 && (
               <span className="ml-2 text-blue-600 dark:text-blue-400">
                 ({selectedCustomers.length} seleccionado{selectedCustomers.length !== 1 ? 's' : ''})
@@ -356,10 +352,10 @@ export function CustomerListView({
                 selectedCustomers={selectedCustomers}
                 allSelected={allSelected}
                 someSelected={someSelected}
-                sortField={sortField}
+                sortField={sortField as SortField}
                 sortOrder={sortOrder}
                 onSort={handleSort}
-                onSelectAll={allSelected ? onClearSelection : onSelectAll}
+                onSelectAll={onSelectAll}
                 onCustomerToggle={onCustomerToggle}
                 onViewCustomer={onViewCustomer}
                 onEditCustomer={onEditCustomer}

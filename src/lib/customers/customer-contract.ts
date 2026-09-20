@@ -86,3 +86,28 @@ export function buildCustomerIdentity(input: {
     company_name: companyName || null,
   }
 }
+
+type CustomerIdentityInput = Parameters<typeof buildCustomerIdentity>[0]
+
+export function buildCustomerIdentityForUpdate(
+  current: CustomerIdentityInput,
+  updates: CustomerIdentityInput
+) {
+  const hasSplitNameUpdate = updates.first_name !== undefined || updates.last_name !== undefined
+  const hasFullNameUpdate = updates.name !== undefined
+  const hasCompanyNameUpdate = updates.company_name !== undefined
+  const hasCompanyUpdate = updates.company !== undefined
+
+  return buildCustomerIdentity({
+    ...current,
+    ...updates,
+    ...(hasFullNameUpdate && !hasSplitNameUpdate
+      ? { first_name: undefined, last_name: undefined }
+      : {}),
+    ...(hasCompanyNameUpdate
+      ? { company: updates.company_name }
+      : hasCompanyUpdate
+        ? { company_name: updates.company }
+        : {}),
+  })
+}

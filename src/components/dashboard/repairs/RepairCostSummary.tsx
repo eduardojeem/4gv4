@@ -67,7 +67,11 @@ export function RepairCostSummary({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Costos de la reparación</h3>
-          <p className="text-xs text-muted-foreground">Servicios, repuestos cobrados y ajustes con IVA incluido</p>
+          <p className="text-xs text-muted-foreground">
+            {!editable && correctable
+              ? 'Reparación entregada · Corrección auditada de costo interno de repuestos o precio final'
+              : 'Servicios, repuestos cobrados y ajustes con IVA incluido'}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {editable && (
@@ -77,14 +81,30 @@ export function RepairCostSummary({
             </Button>
           )}
           {!editable && correctable && onCorrectInternalCost && (
-            <Button type="button" variant="outline" size="sm" onClick={onCorrectInternalCost} aria-label="Corregir costo interno">
-              <Edit className="mr-2 h-4 w-4" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCorrectInternalCost}
+              aria-label="Corregir costo interno"
+              className="gap-1.5 border-amber-300/80 bg-amber-50/70 text-amber-900 hover:bg-amber-100 hover:text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-200 font-semibold text-xs shadow-2xs"
+              title="Corregir costo de compra o proveedor de repuestos (recalcula ganancia sin alterar lo cobrado al cliente)"
+            >
+              <Wrench className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300" />
               Corregir costo interno
             </Button>
           )}
           {!editable && correctable && onCorrectFinalPrice && (
-            <Button type="button" variant="outline" size="sm" onClick={onCorrectFinalPrice} aria-label="Corregir precio final">
-              <Edit className="mr-2 h-4 w-4" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCorrectFinalPrice}
+              aria-label="Corregir precio final"
+              className="gap-1.5 border-sky-300/80 bg-sky-50/70 text-sky-900 hover:bg-sky-100 hover:text-sky-950 dark:border-sky-800/80 dark:bg-sky-950/40 dark:text-sky-200 font-semibold text-xs shadow-2xs"
+              title="Corregir el precio total cobrado al cliente (ajuste comercial auditado)"
+            >
+              <Coins className="h-3.5 w-3.5 text-sky-700 dark:text-sky-300" />
               Corregir precio final
             </Button>
           )}

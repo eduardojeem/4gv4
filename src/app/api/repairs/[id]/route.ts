@@ -150,9 +150,9 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
       return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
     }
 
-    if (current.status === 'entregado' || current.status === 'cancelado') {
+    if (current.status === 'cancelado') {
       return NextResponse.json(
-        { error: `No se puede editar una reparación en estado "${current.status}".` },
+        { error: 'No se puede editar una reparación cancelada.' },
         { status: 422 }
       )
     }
@@ -266,6 +266,11 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     updateData.pricing_updated_by = ctx.userId
     updateData.pricing_updated_at = new Date().toISOString()
     updateData.updated_at = new Date().toISOString()
+
+    if (resolvedPricing.finalCost !== null) {
+      const balance = Math.max(0, resolvedPricing.finalCost - Number(current.paid_amount || 0))
+      updateData.payment_status = balance <= 0 ? 'pagado' : Number(current.paid_amount || 0) > 0 ? 'parcial' : 'pendiente'
+    }
 
     if (Array.isArray(parts)) {
       delete updateData.estimated_cost

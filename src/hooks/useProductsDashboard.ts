@@ -151,13 +151,44 @@ export function useProductsDashboard({
     setFilters(prev => ({ ...prev, ...newFilters }))
   }, [])
 
-  // Handle quick filters
+  /**
+   * Los filtros rapidos no borran el alcance de la seccion.
+   *
+   * Antes cada filtro reemplazaba todo el estado: la pantalla abria en «solo
+   * productos» y al tocar «bajo stock» volvian a aparecer los servicios y los
+   * productos desactivados, sin que nada lo dijera. Ahora el tipo y el estado
+   * son dos ejes propios, y el filtro rapido solo cambia el suyo.
+   *
+   * «Todos» es la unica salida al catalogo completo: ahi si se limpia todo.
+   */
   const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants') => {
-    // Clear custom filters when applying quick filter
-    setFilters({
-      quick_filter: filter
+    const base = initialFilters ?? {}
+
+    setFilters(prev => {
+      // «Todos» es la unica salida al catalogo completo.
+      if (filter === 'all') return {}
+
+      // Un eje apagado a mano queda apagado: `prev` manda aunque valga
+      // undefined, y el alcance de la seccion solo se usa si nadie lo toco.
+      const actual = <K extends keyof DashboardFilters>(clave: K) =>
+        (clave in prev ? prev[clave] : base[clave])
+
+      if (filter === 'products' || filter === 'services') {
+        const tipo = filter === 'products' ? ('part' as const) : ('service' as const)
+        // Volver a tocar el tipo puesto lo saca, y quedan los dos.
+        return { ...base, ...prev, quick_filter: null, catalog_kind: actual('catalog_kind') === tipo ? undefined : tipo }
+      }
+
+      if (filter === 'active' || filter === 'inactive') {
+        const quiere = filter === 'active'
+        return { ...base, ...prev, quick_filter: null, is_active: actual('is_active') === quiere ? undefined : quiere }
+      }
+
+      // Bajo stock, agotados y variantes: se apagan al volver a tocarlos y no
+      // tocan el tipo ni el estado.
+      return { ...base, ...prev, quick_filter: prev.quick_filter === filter ? null : filter }
     })
-  }, [])
+  }, [initialFilters])
 
   // Handle sorting
   const handleSort = useCallback((field: SortConfig['field']) => {

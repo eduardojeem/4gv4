@@ -44,7 +44,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { BusinessProfileCard } from '@/components/admin/settings/BusinessProfileCard'
 import { useAuth } from '@/contexts/auth-context'
-import { useTheme } from '@/contexts/theme-context'
+import { useTheme, type Theme } from '@/contexts/theme-context'
 import {
   DEFAULT_SYSTEM_COLOR_SCHEME,
   getSystemColorSchemeOption,
@@ -86,7 +86,7 @@ export default function AdminSettingsPage() {
     scope,
   } = useSharedSettings()
   const { loading: authLoading } = useAuth()
-  const { setTheme, setColorScheme } = useTheme()
+  const { theme: activeTheme, colorScheme: activeColorScheme, setTheme, setColorScheme } = useTheme()
   const t = getAdminSettingsText('es')
   const [activeTab, setActiveTab] = useState('company')
   const [currencyChangeConfirmed, setCurrencyChangeConfirmed] = useState(false)
@@ -126,25 +126,18 @@ export default function AdminSettingsPage() {
     }, 0)
   ), [settings, originalSettings])
 
-  const initialSyncDone = useRef(false)
   const themeDirtyRef = useRef(false)
-  const savedThemeRef = useRef({ theme: originalSettings.theme, color: originalSettings.primaryColor })
-
-  useEffect(() => {
-    // El tema se toma de la organizacion. Con valores globales no hay de
-    // donde tomarlo.
-    if (scope !== 'organization' || isLoading || initialSyncDone.current) return
-    setTheme(settings.theme as 'light' | 'dark' | 'system')
-    setColorScheme(isSystemColorScheme(settings.primaryColor) ? settings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
-    initialSyncDone.current = true
-  }, [scope, isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
+  // Preservar el tema y esquema con el que el usuario ingresó a la pantalla.
+  // No forzamos un cambio al cargar para no pisar el modo claro/oscuro del usuario.
+  const savedThemeRef = useRef({ theme: activeTheme, color: activeColorScheme })
 
   useEffect(() => {
     if (!themeDirtyRef.current) {
-      savedThemeRef.current = { theme: originalSettings.theme, color: originalSettings.primaryColor }
+      savedThemeRef.current = { theme: activeTheme, color: activeColorScheme }
     }
-  }, [originalSettings.theme, originalSettings.primaryColor])
+  }, [activeTheme, activeColorScheme])
 
+  // Si el usuario previsualiza un cambio de tema pero sale sin guardar, revertimos a su tema activo.
   useEffect(() => () => {
     if (!themeDirtyRef.current) return
     const { theme, color } = savedThemeRef.current
@@ -203,15 +196,20 @@ export default function AdminSettingsPage() {
     }
     themeDirtyRef.current = false
     setCurrencyChangeConfirmed(false)
-    savedThemeRef.current = { theme: settings.theme, color: settings.primaryColor }
+    savedThemeRef.current = {
+      theme: (settings.theme as Theme) || 'light',
+      color: isSystemColorScheme(settings.primaryColor) ? settings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME,
+    }
     toast.success(t.saved)
   }
 
   const handleReset = () => {
     resetSettings()
-    setTheme(originalSettings.theme as 'light' | 'dark' | 'system')
-    setColorScheme(isSystemColorScheme(originalSettings.primaryColor) ? originalSettings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
-    themeDirtyRef.current = false
+    if (themeDirtyRef.current) {
+      setTheme(savedThemeRef.current.theme as 'light' | 'dark' | 'system')
+      setColorScheme(isSystemColorScheme(savedThemeRef.current.color) ? savedThemeRef.current.color : DEFAULT_SYSTEM_COLOR_SCHEME)
+      themeDirtyRef.current = false
+    }
     setCurrencyChangeConfirmed(false)
     toast.info(t.discarded)
   }

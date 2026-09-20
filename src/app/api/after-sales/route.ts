@@ -66,6 +66,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const customerId = searchParams.get('customer_id')
     const repairId = searchParams.get('repair_id')
     const saleId = searchParams.get('sale_id')
+    const search = searchParams.get('search')?.trim()
     const from = (page - 1) * limit
     const to = from + limit - 1
 
@@ -96,6 +97,12 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if (customerId) query = query.eq('customer_id', customerId)
     if (repairId) query = query.eq('repair_id', repairId)
     if (saleId) query = query.eq('sale_id', saleId)
+    if (search) {
+      const sanitized = search.replace(/[%_,()]/g, '')
+      if (sanitized) {
+        query = query.or(`case_number.ilike.%${sanitized}%,reason.ilike.%${sanitized}%,notes.ilike.%${sanitized}%`)
+      }
+    }
 
     const { data, error, count } = await query
       .order('created_at', { ascending: false })

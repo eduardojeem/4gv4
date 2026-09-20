@@ -24,14 +24,14 @@ export function RepairInternalCostCorrectionDialog({ open, repair, onOpenChange,
 function CorrectionForm({ open, repair, onOpenChange, onSaved }: {
   open: boolean; repair: Repair; onOpenChange: (open: boolean) => void; onSaved: () => void | Promise<void>
 }) {
-  const initialRows = useMemo<EditableCost[]>(() => repair.parts
-    .filter((part): part is typeof part & { databaseId: string } => Boolean(part.databaseId))
+  const initialRows = useMemo<EditableCost[]>(() => (repair.parts || [])
+    .filter((part) => Boolean(part.databaseId || (part as any).id))
     .map((part) => ({
-      partId: part.databaseId,
+      partId: String(part.databaseId || (part as any).id),
       name: part.name,
       quantity: part.quantity,
-      previousUnitCost: part.internalCost ?? part.cost,
-      unitCost: part.internalCost ?? part.cost,
+      previousUnitCost: part.internalCost ?? part.cost ?? 0,
+      unitCost: part.internalCost ?? part.cost ?? 0,
     })), [repair.parts])
   const [rows, setRows] = useState(initialRows)
   const [reason, setReason] = useState('')

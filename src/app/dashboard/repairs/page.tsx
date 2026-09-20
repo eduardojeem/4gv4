@@ -273,10 +273,14 @@ function RepairsPageContent() {
     const activeRepairs = repairs.filter((repair) => repair.status !== 'entregado' && repair.status !== 'cancelado')
     const urgentRepairs = activeRepairs.filter((repair) => repair.urgency === 'urgent')
     const readyRepairs = repairs.filter((repair) => repair.status === 'listo')
+    const unassignedRepairs = activeRepairs.filter((repair) => !repair.technician?.id)
+    const pausedRepairs = repairs.filter((repair) => repair.status === 'pausado')
     return {
       activeRepairs: activeRepairs.length,
       urgentRepairs: urgentRepairs.length,
       readyRepairs: readyRepairs.length,
+      unassignedRepairs: unassignedRepairs.length,
+      pausedRepairs: pausedRepairs.length,
     }
   }, [repairs])
 
@@ -839,7 +843,7 @@ function RepairsPageContent() {
 
   return (
     <RepairHelpActionsProvider execute={executeRepairHelpAction}>
-    <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-5 lg:p-6 dark:bg-slate-950">
+    <div className="flex flex-col gap-3 sm:gap-3.5 bg-slate-50 p-3 sm:p-4 lg:p-5 dark:bg-slate-950">
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={canManageRepairs ? handleNewRepair : undefined}
@@ -849,10 +853,12 @@ function RepairsPageContent() {
         activeRepairs={repairPulse.activeRepairs}
         urgentRepairs={repairPulse.urgentRepairs}
         readyRepairs={repairPulse.readyRepairs}
+        unassignedRepairs={repairPulse.unassignedRepairs}
+        pausedRepairs={repairPulse.pausedRepairs}
+        statusFilter={statusFilter}
+        onStatusFilterSelect={setStatusFilter}
         selectedBranchName={selectedBranch?.name}
       />
-
-      <RepairLimitBanner reloadSignal={repairs.length} />
 
       <div className="hidden">
         <Collapsible open={quickAccessOpen} onOpenChange={setQuickAccessOpen}>

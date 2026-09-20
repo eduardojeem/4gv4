@@ -32,4 +32,24 @@ describe('RepairFinalPriceCorrectionDialog', () => {
     expect(screen.getByRole('button', { name: 'Revisar corrección' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('button', { name: 'Ir a Posventa' }).hasAttribute('disabled')).toBe(false)
   })
+
+  it('allows correcting price to 0 when there is no paid amount', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<RepairFinalPriceCorrectionDialog open repair={{ ...repair, paidAmount: 0 }} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+    const price = screen.getByLabelText('Nuevo precio final')
+    await user.clear(price)
+    await user.type(price, '0')
+    await user.type(screen.getByLabelText('Motivo obligatorio'), 'Garantia de reparacion sin costo')
+    const reviewBtn = screen.getByRole('button', { name: 'Revisar corrección' })
+    expect(reviewBtn.hasAttribute('disabled')).toBe(false)
+    await user.click(reviewBtn)
+    expect(screen.getByText('Sin costo')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Confirmar nuevo precio' }))
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      newFinalTotal: 0,
+      reason: 'Garantia de reparacion sin costo',
+    })
+  })
 })

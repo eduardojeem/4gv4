@@ -11,7 +11,7 @@
  * - Diseño moderno, responsivo y adaptado al tema oscuro/claro
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   User,
   Phone,
@@ -25,7 +25,8 @@ import {
   Star,
   Check,
   ShieldCheck,
-  Coins
+  Coins,
+  ChevronDown
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -72,6 +73,8 @@ interface CustomerFormSimpleProps {
   customerId?: string | null
   /** Ofrece invitar a la tienda pública. Solo tiene sentido al crear. */
   showStoreInvite?: boolean
+  /** En el alta, muestra primero el contacto esencial y pliega lo opcional. */
+  progressiveDisclosure?: boolean
   onSubmit: (data: SimpleCustomerFormData) => void
   onCancel?: () => void
   submitLabel?: string
@@ -142,6 +145,7 @@ export function CustomerFormSimple({
   initialData,
   customerId,
   showStoreInvite = false,
+  progressiveDisclosure = false,
   onSubmit,
   onCancel,
   submitLabel = 'Guardar Cliente',
@@ -155,7 +159,7 @@ export function CustomerFormSimple({
     ruc: '',
     phone: '',
     email: '',
-    city: 'Asunción',
+    city: progressiveDisclosure ? '' : 'Asunción',
     address: '',
     customerType: 'individual',
     companyName: '',
@@ -166,6 +170,7 @@ export function CustomerFormSimple({
   })
 
   const [errors, setErrors] = useState<ValidationErrors>({})
+  const [showDetails, setShowDetails] = useState(false)
 
   // Aviso anticipado de que el telefono, el correo o el RUC ya estan cargados en
   // otro cliente. Quien decide es el servidor, que rechaza el alta con 409: esto
@@ -176,16 +181,6 @@ export function CustomerFormSimple({
     ruc: formData.ruc,
     excludeId: customerId ?? null,
   })
-
-  // Actualizar estado si initialData cambia
-  useEffect(() => {
-    if (initialData) {
-      setFormData(prev => ({
-        ...prev,
-        ...initialData
-      }))
-    }
-  }, [initialData])
 
   const handleInputChange = (field: keyof SimpleCustomerFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -199,6 +194,10 @@ export function CustomerFormSimple({
 
     const validationErrors = validateForm(formData)
     setErrors(validationErrors)
+
+    if (validationErrors.alternatePhone || validationErrors.alternatePhoneLabel) {
+      setShowDetails(true)
+    }
 
     if (Object.keys(validationErrors).length === 0) {
       onSubmit(formData)
@@ -232,8 +231,9 @@ export function CustomerFormSimple({
                 key={type.value}
                 type="button"
                 onClick={() => handleInputChange('customerType', type.value)}
+                aria-pressed={isSelected}
                 className={cn(
-                  "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all relative cursor-pointer",
+                  "flex flex-col items-start rounded-lg border p-2 text-left transition-colors relative cursor-pointer",
                   isSelected
                     ? "border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 shadow-xs ring-1 ring-blue-500"
                     : "border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-white/20"
@@ -280,21 +280,21 @@ export function CustomerFormSimple({
       <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] space-y-3">
         <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
           <User className="h-3.5 w-3.5 text-blue-500" />
-          <span>Datos Principales</span>
+          <span>Contacto principal</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Nombre / Razón Social */}
+          {/* La empresa tiene un campo propio; aquí va la persona de contacto. */}
           <div className="space-y-1">
             <Label htmlFor="firstName" className="text-xs font-medium flex items-center justify-between">
-              <span>Nombre o Razón Social <span className="text-red-500">*</span></span>
+              <span>Nombre <span className="text-red-500">*</span></span>
             </Label>
             <Input
               id="firstName"
               value={formData.firstName}
               onChange={(e) => handleInputChange('firstName', e.target.value)}
               onBlur={(e) => handleInputChange('firstName', capitalizePersonName(e.target.value))}
-              placeholder="Ej: Juan Carlos / Inversiones SRL"
+              placeholder="Ej: Juan Carlos"
               className={cn(
                 "h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
                 errors.firstName && "border-red-500 focus-visible:ring-red-500"
@@ -309,17 +309,17 @@ export function CustomerFormSimple({
             )}
           </div>
 
-          {/* Apellido / Nombre Fantasía */}
+          {/* Apellido */}
           <div className="space-y-1">
             <Label htmlFor="lastName" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              Apellido / Fantasía (opcional)
+              Apellido (opcional)
             </Label>
             <Input
               id="lastName"
               value={formData.lastName || ''}
               onChange={(e) => handleInputChange('lastName', e.target.value)}
               onBlur={(e) => handleInputChange('lastName', capitalizePersonName(e.target.value))}
-              placeholder="Ej: Pérez / Comercial"
+              placeholder="Ej: Pérez"
               className="h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
             />
           </div>
@@ -328,7 +328,7 @@ export function CustomerFormSimple({
           <div className="space-y-1">
             <Label htmlFor="ruc" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
               <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-              <span>RUC / Cédula (C.I.)</span>
+              <span>RUC / Cédula (opcional)</span>
             </Label>
             <Input
               id="ruc"
@@ -363,64 +363,6 @@ export function CustomerFormSimple({
               </p>
             )}
           </div>
-
-          {/* Contacto alternativo.
-              En un taller el celular del cliente suele ser el equipo que dejó:
-              este es el número de un tercero al que sí se lo puede ubicar. */}
-          <div className="space-y-1">
-            <Label htmlFor="alternatePhone" className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <Phone className="h-3.5 w-3.5 text-slate-400" />
-              <span>Otro teléfono para avisarle (opcional)</span>
-            </Label>
-            <Input
-              id="alternatePhone"
-              type="tel"
-              value={formData.alternatePhone || ''}
-              onChange={(e) => handleInputChange('alternatePhone', e.target.value)}
-              placeholder="Si deja su celular en reparación"
-              className={cn(
-                "h-9 text-xs font-mono rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
-                errors.alternatePhone && "border-red-500 focus-visible:ring-red-500"
-              )}
-            />
-            {errors.alternatePhone && (
-              <p className="text-[11px] text-red-500 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {errors.alternatePhone}
-              </p>
-            )}
-          </div>
-
-          {/* Solo tiene sentido preguntar de quién es si hay un número cargado. */}
-          {(formData.alternatePhone || '').trim().length > 0 && (
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="alternatePhoneLabel" className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                ¿De quién es ese teléfono? <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="alternatePhoneLabel"
-                list="alternate-phone-labels"
-                value={formData.alternatePhoneLabel || ''}
-                onChange={(e) => handleInputChange('alternatePhoneLabel', e.target.value)}
-                placeholder="Ej: hermana, jefe, hijo…"
-                className={cn(
-                  "h-9 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900",
-                  errors.alternatePhoneLabel && "border-red-500 focus-visible:ring-red-500"
-                )}
-              />
-              <datalist id="alternate-phone-labels">
-                {ALTERNATE_PHONE_LABELS.map((label) => (
-                  <option key={label} value={label} />
-                ))}
-              </datalist>
-              {errors.alternatePhoneLabel && (
-                <p className="text-[11px] text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {errors.alternatePhoneLabel}
-                </p>
-              )}
-            </div>
-          )}
 
           {/* Correo Electrónico */}
           <div className="space-y-1 sm:col-span-2">
@@ -497,6 +439,56 @@ export function CustomerFormSimple({
         </div>
       </div>
 
+      {progressiveDisclosure && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-between border-dashed text-sm"
+          aria-expanded={showDetails}
+          aria-controls="customer-additional-fields"
+          onClick={() => setShowDetails((open) => !open)}
+        >
+          <span>Datos adicionales <span className="font-normal text-muted-foreground">· Ubicación, otro teléfono y crédito</span></span>
+          <ChevronDown className={cn('h-4 w-4 transition-transform', showDetails && 'rotate-180')} />
+        </Button>
+      )}
+
+      {(!progressiveDisclosure || showDetails) && <div id="customer-additional-fields" className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02] sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="alternatePhone" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            Otro teléfono para avisarle (opcional)
+          </Label>
+          <Input
+            id="alternatePhone"
+            type="tel"
+            value={formData.alternatePhone || ''}
+            onChange={(e) => handleInputChange('alternatePhone', e.target.value)}
+            placeholder="Si deja su celular en reparación"
+            className={cn('h-9 rounded-lg text-xs', errors.alternatePhone && 'border-red-500')}
+          />
+          {errors.alternatePhone && <p className="text-xs text-red-600">{errors.alternatePhone}</p>}
+        </div>
+        {(formData.alternatePhone || '').trim().length > 0 && (
+          <div className="space-y-1">
+            <Label htmlFor="alternatePhoneLabel" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+              ¿De quién es ese teléfono? <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="alternatePhoneLabel"
+              list="alternate-phone-labels"
+              value={formData.alternatePhoneLabel || ''}
+              onChange={(e) => handleInputChange('alternatePhoneLabel', e.target.value)}
+              placeholder="Ej: hermana, jefe, hijo…"
+              className={cn('h-9 rounded-lg text-xs', errors.alternatePhoneLabel && 'border-red-500')}
+            />
+            <datalist id="alternate-phone-labels">
+              {ALTERNATE_PHONE_LABELS.map((label) => <option key={label} value={label} />)}
+            </datalist>
+            {errors.alternatePhoneLabel && <p className="text-xs text-red-600">{errors.alternatePhoneLabel}</p>}
+          </div>
+        )}
+      </div>
       {/* ─── Bloque 2: Ubicación ─── */}
       <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] space-y-2.5">
         <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -705,6 +697,8 @@ export function CustomerFormSimple({
           />
         </div>
       </div>
+
+      </div>}
 
       {/* ─── Botones de Acción ─── */}
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-white/5">
