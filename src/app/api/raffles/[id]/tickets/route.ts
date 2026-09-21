@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { routeParam } from '@/lib/api/route-params'
 import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
 import { MAX_TICKETS_PER_OPERATION } from '@/lib/raffles/responsible-play'
@@ -11,11 +12,6 @@ const redeemSchema = z.object({
   quantity: z.number().int().min(1, 'Elegí al menos un número').max(MAX_TICKETS_PER_OPERATION),
 })
 
-function raffleId(routeContext: unknown): string | null {
-  const params = (routeContext as { params?: { id?: string } } | undefined)?.params
-  return params?.id ?? null
-}
-
 /**
  * Canje de puntos por números.
  *
@@ -25,7 +21,7 @@ function raffleId(routeContext: unknown): string | null {
  * pedir números sin pagar los puntos.
  */
 export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
-  const id = raffleId(routeContext)
+  const id = await routeParam(routeContext, 'id')
   if (!id) return NextResponse.json({ error: 'Falta el sorteo' }, { status: 400 })
 
   const body = await request.json().catch(() => null)

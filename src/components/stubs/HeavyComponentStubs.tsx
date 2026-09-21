@@ -70,7 +70,7 @@ export const Html5QrcodeScanner = class {
     console.warn('QR Code scanner disabled for bundle optimization')
   }
   
-  render(onScanSuccess: Function, onScanFailure?: Function) {
+  render(onScanSuccess: (decodedText: string, result: unknown) => void, onScanFailure?: (message: string, error: unknown) => void) {
     toast.warning('Escáner QR deshabilitado temporalmente')
   }
   

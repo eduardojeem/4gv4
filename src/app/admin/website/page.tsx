@@ -15,8 +15,10 @@ import { BrandsSectionEditor } from '@/components/admin/website/BrandsSectionEdi
 import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
 import { WebsiteSectionIntro } from '@/components/admin/website/WebsiteSectionIntro'
-import { AlertTriangle, Eye, Globe, RotateCw } from 'lucide-react'
+import { AlertTriangle, Eye, Globe, Images, RotateCw } from 'lucide-react'
 import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -39,6 +41,8 @@ export default function WebsiteAdminPage() {
 
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [tab, setTab] = useState('company')
+  const [mediaDialogOpen, setMediaDialogOpen] = useState(false)
+  const { count: mediaCount, limit: mediaLimit, isAtLimit: isMediaAtLimit, isNearLimit: isMediaNearLimit } = useWebsiteMediaQuota()
   const dirtyRef = useRef(false)
 
   const setDirty = useCallback((dirty: boolean) => {
@@ -126,6 +130,33 @@ export default function WebsiteAdminPage() {
             <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
           </Button>
 
+          <Button
+            type="button"
+            variant={isMediaAtLimit ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={() => setMediaDialogOpen(true)}
+            className="gap-2"
+            title={`Historial de imágenes: ${mediaCount}/${mediaLimit} usadas (${mediaLimit - mediaCount} disponibles)`}
+          >
+            <Images className={cn("h-4 w-4", !isMediaAtLimit && "text-primary")} />
+            <span>Historial de imágenes</span>
+            <span className={cn(
+              "px-1.5 py-0.2 rounded-full text-[10px] font-bold tabular-nums",
+              isMediaAtLimit
+                ? "bg-white text-destructive"
+                : isMediaNearLimit
+                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                : "bg-muted text-muted-foreground"
+            )}>
+              {mediaCount}/{mediaLimit}
+            </span>
+          </Button>
+
+          <WebsiteMediaLibraryDialog
+            open={mediaDialogOpen}
+            onOpenChange={setMediaDialogOpen}
+          />
+
           <WebsiteHowItWorksDialog
             currentTab={tab}
             orgSlug={orgSlug}
@@ -189,6 +220,7 @@ export default function WebsiteAdminPage() {
           onChange={handleTabChange}
           settings={settings}
           servicesModuleEnabled={servicesModuleEnabled}
+          onOpenMediaHistory={() => setMediaDialogOpen(true)}
         />
         <div className="min-w-0">
 

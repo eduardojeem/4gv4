@@ -80,28 +80,24 @@ const iconButton =
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 export function MarketplaceProductModal({ product, open, onClose }: Props) {
+  if (!product) return null
+  return <MarketplaceProductModalContent key={product.id} product={product} open={open} onClose={onClose} />
+}
+
+function MarketplaceProductModalContent({ product, open, onClose }: Props & { product: MarketplaceProduct }) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [mainError, setMainError] = useState(false)
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({})
 
   // Incluye las fotos de las variantes, para que elegir un color muestre la suya.
-  const allImages: string[] = product
-    ? galleryWithVariantImages(
+  const allImages = useMemo(() => galleryWithVariantImages(
         [product.image, ...(Array.isArray(product.images) ? product.images : [])],
         product.variants ?? [],
         resolveProductImageUrl,
-      ).filter((image) => image !== '/placeholder-product.svg')
-    : []
+      ).filter((image) => image !== '/placeholder-product.svg'), [product])
 
   const hasMultiple = allImages.length > 1
   const currentSrc = allImages[activeIdx] ?? null
-
-  // Resetear índice cuando cambia de producto
-  useEffect(() => {
-    setActiveIdx(0)
-    setMainError(false)
-    setSelectedAttrs({})
-  }, [product?.id])
 
   const prev = useCallback(() => { setMainError(false); setActiveIdx((i) => Math.max(0, i - 1)) }, [])
   const next = useCallback(
@@ -121,37 +117,37 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
   }, [open, hasMultiple, prev, next])
 
   const variants = useMemo<PublicProductVariant[]>(
-    () => (product?.variants ?? []).filter((variant) => variant.is_active),
-    [product?.variants]
+    () => (product.variants ?? []).filter((variant) => variant.is_active),
+    [product.variants]
   )
   const hasVariants = Boolean(product?.has_variants && variants.length > 0)
+  const variantAttributeConfig = product.variant_attribute_config
   const attributeKeys = useMemo(() => {
     const nonSelectable = new Set(['image_url', 'image', 'photo', 'imageurl'])
-    if (product?.variant_attribute_config?.length) {
-      return product.variant_attribute_config
+    if (variantAttributeConfig?.length) {
+      return variantAttributeConfig
         .filter((config) => !nonSelectable.has(config.key.toLowerCase()))
         .map((config) => config.key)
     }
     return Array.from(new Set(variants.flatMap((variant) => Object.keys(variant.attributes ?? {}))))
       .filter((k) => !nonSelectable.has(k.toLowerCase()))
-  }, [product?.variant_attribute_config, variants])
+  }, [variantAttributeConfig, variants])
   const matchedVariant = useMemo(() => {
     if (!hasVariants || attributeKeys.some((key) => !selectedAttrs[key])) return null
     return variants.find((variant) => attributeKeys.every((key) => variant.attributes[key] === selectedAttrs[key])) ?? null
   }, [attributeKeys, hasVariants, selectedAttrs, variants])
 
-  // La foto sigue a la variante elegida, como en la pagina de detalle.
-  const variantImageIdx = useMemo(
-    () => variantImageIndex(allImages, matchedVariant, variants, resolveProductImageUrl),
-    [allImages, matchedVariant, variants],
-  )
-  useEffect(() => {
+  const handleAttributeChange = (key: string, value: string) => {
+    const nextAttrs = { ...selectedAttrs, [key]: value }
+    setSelectedAttrs(nextAttrs)
+    if (attributeKeys.some((attribute) => !nextAttrs[attribute])) return
+    const nextVariant = variants.find((variant) => attributeKeys.every((attribute) => variant.attributes[attribute] === nextAttrs[attribute])) ?? null
+    if (nextVariant?.id === matchedVariant?.id) return
+    const variantImageIdx = variantImageIndex(allImages, nextVariant, variants, resolveProductImageUrl)
     if (variantImageIdx === -1) return
     setMainError(false)
     setActiveIdx(variantImageIdx)
-  }, [variantImageIdx])
-
-  if (!product) return null
+  }
 
   const selectedSalePrice = matchedVariant?.sale_price ?? product.sale_price
   const displayPrice = resolvePublicVariantPrice({ isWholesale: false, product, variant: matchedVariant })
@@ -368,7 +364,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
                 variants={variants}
                 config={product.variant_attribute_config}
                 selected={selectedAttrs}
-                onChange={(key, value) => setSelectedAttrs((current) => ({ ...current, [key]: value }))}
+                onChange={handleAttributeChange}
               />
             )}
 

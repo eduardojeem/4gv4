@@ -588,6 +588,20 @@ export const AnnouncementSchema = z.object({
 // Hasta tres avisos por tienda: mas que eso no se alcanzan a mostrar.
 export const AnnouncementsSchema = z.array(AnnouncementSchema).max(3, 'Hasta 3 avisos')
 
+/** Esquema para un archivo de imagen en la biblioteca de medios del sitio web */
+export const MediaItemSchema = z.object({
+  id: z.string().min(1).max(100),
+  url: z.string().trim().max(1000).refine(isSafeLinkOrPath, 'URL de imagen no permitida'),
+  path: z.string().trim().max(1000),
+  name: z.string().trim().max(200),
+  size: z.number().int().nonnegative().optional(),
+  section: z.enum(['logo', 'promotions', 'announcements', 'brands', 'general']).optional(),
+  createdAt: z.string().max(100).optional(),
+})
+
+/** Biblioteca de imágenes: límite estricto de 20 por organización */
+export const MediaLibrarySchema = z.array(MediaItemSchema).max(20, 'Máximo 20 imágenes por organización')
+
 // Esquema completo de configuración del sitio web
 export const WebsiteSettingsSchema = z.object({
   company_info: CompanyInfoSchema,
@@ -608,6 +622,7 @@ export const WebsiteSettingsSchema = z.object({
   process_flows: ProcessFlowsSchema,
   maintenance_mode: MaintenanceModeSchema.optional(),
   checkout: CheckoutSettingsSchema.optional(),
+  media_library: MediaLibrarySchema.optional(),
 })
 
 // Tipo inferido del esquema
@@ -633,6 +648,7 @@ export const SETTING_SCHEMAS = {
   process_flows: ProcessFlowsSchema,
   maintenance_mode: MaintenanceModeSchema,
   checkout: CheckoutSettingsSchema,
+  media_library: MediaLibrarySchema,
 } as const
 
 export function isWebsiteSettingKey(key: string): key is keyof typeof SETTING_SCHEMAS {

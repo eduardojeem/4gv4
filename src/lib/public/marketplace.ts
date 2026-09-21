@@ -1001,7 +1001,7 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     .filter((r) => Boolean(r.has_variants))
     .map((r) => r.id)
 
-  let variantsByProduct = new Map<string, PublicProductVariant[]>()
+  const variantsByProduct = new Map<string, PublicProductVariant[]>()
   if (variantProductIds.length > 0) {
     const { data: variantsData } = await supabase
       .from('product_variants')

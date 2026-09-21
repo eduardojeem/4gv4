@@ -308,11 +308,16 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const fetchBrands = useCallback(async () => {
     if (!enabled) return
     try {
+      // Acotado a proposito: esta consulta no tenia tope y PostgREST corta en
+      // mil filas sin avisar, asi que la pantalla creia tener todas las marcas
+      // cuando no las tenia. El buscador de marcas consulta al servidor cuando
+      // hay muchas (ver BrandPicker), y el filtro usa estas como sugerencias.
       const { data, error } = await supabase
         .from('brands')
         .select('*')
         .eq('is_active', true)
         .order('name')
+        .limit(200)
 
       if (error) throw error
       setBrands((data || []) as unknown as Brand[])
@@ -453,6 +458,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
   // Función para crear producto
   const createProduct = useCallback(async (productData: Database['public']['Tables']['products']['Insert']) => {
+    let payload: ProductApiPayload | null = null
     try {
       const response = await fetch('/api/products', {
         method: 'POST',
@@ -462,7 +468,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         },
         body: JSON.stringify(productData),
       })
-      const payload = await response.json().catch(() => null) as ProductApiPayload | null
+      payload = await response.json().catch(() => null) as ProductApiPayload | null
 
       if (!response.ok || !payload?.success || !payload.data) {
         throw new Error(getProductApiError(payload, 'Error al crear el producto'))
@@ -504,7 +510,9 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       
       return { 
         success: false, 
-        error: errorMessage
+        error: errorMessage,
+        code: payload?.code,
+        conflictProductId: (payload as any)?.conflictProductId,
       }
     }
   }, [selectedBranchId, fetchDashboardStats, fetchProducts])

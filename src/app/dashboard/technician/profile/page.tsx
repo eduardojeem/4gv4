@@ -379,7 +379,7 @@ export default function TechnicianProfilePage() {
                   <div>
                     <h4 className="font-medium text-amber-800 dark:text-amber-300 text-sm">Cambiar contraseña</h4>
                     <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-1">
-                      Para cambiar tu contraseña, usá la opción "Olvidé mi contraseña" en la pantalla de login o contactá al administrador.
+                      Para cambiar tu contraseña, usá la opción &quot;Olvidé mi contraseña&quot; en la pantalla de login o contactá al administrador.
                     </p>
                   </div>
                 </div>

@@ -59,3 +59,6 @@ export type { GroupBySelectorProps } from './GroupBySelector'
 
 export { ProductSectionGroup } from './ProductSectionGroup'
 export type { ProductSectionGroupProps } from './ProductSectionGroup'
+
+export { ProductSummaryOverview } from './ProductSummaryOverview'
+export type { ProductSummaryOverviewProps } from './ProductSummaryOverview'

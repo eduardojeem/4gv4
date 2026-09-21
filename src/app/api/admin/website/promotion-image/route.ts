@@ -37,8 +37,19 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ success: false, error: 'La imagen no puede superar 5 MB' }, { status: 400 })
   }
 
-  const storagePath = `website/promotions/${organizationId}/${slideId}-${randomUUID()}.${extension}`
   const admin = createAdminSupabase()
+
+  // Verificar cuota de 20 imágenes
+  const { getWebsiteMediaLibrary, addWebsiteMediaItem, deleteWebsiteMediaItem, MAX_WEBSITE_MEDIA_COUNT } = await import('@/lib/website/website-media')
+  const currentItems = await getWebsiteMediaLibrary(organizationId, admin)
+  if (currentItems.length >= MAX_WEBSITE_MEDIA_COUNT) {
+    return NextResponse.json(
+      { success: false, error: `Alcanzaste el límite de ${MAX_WEBSITE_MEDIA_COUNT} imágenes para tu sitio web. Eliminá imágenes desde el Historial para liberar espacio.` },
+      { status: 400 }
+    )
+  }
+
+  const storagePath = `website/promotions/${organizationId}/${slideId}-${randomUUID()}.${extension}`
   const buffer = Buffer.from(await file.arrayBuffer())
   const { error } = await admin.storage
     .from('product-images')
@@ -49,9 +60,23 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const { data: { publicUrl } } = admin.storage.from('product-images').getPublicUrl(storagePath)
+  const finalUrl = `${publicUrl}?v=${Date.now()}`
+
+  await addWebsiteMediaItem(
+    organizationId,
+    {
+      url: finalUrl,
+      path: storagePath,
+      name: slideId === 'aviso' ? 'Imagen de aviso' : `Banner ${slideId}`,
+      size: file.size,
+      section: slideId === 'aviso' ? 'announcements' : 'promotions',
+    },
+    admin
+  )
+
   return NextResponse.json({
     success: true,
-    url: `${publicUrl}?v=${Date.now()}`,
+    url: finalUrl,
     path: storagePath,
   })
 }
@@ -71,10 +96,8 @@ async function deleteHandler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const admin = createAdminSupabase()
-  const { error } = await admin.storage.from('product-images').remove([path])
-  if (error) {
-    return NextResponse.json({ success: false, error: `No se pudo eliminar la imagen: ${error.message}` }, { status: 500 })
-  }
+  const { deleteWebsiteMediaItem } = await import('@/lib/website/website-media')
+  await deleteWebsiteMediaItem(organizationId, { path }, admin)
 
   return NextResponse.json({ success: true })
 }

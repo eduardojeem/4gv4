@@ -9,6 +9,7 @@ import {
   Trash2, Type, Upload, X,
   ChevronDown, ChevronUp, HelpCircle, Sparkles, Lightbulb, Flame,
   Shirt, ShoppingBag, Truck, Tag, ExternalLink, Zap,
+  Images,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -23,6 +24,9 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { cn } from '@/lib/utils'
 import { PromotionalCarouselSlideSchema } from '@/lib/validation/website-settings'
 import { getPromotionStoragePathFromUrl } from '@/lib/website/promotional-carousel-storage'
@@ -504,27 +508,57 @@ function ImageUploadZone({
   imageUrl,
   uploading,
   onFileSelect,
+  onSelectFromHistory,
   onClear,
   error,
 }: {
   imageUrl: string
   uploading: boolean
   onFileSelect: (file: File) => void
+  onSelectFromHistory?: (url: string) => void
   onClear: () => void
   error?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [mediaOpen, setMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
+
+  const handleTriggerUpload = () => {
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: tu organización llegó al máximo de 20 imágenes. Eliminá imágenes desde el Historial para liberar espacio.')
+      setMediaOpen(true)
+      return
+    }
+    inputRef.current?.click()
+  }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: tu organización llegó al máximo de 20 imágenes. Eliminá imágenes desde el Historial para liberar espacio.')
+      setMediaOpen(true)
+      return
+    }
     const file = e.dataTransfer.files?.[0]
     if (file) onFileSelect(file)
   }
 
   return (
     <div className="space-y-2">
+      {isMediaAtLimit && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+          <span className="font-semibold">⚠️ Límite de 20 imágenes alcanzado en tu organización</span>
+          <button
+            type="button"
+            onClick={() => setMediaOpen(true)}
+            className="underline font-bold hover:text-destructive/80 shrink-0 cursor-pointer"
+          >
+            Abrir historial y liberar espacio
+          </button>
+        </div>
+      )}
       {imageUrl ? (
         <div className={cn('relative overflow-hidden rounded-lg border bg-muted/30', error ? 'border-destructive' : 'border-border/60')}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -537,50 +571,75 @@ function ImageUploadZone({
           >
             <X className="h-3.5 w-3.5" />
           </button>
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMediaOpen(true)}
+              className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/85 cursor-pointer"
+              title="Seleccionar otra imagen del historial"
+            >
+              <Images className="h-3 w-3 text-primary-foreground" />
+              <span>Historial</span>
+            </button>
+            <button
+              id="promotion-image-upload"
+              type="button"
+              onClick={handleTriggerUpload}
+              disabled={uploading}
+              aria-describedby={error ? 'promotion-image-error' : undefined}
+              className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/85 disabled:opacity-60 cursor-pointer"
+            >
+              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+              {uploading ? 'Subiendo…' : 'Cambiar archivo'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
           <button
             id="promotion-image-upload"
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={handleTriggerUpload}
             disabled={uploading}
             aria-describedby={error ? 'promotion-image-error' : undefined}
-            className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/80 disabled:opacity-60"
+            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            className={cn(
+              'flex w-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors cursor-pointer',
+              dragging
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-border/70 bg-muted/30 text-muted-foreground hover:border-primary/50 hover:bg-primary/5',
+              uploading && 'pointer-events-none opacity-60',
+              error && 'border-destructive',
+            )}
           >
-            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-            {uploading ? 'Subiendo…' : 'Cambiar imagen'}
-          </button>
-        </div>
-      ) : (
-        <button
-          id="promotion-image-upload"
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          aria-describedby={error ? 'promotion-image-error' : undefined}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-          className={cn(
-            'flex w-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-4 py-9 text-center transition-colors',
-            dragging
-              ? 'border-primary bg-primary/5 text-primary'
-              : 'border-border/70 bg-muted/30 text-muted-foreground hover:border-primary/50 hover:bg-primary/5',
-            uploading && 'pointer-events-none opacity-60',
-            error && 'border-destructive',
-          )}
-        >
-          {uploading ? (
-            <Loader2 className="h-8 w-8 animate-spin" />
-          ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-              <Upload className="h-5 w-5" />
+            {uploading ? (
+              <Loader2 className="h-8 w-8 animate-spin" />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                <Upload className="h-5 w-5" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-semibold">{uploading ? 'Subiendo imagen…' : 'Subir imagen'}</p>
+              <p className="text-xs text-muted-foreground">Arrastrá o hacé click · JPG, PNG, WebP — máx. 5 MB</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Recomendado: 1200 × 500 px o mayor</p>
             </div>
-          )}
-          <div>
-            <p className="text-sm font-semibold">{uploading ? 'Subiendo imagen…' : 'Subir imagen'}</p>
-            <p className="text-xs text-muted-foreground">Arrastrá o hacé click · JPG, PNG, WebP — máx. 5 MB</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">Recomendado: 1200 × 500 px o mayor</p>
+          </button>
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] text-muted-foreground">¿Ya subiste imágenes antes?</span>
+            <button
+              type="button"
+              onClick={() => setMediaOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
+            >
+              <Images className="h-3.5 w-3.5" />
+              <span>Elegir del historial</span>
+            </button>
           </div>
-        </button>
+        </div>
       )}
       <input
         ref={inputRef}
@@ -592,6 +651,16 @@ function ImageUploadZone({
           const file = e.target.files?.[0]
           if (file) onFileSelect(file)
           e.target.value = ''
+        }}
+      />
+      <WebsiteMediaLibraryDialog
+        open={mediaOpen}
+        onOpenChange={setMediaOpen}
+        filterSection="promotions"
+        title="Historial de Imágenes del Carrusel"
+        description="Elegí una imagen ya subida o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+        onSelect={(url) => {
+          onSelectFromHistory?.(url)
         }}
       />
     </div>
@@ -660,6 +729,8 @@ export function PromotionalCarouselEditor({
   const [activeEditorSection, setActiveEditorSection] = useState<EditorSection>('content')
   const [showCarouselGuide, setShowCarouselGuide] = useState(false)
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('all')
+  const [carouselMediaOpen, setCarouselMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
   const current = draft ?? settings?.[settingKey] ?? defaults
   const hasChanges = draft !== null
   const dirtyContext = useWebsiteEditorDirty()
@@ -763,6 +834,12 @@ export function PromotionalCarouselEditor({
 
   const uploadImage = async (file: File) => {
     if (!editingSlide) return
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: alcanzaste el máximo de 20 imágenes en tu organización. Eliminá imágenes desde el Historial para liberar espacio.', {
+        duration: 5000,
+      })
+      return
+    }
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
       toast.error('Usá una imagen JPG, PNG, WebP o AVIF')
       return
@@ -936,6 +1013,8 @@ export function PromotionalCarouselEditor({
 
   return (
     <div className="max-w-5xl space-y-6 pb-24 md:pb-8">
+      <WebsiteMediaQuotaBanner onOpenHistory={() => setCarouselMediaOpen(true)} />
+
       <SectionCard
         icon={GalleryHorizontalEnd}
         title={title}
@@ -1070,10 +1149,29 @@ export function PromotionalCarouselEditor({
 
       {/* Slides list */}
       <section aria-labelledby="carousel-slides-title" className="space-y-3">
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
           <div>
             <h2 id="carousel-slides-title" className="text-base font-semibold">Diapositivas</h2>
             <p className="text-xs text-muted-foreground">{current.slides.length} de {MAX_SLIDES} configuradas</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCarouselMediaOpen(true)}
+              className="gap-1.5"
+              title="Ver todas las imágenes subidas y administrar cuota"
+            >
+              <Images className="h-4 w-4 text-primary" />
+              <span>Historial de imágenes</span>
+            </Button>
+            {current.slides.length < MAX_SLIDES && (
+              <Button type="button" size="sm" onClick={openNewSlide} className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                Nueva diapositiva
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1517,6 +1615,10 @@ export function PromotionalCarouselEditor({
                     uploading={uploading}
                     error={fieldErrors.imageUrl}
                     onFileSelect={(file) => void uploadImage(file)}
+                    onSelectFromHistory={(url) => {
+                      updateSlideField('imageUrl', url)
+                      toast.success('Imagen seleccionada del historial')
+                    }}
                     onClear={() => {
                       discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
                       editingUploadPathRef.current = null
@@ -1847,6 +1949,22 @@ export function PromotionalCarouselEditor({
           </div>
         </DialogContent>
       </Dialog>
+
+      <WebsiteMediaLibraryDialog
+        open={carouselMediaOpen}
+        onOpenChange={setCarouselMediaOpen}
+        filterSection="promotions"
+        title="Historial de Imágenes del Carrusel"
+        description="Elegí una imagen ya subida o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+        onSelect={(url) => {
+          if (editingSlide) {
+            setEditingSlide((prev) => prev ? { ...prev, imageUrl: url } : prev)
+            toast.success('Imagen asignada a la diapositiva')
+          } else {
+            toast.info('Imagen seleccionada. Para asignarla, edita una diapositiva o creá una nueva.')
+          }
+        }}
+      />
     </div>
   )
 }

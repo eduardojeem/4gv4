@@ -13,6 +13,43 @@ vi.mock('@/hooks/use-public-cart', () => ({ usePublicCart: () => ({ addProduct }
 vi.mock('@/hooks/useWebsiteSettings', () => ({ useWebsiteSettings: () => ({ settings: { checkout: { commerceMode: 'cart' }, company_info: {} }, isLoading: false }) }))
 
 describe('detalle público compacto y variantes', () => {
+  const variantProduct = {
+    id: 'gallery-product', name: 'Remera color', sale_price: 89000, offer_price: 79000,
+    in_stock: true, stock_quantity: 4, image: '/remera-base.jpg', images: [], has_variants: true,
+    variants: [{ id: 'negro', product_id: 'gallery-product', variant_name: 'Negro',
+      attributes: { color: 'Negro', image_url: '/remera-negra.jpg' }, sku: 'NEGRO',
+      sale_price: 89000, stock_quantity: 4, is_active: true }],
+    organization_slug: 'tienda-demo', organization_name: 'Tienda Demo',
+  }
+
+  it('la vista rápida muestra la foto de la variante y conserva la navegación manual', () => {
+    render(<ProductCard product={variantProduct as unknown as PublicProduct} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Vista rápida de Remera color' }))
+    const modal = within(screen.getByRole('dialog'))
+    fireEvent.click(modal.getByRole('button', { name: /Negro/ }))
+    expect(modal.getByRole('img', { name: 'Remera color', exact: true })).toHaveAttribute('src', '/remera-negra.jpg')
+    expect(modal.getByRole('button', { name: /Agregar al carrito.*79\.000/ })).toBeEnabled()
+
+    fireEvent.click(modal.getByRole('button', { name: 'Ver imagen 1' }))
+    fireEvent.click(modal.getByRole('button', { name: /Negro/ }))
+    expect(modal.getByRole('img', { name: 'Remera color', exact: true })).toHaveAttribute('src', '/remera-base.jpg')
+  })
+
+  it('marketplace cambia la foto por color y reinicia la selección al cambiar de producto', () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<MarketplaceProductModal product={variantProduct as unknown as MarketplaceProduct} open onClose={onClose} />)
+    fireEvent.click(screen.getByRole('button', { name: /Negro/ }))
+    expect(screen.getByRole('img', { name: 'Remera color — imagen 2', exact: true })).toHaveAttribute('src', '/remera-negra.jpg')
+    fireEvent.click(screen.getByRole('button', { name: 'Remera color imagen 1' }))
+    fireEvent.click(screen.getByRole('button', { name: /Negro/ }))
+    expect(screen.getByRole('img', { name: 'Remera color — imagen 1', exact: true })).toHaveAttribute('src', '/remera-base.jpg')
+
+    rerender(<MarketplaceProductModal product={{ ...variantProduct, id: 'otro', name: 'Otra remera' } as unknown as MarketplaceProduct} open onClose={onClose} />)
+    expect(screen.getByRole('img', { name: 'Otra remera — imagen 1', exact: true })).toHaveAttribute('src', '/remera-base.jpg')
+    rerender(<MarketplaceProductModal product={null} open onClose={onClose} />)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('permite elegir cantidad y conserva la ruta de la tienda para producto simple', () => {
     addProduct.mockClear()
     const product = { id: 'p1', name: 'Remera', sale_price: 50000, in_stock: true, stock_quantity: 2, description: 'Algodón', images: [], brand: 'Marca', category: { name: 'Ropa' } } as unknown as PublicProduct

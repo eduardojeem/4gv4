@@ -25,7 +25,6 @@ import {
   CreditCard,
   Zap,
   Tag,
-  ChevronRight,
   Home,
   TrendingDown,
   Minus,
@@ -43,6 +42,12 @@ import {
   CheckCircle2,
   Boxes,
   ShieldCheck,
+  ShieldAlert,
+  Loader2,
+  ZoomIn,
+  Maximize2,
+  ChevronLeft,
+  ChevronRight,
   Percent,
   Search,
   Filter,
@@ -164,6 +169,19 @@ export default function ProductDetailPage() {
   const [copiedSku, setCopiedSku] = useState(false)
   const [copiedId, setCopiedId] = useState(false)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [isImageZoomed, setIsImageZoomed] = useState(false)
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 })
+
+  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    setZoomPosition({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    })
+  }
   const [activeTab, setActiveTab] = useState('overview')
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([])
@@ -501,6 +519,34 @@ export default function ProductDetailPage() {
     }
   }
 
+  const [isTogglingActive, setIsTogglingActive] = useState(false)
+
+  const handleToggleActive = async () => {
+    if (!product || isTogglingActive) return
+    const nextState = !product.is_active
+    setIsTogglingActive(true)
+    try {
+      const result = await updateProduct(product.id, {
+        is_active: nextState,
+      } as any)
+
+      if (result.success) {
+        setProduct((prev) => (prev ? { ...prev, is_active: nextState } : null))
+        toast.success(
+          nextState
+            ? `"${product.name}" ha sido activado exitosamente`
+            : `"${product.name}" ha sido desactivado`
+        )
+      } else {
+        toast.error(result.error || 'Error al cambiar el estado del producto')
+      }
+    } catch (error) {
+      toast.error('Error al cambiar el estado del producto')
+    } finally {
+      setIsTogglingActive(false)
+    }
+  }
+
   const handleCopySku = () => {
     if (!product?.sku) return
     navigator.clipboard.writeText(product.sku)
@@ -737,18 +783,27 @@ export default function ProductDetailPage() {
                   <span className={cn('h-2 w-2 rounded-full', stockBadge.dotClass)} />
                   {stockBadge.label}
                 </Badge>
-                <Badge
-                  variant="outline"
+                <button
+                  type="button"
+                  onClick={handleToggleActive}
+                  disabled={isTogglingActive}
+                  title={product.is_active ? 'Click para desactivar' : 'Click para activar'}
                   className={cn(
-                    'text-xs font-semibold px-2.5 py-0.5 rounded-md gap-1',
+                    'inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-md gap-1 border transition-all cursor-pointer hover:opacity-85',
                     product.is_active
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                      : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400'
+                      : 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
                   )}
                 >
-                  {product.is_active ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <EyeOff className="h-3 w-3 text-slate-400" />}
-                  {product.is_active ? 'Activo en Catálogo' : 'Inactivo'}
-                </Badge>
+                  {isTogglingActive ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : product.is_active ? (
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  ) : (
+                    <EyeOff className="h-3 w-3 text-amber-500" />
+                  )}
+                  {product.is_active ? 'Activo en Catálogo' : 'Inactivo (Click para activar)'}
+                </button>
                 {product.featured && (
                   <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0 shadow-xs px-2 py-0.5 text-xs font-bold gap-1">
                     <Star className="h-3 w-3 fill-white" /> Destacado
@@ -804,6 +859,30 @@ export default function ProductDetailPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleToggleActive}
+                disabled={isTogglingActive}
+                title={product.is_active ? 'Desactivar producto' : 'Activar producto'}
+                className={cn(
+                  'h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shadow-xs transition-colors',
+                  product.is_active
+                    ? 'text-slate-700 dark:text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:border-rose-200'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 hover:border-emerald-700 dark:border-emerald-600'
+                )}
+              >
+                {isTogglingActive ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : product.is_active ? (
+                  <EyeOff className="h-3.5 w-3.5 text-slate-500" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                )}
+                {product.is_active ? 'Desactivar' : 'Activar Producto'}
+              </Button>
+
               {/* Imprimir la etiqueta es de lo que mas se hace con un producto
                   recien cargado: va con las acciones principales, no escondido
                   al lado del codigo de barras. */}
@@ -854,6 +933,43 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Banner de producto inactivo */}
+        {!product.is_active && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
+                <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-900 dark:text-amber-100">
+                  Este producto se encuentra inactivo
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  No está habilitado para ventas en punto de venta (caja) ni para el catálogo público.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleToggleActive}
+              disabled={isTogglingActive}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs shrink-0 gap-1.5 h-8.5 px-3.5"
+            >
+              {isTogglingActive ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+              Activar Ahora
+            </Button>
+          </motion.div>
+        )}
 
         {/* ── Top Metrics Ribbon (4 Cards) ─────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1016,16 +1132,32 @@ export default function ProductDetailPage() {
             {/* Gallery Card */}
             <Card className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 shadow-sm overflow-hidden backdrop-blur-md">
               <CardContent className="p-4 sm:p-6">
-                <div className="relative aspect-video sm:aspect-2/1 w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800/80 dark:to-slate-900/80 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200/60 dark:border-slate-700/60 shadow-inner">
+                <div
+                  className="relative aspect-video sm:aspect-2/1 w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800/80 dark:to-slate-900/80 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200/60 dark:border-slate-700/60 shadow-inner group cursor-crosshair select-none"
+                  onMouseEnter={() => setIsImageZoomed(true)}
+                  onMouseMove={handleImageMouseMove}
+                  onMouseLeave={() => {
+                    setIsImageZoomed(false)
+                    setZoomPosition({ x: 50, y: 50 })
+                  }}
+                >
                   {productImages && productImages[selectedImageIndex]?.url ? (
-                    <Image
-                      src={productImages[selectedImageIndex].url}
-                      alt={product.name}
-                      fill
-                      priority
-                      className="object-contain p-2 rounded-2xl transition-all duration-300 hover:scale-105"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 60vw, 800px"
-                    />
+                    <div
+                      className="relative w-full h-full transition-transform duration-150 ease-out will-change-transform"
+                      style={{
+                        transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                        transform: isImageZoomed ? 'scale(2.3)' : 'scale(1)',
+                      }}
+                    >
+                      <Image
+                        src={productImages[selectedImageIndex].url}
+                        alt={product.name}
+                        fill
+                        priority
+                        className="object-contain p-2 rounded-2xl pointer-events-none"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 60vw, 800px"
+                      />
+                    </div>
                   ) : (
                     <div className="text-center p-6">
                       <ImageIcon className="h-16 w-16 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
@@ -1033,8 +1165,23 @@ export default function ProductDetailPage() {
                     </div>
                   )}
 
+                  {/* Zoom hint badge */}
+                  {productImages && productImages[selectedImageIndex]?.url && (
+                    <div
+                      className={cn(
+                        "absolute top-3 left-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-200 pointer-events-none shadow-sm",
+                        isImageZoomed
+                          ? "bg-blue-600 text-white backdrop-blur-md opacity-95 scale-100 ring-2 ring-blue-400/50"
+                          : "bg-slate-900/60 text-white/90 backdrop-blur-sm opacity-60 group-hover:opacity-100"
+                      )}
+                    >
+                      <ZoomIn className="h-3 w-3" />
+                      <span>{isImageZoomed ? 'Zoom 2.3x' : 'Pasa el cursor para ampliar'}</span>
+                    </div>
+                  )}
+
                   {productImages.length > 1 && (
-                    <div className="absolute bottom-3 right-3 bg-black/70 backdrop-blur-md text-white text-[11px] font-mono font-semibold px-2.5 py-1 rounded-full shadow-lg">
+                    <div className="absolute bottom-3 right-3 z-10 bg-black/70 backdrop-blur-md text-white text-[11px] font-mono font-semibold px-2.5 py-1 rounded-full shadow-lg">
                       {selectedImageIndex + 1} / {productImages.length}
                     </div>
                   )}

@@ -20,7 +20,9 @@ const raffleSchema = z.object({
   terms: z.string().max(4000).nullable().optional(),
   min_purchase_amount: z.number().nonnegative().nullable().optional(),
   auto_entry_on_sale: z.boolean().default(false),
-  allow_point_purchase: z.boolean().default(true),
+  // Vender puntos en efectivo es vender números por plata: se pide a
+  // proposito, no se asume. La pantalla tambien lo ofrece apagado.
+  allow_point_purchase: z.boolean().default(false),
   point_purchase_price: z.number().positive().nullable().optional(),
   starts_at: z.string().min(1, 'Falta la fecha de inicio'),
   ends_at: z.string().min(1, 'Falta la fecha de cierre'),
@@ -50,7 +52,8 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
 
   if (rafflesRes.error) {
     if (isLoyaltyModuleMissing(rafflesRes.error)) {
-      return NextResponse.json({ moduleInstalled: false, raffles: [], message: LOYALTY_MIGRATION_HINT })
+      logger.warn('raffles: modulo reportado como no instalado', { code: rafflesRes.error.code, message: rafflesRes.error.message })
+      return NextResponse.json({ moduleInstalled: false, raffles: [], message: LOYALTY_MIGRATION_HINT, reason: rafflesRes.error.message, code: rafflesRes.error.code })
     }
     logger.error('raffles read failed', { error: rafflesRes.error })
     return NextResponse.json({ error: 'No se pudieron cargar los sorteos' }, { status: 500 })

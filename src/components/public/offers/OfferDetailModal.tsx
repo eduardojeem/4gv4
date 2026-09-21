@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -106,6 +106,7 @@ export function OfferDetailModal({
   contactPhone: string
 }) {
   const { addProduct } = usePublicCart()
+  const { settings: websiteSettings } = useWebsiteSettings()
   const [activeImageIdx, setActiveImageIdx] = useState(0)
   const [quantity, setQuantity] = useState(1)
   const [addedToCart, setAddedToCart] = useState(false)
@@ -116,13 +117,20 @@ export function OfferDetailModal({
   const hasVariants = Boolean(offer?.has_variants && offer?.variants && offer.variants.length > 0)
 
   // Find matching variant from selected attributes
-  const activeVariants = offer?.variants?.filter((v) => v.is_active && v.stock_quantity > 0) ?? []
-  const allVariants = offer?.variants?.filter((v) => v.is_active) ?? []
-
+  const offerVariants = offer?.variants
+  const attributeConfig = offer?.variant_attribute_config
+  const activeVariants = useMemo(
+    () => offerVariants?.filter((v) => v.is_active && v.stock_quantity > 0) ?? [],
+    [offerVariants],
+  )
+  const allVariants = useMemo(
+    () => offerVariants?.filter((v) => v.is_active) ?? [],
+    [offerVariants],
+  )
 
   const attributeKeys: string[] = useMemo(() => {
     const nonSelectable = new Set(['image_url', 'image', 'photo', 'imageurl'])
-    if (!offer?.variant_attribute_config || offer.variant_attribute_config.length === 0) {
+    if (!attributeConfig || attributeConfig.length === 0) {
       // Fallback: derive from variants themselves
       const keys = new Set<string>()
       for (const v of allVariants) {
@@ -132,10 +140,10 @@ export function OfferDetailModal({
       }
       return Array.from(keys)
     }
-    return offer.variant_attribute_config
+    return attributeConfig
       .filter((c) => !nonSelectable.has(c.key.toLowerCase()))
       .map((c) => c.key)
-  }, [offer?.variant_attribute_config, allVariants])
+  }, [attributeConfig, allVariants])
 
   // Matched variant (exact match on all keys)
   const matchedVariant: OfferDetailVariant | null = useMemo(() => {
@@ -162,15 +170,6 @@ export function OfferDetailModal({
     () => galleryWithVariantImages([offer?.image, ...(offer?.images ?? [])], allVariants),
     [offer?.image, offer?.images, allVariants],
   )
-  const variantImageIdx = useMemo(
-    () => variantImageIndex(galleryImages, matchedVariant, allVariants),
-    [galleryImages, matchedVariant, allVariants],
-  )
-  useEffect(() => {
-    if (variantImageIdx === -1) return
-    setActiveImageIdx(variantImageIdx)
-  }, [variantImageIdx])
-
   if (!offer) return null
 
   const discount = calcDiscount(
@@ -183,7 +182,6 @@ export function OfferDetailModal({
   const currentImage = galleryImages[activeImageIdx] || offer.image || null
   const resolvedActive = resolveProductImageUrl(currentImage)
 
-  const { settings: websiteSettings } = useWebsiteSettings()
   const storeName = websiteSettings?.company_info?.name || null
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
   const fullProductUrl = currentOrigin ? `${currentOrigin}${productHref}` : productHref
@@ -211,23 +209,28 @@ export function OfferDetailModal({
       : null
 
   const handleSelectAttr = (key: string, value: string) => {
-    setSelectedAttrs((prev) => {
-      const next = { ...prev, [key]: value }
-      // If the current selection of subsequent attrs is no longer available, clear them
-      const keys = attributeKeys
-      const idx = keys.indexOf(key)
-      const cleared = { ...next }
-      for (let i = idx + 1; i < keys.length; i++) {
-        const k = keys[i]
-        const avail = new Set<string>()
-        for (const v of activeVariants) {
-          const matchesBefore = keys.slice(0, i).every((kk) => v.attributes[kk] === cleared[kk])
-          if (matchesBefore && v.attributes[k]) avail.add(v.attributes[k])
-        }
-        if (cleared[k] && !avail.has(cleared[k])) delete cleared[k]
+    // If a subsequent choice is no longer available, clear it before matching the image.
+    const cleared = { ...selectedAttrs, [key]: value }
+    const idx = attributeKeys.indexOf(key)
+    for (let i = idx + 1; i < attributeKeys.length; i++) {
+      const k = attributeKeys[i]
+      const avail = new Set<string>()
+      for (const variant of activeVariants) {
+        const matchesBefore = attributeKeys.slice(0, i).every((previousKey) => variant.attributes[previousKey] === cleared[previousKey])
+        if (matchesBefore && variant.attributes[k]) avail.add(variant.attributes[k])
       }
-      return cleared
-    })
+      if (cleared[k] && !avail.has(cleared[k])) delete cleared[k]
+    }
+    setSelectedAttrs(cleared)
+
+    if (attributeKeys.every((attributeKey) => Boolean(cleared[attributeKey]))) {
+      const nextVariant = allVariants.find((variant) =>
+        attributeKeys.every((attributeKey) => variant.attributes[attributeKey] === cleared[attributeKey])
+      )
+      const imageIndex = variantImageIndex(galleryImages, nextVariant, allVariants)
+      const previousImageIndex = variantImageIndex(galleryImages, matchedVariant, allVariants)
+      if (imageIndex !== -1 && imageIndex !== previousImageIndex) setActiveImageIdx(imageIndex)
+    }
     setQuantity(1)
     setAddedToCart(false)
   }

@@ -89,7 +89,6 @@ const defaultFilters: FilterState = {
 const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps) => {
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
   const [isOpen, setIsOpen] = useState(false)
-  const [activeFiltersCount, setActiveFiltersCount] = useState(0)
 
   // Extraer datos únicos de los productos para los filtros
   const filterOptions = useMemo(() => {
@@ -270,7 +269,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
   }
 
   // Contar filtros activos
-  useEffect(() => {
+  const activeFiltersCount = useMemo(() => {
     let count = 0
     if (filters.search) count++
     if (filters.categories.length > 0) count++
@@ -282,7 +281,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
     if (filters.dateRange.from || filters.dateRange.to) count++
     if (!filters.showOutOfStock || !filters.showLowStock || filters.showDiscontinued) count++
 
-    setActiveFiltersCount(count)
+    return count
   }, [filters, filterOptions])
 
   // Aplicar filtros cuando cambien
@@ -638,7 +637,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
         <div className="flex flex-wrap gap-2">
           {filters.search && (
             <Badge variant="secondary" className="flex items-center gap-1">
-              Búsqueda: "{filters.search}"
+              Búsqueda: &quot;{filters.search}&quot;
               <Button
                 variant="ghost"
                 size="sm"

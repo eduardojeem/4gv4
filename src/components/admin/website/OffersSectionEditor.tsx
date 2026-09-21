@@ -127,31 +127,37 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
         </div>
       )}
 
-      <details className="rounded-xl border p-3">
-      <summary className="cursor-pointer text-sm font-medium">Ver vista previa de ofertas</summary>
-      <Card className={cn('relative mt-3 overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
-        {/* Decorative elements to match public site */}
-        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-foreground/5 blur-3xl" />
-
-        <div className="relative flex items-center justify-between border-b border-foreground/5 px-5 py-3 backdrop-blur-sm">
+      <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between">
           <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            <Eye className="h-3.5 w-3.5" />
-            Vista previa pública
+            <Eye className="h-3.5 w-3.5 text-primary" />
+            Vista previa del encabezado en vivo
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <span className={cn(
+            "text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full",
+            current.enabled ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-muted text-muted-foreground border"
+          )}>
             {current.enabled ? 'Visible' : 'Oculta'}
           </span>
         </div>
-        <div className="relative p-6 sm:p-10">
-          <span className="mb-4 flex w-max items-center gap-2 rounded-full border border-foreground/10 bg-background/50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] backdrop-blur-md">
-            <Tag className="h-3.5 w-3.5" />
-            {current.eyebrow}
-          </span>
-          <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">{current.title}</h2>
-          <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">{current.subtitle}</p>
-        </div>
-      </Card>
-      </details>
+        <Card className={cn('relative overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
+          {/* Decorative elements to match public site */}
+          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-foreground/5 blur-3xl" />
+
+          <div className="relative p-6 sm:p-8">
+            <span className="mb-3 flex w-max items-center gap-2 rounded-full border border-foreground/10 bg-background/60 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] backdrop-blur-md">
+              <Tag className="h-3 w-3" />
+              {current.eyebrow || 'Ofertas'}
+            </span>
+            <h2 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
+              {current.title || 'Precios especiales'}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base leading-relaxed">
+              {current.subtitle || 'Descubrí todos los productos en promoción y ahorrá en tu compra.'}
+            </p>
+          </div>
+        </Card>
+      </div>
 
       <SectionCard
         icon={ShoppingBag}
@@ -184,31 +190,38 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
             <Textarea id="offers-subtitle" value={current.subtitle} onChange={(event) => patch('subtitle', event.target.value)} rows={3} maxLength={240} />
           </div>
 
-          <div className="space-y-3">
-            <Label className="font-semibold">Color del Acento</Label>
-            <p className="text-xs text-muted-foreground">Define el matiz de los bordes y brillos de esta sección especial.</p>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {/* Selector de color compacto y elegante */}
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <Label className="text-xs sm:text-sm font-semibold">Color del Acento</Label>
+                <p className="text-xs text-muted-foreground">Define el matiz de los bordes, brillos y destaques en /ofertas.</p>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/40 px-2.5 py-1 text-xs">
+                <span className={cn('h-3.5 w-3.5 rounded-full shadow-xs', (ACCENTS.find(a => a.value === current.accentColor) ?? ACCENTS[0]).swatch)} />
+                <span className="font-semibold text-foreground capitalize">{(ACCENTS.find(a => a.value === current.accentColor) ?? ACCENTS[0]).label}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1">
               {ACCENTS.map((accent) => {
                 const isSelected = current.accentColor === accent.value
                 return (
                   <button
                     key={accent.value}
                     type="button"
+                    title={accent.label}
                     onClick={() => patch('accentColor', accent.value)}
                     className={cn(
-                      'group relative flex flex-col items-center justify-center rounded-2xl border p-4 transition-all hover:scale-105 active:scale-95',
-                      isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm' : 'border-border/50 hover:border-foreground/30 bg-background'
+                      'group relative flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all active:scale-95',
+                      isSelected
+                        ? 'border-primary bg-primary/10 text-primary font-semibold ring-2 ring-primary/20 shadow-2xs'
+                        : 'border-border/60 bg-background hover:bg-muted/50 text-muted-foreground hover:text-foreground'
                     )}
                   >
-                    <span className={cn('h-8 w-8 rounded-full shadow-inner transition-transform group-hover:scale-110', accent.swatch)} />
-                    <span className={cn('mt-3 text-[11px] font-bold uppercase tracking-wider', isSelected ? 'text-primary' : 'text-muted-foreground')}>
-                      {accent.label}
-                    </span>
-                    {isSelected && (
-                      <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                        ✓
-                      </span>
-                    )}
+                    <span className={cn('h-3.5 w-3.5 rounded-full shadow-inner transition-transform group-hover:scale-110 shrink-0', accent.swatch)} />
+                    <span className="capitalize">{accent.label}</span>
+                    {isSelected && <span className="text-[11px] font-bold ml-0.5">✓</span>}
                   </button>
                 )
               })}
@@ -217,48 +230,73 @@ export function OffersSectionEditor({ className }: OffersSectionEditorProps = {}
         </div>
       </SectionCard>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Tarjeta 1: Productos con precio de oferta */}
-        <div className="group relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-xs transition-all hover:border-border hover:shadow-sm">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              <ShoppingBag className="h-4 w-4 text-primary" />
-              <span>Precios de rebaja</span>
+      {/* Explicación de cómo se nutre la sección de ofertas */}
+      {isInsidePromotions ? (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-border/80 bg-muted/30 p-4 shadow-2xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <ShoppingBag className="h-4.5 w-4.5" />
             </div>
-            <p className="text-sm font-bold text-foreground">Productos en oferta activa</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              El catálogo recopila automáticamente cualquier producto que tenga configurado un &quot;precio de oferta&quot;.
-            </p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground">
+                ¿Cómo aparecen los productos con precios de rebaja?
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Tu tienda recopila automáticamente cualquier producto de tu inventario que tenga un precio de oferta activo o que califique para tus reglas de descuento.
+              </p>
+            </div>
           </div>
-          <Button asChild variant="outline" className="w-fit rounded-xl text-xs font-semibold">
+          <Button asChild variant="outline" size="sm" className="w-fit shrink-0 rounded-xl text-xs font-semibold h-8">
             <Link href="/dashboard/products">
-              <ShoppingBag className="mr-2 h-3.5 w-3.5" />
-              Gestionar productos
+              <ShoppingBag className="mr-1.5 h-3.5 w-3.5" />
+              <span>Ver productos</span>
             </Link>
           </Button>
         </div>
-
-        {/* Tarjeta 2: Campañas y promociones avanzadas */}
-        <div className="group relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/5 via-background to-background p-5 sm:p-6 shadow-xs transition-all hover:border-primary/40 hover:shadow-sm">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span>Campañas & Banners</span>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Tarjeta 1: Productos con precio de oferta */}
+          <div className="group relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-xs transition-all hover:border-border hover:shadow-sm">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                <ShoppingBag className="h-4 w-4 text-primary" />
+                <span>Precios de rebaja</span>
+              </div>
+              <p className="text-sm font-bold text-foreground">Productos en oferta activa</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                El catálogo recopila automáticamente cualquier producto que tenga configurado un &quot;precio de oferta&quot;.
+              </p>
             </div>
-            <p className="text-sm font-bold text-foreground">Personalización en Promociones</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Diseñá banners con imágenes propias, activá el carrusel de productos rebajados y creá cupones de descuento.
-            </p>
+            <Button asChild variant="outline" className="w-fit rounded-xl text-xs font-semibold">
+              <Link href="/dashboard/products">
+                <ShoppingBag className="mr-2 h-3.5 w-3.5" />
+                Gestionar productos
+              </Link>
+            </Button>
           </div>
-          <Button asChild className="w-fit rounded-xl text-xs font-bold gap-1.5 shadow-sm">
-            <Link href="/dashboard/promotions?tab=publica">
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-              <span>Ir a sección de Promociones</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
+
+          {/* Tarjeta 2: Campañas y promociones avanzadas (solo fuera de Promociones) */}
+          <div className="group relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/5 via-background to-background p-5 sm:p-6 shadow-xs transition-all hover:border-primary/40 hover:shadow-sm">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span>Campañas & Banners</span>
+              </div>
+              <p className="text-sm font-bold text-foreground">Personalización en Promociones</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Diseñá banners con imágenes propias, activá el carrusel de productos rebajados y creá cupones de descuento.
+              </p>
+            </div>
+            <Button asChild className="w-fit rounded-xl text-xs font-bold gap-1.5 shadow-sm">
+              <Link href="/dashboard/promotions?tab=publica">
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                <span>Ir a sección de Promociones</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
         <div className="flex items-center gap-2 text-xs">

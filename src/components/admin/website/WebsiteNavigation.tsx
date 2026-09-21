@@ -13,9 +13,11 @@ import {
   ChevronRight,
   Layers,
   Megaphone,
+  Images,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WebsiteSettings } from '@/types/website-settings'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 
 interface NavigationItem {
   id: string
@@ -194,12 +196,16 @@ export function WebsiteNavigation({
   onChange,
   settings,
   servicesModuleEnabled = true,
+  onOpenMediaHistory,
 }: {
   value: string
   onChange: (value: string) => void
   settings?: WebsiteSettings | null
   servicesModuleEnabled?: boolean
+  onOpenMediaHistory?: () => void
 }) {
+  const { count: mediaCount, limit: mediaLimit, isAtLimit: isMediaAtLimit, isNearLimit: isMediaNearLimit } = useWebsiteMediaQuota()
+
   return (
     <nav
       aria-label="Secciones del sitio web"
@@ -363,6 +369,46 @@ export function WebsiteNavigation({
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Tarjeta de Cuota de Imágenes Web */}
+        <div className="mt-4 pt-3.5 border-t border-border/70 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-foreground flex items-center gap-1.5">
+              <Images className="h-3.5 w-3.5 text-primary" />
+              <span>Imágenes ({mediaCount}/{mediaLimit})</span>
+            </span>
+            {isMediaAtLimit ? (
+              <span className="rounded-md bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                Lleno
+              </span>
+            ) : isMediaNearLimit ? (
+              <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                Alerta
+              </span>
+            ) : null}
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full transition-all duration-300",
+                isMediaAtLimit ? "bg-destructive" : isMediaNearLimit ? "bg-amber-500" : "bg-primary"
+              )}
+              style={{ width: `${Math.min(100, (mediaCount / mediaLimit) * 100)}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>{isMediaAtLimit ? '0 disponibles' : `${mediaLimit - mediaCount} disponibles`}</span>
+            {onOpenMediaHistory && (
+              <button
+                type="button"
+                onClick={onOpenMediaHistory}
+                className="font-semibold text-primary hover:underline cursor-pointer"
+              >
+                Ver historial
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </nav>

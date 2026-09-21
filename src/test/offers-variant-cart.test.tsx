@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { Profiler } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const control = vi.hoisted(() => ({
@@ -78,6 +79,68 @@ beforeEach(() => {
  * modal ni siquiera mandaba la variante que el cliente acababa de elegir.
  */
 describe('agregar una oferta con variantes al carrito', () => {
+  it('actualiza la foto de la variante sin un render extra de sincronización', () => {
+    const commits: number[] = []
+    const product = {
+      ...conVariantes,
+      image: '/remera.jpg',
+      variants: conVariantes.variants?.map((variant) => ({
+        ...variant,
+        attributes: {
+          ...variant.attributes,
+          image_url: variant.id === 'v2' ? '/remera-l.jpg' : '/remera-m.jpg',
+        },
+      })),
+    }
+
+    render(
+      <Profiler id="detalle-oferta" onRender={() => commits.push(1)}>
+        <OfferDetailModal
+          offer={product}
+          isOpen
+          onClose={vi.fn()}
+          tenantPrefix="/tienda-demo"
+          commerceMode="cart"
+          contactPhone=""
+        />
+      </Profiler>
+    )
+
+    const before = commits.length
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'L' }))
+
+    expect(screen.getByRole('img', { name: 'Remera Básica' })).toHaveAttribute('src', '/remera-l.jpg')
+    expect(commits.length - before).toBeLessThanOrEqual(2)
+  })
+
+  it('no reinicia la galería al tocar otra vez el talle ya elegido', () => {
+    const product = {
+      ...conVariantes,
+      image: '/remera.jpg',
+      variants: conVariantes.variants?.map((variant) => ({
+        ...variant,
+        attributes: { ...variant.attributes, image_url: '/remera-l.jpg' },
+      })),
+    }
+    render(
+      <OfferDetailModal
+        offer={product}
+        isOpen
+        onClose={vi.fn()}
+        tenantPrefix="/tienda-demo"
+        commerceMode="cart"
+        contactPhone=""
+      />
+    )
+    const modal = within(screen.getByRole('dialog'))
+    fireEvent.click(modal.getByRole('button', { name: 'L' }))
+    fireEvent.click(modal.getByRole('button', { name: 'Ver imagen 1' }))
+    expect(modal.getByRole('img', { name: 'Remera Básica' })).toHaveAttribute('src', '/remera.jpg')
+
+    fireEvent.click(modal.getByRole('button', { name: 'L' }))
+    expect(modal.getByRole('img', { name: 'Remera Básica' })).toHaveAttribute('src', '/remera.jpg')
+  })
+
   it('desde el modal se manda la variante elegida', () => {
     render(
       <OfferDetailModal

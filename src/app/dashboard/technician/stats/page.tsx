@@ -104,10 +104,11 @@ export default function TechnicianStatsPage() {
   const [period, setPeriod] = useState<Period>('30d')
 
   // Filter repairs for current technician
+  const userId = user?.id
   const myRepairs = useMemo(() => {
-    if (!user?.id) return []
-    return repairs.filter(r => r.technician?.id === user.id)
-  }, [repairs, user?.id])
+    if (!userId) return []
+    return repairs.filter(r => r.technician?.id === userId)
+  }, [repairs, userId])
 
   // Repairs filtered by selected period
   const periodRepairs = useMemo(() => filterByPeriod(myRepairs, period), [myRepairs, period])

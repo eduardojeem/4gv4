@@ -1,16 +1,15 @@
 /**
- * ProductCard Component - Premium Edition
- * Enhanced card display for products in grid view with premium aesthetics and variant inspector
+ * ProductCard Component - Modern & Clean Edition
+ * Redesigned product card with clean hierarchy, intuitive actions, and modern aesthetics
  */
 
 import React, { useState } from 'react'
 import Image from 'next/image'
 import {
   Edit, Trash2, Copy, Eye, Package,
-  TrendingUp, TrendingDown, Tag, BarChart2,
   AlertTriangle, CheckCircle2, XCircle,
-  Globe, EyeOff, Wrench, Sparkles, Layers3,
-  ChevronDown, ChevronUp, Barcode
+  Globe, EyeOff, Wrench, Layers3,
+  ChevronDown, ChevronUp, ArrowUpRight
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -129,26 +128,23 @@ export const ProductCard = React.memo(function ProductCard({
   const stockStatusConfig = {
     in_stock: {
       label: 'En Stock',
-      bgClass: 'bg-gradient-to-r from-emerald-500 to-teal-500',
-      pillBg: 'bg-emerald-50 dark:bg-emerald-950/40',
+      badgeClass: 'bg-emerald-600/90 text-white',
       textClass: 'text-emerald-700 dark:text-emerald-400',
-      barClass: 'from-emerald-400 to-teal-400',
+      barClass: 'from-emerald-500 to-teal-500',
       icon: CheckCircle2
     },
     low_stock: {
       label: 'Stock Bajo',
-      bgClass: 'bg-gradient-to-r from-amber-500 to-orange-500',
-      pillBg: 'bg-amber-50 dark:bg-amber-950/40',
+      badgeClass: 'bg-amber-600/90 text-white',
       textClass: 'text-amber-700 dark:text-amber-400',
-      barClass: 'from-amber-400 to-orange-400',
+      barClass: 'from-amber-500 to-orange-500',
       icon: AlertTriangle
     },
     out_of_stock: {
       label: 'Agotado',
-      bgClass: 'bg-gradient-to-r from-red-500 to-rose-500',
-      pillBg: 'bg-red-50 dark:bg-red-950/40',
-      textClass: 'text-red-700 dark:text-red-400',
-      barClass: 'from-red-400 to-rose-400',
+      badgeClass: 'bg-rose-600/90 text-white',
+      textClass: 'text-rose-700 dark:text-rose-400',
+      barClass: 'from-rose-500 to-red-500',
       icon: XCircle
     }
   }
@@ -156,8 +152,7 @@ export const ProductCard = React.memo(function ProductCard({
   const statusConfig = isService
     ? {
         label: 'Servicio',
-        bgClass: 'bg-gradient-to-r from-violet-600 to-purple-600',
-        pillBg: 'bg-purple-50 dark:bg-purple-950/40',
+        badgeClass: 'bg-purple-600/90 text-white',
         textClass: 'text-purple-700 dark:text-purple-400',
         barClass: 'from-purple-500 to-violet-500',
         icon: Wrench
@@ -178,7 +173,7 @@ export const ProductCard = React.memo(function ProductCard({
   // First letter placeholder
   const firstLetter = product.name.charAt(0).toUpperCase()
 
-  // Resolve usable image URL: prefer images[0] (DB field), fallback to image (legacy)
+  // Resolve usable image URL
   const imageUrl: string | undefined =
     ((product as any).images as string[] | null | undefined)?.[0] ||
     product.image ||
@@ -203,23 +198,20 @@ export const ProductCard = React.memo(function ProductCard({
       role="article"
       aria-label={`Producto: ${product.name}, Precio: Gs. ${product.sale_price}, Stock: ${product.stock_quantity}`}
       className={cn(
-        'group relative border border-slate-200/50 dark:border-slate-800/50 cursor-pointer',
-        'bg-white/70 backdrop-blur-md dark:bg-slate-950/65 overflow-hidden',
-        'transition-all duration-300 ease-out rounded-[24px]',
-        'hover:shadow-2xl hover:shadow-slate-200/40 dark:hover:shadow-slate-900/40',
-        'hover:border-slate-300 dark:hover:border-slate-700',
-        isSelected && 'ring-2 ring-blue-500 border-blue-200 dark:border-blue-700 shadow-lg shadow-blue-100/50 dark:shadow-blue-900/30',
-        isHovered ? 'scale-[1.025] -translate-y-1' : 'shadow-md',
+        'group relative flex flex-col justify-between rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden',
+        'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-2xs',
+        'hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-slate-950/60 hover:border-slate-300 dark:hover:border-slate-700',
+        isSelected && 'ring-2 ring-blue-500 border-blue-400 dark:border-blue-600 shadow-md shadow-blue-500/10',
+        isHovered && '-translate-y-1',
         className
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onViewDetails(product)}
     >
-      <CardContent className="p-0">
-
-        {/* ── Image Section ── */}
-        <div className="relative aspect-[4/3] bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 dark:from-gray-800 dark:via-gray-750 dark:to-gray-800 overflow-hidden">
+      <CardContent className="p-0 flex flex-col flex-1">
+        {/* ── Media Header (Image + Floating Badges) ── */}
+        <div className="relative aspect-[16/10] bg-slate-100 dark:bg-slate-800/60 overflow-hidden border-b border-slate-100 dark:border-slate-800/80">
           {isValidImage && !imageError ? (
             <>
               <Image
@@ -228,358 +220,353 @@ export const ProductCard = React.memo(function ProductCard({
                 fill
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 className={cn(
-                  'object-cover transition-all duration-500',
-                  isHovered ? 'scale-110 brightness-105' : 'scale-100 brightness-100'
+                  'object-cover transition-transform duration-500',
+                  isHovered ? 'scale-105' : 'scale-100'
                 )}
                 onError={() => setImageError(true)}
               />
-              {/* Gradient overlay on hover */}
               <div
                 className={cn(
-                  'absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent',
-                  'transition-opacity duration-300',
+                  'absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent transition-opacity duration-200',
                   isHovered ? 'opacity-100' : 'opacity-0'
                 )}
               />
             </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 via-slate-50 to-purple-50 dark:from-indigo-950/30 dark:via-gray-900 dark:to-purple-950/30">
-              <div className="text-center space-y-2">
-                <div className="relative inline-block">
-                  <div className="h-16 w-16 rounded-2xl bg-white dark:bg-gray-700 shadow-inner flex items-center justify-center mx-auto border border-gray-100 dark:border-gray-600">
-                    <Package className="h-8 w-8 text-gray-300 dark:text-gray-500" />
-                  </div>
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200/70 dark:from-slate-800 dark:via-slate-850 dark:to-slate-900">
+              <div className="text-center space-y-1">
+                <div className="h-12 w-12 rounded-xl bg-white/80 dark:bg-slate-700/80 shadow-xs flex items-center justify-center mx-auto border border-slate-200/60 dark:border-slate-600/60">
+                  <Package className="h-6 w-6 text-slate-400 dark:text-slate-500" />
                 </div>
-                <span className="text-4xl font-black bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-500 dark:to-gray-400 bg-clip-text text-transparent block">
+                <span className="text-2xl font-black text-slate-300 dark:text-slate-600 tracking-wider">
                   {firstLetter}
                 </span>
               </div>
             </div>
           )}
 
-          {/* Status pill — top left */}
-          <div className="absolute top-2.5 left-2.5">
-            <div className={cn(
-              'px-2.5 py-1 rounded-full backdrop-blur-md',
-              'flex items-center gap-1.5 shadow-lg',
-              'border border-white/25 dark:border-white/10',
-              statusConfig.bgClass
-            )}>
-              <StatusIcon className="h-3 w-3 text-white" strokeWidth={2.5} />
-              <span className="text-[10px] font-bold text-white tracking-wide uppercase">
-                {statusConfig.label}
-              </span>
-            </div>
-          </div>
-
-          {/* Margin badge — top right */}
-          {margin !== null && (
-            <div className="absolute top-2.5 right-2.5">
-              <div className={cn(
-                'px-2.5 py-1 rounded-full backdrop-blur-md border border-white/20 shadow-lg',
-                margin >= 20
-                  ? 'bg-emerald-500/90'
-                  : margin >= 10
-                    ? 'bg-amber-500/90'
-                    : 'bg-red-500/90'
-              )}>
-                <span className="text-[10px] font-bold text-white tracking-wide">
-                  {margin}% margen
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Multiple images indicator */}
-          {imagesCount > 1 && (
-            <div className="absolute bottom-2.5 left-2.5">
-              <div className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium shadow">
-                +{imagesCount - 1} fotos
-              </div>
-            </div>
-          )}
-
-          {/* Selection checkbox */}
-          <div className={cn(
-            'absolute bottom-2.5 left-2.5 transition-all duration-200',
-            product.images && product.images.length > 1 ? 'hidden' : '',
-            isHovered || isSelected ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
-          )}>
-            <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg p-1.5 shadow-xl border border-white/30">
+          {/* Checkbox de selección (Top-Left) */}
+          <div
+            className={cn(
+              'absolute top-2.5 left-2.5 z-10 transition-all duration-200',
+              isSelected || isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90 sm:group-hover:opacity-100 sm:group-hover:scale-100'
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-lg p-1 shadow-xs border border-slate-200/80 dark:border-slate-700/80">
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onSelect(product.id)}
-                onClick={(e) => e.stopPropagation()}
                 aria-label={`Seleccionar ${product.name}`}
-                className="border-gray-400 dark:border-gray-500"
+                className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
               />
             </div>
           </div>
 
-          {/* Quick action buttons */}
+          {/* Badge de Estado (Top-Right) */}
+          <div className="absolute top-2.5 right-2.5 z-10">
+            <div className={cn(
+              'px-2 py-0.5 rounded-full backdrop-blur-md flex items-center gap-1 shadow-xs text-[10px] font-bold tracking-wide uppercase',
+              statusConfig.badgeClass
+            )}>
+              <StatusIcon className="h-3 w-3" strokeWidth={2.5} />
+              <span>{statusConfig.label}</span>
+            </div>
+          </div>
+
+          {/* Indicador de fotos (Bottom-Left) */}
+          {imagesCount > 1 && (
+            <div className="absolute bottom-2 left-2 z-10">
+              <span className="px-2 py-0.5 rounded-md bg-slate-900/75 backdrop-blur-md text-white text-[10px] font-semibold shadow-xs">
+                +{imagesCount - 1} fotos
+              </span>
+            </div>
+          )}
+
+          {/* Margen comercial para admin (Bottom-Right) */}
+          {margin !== null && (
+            <div className="absolute bottom-2 right-2 z-10">
+              <span className={cn(
+                'px-2 py-0.5 rounded-md backdrop-blur-md text-white text-[10px] font-bold shadow-xs',
+                margin >= 20 ? 'bg-emerald-600/85' : margin >= 10 ? 'bg-amber-600/85' : 'bg-rose-600/85'
+              )}>
+                {margin}% mg
+              </span>
+            </div>
+          )}
+
+          {/* Barra Flotante de Acciones en Hover (Centro/Bottom de la imagen) */}
           <div className={cn(
-            'absolute bottom-2.5 right-2.5 flex gap-1.5 transition-all duration-300',
-            isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            'absolute inset-x-0 bottom-2 flex justify-center z-20 transition-all duration-200 px-2',
+            isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
           )}>
-            {[
-              { action: onViewDetails, icon: Eye, color: 'hover:bg-blue-500', label: 'Ver detalles' },
-              { action: onEdit, icon: Edit, color: 'hover:bg-green-500', label: 'Editar' },
-              { action: onDuplicate, icon: Copy, color: 'hover:bg-purple-500', label: 'Duplicar' },
-              { action: onDelete, icon: Trash2, color: 'hover:bg-red-500', label: 'Eliminar' },
-            ].map(({ action, icon: Icon, color, label }) => (
+            <div className="flex items-center gap-1 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-lg border border-white/10">
               <Button
-                key={label}
                 size="icon"
-                variant="secondary"
-                className={cn(
-                  'h-8 w-8 bg-white/95 dark:bg-gray-800/95 dark:text-gray-200',
-                  'hover:text-white backdrop-blur-md shadow-lg',
-                  'border border-white/20 dark:border-white/10 transition-all duration-150',
-                  color
-                )}
-                onClick={(e) => { e.stopPropagation(); action(product) }}
-                aria-label={`${label}: ${product.name}`}
-                title={label}
+                variant="ghost"
+                className="h-7 w-7 text-slate-200 hover:text-white hover:bg-white/20 rounded-lg transition-colors"
+                onClick={(e) => { e.stopPropagation(); onViewDetails(product) }}
+                title="Ver detalles rápidos"
+                aria-label={`Ver detalles: ${product.name}`}
               >
-                <Icon className="h-3.5 w-3.5" aria-hidden />
+                <Eye className="h-3.5 w-3.5" />
               </Button>
-            ))}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-slate-200 hover:text-white hover:bg-blue-600/70 rounded-lg transition-colors"
+                onClick={(e) => { e.stopPropagation(); onEdit(product) }}
+                title="Editar producto"
+                aria-label={`Editar: ${product.name}`}
+              >
+                <Edit className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-slate-200 hover:text-white hover:bg-purple-600/70 rounded-lg transition-colors"
+                onClick={(e) => { e.stopPropagation(); onDuplicate(product) }}
+                title="Duplicar producto"
+                aria-label={`Duplicar: ${product.name}`}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-slate-200 hover:text-rose-200 hover:bg-rose-600/80 rounded-lg transition-colors"
+                onClick={(e) => { e.stopPropagation(); onDelete(product) }}
+                title="Eliminar producto"
+                aria-label={`Eliminar: ${product.name}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* ── Info Section ── */}
-        <div className="p-4 space-y-3">
+        {/* ── Content Body ── */}
+        <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between space-y-3">
+          <div className="space-y-2">
+            {/* Fila 1: Metadatos (Tipo/Categoría a la izquierda, SKU a la derecha) */}
+            <div className="flex items-center justify-between gap-1.5 text-xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                {isService ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-200/80 dark:border-purple-800/80 px-2 py-0.5 rounded-md shrink-0">
+                    <Wrench className="h-2.5 w-2.5" />
+                    Servicio
+                  </span>
+                ) : variants.length > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 px-2 py-0.5 rounded-md shrink-0">
+                    <Layers3 className="h-2.5 w-2.5" />
+                    {variants.length} vars
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 px-2 py-0.5 rounded-md shrink-0">
+                    <Package className="h-2.5 w-2.5" />
+                    Producto
+                  </span>
+                )}
 
-          {/* Category + brand row */}
-          <div className="flex items-center gap-1.5 flex-wrap min-h-[1.25rem]">
-            {isService ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-100/80 dark:bg-purple-950/70 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-full">
-                <Wrench className="h-2.5 w-2.5" />
-                Servicio
-              </span>
-            ) : variants.length > 0 ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 border border-violet-200 dark:border-violet-800 px-2 py-0.5 rounded-full">
-                <Layers3 className="h-2.5 w-2.5 text-violet-600 dark:text-violet-400" />
-                {variants.length} Variantes
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 px-2 py-0.5 rounded-full">
-                <Package className="h-2.5 w-2.5" />
-                Producto
-              </span>
-            )}
-            {categoryLabel && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                <Tag className="h-2.5 w-2.5" />
-                {categoryLabel}
-              </span>
-            )}
-            {categoryLabel && product.brand && (
-              <span className="text-gray-300 dark:text-gray-600 text-[10px]">·</span>
-            )}
-            {product.brand && (
-              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
-                {product.brand}
-              </span>
-            )}
-          </div>
-
-          {/* Product name */}
-          <h3 className="font-bold text-base text-gray-900 dark:text-gray-100 line-clamp-2 leading-snug min-h-[2.75rem] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">
-            {product.name}
-          </h3>
-
-          {/* SKU */}
-          <div>
-            <code className="text-[10px] font-mono font-medium text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/50 px-2 py-0.5 rounded border border-gray-100 dark:border-gray-700">
-              {product.sku}
-            </code>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-gray-100 dark:border-gray-700/60" />
-
-          {/* Price */}
-          <div className="flex items-end justify-between gap-2">
-            <div>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">
-                {hasPriceRange ? 'Rango de Precios' : 'Precio venta'}
-              </p>
-              <span className="text-xl font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-white dark:via-slate-200 dark:to-white bg-clip-text text-transparent tracking-tight">
-                {hasPriceRange
-                  ? `${formatCurrency(minVariantPrice)} – ${formatCurrency(maxVariantPrice)}`
-                  : formatCurrency(product.sale_price)
-                }
-              </span>
-            </div>
-            {canViewCost && product.purchase_price && product.purchase_price > 0 && (
-              <div className="text-right">
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">Costo</p>
-                <span className="text-sm font-semibold text-gray-400 dark:text-gray-500">
-                  {formatCurrency(product.purchase_price)}
-                </span>
+                {categoryLabel && (
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[120px]" title={categoryLabel}>
+                    {categoryLabel}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Stock bar or Service indicator */}
-          {isService ? (
-            <div className="rounded-xl border border-purple-200/80 dark:border-purple-800/60 bg-purple-50/60 dark:bg-purple-950/30 p-2.5 flex items-center justify-between">
-              <span className="flex items-center gap-1.5 font-bold text-xs text-purple-700 dark:text-purple-300">
-                <Wrench className="h-3.5 w-3.5" />
-                Servicio Profesional
-              </span>
-              <Badge variant="outline" className="text-[10px] font-bold bg-white dark:bg-slate-900 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 py-0 h-5">
-                Sin límite de stock
-              </Badge>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1 font-medium text-gray-500 dark:text-gray-400">
-                  <BarChart2 className="h-3 w-3" />
-                  {variants.length > 0 ? `Stock (${variants.length} vars)` : 'Stock'}
-                </span>
-                <span className={cn(
-                  'font-bold tabular-nums text-xs',
-                  stockStatus === 'in_stock' && 'text-emerald-600 dark:text-emerald-400',
-                  stockStatus === 'low_stock' && 'text-amber-600 dark:text-amber-400',
-                  stockStatus === 'out_of_stock' && 'text-red-600 dark:text-red-400',
-                )}>
-                  {effectiveStock}
-                  <span className="font-normal text-gray-400 dark:text-gray-500"> u</span>
-                </span>
-              </div>
-              <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className={cn('h-full rounded-full bg-gradient-to-r transition-all duration-700', statusConfig.barClass)}
-                  style={{ width: `${stockFillPct}%` }}
-                />
-              </div>
-              {minStock > 0 && (
-                <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                  Mínimo: {minStock} u
-                </p>
+              {product.sku && (
+                <code className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 bg-slate-100/90 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                  {product.sku}
+                </code>
               )}
             </div>
-          )}
 
-          {/* Variants Quick Inspector Drawer */}
-          {variants.length > 0 && (
-            <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowVariantsDrawer((prev) => !prev)
-                }}
-                className="w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-xs font-bold text-violet-700 dark:text-violet-300 bg-violet-50/70 dark:bg-violet-950/40 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Layers3 className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
-                  <span>Ver stock por variante ({variants.length})</span>
+            {/* Fila 2: Nombre del Producto */}
+            <div>
+              {product.brand && (
+                <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">
+                  {product.brand}
+                </p>
+              )}
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors min-h-[2.5rem]">
+                {product.name}
+              </h3>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800/70">
+            {/* Fila 3: Precios (Venta + Costo) */}
+            <div className="flex items-baseline justify-between gap-2">
+              <div>
+                <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                  {hasPriceRange
+                    ? `${formatCurrency(minVariantPrice)} – ${formatCurrency(maxVariantPrice)}`
+                    : formatCurrency(product.sale_price)
+                  }
                 </span>
-                {showVariantsDrawer ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              </button>
-
-              {showVariantsDrawer && (
-                <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                  {variants.map((v) => (
-                    <div
-                      key={v.id}
-                      className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-[11px]"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{v.name}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{v.sku || '—'}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className={cn(
-                          'inline-block px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums',
-                          v.stockQuantity <= 0
-                            ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400'
-                            : v.minStock && v.stockQuantity <= v.minStock
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
-                              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                        )}>
-                          {v.stockQuantity} u
-                        </span>
-                        <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                          {formatCurrency(v.salePrice)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+              </div>
+              {canViewCost && product.purchase_price && product.purchase_price > 0 && (
+                <div className="text-right text-[11px] text-slate-400 dark:text-slate-500 font-medium tabular-nums">
+                  <span>Costo: </span>
+                  <span className="font-semibold text-slate-600 dark:text-slate-400">{formatCurrency(product.purchase_price)}</span>
                 </div>
               )}
             </div>
-          )}
 
-          {/* Inactive badge */}
-          {!product.is_active && (
-            <div className="pt-1">
-              <Badge
-                variant="outline"
-                className="text-[10px] bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 font-medium w-full justify-center py-1"
-              >
-                ⏸ Inactivo
-              </Badge>
-            </div>
-          )}
+            {/* Fila 4: Inventario / Stock */}
+            {isService ? (
+              <div className="rounded-xl border border-purple-200/60 dark:border-purple-800/50 bg-purple-50/50 dark:bg-purple-950/25 px-2.5 py-1.5 flex items-center justify-between text-xs">
+                <span className="font-semibold text-purple-700 dark:text-purple-300 text-[11px] flex items-center gap-1.5">
+                  <Wrench className="h-3 w-3" />
+                  Mano de obra técnica
+                </span>
+                <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-100/80 dark:bg-purple-900/50 px-2 py-0.5 rounded-full">
+                  Ilimitado
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {variants.length > 0 ? `Stock (${variants.length} variantes)` : 'Stock disponible'}
+                  </span>
+                  <span className={cn(
+                    'font-bold tabular-nums text-xs',
+                    stockStatus === 'in_stock' && 'text-emerald-600 dark:text-emerald-400',
+                    stockStatus === 'low_stock' && 'text-amber-600 dark:text-amber-400',
+                    stockStatus === 'out_of_stock' && 'text-rose-600 dark:text-rose-400',
+                  )}>
+                    {effectiveStock} u
+                    {minStock > 0 && (
+                      <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 ml-1">
+                        (mín: {minStock})
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full bg-gradient-to-r transition-all duration-500', statusConfig.barClass)}
+                    style={{ width: `${stockFillPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
-          {/* Visibility toggle — always visible */}
-          {onToggleActive && (
+            {/* Variantes Acordeón (si tiene) */}
+            {variants.length > 0 && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowVariantsDrawer((prev) => !prev)
+                  }}
+                  className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-xl text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-200/50 dark:border-indigo-800/40"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Layers3 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <span>Ver stock por variante ({variants.length})</span>
+                  </span>
+                  {showVariantsDrawer ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+
+                {showVariantsDrawer && (
+                  <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {variants.map((v) => (
+                      <div
+                        key={v.id}
+                        className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-850 border border-slate-200/60 dark:border-slate-800 text-[11px]"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{v.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{v.sku || '—'}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className={cn(
+                            'inline-block px-1.5 py-0.2 rounded text-[10px] font-bold tabular-nums',
+                            v.stockQuantity <= 0
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
+                              : v.minStock && v.stockQuantity <= v.minStock
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                          )}>
+                            {v.stockQuantity} u
+                          </span>
+                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                            {formatCurrency(v.salePrice)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Inactivo badge */}
+            {!product.is_active && (
+              <div className="py-0.5">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 font-medium w-full justify-center py-0.5"
+                >
+                  ⏸ Producto Desactivado
+                </Badge>
+              </div>
+            )}
+
+            {/* Footer de la tarjeta: Visibilidad + Link Ver Detalle */}
             <div
-              className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700/60"
+              className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs"
               onClick={(e) => e.stopPropagation()}
             >
-              <span className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400">
-                {!product.is_active ? (
-                  <><EyeOff className="h-3.5 w-3.5 text-gray-400" /> Inactivo</>
-                ) : (product as any).visibility === 'hidden' ? (
-                  <><EyeOff className="h-3.5 w-3.5 text-gray-400" /> Oculto</>
-                ) : (product as any).visibility === 'wholesale' ? (
-                  <><Globe className="h-3.5 w-3.5 text-blue-500" /> Mayorista</>
-                ) : (
-                  <><Globe className="h-3.5 w-3.5 text-emerald-500" /> Visible</>
+              <div className="flex items-center gap-2">
+                {onToggleActive && (
+                  <>
+                    <Switch
+                      checked={localActive}
+                      disabled={togglingActive}
+                      onCheckedChange={async (checked) => {
+                        setLocalActive(checked)
+                        setTogglingActive(true)
+                        try {
+                          await onToggleActive(product, checked)
+                        } catch {
+                          setLocalActive(!checked)
+                        } finally {
+                          setTogglingActive(false)
+                        }
+                      }}
+                      aria-label={localActive ? 'Ocultar del catálogo público' : 'Publicar en catálogo'}
+                      className="data-[state=checked]:bg-emerald-500 scale-90"
+                    />
+                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                      {!product.is_active ? (
+                        <span className="text-slate-400">Inactivo</span>
+                      ) : (product as any).visibility === 'hidden' ? (
+                        <span className="text-slate-500">Oculto</span>
+                      ) : (product as any).visibility === 'wholesale' ? (
+                        <span className="text-blue-600 dark:text-blue-400">Mayorista</span>
+                      ) : (
+                        <span className="text-emerald-600 dark:text-emerald-400">Visible</span>
+                      )}
+                    </span>
+                  </>
                 )}
-              </span>
-              <Switch
-                checked={localActive}
-                disabled={togglingActive}
-                onCheckedChange={async (checked) => {
-                  setLocalActive(checked)
-                  setTogglingActive(true)
-                  try {
-                    await onToggleActive(product, checked)
-                  } catch {
-                    setLocalActive(!checked) // revert on error
-                  } finally {
-                    setTogglingActive(false)
-                  }
-                }}
-                aria-label={localActive ? 'Ocultar del catálogo público' : 'Publicar en catálogo'}
-                className="data-[state=checked]:bg-emerald-500"
-              />
-            </div>
-          )}
+              </div>
 
-          {/* Primary CTA */}
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn(
-              'w-full mt-1 text-xs font-semibold gap-1.5 justify-center',
-              'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30',
-              'border border-transparent hover:border-blue-200 dark:hover:border-blue-800',
-              'transition-all duration-200 rounded-lg h-8',
-              'opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0'
-            )}
-            onClick={(e) => { e.stopPropagation(); onViewDetails(product) }}
-          >
-            <Eye className="h-3.5 w-3.5" />
-            Ver detalle
-          </Button>
+              <button
+                type="button"
+                onClick={() => onViewDetails(product)}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+              >
+                <span>Ficha</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

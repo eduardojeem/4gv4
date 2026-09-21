@@ -27,7 +27,7 @@ import { es } from 'date-fns/locale'
 import {
   Save, User, Phone, Mail, Smartphone, Laptop, Tablet,
   AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText,
-  Search, Loader2, Maximize2, Minimize2, CheckSquare, Sparkles, Droplets, CheckCircle2, ChevronDown, ChevronUp, Clock, Check, X, Tag, Wrench, Shield, Star
+  Search, Loader2, Maximize2, Minimize2, CheckSquare, Sparkles, Droplets, CheckCircle2, ChevronDown, ChevronUp, Clock, Check, X, Tag, Wrench, Shield, Star, Camera
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -299,7 +299,7 @@ export function RepairFormDialogV2({
   onSubmit
 }: RepairFormDialogV2Props) {
   const formId = 'repair-form-dialog-form'
-  const { planCode } = useSubscriptionStatus()
+  const { planCode, planName } = useSubscriptionStatus()
   const { selectedBranchId } = useBranch()
   const { settings: sharedSettings } = useSharedSettings()
   const photoLimit = repairPhotoLimit(planCode)
@@ -314,6 +314,10 @@ export function RepairFormDialogV2({
   const setQuickMode = useCallback((val: boolean) => {
     setQuickModeState(val)
     saveQuickModePreference(val)
+  }, [])
+  const [imagesExpandedMap, setImagesExpandedMap] = useState<Record<number, boolean>>({})
+  const toggleImagesExpanded = useCallback((deviceIndex: number) => {
+    setImagesExpandedMap(prev => ({ ...prev, [deviceIndex]: !prev[deviceIndex] }))
   }, [])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activeSection, setActiveSection] = useState<RepairFormSectionId>('customer')
@@ -2072,78 +2076,120 @@ export function RepairFormDialogV2({
                         </div>
                       </div>
 
-                      {/* Images */}
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
-                          Fotos del Dispositivo
-                          <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
-                        </Label>
-                        <Controller
-                          name={`devices.${index}.images`}
-                          control={control}
-                          render={({ field }) => {
-                            // Función mejorada para subir archivos a través de API (evita problemas de RLS)
-                            const onUploadFiles = async (files: File[]): Promise<string[]> => {
-                              const urls: string[] = []
-                              
-                              for (const file of files) {
-                                try {
-                                  const ext = file.name.split('.').pop() || 'jpg'
-                                  const filename = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-                                  const path = `uploads/${filename}`
-                                  
-                                  // Usar FormData para enviar el archivo a nuestra API
-                                  const formData = new FormData()
-                                  formData.append('file', file)
-                                  formData.append('bucket', 'repair-images')
-                                  formData.append('path', path)
-
-                                  const response = await fetch('/api/upload', {
-                                    method: 'POST',
-                                    body: formData
-                                  })
-
-                                  if (!response.ok) {
-                                    throw new Error(`Upload failed with status: ${response.status}`)
-                                  }
-
-                                  const result = await response.json()
-                                  
-                                  if (result.success && result.url) {
-                                    urls.push(result.url)
-                                  } else {
-                                    throw new Error(result.error || 'Unknown upload error')
-                                  }
-                                } catch (error) {
-                                  console.error('Failed to upload image:', error)
-                                  toast.error('Error al subir imagen. Intente nuevamente.')
-                                }
-                              }
-                              return urls
+                      {/* Images — Sección Colapsable / Expandible con indicador de Plan Enterprise */}
+                      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 overflow-hidden transition-all shadow-2xs">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleImagesExpanded(index)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              toggleImagesExpanded(index)
                             }
-                            // Plan FREE: sin fotos. BASIC: máx 3. PRO/ENTERPRISE: ilimitado (tope técnico 6).
-                            if (photoLimit === 0) {
-                              return (
-                                <UpgradeHint
-                                  requiredPlan="Basic"
-                                  message="Las fotos de reparación están disponibles desde el plan Basic."
-                                />
-                              )
-                            }
-                            return (
-                              <ImageUploader
-                                images={field.value || []}
-                                onChange={field.onChange}
-                                maxImages={photoLimit === null ? 6 : Math.min(6, photoLimit)}
-                                maxSize={5242880}
-                                onUploadFiles={onUploadFiles}
-                                compact
-                                tipsTitle="Fotos del estado con el que entró:"
-                                tips={CONSEJOS_FOTOS_INGRESO}
-                              />
-                            )
                           }}
-                        />
+                          className="flex items-center justify-between p-3.5 cursor-pointer select-none hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors"
+                          aria-expanded={Boolean(imagesExpandedMap[index])}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Camera className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              Fotos del Dispositivo
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">(opcional)</span>
+
+                            {/* Badge destacando el plan que requiere la función */}
+                            <Badge className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white font-extrabold text-[10px] px-2.5 py-0.5 rounded-full border-0 shadow-xs flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              {photoLimit !== 0 ? `Plan ${planName || 'Enterprise'} (Activo)` : 'Plan Enterprise'}
+                            </Badge>
+
+                            {watch(`devices.${index}.images`) && (watch(`devices.${index}.images`)?.length ?? 0) > 0 && (
+                              <Badge variant="secondary" className="text-[10px] font-bold">
+                                {watch(`devices.${index}.images`)?.length} {(watch(`devices.${index}.images`)?.length ?? 0) === 1 ? 'foto' : 'fotos'}
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="text-[11px] font-semibold hidden sm:inline">
+                              {imagesExpandedMap[index] ? 'Contraer' : 'Expandir'}
+                            </span>
+                            <ChevronDown className={cn("h-4 w-4 transition-transform duration-200 text-slate-500", imagesExpandedMap[index] && "rotate-180")} />
+                          </div>
+                        </div>
+
+                        {/* Contenido expandible */}
+                        {imagesExpandedMap[index] && (
+                          <div className="p-3.5 pt-1 border-t border-slate-200/80 dark:border-slate-800/80 space-y-3 animate-in fade-in-50 duration-200">
+                            {photoLimit === 0 ? (
+                              <div className="mt-2">
+                                <UpgradeHint
+                                  requiredPlan="Enterprise"
+                                  message={`Tu plan activo es ${planName}. La opción de agregar fotos a las reparaciones está disponible exclusivamente en el Plan Enterprise.`}
+                                />
+                              </div>
+                            ) : (
+
+                            <Controller
+                              name={`devices.${index}.images`}
+                              control={control}
+                              render={({ field }) => {
+                                const onUploadFiles = async (files: File[]): Promise<string[]> => {
+                                  const urls: string[] = []
+
+                                  for (const file of files) {
+                                    try {
+                                      const ext = file.name.split('.').pop() || 'jpg'
+                                      const filename = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+                                      const path = `uploads/${filename}`
+
+                                      const formData = new FormData()
+                                      formData.append('file', file)
+                                      formData.append('bucket', 'repair-images')
+                                      formData.append('path', path)
+
+                                      const response = await fetch('/api/upload', {
+                                        method: 'POST',
+                                        body: formData
+                                      })
+
+                                      if (!response.ok) {
+                                        throw new Error(`Upload failed with status: ${response.status}`)
+                                      }
+
+                                      const result = await response.json()
+
+                                      if (result.success && result.url) {
+                                        urls.push(result.url)
+                                      } else {
+                                        throw new Error(result.error || 'Unknown upload error')
+                                      }
+                                    } catch (error) {
+                                      console.error('Failed to upload image:', error)
+                                      toast.error('Error al subir imagen. Intente nuevamente.')
+                                    }
+                                  }
+                                  return urls
+                                }
+
+                                return (
+                                  <ImageUploader
+                                    images={field.value || []}
+                                    onChange={field.onChange}
+                                    maxImages={6}
+                                    maxSize={5242880}
+                                    onUploadFiles={onUploadFiles}
+                                    compact
+                                    tipsTitle="Fotos del estado con el que entró:"
+                                    tips={CONSEJOS_FOTOS_INGRESO}
+                                  />
+                                )
+                              }}
+                            />
+                            )}
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

@@ -209,10 +209,11 @@ export default function TechnicianHistoryPage() {
   const pageSize = 15
 
   // Filter repairs for current technician
+  const userId = user?.id
   const myRepairs = useMemo(() => {
-    if (!user?.id) return []
-    return repairs.filter(r => r.technician?.id === user.id)
-  }, [repairs, user?.id])
+    if (!userId) return []
+    return repairs.filter(r => r.technician?.id === userId)
+  }, [repairs, userId])
 
   // Apply filters and sorting
   const filteredRepairs = useMemo(() => {

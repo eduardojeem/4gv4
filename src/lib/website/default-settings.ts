@@ -435,7 +435,8 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       },
       minOrderAmount: 0,
       confirmationMessage: '',
-    }
+    },
+    media_library: [],
   }
 }
 
@@ -553,6 +554,7 @@ export function applyWebsiteSettingsDefaults(
       },
       delivery: { ...defaults.checkout.delivery, ...(settings.checkout?.delivery ?? {}) },
       pickup:   { ...defaults.checkout.pickup,   ...(settings.checkout?.pickup   ?? {}) },
-    }
+    },
+    media_library: Array.isArray(settings.media_library) ? settings.media_library : defaults.media_library,
   }
 }

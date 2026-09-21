@@ -474,6 +474,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         error: conflictMessage(conflictoAlCrear),
         code: 'DUPLICATE_CODE',
         field: conflictoAlCrear.field,
+        conflictProductId: conflictoAlCrear.id,
       }, { status: 409 })
     }
 

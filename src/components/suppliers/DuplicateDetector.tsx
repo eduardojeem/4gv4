@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useMemo } from 'react'
 import { motion, AnimatePresence  } from '../ui/motion'
 import { AlertTriangle, X, Check } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,12 +29,10 @@ export function DuplicateDetector({
     onMerge,
     className
 }: DuplicateDetectorProps) {
-    const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([])
-
-    useEffect(() => {
-        const matches = findDuplicates(newSupplier, existingSuppliers)
-        setDuplicates(matches)
-    }, [newSupplier, existingSuppliers])
+    const duplicates = useMemo(
+        () => findDuplicates(newSupplier, existingSuppliers),
+        [newSupplier, existingSuppliers]
+    )
 
     if (duplicates.length === 0) return null
 

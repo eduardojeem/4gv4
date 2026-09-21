@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Building2, Globe, Save, X, AlertCircle, BadgeCheck, Loader2, Search } from 'lucide-react'
+import { Building2, Globe, Save, X, AlertCircle, BadgeCheck, Loader2, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,6 +42,12 @@ interface BrandModalProps {
   isOpen: boolean
   onClose: () => void
   brand?: Brand
+  /**
+   * El nombre que el usuario ya escribió antes de abrir el alta. Llega desde
+   * el buscador de marcas del formulario de producto: escribirlo de nuevo acá
+   * era el paso que sobraba.
+   */
+  initialName?: string
   onSave: (brandData: BrandInsert) => Promise<{ success: boolean; error?: string }>
 }
 
@@ -71,6 +77,7 @@ export function BrandModal({
   isOpen,
   onClose,
   brand,
+  initialName,
   onSave
 }: BrandModalProps) {
   const [formData, setFormData] = useState<BrandInsert>({
@@ -119,7 +126,10 @@ export function BrandModal({
       : null
     setOfficial(linked)
     setOwnBrand(Boolean(brand) && !linked)
-    setCatalogQuery('')
+    // Con un nombre ya escrito, la búsqueda del catálogo arranca hecha: si esa
+    // marca es oficial, aparece sola; si no, el nombre ya está cargado para
+    // crearla como propia.
+    setCatalogQuery(brand ? '' : (initialName ?? '').trim())
     setCatalogResults([])
 
     if (brand) {
@@ -133,7 +143,7 @@ export function BrandModal({
       })
     } else {
       setFormData({
-        name: '',
+        name: (initialName ?? '').trim(),
         description: '',
         website: '',
         country: '',
@@ -142,7 +152,7 @@ export function BrandModal({
       })
     }
     setErrors({})
-  }, [brand, isOpen])
+  }, [brand, isOpen, initialName])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -348,8 +358,22 @@ export function BrandModal({
                           ))
                         )}
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setOwnBrand(true)}>
-                        No está en el catálogo: es una marca propia
+                      {/* Crear es a lo que se vino: el botón lo dice con el
+                          nombre escrito y no se pierde entre los resultados. */}
+                      <Button
+                        type="button"
+                        className="w-full gap-2"
+                        onClick={() => {
+                          // Lo que quedó escrito en el buscador es el nombre.
+                          const escrito = catalogQuery.trim()
+                          if (escrito) handleInputChange('name', escrito)
+                          setOwnBrand(true)
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                        {(catalogQuery.trim() || formData.name?.trim())
+                          ? `Crear «${catalogQuery.trim() || formData.name?.trim()}» como marca propia`
+                          : 'No está en el catálogo: crearla como marca propia'}
                       </Button>
                     </div>
                   )}

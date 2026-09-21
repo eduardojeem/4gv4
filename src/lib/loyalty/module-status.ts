@@ -29,9 +29,13 @@ export interface SupabaseLikeError {
 export function isLoyaltyModuleMissing(error: SupabaseLikeError | null | undefined): boolean {
   if (!error) return false
 
-  if (error.code && MISSING_SCHEMA_CODES.has(error.code)) return true
-
   const text = `${error.message ?? ''} ${error.details ?? ''}`.toLowerCase()
+
+  // Si falla una función interna de Postgres (como gen_random_bytes de una extensión),
+  // es un error de ejecución/configuración interna, no que falte la migración del módulo.
+  if (text.includes('gen_random_bytes')) return false
+
+  if (error.code && MISSING_SCHEMA_CODES.has(error.code)) return true
 
   // El mensaje varía entre PostgREST y el driver; se busca el nombre de alguna
   // de las relaciones nuevas junto con la frase de "no existe".
@@ -50,6 +54,12 @@ export function isLoyaltyModuleMissing(error: SupabaseLikeError | null | undefin
   ].some((name) => text.includes(name))
 
   if (!mentionsOurTables) return false
+
+  // «Could not find the 'x' column of 'raffles'» (PGRST204) o «relationship
+  // between» (PGRST200) hablan de una columna o de un vínculo que falta, no de
+  // la migración: mandar a correr un SQL que ya se corrió manda a la persona a
+  // buscar donde no es.
+  if (text.includes('column') || text.includes('columna') || text.includes('relationship')) return false
 
   return text.includes('does not exist') || text.includes('no existe') || text.includes('could not find')
 }

@@ -44,7 +44,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
     // Filter by period
     if (selectedPeriod !== 'all') {
       const now = new Date()
-      let cutoffDate = new Date()
+      const cutoffDate = new Date()
 
       if (selectedPeriod === 'today') {
         cutoffDate.setHours(0, 0, 0, 0)

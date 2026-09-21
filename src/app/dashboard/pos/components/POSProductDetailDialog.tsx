@@ -310,12 +310,13 @@ export function POSProductDetailDialog({
   }
 
   // Imagen activa (variante > producto)
+  const productImage = product?.image
   const imageSrc = useMemo(() => {
     if (selectedVariant?.images?.[0]) {
       return resolveProductImageUrl(selectedVariant.images[0])
     }
-    return product?.image ? resolveProductImageUrl(product.image) : ''
-  }, [selectedVariant, product?.image])
+    return productImage ? resolveProductImageUrl(productImage) : ''
+  }, [selectedVariant, productImage])
 
   // Planes de crédito
   const creditProductProxy = useMemo(() => {
@@ -339,13 +340,14 @@ export function POSProductDetailDialog({
   const basePrice = product?.sale_price || 0
   const activeUnitSalePrice = hasVariants && selectedVariant ? selectedVariant.price : basePrice
 
+  const explicitWholesalePrice = product?.wholesale_price
   const hasExplicitWholesale =
-    typeof product?.wholesale_price === 'number' && product.wholesale_price > 0
+    typeof explicitWholesalePrice === 'number' && explicitWholesalePrice > 0
   const computedWholesale = Math.round(activeUnitSalePrice * (1 - wholesaleDiscountRate / 100))
   const wholesalePrice = hasVariants && selectedVariant && typeof selectedVariant.wholesale_price === 'number'
     ? selectedVariant.wholesale_price
     : hasExplicitWholesale
-    ? product?.wholesale_price!
+    ? explicitWholesalePrice
     : computedWholesale
 
   const activePrice = isWholesale ? wholesalePrice : activeUnitSalePrice

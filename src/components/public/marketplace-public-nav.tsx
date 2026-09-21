@@ -245,16 +245,18 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
             <PublicFavorites />
             <ThemeToggle />
 
-            {/* SaaS CTA — desktop */}
+            {/* SaaS CTA — desktop (Resaltado) */}
             <Link
               href="/saas"
               className={cn(
-                'hidden items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 lg:flex',
+                'hidden items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition-all duration-200 active:scale-[0.97] lg:flex',
+                'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:via-indigo-500 hover:to-cyan-500',
+                'shadow-md shadow-blue-600/25 hover:shadow-lg hover:shadow-blue-600/35 border border-white/15',
                 searchFocused && 'xl:hidden'
               )}
             >
-              <Rocket className="h-3.5 w-3.5" />
-              ¿Tenés un negocio?
+              <Rocket className="h-3.5 w-3.5 text-cyan-200 animate-pulse" />
+              <span>¿Tenés un negocio?</span>
             </Link>
 
             {user ? (
@@ -632,13 +634,13 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                 <Link
                   href="/saas"
                   onClick={() => setMobileDrawerOpen(false)}
-                  className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2.5 text-sm font-semibold text-primary hover:bg-primary/[0.08] transition-colors"
+                  className="flex items-center justify-between rounded-xl p-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-cyan-500 transition-all"
                 >
                   <div className="flex items-center gap-3">
-                    <Rocket className="h-4 w-4" />
-                    <span>Publicar mi tienda SaaS</span>
+                    <Rocket className="h-4 w-4 text-cyan-200" />
+                    <span>¿Tenés un negocio? Empezá aquí</span>
                   </div>
-                  <ChevronRight className="h-4 w-4 opacity-70" />
+                  <ChevronRight className="h-4 w-4 text-white/80" />
                 </Link>
               </div>
             </nav>

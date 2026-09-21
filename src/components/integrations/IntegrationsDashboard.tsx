@@ -65,7 +65,7 @@ export default function IntegrationsDashboard() {
   const supplierSystem = useSupplierSystem()
 
   // Mock data para demostración
-  const [integrations, setIntegrations] = React.useState<IntegrationStatus[]>([
+  const [integrations, setIntegrations] = React.useState<IntegrationStatus[]>(() => [
     {
       id: 'stripe',
       name: 'Stripe',

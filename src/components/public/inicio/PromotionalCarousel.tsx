@@ -152,26 +152,27 @@ export function PromotionalCarousel({
   const touchStartY = useRef<number | null>(null)
 
   const slides = settings?.slides.filter((slide) => slide.active) ?? []
+  const slideCount = slides.length
   const safeIndex = slides.length > 0 ? activeIndex % slides.length : 0
   const activeSlide = slides[safeIndex]
   const canRotate = slides.length > 1
   const intervalSeconds = Math.min(15, Math.max(5, settings?.intervalSeconds || 6))
 
   const goTo = useCallback((index: number) => {
-    setActiveIndex((index + slides.length) % slides.length)
-  }, [slides.length])
+    if (slideCount > 0) setActiveIndex((index + slideCount) % slideCount)
+  }, [slideCount])
 
   const nextSlide = useCallback(() => {
-    if (slides.length > 0) {
-      setActiveIndex((current) => (current + 1) % slides.length)
+    if (slideCount > 0) {
+      setActiveIndex((current) => (current + 1) % slideCount)
     }
-  }, [slides.length])
+  }, [slideCount])
 
   const prevSlide = useCallback(() => {
-    if (slides.length > 0) {
-      setActiveIndex((current) => (current - 1 + slides.length) % slides.length)
+    if (slideCount > 0) {
+      setActiveIndex((current) => (current - 1 + slideCount) % slideCount)
     }
-  }, [slides.length])
+  }, [slideCount])
 
   // Autoplay loop
   useEffect(() => {

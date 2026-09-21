@@ -703,7 +703,7 @@ export function FinanceBusinessGuideModal({
                   <div className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs space-y-2">
                     <h4 className="font-bold text-foreground text-sm flex items-center gap-1.5">
                       <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      Atención a la "Cobertura Incompleta":
+                      Atención a la &quot;Cobertura Incompleta&quot;:
                     </h4>
                     <p className="text-muted-foreground leading-relaxed">
                       Si vendiste un producto o realizaste una reparación sin costo de repuesto cargado, el sistema te mostrará una insignia de advertencia.
@@ -817,7 +817,7 @@ export function FinanceBusinessGuideModal({
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3.5 text-xs">
                     <p className="font-bold text-rose-700 dark:text-rose-400">
-                      "No puedo registrar un pago de gasto en efectivo"
+                      &quot;No puedo registrar un pago de gasto en efectivo&quot;
                     </p>
                     <p className="mt-1 text-muted-foreground">
                       <strong>Solución:</strong> Todo pago en efectivo debe salir de una caja abierta de la sucursal. Abrí la sesión de caja del día o seleccioná método de pago bancario / cheque.
@@ -826,7 +826,7 @@ export function FinanceBusinessGuideModal({
 
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 text-xs">
                     <p className="font-bold text-amber-700 dark:text-amber-400">
-                      "Aprobé la nómina pero el dinero no se descontó de la cuenta"
+                      &quot;Aprobé la nómina pero el dinero no se descontó de la cuenta&quot;
                     </p>
                     <p className="mt-1 text-muted-foreground">
                       <strong>Solución:</strong> Aprobar reconoce el compromiso contable. Para descontar el dinero, hacé clic en <strong>Pagar</strong> en la corrida de nómina.
@@ -835,7 +835,7 @@ export function FinanceBusinessGuideModal({
 
                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5 text-xs">
                     <p className="font-bold text-blue-700 dark:text-blue-400">
-                      "¿Por qué tengo Ganancia Neta positiva pero poco saldo en el banco?"
+                      &quot;¿Por qué tengo Ganancia Neta positiva pero poco saldo en el banco?&quot;
                     </p>
                     <p className="mt-1 text-muted-foreground">
                       <strong>Causa frecuente:</strong> Compraste mercadería o repuestos que todavía están en las estanterías (stock), o tus clientes tienen cuotas a crédito por vencer en los próximos meses.

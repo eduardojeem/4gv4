@@ -67,6 +67,7 @@ import { buildCategoryOptions, getCategoryIndent } from '@/lib/categories/catego
 import { NewProductChecklist } from '@/components/dashboard/products/NewProductChecklist'
 import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
+import { BrandPicker } from '@/components/dashboard/brands/BrandPicker'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
@@ -279,6 +280,9 @@ export function ProductModal({
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false)
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false)
+  // Lo que el usuario escribió en el buscador de marcas: el alta abre con ese
+  // nombre ya puesto, para no escribirlo dos veces.
+  const [nombreDeMarcaNueva, setNombreDeMarcaNueva] = useState('')
 
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
@@ -1365,7 +1369,7 @@ export function ProductModal({
                     </div>
                   </div>
 
-                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
                     <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                       <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -1454,40 +1458,23 @@ export function ProductModal({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Marca <FieldRequirement /></FormLabel>
-                              <div className="flex gap-2">
-                                <Select
-                                  onValueChange={(value) => {
-                                    field.onChange(value)
-                                    const selectedBrand = localBrands.find(b => b.id === value)
-                                    if (selectedBrand) {
-                                      setValue('brand', selectedBrand.name, { shouldDirty: true })
-                                    }
+                              <FormControl>
+                                <BrandPicker
+                                  brands={localBrands}
+                                  value={field.value}
+                                  onSelect={(marca) => {
+                                    field.onChange(marca?.id ?? '')
+                                    setValue('brand', marca?.name ?? '', { shouldDirty: true })
                                   }}
-                                  value={field.value || ""}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Seleccionar marca" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {localBrands.map((brand) => (
-                                      <SelectItem key={brand.id} value={brand.id}>
-                                        {brand.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => setIsBrandModalOpen(true)}
-                                  aria-label="Crear nueva marca"
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              </div>
+                                  onCreate={(nombre) => {
+                                    setNombreDeMarcaNueva(nombre)
+                                    setIsBrandModalOpen(true)
+                                  }}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Escribí el nombre: si ya la tenés cargada aparece en la lista, y si no, se crea.
+                              </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1614,14 +1601,14 @@ export function ProductModal({
                     </CardContent>
                   </Card>
 
-                  <Card className="border-0 shadow-none bg-transparent md:border md:border-purple-100 md:dark:border-purple-900/50 md:bg-gradient-to-br md:from-white md:to-purple-50/30 md:dark:from-slate-800 md:dark:to-slate-800/50">
-                    <CardHeader className="pb-3 px-0 md:px-6">
-                      <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                         Categorización
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
+                    <CardContent className="p-4 sm:p-6 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -1868,14 +1855,14 @@ export function ProductModal({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="border-0 shadow-none bg-transparent md:border md:border-blue-200 md:dark:border-blue-800 md:bg-gradient-to-br md:from-blue-50/50 md:to-white md:dark:from-blue-900/10 md:dark:to-slate-900">
-                        <CardHeader className="pb-3 px-0 md:px-6">
-                          <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                      <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                        <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-blue-700 dark:text-blue-400">
                             <Users className="h-4 w-4" />
                             Precio Mayorista <FieldRequirement />
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-2">
+                        <CardContent className="p-4 sm:p-6 space-y-3">
                           <FormField
                             control={form.control}
                             name="wholesale_price"
@@ -1930,13 +1917,13 @@ export function ProductModal({
                         </CardContent>
                       </Card>
 
-                      <Card className={`transition-all ${hasOffer
-                        ? 'border-l-4 border-red-500 bg-red-50/20 dark:bg-red-955/10 md:border-2 md:border-red-400 md:dark:border-red-800 md:bg-gradient-to-br md:from-red-50 md:to-pink-50 md:dark:from-red-900/10 md:dark:to-pink-900/10 md:shadow-lg md:shadow-red-100 md:dark:shadow-none'
-                        : 'border-0 shadow-none bg-transparent md:border md:border-gray-200 md:dark:border-gray-700 md:bg-white md:dark:bg-slate-900'
+                      <Card className={`transition-all rounded-2xl ${hasOffer
+                        ? 'border-2 border-rose-400 dark:border-rose-800 bg-gradient-to-br from-rose-50/70 to-white dark:from-rose-950/30 dark:to-slate-900 shadow-2xs'
+                        : 'border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs'
                         }`}>
-                        <CardHeader className="pb-3 px-0 md:px-6">
+                        <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                           <div className="flex items-center justify-between">
-                            <CardTitle className={`text-sm font-medium flex items-center gap-2 ${hasOffer ? 'text-red-700 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                            <CardTitle className={`text-sm font-semibold flex items-center gap-2 ${hasOffer ? 'text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'}`}>
                               <Tag className="h-4 w-4" />
                               Precio en Oferta <FieldRequirement conditional={hasOffer ? '• Obligatorio con oferta activa' : '• Opcional'} />
                             </CardTitle>
@@ -1945,13 +1932,13 @@ export function ProductModal({
                               name="has_offer"
                               render={({ field }) => (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-xs text-slate-600 dark:text-slate-400">
                                     {field.value ? 'Activa' : 'Inactiva'}
                                   </span>
                                   <Switch
                                     checked={field.value}
                                     onCheckedChange={field.onChange}
-                                    className="data-[state=checked]:bg-red-500"
+                                    className="data-[state=checked]:bg-rose-500"
                                     aria-label="Activar precio en oferta"
                                   />
                                 </div>
@@ -1959,7 +1946,7 @@ export function ProductModal({
                             />
                           </div>
                         </CardHeader>
-                        <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-2">
+                        <CardContent className="p-4 sm:p-6 space-y-3">
                           <FormField
                             control={form.control}
                             name="offer_price"
@@ -2031,14 +2018,13 @@ export function ProductModal({
                       </Card>
                     </div>
 
-                    {/* Cuotas / Financiación (informativo en la web pública) */}
-                    <Card className={`transition-all ${installmentsEnabled
-                      ? 'border-l-4 border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10 md:border-2 md:border-indigo-400 md:dark:border-indigo-800 md:bg-gradient-to-br md:from-indigo-50 md:to-white md:dark:from-indigo-900/10 md:dark:to-slate-900 md:shadow-lg md:shadow-indigo-100 md:dark:shadow-none'
-                      : 'border-0 shadow-none bg-transparent md:border md:border-gray-200 md:dark:border-gray-700 md:bg-white md:dark:bg-slate-900'
+                    <Card className={`transition-all rounded-2xl ${installmentsEnabled
+                      ? 'border-2 border-indigo-400 dark:border-indigo-800 bg-gradient-to-br from-indigo-50/70 to-white dark:from-indigo-950/30 dark:to-slate-900 shadow-2xs'
+                      : 'border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs'
                       }`}>
-                      <CardHeader className="pb-3 px-0 md:px-6">
+                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                         <div className="flex items-center justify-between">
-                          <CardTitle className={`text-sm font-medium flex items-center gap-2 ${installmentsEnabled ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                          <CardTitle className={`text-sm font-semibold flex items-center gap-2 ${installmentsEnabled ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400'}`}>
                             <CreditCard className="h-4 w-4" />
                             Activar cuotas / financiación <FieldRequirement conditional={installmentsEnabled ? '• Configurá los planes abajo' : '• Opcional'} />
                           </CardTitle>
@@ -2047,7 +2033,7 @@ export function ProductModal({
                             name="installments_enabled"
                             render={({ field }) => (
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-600 dark:text-gray-400">
+                                <span className="text-xs text-slate-600 dark:text-slate-400">
                                   {field.value ? 'Activa' : 'Inactiva'}
                                 </span>
                                 <Switch
@@ -2061,7 +2047,7 @@ export function ProductModal({
                           />
                         </div>
                       </CardHeader>
-                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-3">
+                      <CardContent className="p-4 sm:p-6 space-y-3">
                         {!installmentsEnabled ? (
                           <div className="space-y-2.5">
                             <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -2575,14 +2561,14 @@ export function ProductModal({
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
                       <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
                           <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                           Stock Actual <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
+                      <CardContent className="p-4 sm:p-6">
                         <FormField
                           control={form.control}
                           name="stock_quantity"
@@ -2602,14 +2588,14 @@ export function ProductModal({
                       </CardContent>
                     </Card>
 
-                    <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
-                      <CardHeader className="pb-3 px-0 md:px-6">
-                        <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                          <Package className="h-4 w-4" />
+                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                          <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                           Stock Mínimo <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
+                      <CardContent className="p-4 sm:p-6">
                         <FormField
                           control={form.control}
                           name="min_stock"
@@ -2632,14 +2618,14 @@ export function ProductModal({
                       </CardContent>
                     </Card>
 
-                    <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
-                      <CardHeader className="pb-3 px-0 md:px-6">
-                        <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                          <Warehouse className="h-4 w-4 text-amber-600" />
+                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs md:col-span-2">
+                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                          <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                           Stock Máximo <FieldRequirement />
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
+                      <CardContent className="p-4 sm:p-6">
                         <FormField
                           control={form.control}
                           name="max_stock"
@@ -2741,14 +2727,14 @@ export function ProductModal({
                       </p>
                     </div>
                   </div>
-                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
                     <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                       <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <RefreshCw className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                         Garantía y Cobertura
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
+                    <CardContent className="p-4 sm:p-6 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -2845,14 +2831,14 @@ export function ProductModal({
                     </CardContent>
                   </Card>
 
-                  <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
-                    <CardHeader className="pb-3 px-0 md:px-6">
-                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                        <RefreshCw className="h-4 w-4" />
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+                        <RefreshCw className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                         Cambios y Devoluciones
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
+                    <CardContent className="p-4 sm:p-6 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -3013,7 +2999,7 @@ export function ProductModal({
                       </ul>
                     </div>
                   </div>
-                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-2xs">
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
                     <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                       <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <Upload className="h-4 w-4 text-purple-600 dark:text-purple-400" />
@@ -3164,6 +3150,7 @@ export function ProductModal({
 
     <BrandModal
       isOpen={isBrandModalOpen}
+      initialName={nombreDeMarcaNueva}
       onClose={() => setIsBrandModalOpen(false)}
       onSave={handleSaveBrand}
     />

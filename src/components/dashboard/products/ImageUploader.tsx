@@ -308,8 +308,8 @@ export function ImageUploader({
               border-2 border-dashed rounded-xl text-center cursor-pointer transition-all
               ${compact ? 'p-3' : 'p-8'}
               ${isDragActive 
-                ? 'border-blue-500 bg-blue-50 scale-105' 
-                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 scale-105' 
+                : 'border-slate-300 dark:border-slate-700/80 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-slate-50/50 dark:bg-slate-900/40'
               }
               ${disabled || uploading ? 'opacity-50 cursor-not-allowed' : ''}
             `}
@@ -318,24 +318,24 @@ export function ImageUploader({
             
             {uploading ? (
               compact ? (
-                <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
+                <div className="flex items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                   <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   Subiendo imágenes…
                 </div>
               ) : (
                 <div className="space-y-3">
                   <Loader2 className="h-12 w-12 text-blue-500 mx-auto animate-spin" />
-                  <p className="text-gray-600 font-medium">Subiendo imágenes...</p>
-                  <p className="text-xs text-gray-500">Comprimiendo y optimizando</p>
+                  <p className="text-slate-600 dark:text-slate-300 font-medium">Subiendo imágenes...</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Comprimiendo y optimizando</p>
                 </div>
               )
             ) : compact ? (
-              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                <Upload className="h-4 w-4 shrink-0 text-gray-400" />
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+                <Upload className="h-4 w-4 shrink-0 text-slate-400" />
                 <span className="font-medium">
                   {isDragActive ? '¡Soltá las fotos acá!' : 'Arrastrá fotos o hacé clic'}
                 </span>
-                <span className="text-gray-400">
+                <span className="text-slate-400 dark:text-slate-500">
                   hasta {maxImages} · {maxSize / 1024 / 1024}MB
                 </span>
                 {/* Sin esto la carga por URL quedaba inalcanzable en compacto:
@@ -344,7 +344,7 @@ export function ImageUploader({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setShowUrlInput(!showUrlInput) }}
                   disabled={disabled || uploading}
-                  className="inline-flex items-center gap-1 rounded px-1 font-medium text-blue-600 underline-offset-2 hover:underline disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded px-1 font-medium text-blue-600 dark:text-blue-400 underline-offset-2 hover:underline disabled:opacity-50"
                 >
                   <LinkIcon className="h-3 w-3" />
                   URL
@@ -353,7 +353,7 @@ export function ImageUploader({
             ) : (
               <div className="space-y-3">
                 <div className="relative inline-block">
-                  <Upload className="h-12 w-12 text-gray-400 mx-auto" />
+                  <Upload className="h-12 w-12 text-slate-400 dark:text-slate-500 mx-auto" />
                   {isDragActive && (
                     <motion.div
                       initial={{ scale: 0 }}
@@ -364,15 +364,15 @@ export function ImageUploader({
                 </div>
                 
                 <div>
-                  <p className="text-gray-700 font-medium mb-1">
+                  <p className="text-slate-700 dark:text-slate-200 font-medium mb-1">
                     {isDragActive
                       ? '¡Suelta las imágenes aquí!'
                       : 'Arrastra imágenes o haz clic para seleccionar'}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Máximo {maxImages} imágenes • {maxSize / 1024 / 1024}MB cada una
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Formatos: JPG, PNG, WebP
                   </p>
                 </div>
@@ -409,9 +409,9 @@ export function ImageUploader({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <Card className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 border-blue-200">
+                <Card className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800/60">
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-blue-700">
+                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
                       <LinkIcon className="h-4 w-4" />
                       <Label className="text-sm font-medium">Agregar imagen desde URL</Label>
                     </div>
@@ -465,7 +465,7 @@ export function ImageUploader({
                       </Button>
                     </div>
 
-                    <p className="text-xs text-blue-600">
+                    <p className="text-xs text-blue-600 dark:text-blue-300/80">
                       Usá una URL HTTPS de un proveedor habilitado. El sistema validará el dominio y que la imagen cargue correctamente.
                     </p>
                   </div>
@@ -478,7 +478,7 @@ export function ImageUploader({
 
       {/* Información adicional */}
       {images.length > 0 && (
-        <div className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+        <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 p-3 rounded-xl">
           <div className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4" />
             <span>
@@ -486,7 +486,7 @@ export function ImageUploader({
             </span>
           </div>
           {images.length === maxImages && (
-            <div className="flex items-center gap-2 text-amber-600">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <AlertCircle className="h-4 w-4" />
               <span className="text-xs">Límite alcanzado</span>
             </div>
@@ -508,12 +508,12 @@ export function ImageUploader({
             <span>{listaDeConsejos[0]}</span>
           </p>
         ) : (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/50 rounded-xl p-4">
             <div className="flex gap-3">
-              <ImageIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+              <ImageIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-blue-900 mb-1">{tipsTitle ?? 'Consejos para mejores imágenes:'}</p>
-                <ul className="text-blue-700 space-y-1 text-xs">
+                <p className="font-medium text-blue-900 dark:text-blue-200 mb-1">{tipsTitle ?? 'Consejos para mejores imágenes:'}</p>
+                <ul className="text-blue-700 dark:text-blue-300/80 space-y-1 text-xs">
                   {listaDeConsejos.map((consejo) => (
                     <li key={consejo}>• {consejo}</li>
                   ))}

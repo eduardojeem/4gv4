@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { normalizePhone } from '@/lib/customers/contact-rules'
 import {
   normalizeDocument,
@@ -24,6 +24,7 @@ const ESPERA_MS = 350
 /** Debajo de esto no vale la pena preguntar: todavia lo estan escribiendo. */
 const MIN_PHONE_DIGITOS = 6
 const MIN_RUC_DIGITOS = 4
+const NO_DUPLICATES: CustomerDuplicate[] = []
 
 export type DuplicateCheckInput = {
   phone?: string
@@ -33,46 +34,38 @@ export type DuplicateCheckInput = {
 }
 
 export function useCustomerDuplicates(input: DuplicateCheckInput): CustomerDuplicate[] {
-  const [duplicates, setDuplicates] = useState<CustomerDuplicate[]>([])
-
-  // Cada consulta lleva su numero: si dos salen juntas, la respuesta vieja no
-  // puede pisar a la nueva y dejar el aviso diciendo lo contrario de lo que hay.
-  const secuenciaRef = useRef(0)
+  const [result, setResult] = useState<{ query: string; duplicates: CustomerDuplicate[] } | null>(null)
 
   const phone = normalizePhone(input.phone)
   const email = normalizeEmail(input.email)
   const ruc = normalizeDocument(input.ruc)
   const excludeId = input.excludeId ?? ''
 
+  const params = new URLSearchParams()
+  if (phone.length >= MIN_PHONE_DIGITOS) params.set('phone', phone)
+  // Un correo a medio escribir no sirve para comparar.
+  if (email.includes('@') && email.includes('.')) params.set('email', email)
+  if (ruc.length >= MIN_RUC_DIGITOS) params.set('ruc', ruc)
+  if (excludeId) params.set('excludeId', excludeId)
+  const query = params.has('phone') || params.has('email') || params.has('ruc') ? params.toString() : ''
+
   useEffect(() => {
-    const params = new URLSearchParams()
-    if (phone.length >= MIN_PHONE_DIGITOS) params.set('phone', phone)
-    // Un correo a medio escribir no sirve para comparar.
-    if (email.includes('@') && email.includes('.')) params.set('email', email)
-    if (ruc.length >= MIN_RUC_DIGITOS) params.set('ruc', ruc)
-    if (excludeId) params.set('excludeId', excludeId)
-
-    if (!params.has('phone') && !params.has('email') && !params.has('ruc')) {
-      setDuplicates([])
-      return
-    }
-
-    const secuencia = ++secuenciaRef.current
+    if (!query) return
     const controlador = new AbortController()
 
     const temporizador = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/customers/check-duplicate?${params.toString()}`, {
+        const response = await fetch(`/api/customers/check-duplicate?${query}`, {
           signal: controlador.signal,
         })
         const body = await response.json().catch(() => null)
-        if (secuencia !== secuenciaRef.current) return
-        setDuplicates(Array.isArray(body?.duplicates) ? body.duplicates : [])
+        if (controlador.signal.aborted) return
+        setResult({ query, duplicates: Array.isArray(body?.duplicates) ? body.duplicates : [] })
       } catch {
         // Sin red o consulta cancelada: se sigue sin aviso anticipado y el
         // guardado avisa igual. Marcar un duplicado que no se pudo comprobar
         // seria peor que no decir nada.
-        if (secuencia === secuenciaRef.current) setDuplicates([])
+        if (!controlador.signal.aborted) setResult({ query, duplicates: [] })
       }
     }, ESPERA_MS)
 
@@ -80,7 +73,7 @@ export function useCustomerDuplicates(input: DuplicateCheckInput): CustomerDupli
       clearTimeout(temporizador)
       controlador.abort()
     }
-  }, [phone, email, ruc, excludeId])
+  }, [query])
 
-  return duplicates
+  return result?.query === query ? result.duplicates : NO_DUPLICATES
 }

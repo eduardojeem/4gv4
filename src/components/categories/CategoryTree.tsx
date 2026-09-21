@@ -15,9 +15,13 @@ interface Category extends BaseCategory {
     products_count?: number
 }
 
+interface TreeCategory extends Category {
+    children: TreeCategory[]
+}
+
 interface CategoryTreeNodeProps {
     category: Category
-    children: Category[]
+    childCategories: TreeCategory[]
     level: number
     onEdit: (category: Category) => void
     onDelete: (id: string) => void
@@ -27,7 +31,7 @@ interface CategoryTreeNodeProps {
 
 function CategoryTreeNode({
     category,
-    children,
+    childCategories,
     level,
     onEdit,
     onDelete,
@@ -35,7 +39,7 @@ function CategoryTreeNode({
     onAddChild
 }: CategoryTreeNodeProps) {
     const [isExpanded, setIsExpanded] = useState(true)
-    const hasChildren = children.length > 0
+    const hasChildren = childCategories.length > 0
 
     return (
         <div className="relative">
@@ -102,7 +106,7 @@ function CategoryTreeNode({
                             {category.products_count || 0} productos
                         </span>
                         {hasChildren && (
-                            <span>{children.length} subcategoría{children.length !== 1 ? 's' : ''}</span>
+                            <span>{childCategories.length} subcategoría{childCategories.length !== 1 ? 's' : ''}</span>
                         )}
                     </div>
                 </div>
@@ -162,11 +166,11 @@ function CategoryTreeNode({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                     >
-                        {children.map((child) => (
+                        {childCategories.map((child) => (
                             <CategoryTreeNode
                                 key={child.id}
                                 category={child}
-                                children={[]} // Will be populated by parent
+                                childCategories={child.children}
                                 level={level + 1}
                                 onEdit={onEdit}
                                 onDelete={onDelete}
@@ -200,8 +204,8 @@ export function CategoryTree({
 }: CategoryTreeProps) {
     // Build tree structure
     const buildTree = () => {
-        const categoryMap = new Map(categories.map(c => [c.id, { ...c, children: [] as Category[] }]))
-        const roots: Category[] = []
+        const categoryMap = new Map(categories.map(c => [c.id, { ...c, children: [] as TreeCategory[] }]))
+        const roots: TreeCategory[] = []
 
         categories.forEach(category => {
             const node = categoryMap.get(category.id)
@@ -225,12 +229,12 @@ export function CategoryTree({
 
     const tree = buildTree()
 
-    const renderNode = (category: Category & { children?: Category[] }, level = 0): React.ReactNode => {
+    const renderNode = (category: TreeCategory, level = 0): React.ReactNode => {
         return (
             <CategoryTreeNode
                 key={category.id}
                 category={category}
-                children={category.children || []}
+                childCategories={category.children}
                 level={level}
                 onEdit={onEdit}
                 onDelete={onDelete}

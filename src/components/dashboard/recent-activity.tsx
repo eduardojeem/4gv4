@@ -69,7 +69,7 @@ export function RecentActivity() {
         const mappedItems: ActivityItem[] = (data || []).map((item: any) => {
             let description = ''
             let icon = <Activity className="h-4 w-4" />
-            let formattedAmount = item.amount ? formatCurrency(Number(item.amount)) : undefined
+            const formattedAmount = item.amount ? formatCurrency(Number(item.amount)) : undefined
 
             if (item.type === 'sale') {
                 description = 'Venta realizada'

@@ -500,7 +500,7 @@ export function ServicesTab() {
               ¿Eliminar servicio?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Estás a punto de eliminar <strong className="text-foreground">"{serviceToDelete?.name}"</strong>.
+              Estás a punto de eliminar <strong className="text-foreground">&quot;{serviceToDelete?.name}&quot;</strong>.
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

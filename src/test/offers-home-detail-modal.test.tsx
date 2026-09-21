@@ -1,15 +1,20 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const control = vi.hoisted(() => ({ addProduct: vi.fn(() => ({ limited: false, quantity: 1 })) }))
 
 vi.mock('@/hooks/use-public-cart', () => ({ usePublicCart: () => ({ addProduct: control.addProduct }) }))
 vi.mock('@/hooks/useWebsiteSettings', () => ({
-  useWebsiteSettings: () => ({
-    settings: { checkout: { commerceMode: 'cart' }, company_info: { name: 'DA', whatsapp: '595981123456' } },
-    isLoading: false,
-    error: null,
-  }),
+  useWebsiteSettings: () => {
+    // El hook real usa Hooks; conservar esa característica detecta llamadas condicionales.
+    useState(null)
+    return {
+      settings: { checkout: { commerceMode: 'cart' }, company_info: { name: 'DA', whatsapp: '595981123456' } },
+      isLoading: false,
+      error: null,
+    }
+  },
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 vi.mock('next/image', () => ({
@@ -22,7 +27,7 @@ vi.mock('next/image', () => ({
 
 import { OFFER_ACCENTS, OffersCarouselDeck, type OfferSlide } from '@/components/public/offers/OffersCarouselDeck'
 import { mapProductsToOfferSlides } from '@/components/public/inicio/OffersCarousel'
-import type { OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
+import { OfferDetailModal, type OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
 
 const accent = OFFER_ACCENTS.rose
 
@@ -107,6 +112,18 @@ describe('el inicio manda el producto completo a las ofertas', () => {
 })
 
 describe('el detalle de una oferta destacada', () => {
+  it('puede abrirse después de renderizarse sin oferta sin cambiar el orden de Hooks', () => {
+    const props = {
+      isOpen: true,
+      onClose: vi.fn(),
+      tenantPrefix: '/tienda-demo',
+      commerceMode: 'cart' as const,
+      contactPhone: '595981123456',
+    }
+    const { rerender } = render(<OfferDetailModal offer={null} {...props} />)
+    rerender(<OfferDetailModal offer={producto()} {...props} />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
   it('la foto abre el modal sin salir de la página', () => {
     pintar([slide()])
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

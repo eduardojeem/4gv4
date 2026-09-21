@@ -56,6 +56,7 @@ import { useCashRegister } from '@/hooks/useCashRegister'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { StoreSetupAlert } from '@/components/dashboard/StoreSetupAlert'
+import { CashStatusBanner } from '@/components/dashboard/CashStatusBanner'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -257,9 +258,14 @@ export default function DashboardPage() {
     setActiveRegisterId(saved)
   }, [selectedBranchId])
 
+  // Hasta que la primera consulta conteste no se sabe nada: sin esto, el panel
+  // abría siempre anunciando «caja cerrada», incluso con el turno abierto.
+  const [cajaVerificada, setCajaVerificada] = useState(false)
+
   // Check open session
   useEffect(() => {
     checkOpenSession(activeRegisterId || undefined)
+      .finally(() => setCajaVerificada(true))
   }, [activeRegisterId, selectedBranchId, checkOpenSession])
 
   const parsedOpeningAmount = useMemo(() => {
@@ -573,41 +579,8 @@ export default function DashboardPage() {
           <p className="text-sm capitalize text-slate-500 dark:text-slate-400">{today}</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Botón dinámico de Caja (Llamativo y cambia de color) */}
-          {currentSession ? (
-            <Button
-              onClick={() => {
-                setClosingCountedAmount('')
-                setIsCloseDialogOpen(true)
-              }}
-              disabled={registerLoading}
-              type="button"
-              className="gap-2 h-10 px-5 text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20 border-0 transition-all duration-300 transform hover:scale-[1.02]"
-            >
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300"></span>
-              </span>
-              Caja Abierta (Cerrar)
-            </Button>
-          ) : (
-            <Button
-              onClick={() => {
-                setOpeningAmount('')
-                setOpeningNote('')
-                setIsOpenRegisterDialogOpen(true)
-              }}
-              disabled={registerLoading}
-              type="button"
-              className="gap-2 h-10 px-5 text-sm font-bold bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20 border-0 transition-all duration-300 transform hover:scale-[1.02] animate-pulse"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-200"></span>
-              </span>
-              Abrir Caja
-            </Button>
-          )}
-
+          {/* La caja ya no es un botón más acá arriba: es el primer bloque de
+              la pantalla, con su estado y lo que pasa si está cerrada. */}
           <Button asChild size="sm" className="gap-2">
             <Link href="/dashboard/pos">
               <Plus className="h-3.5 w-3.5" />
@@ -656,6 +629,27 @@ export default function DashboardPage() {
           <HelpButton guideKey="overview" variant="outline" size="sm" className="gap-2" showLabel />
         </div>
       </header>
+
+      {/* Estado de la caja: es el primer paso del día y va antes que todo lo
+          demás. Sin caja abierta el POS no confirma ventas. */}
+      <CashStatusBanner
+        status={!cajaVerificada ? 'verificando' : currentSession ? 'abierta' : 'cerrada'}
+        // La sesión vive en `cash_closures`, que no tiene `opened_at`: la
+        // apertura es su `created_at`.
+        openedAt={currentSession?.opened_at ?? (currentSession as { created_at?: string } | null)?.created_at}
+        expectedBalance={expectedBalance}
+        movementsCount={currentSession?.movements?.length ?? 0}
+        busy={registerLoading}
+        onOpen={() => {
+          setOpeningAmount('')
+          setOpeningNote('')
+          setIsOpenRegisterDialogOpen(true)
+        }}
+        onClose={() => {
+          setClosingCountedAmount('')
+          setIsCloseDialogOpen(true)
+        }}
+      />
 
       {/* Alerta de tienda pública no configurada o sin publicar */}
       <StoreSetupAlert />

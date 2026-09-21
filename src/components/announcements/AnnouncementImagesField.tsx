@@ -1,12 +1,14 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, ImagePlus, Loader2, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, ImagePlus, Images, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MAX_ANNOUNCEMENT_IMAGES, type AnnouncementImage } from '@/lib/announcements/announcement'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 
 /**
  * Las imagenes del aviso: se suben desde la computadora o se pega su direccion.
@@ -23,6 +25,8 @@ export function AnnouncementImagesField({
   upload: (file: File) => Promise<string>
 }) {
   const [uploading, setUploading] = useState(false)
+  const [mediaOpen, setMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
   const fileInput = useRef<HTMLInputElement>(null)
   const full = value.length >= MAX_ANNOUNCEMENT_IMAGES
 
@@ -40,7 +44,25 @@ export function AnnouncementImagesField({
     onChange(next)
   }
 
+  const handleTriggerUpload = () => {
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: alcanzaste el máximo de 20 imágenes en tu organización. Eliminá imágenes desde el Historial para liberar espacio.', {
+        duration: 5000,
+      })
+      setMediaOpen(true)
+      return
+    }
+    fileInput.current?.click()
+  }
+
   const addFile = async (file: File) => {
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: alcanzaste el máximo de 20 imágenes en tu organización. Eliminá imágenes desde el Historial para liberar espacio.', {
+        duration: 5000,
+      })
+      setMediaOpen(true)
+      return
+    }
     if (full) {
       toast.error(`Hasta ${MAX_ANNOUNCEMENT_IMAGES} imágenes`)
       return
@@ -62,6 +84,18 @@ export function AnnouncementImagesField({
 
   return (
     <div className="space-y-3">
+      {isMediaAtLimit && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+          <span className="font-semibold">⚠️ Límite de 20 imágenes alcanzado en tu organización</span>
+          <button
+            type="button"
+            onClick={() => setMediaOpen(true)}
+            className="underline font-bold hover:text-destructive/80 shrink-0 cursor-pointer"
+          >
+            Abrir historial y liberar espacio
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <Label>Imágenes del cartel</Label>
@@ -86,10 +120,21 @@ export function AnnouncementImagesField({
             size="sm"
             className="gap-2"
             disabled={uploading || full}
-            onClick={() => fileInput.current?.click()}
+            onClick={handleTriggerUpload}
           >
             {uploading ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : <ImagePlus aria-hidden="true" className="h-4 w-4" />}
             Subir imagen
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={full}
+            onClick={() => setMediaOpen(true)}
+          >
+            <Images aria-hidden="true" className="h-4 w-4 text-primary" />
+            Historial
           </Button>
           <Button
             type="button"
@@ -100,6 +145,17 @@ export function AnnouncementImagesField({
           >
             Pegar dirección
           </Button>
+          <WebsiteMediaLibraryDialog
+            open={mediaOpen}
+            onOpenChange={setMediaOpen}
+            filterSection="announcements"
+            title="Historial de Imágenes de Avisos"
+            description="Reutilizá imágenes subidas para tus avisos o eliminá archivos para liberar espacio (máx 20)."
+            onSelect={(url) => {
+              onChange([...value, { url, alt: '', href: '' }])
+              toast.success('Imagen agregada desde el historial')
+            }}
+          />
         </div>
       </div>
 

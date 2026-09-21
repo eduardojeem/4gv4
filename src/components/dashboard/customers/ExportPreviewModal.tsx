@@ -106,7 +106,7 @@ export function ExportPreviewModal({
             <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg flex-shrink-0">
               <Search className="h-4 w-4" />
               <span>
-                Mostrando {Math.min(20, filteredCustomers.length)} de {filteredCustomers.length} resultados para "{searchTerm}"
+                Mostrando {Math.min(20, filteredCustomers.length)} de {filteredCustomers.length} resultados para &quot;{searchTerm}&quot;
               </span>
               {filteredCustomers.length > 20 && (
                 <Badge variant="outline" className="text-xs">
@@ -154,7 +154,7 @@ export function ExportPreviewModal({
                     {previewData.length === 0 && (
                       <div className="text-center py-12 text-gray-500">
                         <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No se encontraron resultados para "{searchTerm}"</p>
+                        <p>No se encontraron resultados para &quot;{searchTerm}&quot;</p>
                       </div>
                     )}
                     
@@ -203,7 +203,7 @@ export function ExportPreviewModal({
                     {previewData.length === 0 && (
                       <div className="text-center py-12 text-gray-500">
                         <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No se encontraron resultados para "{searchTerm}"</p>
+                        <p>No se encontraron resultados para &quot;{searchTerm}&quot;</p>
                       </div>
                     )}
                     

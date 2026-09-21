@@ -34,8 +34,19 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ success: false, error: 'El logo no puede superar 5 MB' }, { status: 400 })
   }
 
-  const storagePath = `website/brands/${organizationId}/${brandId}-${randomUUID()}.${extension}`
   const admin = createAdminSupabase()
+
+  // Verificar cuota de 20 imágenes
+  const { getWebsiteMediaLibrary, addWebsiteMediaItem, MAX_WEBSITE_MEDIA_COUNT } = await import('@/lib/website/website-media')
+  const currentItems = await getWebsiteMediaLibrary(organizationId, admin)
+  if (currentItems.length >= MAX_WEBSITE_MEDIA_COUNT) {
+    return NextResponse.json(
+      { success: false, error: `Alcanzaste el límite de ${MAX_WEBSITE_MEDIA_COUNT} imágenes para tu sitio web. Eliminá imágenes desde el Historial para liberar espacio.` },
+      { status: 400 }
+    )
+  }
+
+  const storagePath = `website/brands/${organizationId}/${brandId}-${randomUUID()}.${extension}`
   const buffer = Buffer.from(await file.arrayBuffer())
   const { error } = await admin.storage
     .from('product-images')
@@ -46,9 +57,23 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const { data: { publicUrl } } = admin.storage.from('product-images').getPublicUrl(storagePath)
+  const finalUrl = `${publicUrl}?v=${Date.now()}`
+
+  await addWebsiteMediaItem(
+    organizationId,
+    {
+      url: finalUrl,
+      path: storagePath,
+      name: `Logo marca ${brandId}`,
+      size: file.size,
+      section: 'brands',
+    },
+    admin
+  )
+
   return NextResponse.json({
     success: true,
-    url: `${publicUrl}?v=${Date.now()}`,
+    url: finalUrl,
     path: storagePath,
   })
 }

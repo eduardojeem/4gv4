@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Download, MoreVertical, Share, Smartphone, WifiOff, Zap } from 'lucide-react'
 import { toast } from 'sonner'
+import { useHydrated } from '@/hooks/use-hydrated'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -37,29 +38,24 @@ export function InstallPrompt({
   variant?: 'button' | 'icon' | 'menu-item'
 }) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [isIOS, setIsIOS] = useState(false)
-  const [isStandalone, setIsStandalone] = useState(true)
+  const hydrated = useHydrated()
+  const [isIOS] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const nav = window.navigator
+    const iPadOS = /Macintosh/.test(nav.userAgent) && nav.maxTouchPoints > 1
+    return (/iPad|iPhone|iPod/.test(nav.userAgent) || iPadOS) && !('MSStream' in window)
+  })
+  const [installed, setInstalled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const nav = window.navigator as Navigator & { standalone?: boolean }
+    return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
+  })
+  const isStandalone = !hydrated || installed
   // El navegador ya ofrecio instalar y la persona dijo que no. El evento no se
   // puede reutilizar, pero el boton se queda: quien cierra el cartel sin querer
   // no tiene otra forma de volver, y el navegador puede tardar dias en reofrecer.
   const [promptUsed, setPromptUsed] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
-
-  // La deteccion corre en un efecto y no en el estado inicial: leer `navigator`
-  // o `matchMedia` durante el render hace que el servidor y el cliente pinten
-  // cosas distintas y React descarte la hidratacion.
-  useEffect(() => {
-    const nav = window.navigator as Navigator & { standalone?: boolean }
-    // El iPad con iPadOS 13+ se anuncia como Macintosh: sin mirar los puntos de
-    // contacto queda afuera, y es donde mas sirve tener la app instalada.
-    const iPadOS = /Macintosh/.test(nav.userAgent) && nav.maxTouchPoints > 1
-    const iOS = (/iPad|iPhone|iPod/.test(nav.userAgent) || iPadOS) && !('MSStream' in window)
-    const installed =
-      window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
-
-    setIsIOS(iOS)
-    setIsStandalone(installed)
-  }, [])
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -72,7 +68,7 @@ export function InstallPrompt({
     const installedHandler = () => {
       setDeferredPrompt(null)
       setGuideOpen(false)
-      setIsStandalone(true)
+      setInstalled(true)
       toast.success('¡Aplicación instalada!', {
         description: 'Ya podés abrirla desde el ícono, sin pasar por el navegador.',
       })

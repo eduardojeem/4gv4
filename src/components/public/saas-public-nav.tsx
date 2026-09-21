@@ -16,6 +16,7 @@ import {
   Sparkles,
   Store,
   User,
+  LogIn,
   X,
   Zap,
 } from 'lucide-react'
@@ -47,6 +48,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   const { user, signOut } = useAuth()
   const isDark = variant === 'dark'
   const { branding } = usePlatformBranding()
+  const isLoginPage = pathname === '/login' || pathname?.startsWith('/login')
 
   // Cerrar drawer al cambiar de ruta
   useEffect(() => {
@@ -215,19 +217,14 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
           <div className="flex items-center gap-2.5">
             <ThemeToggle />
 
-            {/* Marketplace Button */}
+            {/* Marketplace Button — Resaltado con color fijo que no cambia entre modo claro y oscuro */}
             <Button
               asChild
-              variant="outline"
               size="sm"
-              className={`hidden gap-2 sm:inline-flex rounded-xl font-semibold text-xs h-9 ${
-                isDark
-                  ? 'border-slate-800 bg-slate-900/80 text-slate-200 hover:border-slate-700 hover:bg-slate-800 hover:text-white'
-                  : 'border-slate-200/90 bg-slate-50 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200'
-              }`}
+              className="hidden gap-2 sm:inline-flex rounded-xl font-bold text-xs h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-700/25 border-0 transition-all duration-200 active:scale-[0.97]"
             >
               <Link href={branding.secondaryCtaHref}>
-                <Store className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                <Store className="h-4 w-4 text-white" />
                 {branding.secondaryCtaLabel}
               </Link>
             </Button>
@@ -243,17 +240,31 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                   Ir al Panel
                 </Link>
               </Button>
+            ) : isLoginPage ? (
+              <Button
+                asChild
+                size="sm"
+                className="group hidden gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 pl-2.5 pr-4 text-slate-950 font-bold shadow-md shadow-cyan-500/25 transition-all duration-200 active:scale-[0.97] lg:inline-flex h-9 text-xs"
+              >
+                <Link href="/register">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950/15 transition-transform duration-200 group-hover:scale-110">
+                    <Building2 className="h-3.5 w-3.5 text-slate-950" />
+                  </span>
+                  Registrar empresa
+                </Link>
+              </Button>
             ) : (
               <Button
-                type="button"
+                asChild
                 size="sm"
-                onClick={() => setAuthOpen(true)}
-                className="group hidden gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 pl-2 pr-4 text-slate-950 font-bold shadow-md shadow-cyan-500/25 transition-all duration-200 active:scale-[0.97] lg:inline-flex h-9 text-xs"
+                className="group hidden gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 pl-2.5 pr-4 text-slate-950 font-bold shadow-md shadow-cyan-500/25 transition-all duration-200 active:scale-[0.97] lg:inline-flex h-9 text-xs"
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950/15 transition-transform duration-200 group-hover:scale-110">
-                  <User className="h-3.5 w-3.5 text-slate-950" />
-                </span>
-                Mi cuenta
+                <Link href="/login">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950/15 transition-transform duration-200 group-hover:scale-110">
+                    <LogIn className="h-3.5 w-3.5 text-slate-950" />
+                  </span>
+                  Iniciar sesión
+                </Link>
               </Button>
             )}
 
@@ -332,20 +343,38 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                     </Button>
                   )}
                 </div>
-              ) : (
+              ) : isLoginPage ? (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Accedé a tu panel SaaS o registrate:</p>
+                  <p className="text-xs text-muted-foreground">Creá la cuenta para tu empresa:</p>
                   <Button
-                    type="button"
+                    asChild
                     size="sm"
                     className="w-full gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold shadow-xs hover:from-cyan-400 hover:to-blue-500"
-                    onClick={() => {
-                      setMobileOpen(false)
-                      setAuthOpen(true)
-                    }}
                   >
-                    <User className="h-4 w-4" />
-                    Iniciar sesión / Registro
+                    <Link
+                      href="/register"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <Building2 className="h-4 w-4" />
+                      Registrar empresa
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Accedé a tu panel administrativo:</p>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="w-full gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold shadow-xs hover:from-cyan-400 hover:to-blue-500"
+                  >
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      Iniciar sesión
+                    </Link>
                   </Button>
                 </div>
               )}
@@ -388,13 +417,13 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                 <Link
                   href={branding.secondaryCtaHref}
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center justify-between rounded-xl border border-cyan-500/30 bg-cyan-500/[0.05] px-3 py-2.5 text-sm font-semibold text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/[0.1] transition-colors"
+                  className="flex items-center justify-between rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2.5 text-sm font-bold shadow-sm transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <Store className="h-4 w-4" />
+                    <Store className="h-4 w-4 text-white" />
                     <span>{branding.secondaryCtaLabel}</span>
                   </div>
-                  <ChevronRight className="h-4 w-4 opacity-70" />
+                  <ChevronRight className="h-4 w-4 text-white/70" />
                 </Link>
               </div>
             </nav>

@@ -237,6 +237,7 @@ export function AnnouncementModal({
   const [paused, setPaused] = useState(false)
   const [userPaused, setUserPaused] = useState(false)
   const [viewMode, setViewMode] = useState<'carousel' | 'split'>('carousel')
+  const [touchStartX, setTouchStartX] = useState<number | null>(null)
   const autoCloseSeconds = isPreview ? 0 : (announcement?.autoCloseSeconds ?? 5)
   const carouselAnimation = announcement?.carouselAnimation ?? 'slide'
   const carouselIntervalSeconds = announcement?.carouselIntervalSeconds ?? 3
@@ -353,8 +354,6 @@ export function AnnouncementModal({
   const prevImage = () => setImageIndex((cur) => (cur - 1 + images.length) % images.length)
 
   // Soporte de gestos táctiles (swipe) para deslizar imágenes en móviles
-  const [touchStartX, setTouchStartX] = useState<number | null>(null)
-
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.touches[0].clientX)
     setPaused(true)

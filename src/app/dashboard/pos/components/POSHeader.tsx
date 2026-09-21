@@ -296,3 +296,5 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
     </div>
   )
 })
+
+POSHeader.displayName = 'POSHeader'

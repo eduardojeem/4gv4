@@ -699,9 +699,9 @@ export async function getOrganizationPlanInfo(
   const modulePlanAvailability: Partial<Record<OrganizationModule, ModulePlanAvailability[]>> = {}
   for (const availablePlan of planRows) {
     if (!Array.isArray(availablePlan.modules)) continue
-    for (const module of availablePlan.modules) {
-      if (!ORGANIZATION_MODULES.includes(module as OrganizationModule)) continue
-      const key = module as OrganizationModule
+    for (const moduleCode of availablePlan.modules) {
+      if (!ORGANIZATION_MODULES.includes(moduleCode as OrganizationModule)) continue
+      const key = moduleCode as OrganizationModule
       modulePlanAvailability[key] = [
         ...(modulePlanAvailability[key] ?? []),
         {

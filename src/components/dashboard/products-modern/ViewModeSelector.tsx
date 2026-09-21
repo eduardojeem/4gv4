@@ -24,38 +24,53 @@ export const ViewModeSelector = React.memo(function ViewModeSelector({
     <div 
       role="group" 
       aria-label="Selector de modo de vista"
-      className={cn('flex items-center gap-1 border rounded-lg p-1 bg-gray-50 dark:bg-gray-800 dark:border-gray-700', className)}
+      className={cn('flex items-center gap-0.5 border border-slate-200/90 dark:border-slate-800 rounded-xl p-1 bg-slate-100/70 dark:bg-slate-800/60 h-10 shadow-2xs', className)}
     >
       <Button
-        variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+        variant="ghost"
         size="icon"
         onClick={() => onViewModeChange('table')}
         aria-label="Vista de tabla"
         aria-pressed={viewMode === 'table'}
         title="Vista de tabla"
-        className="h-9 w-9"
+        className={cn(
+          'h-8 w-8 rounded-lg transition-all',
+          viewMode === 'table'
+            ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 font-bold hover:bg-white dark:hover:bg-slate-900'
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-700/60'
+        )}
       >
         <LayoutList className="h-4 w-4" aria-hidden="true" />
       </Button>
       <Button
-        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+        variant="ghost"
         size="icon"
         onClick={() => onViewModeChange('grid')}
         aria-label="Vista de cuadrícula"
         aria-pressed={viewMode === 'grid'}
         title="Vista de cuadrícula"
-        className="h-9 w-9"
+        className={cn(
+          'h-8 w-8 rounded-lg transition-all',
+          viewMode === 'grid'
+            ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 font-bold hover:bg-white dark:hover:bg-slate-900'
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-700/60'
+        )}
       >
         <LayoutGrid className="h-4 w-4" aria-hidden="true" />
       </Button>
       <Button
-        variant={viewMode === 'compact' ? 'secondary' : 'ghost'}
+        variant="ghost"
         size="icon"
         onClick={() => onViewModeChange('compact')}
         aria-label="Vista compacta"
         aria-pressed={viewMode === 'compact'}
         title="Vista compacta"
-        className="h-9 w-9"
+        className={cn(
+          'h-8 w-8 rounded-lg transition-all',
+          viewMode === 'compact'
+            ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 font-bold hover:bg-white dark:hover:bg-slate-900'
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-700/60'
+        )}
       >
         <List className="h-4 w-4" aria-hidden="true" />
       </Button>

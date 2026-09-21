@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { routeParam } from '@/lib/api/route-params'
 import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 import { logger } from '@/lib/logger'
 import { canTransitionRaffleStatus, raffleTransitionMessage, type RaffleLifecycleStatus } from '@/lib/raffles/lifecycle'
 
-function raffleId(routeContext: unknown): string | null {
-  const params = (routeContext as { params?: { id?: string } } | undefined)?.params
-  return params?.id ?? null
-}
-
 /** Detalle con participantes y ganadores, para el panel de administración. */
 export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.create'], module: 'promotions' }, async (_request, { organization }, routeContext) => {
-  const id = raffleId(routeContext)
+  const id = await routeParam(routeContext, 'id')
   if (!id) return NextResponse.json({ error: 'Falta el sorteo' }, { status: 400 })
 
   const supabase = await createOrgScopedClient(organization.id)
@@ -54,7 +50,7 @@ const patchSchema = z.object({
 })
 
 export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
-  const id = raffleId(routeContext)
+  const id = await routeParam(routeContext, 'id')
   if (!id) return NextResponse.json({ error: 'Falta el sorteo' }, { status: 400 })
 
   const body = await request.json().catch(() => null)

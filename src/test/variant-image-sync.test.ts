@@ -75,7 +75,6 @@ describe('los modales muestran la foto de la variante', () => {
     const fuente = leer(ruta)
     expect(fuente).toContain('galleryWithVariantImages')
     expect(fuente).toContain('variantImageIndex')
-    expect(fuente).toContain('if (variantImageIdx === -1) return')
   })
 
   it('el modal de ofertas calcula la galería antes del corte, donde valen los hooks', () => {

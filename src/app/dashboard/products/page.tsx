@@ -17,6 +17,7 @@ import { useProductsSupabase } from "@/hooks/useProductsSupabase";
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
 import { ProductModal } from "@/components/dashboard/product-modal";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { Product } from "@/types/product-unified";
 import { SectionGuideButton } from "@/components/dashboard/common/SectionGuideButton";
@@ -26,6 +27,11 @@ import {
 } from "@/components/dashboard/products/labels/PrintLabelsDialog";
 import { duplicatedFields } from "@/lib/products/duplicate";
 import { PRODUCTS_GUIDE } from "@/components/dashboard/common/section-guides-data";
+import {
+  exportCatalogToExcel,
+  exportCatalogToCSV,
+  type ImportProductRow,
+} from "@/lib/products/import-export-utils";
 import {
   MetricsGrid,
   SearchAndActionsBar,
@@ -38,6 +44,7 @@ import {
   AlertsBanner,
   ProductQuickViewModal,
   ImportProductsModal,
+  ProductSummaryOverview,
 } from "@/components/dashboard/products-modern";
 import {
   AlertDialog,
@@ -61,17 +68,22 @@ import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
 import { useBranch } from "@/contexts/branch-context";
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import {
+  PRODUCT_VIEW_PREFERENCES_KEY,
+  loadProductViewPreferences,
+  saveProductViewPreferences,
+  clearProductViewPreferences,
+  describeProductViewPreferences,
+  type ProductViewPreferences,
+} from "@/lib/products/product-view-preferences";
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 /**
- * El alcance con el que abre el listado: productos físicos y activos.
- *
- * Los servicios (mano de obra, reparaciones) se miran aparte y antes venían
- * mezclados; los desactivados son los que ya no se venden y sólo estorban al
- * buscar. Es un alcance, no un filtro rápido: sobrevive a «bajo stock» y a
- * «agotados», y se sale de él con «Todo el catálogo».
+ * Alcance configurable de la sección:
+ * Por defecto abre con todo el catálogo ({}).
+ * (El alcance anterior de solo productos físicos activos era { catalog_kind: "part", is_active: true }).
  */
-const PRODUCTS_SECTION_SCOPE = { catalog_kind: "part", is_active: true } as const;
+const PRODUCTS_SECTION_SCOPE = {} as const;
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -81,12 +93,15 @@ export default function ProductsPage() {
 
   // Group by mode (desglose por secciones) y modo de maximizar espacio
   const [groupBy, setGroupBy] = useState<GroupByMode>("none");
+  const [hasCustomPreferences, setHasCustomPreferences] = useState(false);
+  const preferencesLoadedRef = useRef(false);
   // Servicios: se ofrecen si la organizacion tiene el modulo o ya cargo
   // servicios. Sin ninguna de las dos, «Solo Servicios», «Por tipo» y
   // «0 servicios» eran ruido en un catalogo que no los usa.
   const { effectiveModules } = useSubscriptionStatus();
   const hasServicesModule = effectiveModules.includes("services");
-  const [isMaximizedSpace, setIsMaximizedSpace] = useState(false);
+  // Resumen de la sección: contraído por defecto para mayor espacio e inmediatez
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
 
   // Permissions check
   const canViewCost = hasPermission('cost_prices.read')
@@ -178,6 +193,90 @@ export default function ProductsPage() {
     }
   }, [handleQuickFilter]);
 
+  // Cargar preferencias guardadas del usuario (desglose continuo, filtro productos, etc.)
+  useEffect(() => {
+    if (typeof window === "undefined" || preferencesLoadedRef.current) return;
+    preferencesLoadedRef.current = true;
+
+    try {
+      const raw = localStorage.getItem(PRODUCT_VIEW_PREFERENCES_KEY);
+      if (!raw) return;
+
+      const prefs = loadProductViewPreferences();
+      setHasCustomPreferences(true);
+
+      if (prefs.groupBy) {
+        setGroupBy(prefs.groupBy);
+      }
+      if (prefs.viewMode) {
+        setViewMode(prefs.viewMode);
+      }
+      if (prefs.itemsPerPage) {
+        setItemsPerPage(prefs.itemsPerPage);
+      }
+      if (typeof prefs.isMaximizedSpace === "boolean") {
+        setIsSummaryExpanded(!prefs.isMaximizedSpace);
+      }
+
+      // Aplicar filtro de alcance guardado si no viene parámetro explícito en la URL
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("filter")) {
+        if (prefs.defaultScope === "all") {
+          handleQuickFilter("all");
+        } else if (prefs.defaultScope === "services") {
+          handleQuickFilter("services");
+        } else if (prefs.defaultScope === "products") {
+          handleFilterChange({ catalog_kind: "part", is_active: true });
+        }
+      }
+    } catch (e) {
+      console.warn("Error applying product view preferences:", e);
+    }
+  }, [handleQuickFilter, handleFilterChange, setViewMode, setItemsPerPage]);
+
+  const handleSavePreferences = useCallback(() => {
+    let defaultScope: ProductViewPreferences["defaultScope"] = "products";
+    if (!filters.catalog_kind) {
+      defaultScope = "all";
+    } else if (filters.catalog_kind === "service") {
+      defaultScope = "services";
+    } else {
+      defaultScope = "products";
+    }
+
+    const currentPrefs: ProductViewPreferences = {
+      defaultScope,
+      groupBy,
+      viewMode,
+      itemsPerPage,
+      isMaximizedSpace: !isSummaryExpanded,
+    };
+
+    saveProductViewPreferences(currentPrefs);
+    setHasCustomPreferences(true);
+
+    const desc = describeProductViewPreferences(currentPrefs);
+    toast.success("Configuración de vista guardada", {
+      description: `Se aplicará automáticamente: ${desc}`,
+      duration: 5000,
+    });
+  }, [filters.catalog_kind, groupBy, viewMode, itemsPerPage, isSummaryExpanded]);
+
+  const handleResetPreferences = useCallback(() => {
+    clearProductViewPreferences();
+    setHasCustomPreferences(false);
+    setGroupBy("none");
+    setViewMode("table");
+    setItemsPerPage(20);
+    setIsSummaryExpanded(false);
+    handleQuickFilter("all");
+
+    toast.info("Configuración restablecida", {
+      description:
+        "Se restauró la vista inicial del sistema (Todo el catálogo, Sin desglose / Lista continua, Vista tabla).",
+    });
+  }, [handleQuickFilter, setViewMode, setItemsPerPage]);
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [serverSearch, setServerSearch] = useState("");
@@ -245,6 +344,18 @@ export default function ProductsPage() {
   const handleDismissAlert = (alertId: string) => {
     setDismissedAlertIds(prev => [...prev, alertId]);
   };
+
+  const activeAdvancedFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.category_id) count++;
+    if (filters.supplier_id) count++;
+    if (filters.brand) count++;
+    if (filters.item_type && filters.item_type !== 'all') count++;
+    if (filters.stock_status) count++;
+    if (typeof filters.price_min === 'number') count++;
+    if (typeof filters.price_max === 'number') count++;
+    return count;
+  }, [filters]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -486,66 +597,265 @@ export default function ProductsPage() {
     }
   };
 
+  // Handle product operational active toggle (Activo / Inactivo en inventario y ventas)
+  const handleToggleProductActiveState = async (product: Product, newActiveState: boolean) => {
+    const result = await updateProduct(product.id, {
+      is_active: newActiveState,
+    } as any);
+
+    if (result.success) {
+      toast.success(
+        newActiveState
+          ? `"${product.name}" ha sido activado exitosamente`
+          : `"${product.name}" ha sido desactivado`
+      );
+      setQuickViewProduct((prev) =>
+        prev && prev.id === product.id ? { ...prev, is_active: newActiveState } : prev
+      );
+    } else {
+      toast.error(result.error || 'Error al cambiar estado del producto');
+      throw new Error(result.error);
+    }
+  };
+
   // Handle import
-  const handleImportProducts = async (rows: Array<{ name: string; sku?: string; description?: string; brand?: string; category?: string; purchase_price?: number; sale_price: number; stock_quantity?: number; min_stock?: number; barcode?: string; unit_measure?: string }>) => {
+  // Handle import with Excel/CSV parsing and update-existing support
+  const handleImportProducts = async (
+    rows: ImportProductRow[],
+    options?: { updateExisting?: boolean; onProgress?: (current: number, total: number) => void }
+  ) => {
     if (!canCreateProducts) {
       toast.error("No tienes permisos para importar productos");
       return {
         success: 0,
+        updated: 0,
         failed: rows.length,
         errors: [{ row: 1, error: "Sin permisos para crear productos" }],
       };
     }
 
     let success = 0;
+    let updated = 0;
     let failed = 0;
     const errors: Array<{ row: number; error: string }> = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      try {
-        const result = await createProduct({
-          name: row.name,
-          sku: row.sku || `IMP-${Date.now()}-${i}`,
-          description: row.description || '',
-          brand: row.brand || null,
-          category_id: categories.find((category) =>
-            category.name?.trim().toLowerCase() === row.category?.trim().toLowerCase()
-          )?.id || null,
-          purchase_price: row.purchase_price || 0,
-          sale_price: row.sale_price,
-          stock_quantity: row.stock_quantity || 0,
-          min_stock: row.min_stock || 0,
-          is_active: true,
-          barcode: row.barcode || null,
-          unit_measure: row.unit_measure || 'unidad',
-        } as any);
+    // Map de productos existentes por SKU y por código de barras para lookup rápido
+    const existingBySku = new Map<string, Product>();
+    const existingByBarcode = new Map<string, Product>();
+    for (const p of products) {
+      if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p);
+      if (p.barcode) existingByBarcode.set(p.barcode.trim(), p);
+    }
 
-        if (result.success) {
-          success++;
+    // Pre-cargar productos existentes desde la base de datos para TODOS los SKUs y códigos del archivo
+    // Esto evita que productos de otras páginas o inactivos no se encuentren al buscar en memoria.
+    const supabase = createClient();
+    const skusToSearch = Array.from(new Set(rows.map((r) => r.sku?.trim()).filter(Boolean))) as string[];
+    const barcodesToSearch = Array.from(new Set(rows.map((r) => r.barcode?.trim()).filter(Boolean))) as string[];
+
+    if (skusToSearch.length > 0) {
+      try {
+        const { data: matchedBySku } = await supabase
+          .from('products')
+          .select('id, name, sku, barcode')
+          .in('sku', skusToSearch);
+        if (matchedBySku) {
+          for (const p of matchedBySku) {
+            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p as any);
+            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p as any);
+          }
+        }
+      } catch (e) {
+        console.error('Error pre-matching SKUs for import:', e);
+      }
+    }
+
+    if (barcodesToSearch.length > 0) {
+      try {
+        const { data: matchedByBarcode } = await supabase
+          .from('products')
+          .select('id, name, sku, barcode')
+          .in('barcode', barcodesToSearch);
+        if (matchedByBarcode) {
+          for (const p of matchedByBarcode) {
+            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p as any);
+            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p as any);
+          }
+        }
+      } catch (e) {
+        console.error('Error pre-matching barcodes for import:', e);
+      }
+    }
+
+    // Map de categorías normalizadas sin importar mayúsculas/tildes
+    const categoryMap = new Map<string, string>();
+    for (const cat of categories) {
+      if (cat.name) {
+        const norm = cat.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        categoryMap.set(norm, cat.id);
+      }
+    }
+
+    // Map de proveedores normalizados
+    const supplierMap = new Map<string, string>();
+    for (const sup of suppliers) {
+      if (sup.name) {
+        const norm = sup.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        supplierMap.set(norm, sup.id);
+      }
+    }
+
+    const total = rows.length;
+    for (let i = 0; i < total; i++) {
+      const row = rows[i];
+      options?.onProgress?.(i + 1, total);
+
+      try {
+        const skuKey = row.sku?.toLowerCase().trim() || '';
+        const barcodeKey = row.barcode?.trim() || '';
+
+        const existing = options?.updateExisting
+          ? (skuKey ? existingBySku.get(skuKey) : null) || (barcodeKey ? existingByBarcode.get(barcodeKey) : null)
+          : null;
+
+        const categoryNorm = row.category
+          ? row.category.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+          : '';
+        const categoryId = categoryMap.get(categoryNorm) || null;
+
+        const supplierNorm = row.supplier
+          ? row.supplier.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+          : '';
+        const supplierId = supplierMap.get(supplierNorm) || null;
+
+        const updatePayload: any = {
+          sale_price: row.sale_price,
+          ...(row.purchase_price !== undefined ? { purchase_price: row.purchase_price } : {}),
+          stock_quantity: row.stock_quantity,
+          ...(row.description ? { description: row.description } : {}),
+          ...(row.brand ? { brand: row.brand } : {}),
+          ...(categoryId ? { category_id: categoryId } : {}),
+          ...(supplierId ? { supplier_id: supplierId } : {}),
+          ...(row.is_active !== undefined ? { is_active: row.is_active } : {}),
+        };
+
+        if (existing) {
+          // Modo actualizar existente
+          const updateRes = await updateProduct(existing.id, updatePayload);
+          if (updateRes.success) {
+            updated++;
+          } else {
+            failed++;
+            errors.push({ row: row.rawRowIndex || i + 2, error: updateRes.error || 'Error al actualizar' });
+          }
         } else {
-          failed++;
-          errors.push({ row: i + 2, error: result.error || 'Error desconocido' });
+          // Modo crear nuevo
+          const createPayload: any = {
+            name: row.name,
+            sku: row.sku || `IMP-${Date.now()}-${i + 1}`,
+            description: row.description || '',
+            brand: row.brand || null,
+            category_id: categoryId,
+            supplier_id: supplierId,
+            purchase_price: row.purchase_price || 0,
+            sale_price: row.sale_price,
+            stock_quantity: row.stock_quantity || 0,
+            min_stock: row.min_stock || 0,
+            is_active: row.is_active !== undefined ? row.is_active : true,
+            barcode: row.barcode || null,
+            unit_measure: row.unit_measure || 'unidad',
+          };
+          const createRes = await createProduct(createPayload);
+          if (createRes.success) {
+            success++;
+          } else if (createRes.conflictProductId && options?.updateExisting) {
+            // Si chocó contra un producto existente en base de datos y la opción actualizar está activa, actualizar
+            const updateRes = await updateProduct(createRes.conflictProductId, updatePayload);
+            if (updateRes.success) {
+              updated++;
+            } else {
+              failed++;
+              errors.push({ row: row.rawRowIndex || i + 2, error: updateRes.error || 'Error al actualizar producto existente' });
+            }
+          } else {
+            failed++;
+            const errMsg = createRes.code === 'DUPLICATE_CODE' && !options?.updateExisting
+              ? `${createRes.error} (Activá la opción "Actualizar si ya existe" para actualizar sus datos)`
+              : (createRes.error || 'Error al crear producto');
+            errors.push({ row: row.rawRowIndex || i + 2, error: errMsg });
+          }
         }
       } catch (err) {
         failed++;
-        errors.push({ row: i + 2, error: err instanceof Error ? err.message : 'Error' });
+        errors.push({ row: row.rawRowIndex || i + 2, error: err instanceof Error ? err.message : 'Error' });
       }
     }
 
     // Refresh after import
     await refreshData();
-    return { success, failed, errors };
+    return { success, updated, failed, errors };
   };
 
-  // Handle export
-  const handleExport = async () => {
-    const result = await exportToCSV(mappedServerFilters);
-    if (result.success) {
-      toast.success(`${totalProducts} productos exportados`);
-    } else {
-      toast.error(result.error || "No hay productos para exportar");
+  // Helper para obtener la lista de productos a exportar (seleccionados o vista actual)
+  const getProductsForExport = () => {
+    if (selectedProductIds.length > 0) {
+      return products.filter((p) => selectedProductIds.includes(p.id));
     }
+    return displayedProducts.length > 0 ? displayedProducts : products;
+  };
+
+  // Handle export to Excel (.xlsx)
+  const handleExportExcel = async () => {
+    const isSelected = selectedProductIds.length > 0;
+    const itemsToExport = getProductsForExport();
+
+    if (itemsToExport.length === 0) {
+      toast.error("No hay productos para exportar");
+      return;
+    }
+
+    try {
+      await exportCatalogToExcel(itemsToExport as any, {
+        filename: isSelected
+          ? `productos_seleccionados_${itemsToExport.length}_${new Date().toISOString().split("T")[0]}`
+          : `catalogo_productos_${new Date().toISOString().split("T")[0]}`,
+        canViewCost,
+        branchName: selectedBranch?.name,
+      });
+      toast.success(`${itemsToExport.length} productos exportados a Excel (.xlsx)`);
+    } catch (e) {
+      console.error("Error exporting to Excel:", e);
+      toast.error("Error al exportar a Excel");
+    }
+  };
+
+  // Handle export to CSV (.csv)
+  const handleExportCsv = async () => {
+    const isSelected = selectedProductIds.length > 0;
+    const itemsToExport = getProductsForExport();
+
+    if (itemsToExport.length === 0) {
+      toast.error("No hay productos para exportar");
+      return;
+    }
+
+    try {
+      exportCatalogToCSV(itemsToExport as any, {
+        filename: isSelected
+          ? `productos_seleccionados_${itemsToExport.length}_${new Date().toISOString().split("T")[0]}`
+          : `catalogo_productos_${new Date().toISOString().split("T")[0]}`,
+        canViewCost,
+      });
+      toast.success(`${itemsToExport.length} productos exportados a CSV`);
+    } catch (e) {
+      console.error("Error exporting to CSV:", e);
+      toast.error("Error al exportar a CSV");
+    }
+  };
+
+  // Export principal (por defecto a Excel)
+  const handleExport = () => {
+    handleExportExcel();
   };
 
   const handleExportPdf = async () => {
@@ -729,128 +1039,97 @@ export default function ProductsPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 dark:bg-gray-950">
       <div className="max-w-[1800px] mx-auto space-y-5">
-        {!isMaximizedSpace ? (
-          <>
-            <PlanLimitBanner resource="products" reloadSignal={totalProducts} />
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                {/* El titulo en degradado y la bajada «Dashboard moderno y
-                    funcional» no decian nada: ahora la bajada cuenta con que
-                    abre la pantalla, que es lo que hay que saber. */}
-                <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl dark:text-gray-50">
-                  Productos
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Catálogo e inventario. La lista abre con tus productos activos; los
-                  servicios y los desactivados se ven con los filtros de arriba.
-                </p>
-              </div>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            {/* El titulo en degradado y la bajada «Dashboard moderno y
+                funcional» no decian nada: ahora la bajada cuenta con que
+                abre la pantalla, que es lo que hay que saber. */}
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl dark:text-gray-50">
+              Productos
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Catálogo e inventario completo. Podés filtrar por productos,
+              servicios o alertas con los controles de arriba.
+            </p>
+          </div>
 
-              <div className="flex items-center gap-2.5">
-                {/* «Más espacio» ya está en la barra de acciones, al lado de
-                    las vistas: tenerlo dos veces solo llenaba el encabezado. */}
+          <div className="flex items-center gap-2.5">
+            {/* Acceso directo a los predeterminados de productos a credito */}
+            <Button
+              asChild
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-10 px-3.5 text-xs font-semibold rounded-xl gap-1.5 transition-all shadow-xs border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+              title="Configurar los datos predeterminados de cuotas para productos a credito"
+            >
+              <Link href="/dashboard/products/credit-defaults">
+                <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Configuración de cuotas</span>
+              </Link>
+            </Button>
 
-                {/* Acceso directo a los predeterminados de productos a credito */}
-                <Button
-                  asChild
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-10 px-3.5 text-xs font-semibold rounded-xl gap-1.5 transition-all shadow-xs border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                  title="Configurar los datos predeterminados de cuotas para productos a credito"
-                >
-                  <Link href="/dashboard/products/credit-defaults">
-                    <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    <span>Cuotas</span>
-                  </Link>
-                </Button>
+            <SectionGuideButton guide={PRODUCTS_GUIDE} />
 
-                <SectionGuideButton guide={PRODUCTS_GUIDE} />
+            {canCreateProducts && (
+              <Button
+                size="lg"
+                onClick={() => setCreateModalOpen(true)}
+                className="cursor-pointer bg-blue-600 shadow-xs transition-colors hover:bg-blue-700"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Nuevo Producto
+              </Button>
+            )}
+          </div>
+        </div>
 
-                {canCreateProducts && (
-                  <Button
-                    size="lg"
-                    onClick={() => setCreateModalOpen(true)}
-                    className="cursor-pointer bg-blue-600 shadow-xs transition-colors hover:bg-blue-700"
-                  >
-                    <Plus className="h-5 w-5 mr-2" />
-                    Nuevo Producto
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Metrics Grid */}
-            <MetricsGrid
-              metrics={globalMetrics}
-              showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
-              canViewCost={canViewCost}
-              onMetricClick={handleMetricClick}
-            />
-
-            {/* Alerts Banner */}
-            <AlertsBanner
-              alerts={normalizedAlerts as any}
-              onAlertClick={handleAlertClick}
-              onDismissAlert={handleDismissAlert}
-            />
-
-            {showBranchNotice && (
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Warehouse className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span className="truncate">
-                    <strong className="text-slate-900 dark:text-slate-100">
-                      {selectedBranch ? `Inventario: ${selectedBranch.name}` : "Inventario general"}
-                    </strong>
+        {/* Barra de contexto: Sucursal activa y Estado del Plan */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+          {showBranchNotice && (
+            <div className="flex items-center justify-between gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 text-xs shadow-2xs backdrop-blur-md">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+                  <Warehouse className="h-3.5 w-3.5" />
+                </div>
+                <span className="truncate text-slate-600 dark:text-slate-300 text-[11px] sm:text-xs">
+                  <strong className="text-slate-900 dark:text-slate-100 font-semibold">
+                    {selectedBranch ? `Inventario: ${selectedBranch.name}` : "Inventario general"}
+                  </strong>
+                  <span className="text-muted-foreground hidden sm:inline">
                     {" — Las existencias, movimientos y alertas corresponden a la sucursal seleccionada."}
                   </span>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
-                  onClick={() => setShowBranchNotice(false)}
-                  title="Ocultar aviso"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
+                </span>
               </div>
-            )}
-          </>
-        ) : (
-          /* Maximized Space Header Indicator */
-          <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs animate-in fade-in duration-200">
-            <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200 font-semibold">
-              <span className="flex h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-              <span>Modo Espacio Maximizado</span>
-              <span className="text-muted-foreground font-normal hidden sm:inline">· Mayor área visible para productos y secciones</span>
-            </div>
-            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                onClick={() => setIsMaximizedSpace(false)}
-                className="h-7 px-2.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg"
+                size="icon"
+                className="h-5 w-5 text-muted-foreground hover:text-foreground shrink-0 rounded-md"
+                onClick={() => setShowBranchNotice(false)}
+                title="Ocultar aviso de sucursal"
               >
-                Restaurar resumen
+                <X className="h-3 w-3" />
               </Button>
-              {canCreateProducts && (
-                <Button
-                  size="sm"
-                  onClick={() => setCreateModalOpen(true)}
-                  className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Nuevo
-                </Button>
-              )}
             </div>
-          </div>
-        )}
+          )}
+
+          <PlanLimitBanner resource="products" reloadSignal={totalProducts} variant="compact" />
+        </div>
+
+        {/* Resumen del Catálogo e Inventario (Contraído por defecto) */}
+        <ProductSummaryOverview
+          metrics={globalMetrics}
+          alerts={normalizedAlerts as any}
+          canViewCost={canViewCost}
+          showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
+          isExpanded={isSummaryExpanded}
+          onToggleExpanded={() => setIsSummaryExpanded((prev) => !prev)}
+          onMetricClick={handleMetricClick}
+          onAlertClick={handleAlertClick}
+          onDismissAlert={handleDismissAlert}
+        />
 
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
@@ -859,15 +1138,23 @@ export default function ProductsPage() {
           onSearchChange={handleSearch}
           isFilterPanelOpen={isFilterPanelOpen}
           onToggleFilters={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+          activeFiltersCount={activeAdvancedFiltersCount}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           groupBy={groupBy}
           onGroupByChange={setGroupBy}
-          isMaximizedSpace={isMaximizedSpace}
-          onToggleMaximizeSpace={() => setIsMaximizedSpace(prev => !prev)}
+          onSaveDefaultGroupBy={handleSavePreferences}
+          onSavePreferences={handleSavePreferences}
+          onResetPreferences={handleResetPreferences}
+          hasSavedPreferences={hasCustomPreferences}
+          isMaximizedSpace={!isSummaryExpanded}
+          onToggleMaximizeSpace={() => setIsSummaryExpanded((prev) => !prev)}
           onRefresh={handleRefresh}
-          onExport={handleExport}
+          onExport={handleExportExcel}
+          onExportExcel={handleExportExcel}
+          onExportCsv={handleExportCsv}
           onExportPdf={handleExportPdf}
+          selectedCount={selectedProductIds.length}
           onImport={canCreateProducts ? () => setImportModalOpen(true) : undefined}
           isLoading={loading || isPending}
         />
@@ -1151,6 +1438,7 @@ export default function ProductsPage() {
           setQuickViewProduct(null);
           setLabelsTarget([toLabelProduct(product)]);
         }}
+        onToggleActive={handleToggleProductActiveState}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

@@ -8,8 +8,17 @@ export interface AutoRaffleEntryResult {
 }
 
 /**
- * Verifica si hay sorteos activos y asigna automáticamente tickets al cliente
- * tras completar una compra calificada en el POS / tienda.
+ * Canje automático de puntos al cerrar una venta.
+ *
+ * OJO con el nombre: esto **no** regala números por comprar. Lo que hace es
+ * gastar el saldo de puntos del cliente —hasta cinco números— en el sorteo
+ * abierto que cierre primero, sin preguntarle. La pantalla de alta decía
+ * «cada Gs. 100.000 de compra = +1 número» y mostraba un simulador con tres
+ * números distintos: nada de eso pasaba. El texto ya está corregido en
+ * `RafflesManager`, y el interruptor viene apagado.
+ *
+ * Requisitos para que corra: el sorteo tiene `auto_entry_on_sale`, la venta
+ * llega a `min_purchase_amount`, y al cliente le alcanzan los puntos.
  */
 export async function tryAutoRaffleEntryForSale(
   supabase: SupabaseClient,

@@ -715,7 +715,7 @@ export async function exportRepairsSectionPDF(params: {
     },
   })
 
-  let nextY = (doc as any).lastAutoTable.finalY + 16
+  const nextY = (doc as any).lastAutoTable.finalY + 16
 
   if (params.trend.length > 0) {
     const totalTrendCount = params.trend.reduce((acc, t) => acc + (Number(t.count) || 0), 0)
@@ -831,7 +831,7 @@ export async function exportCreditsSectionPDF(params: {
     },
   })
 
-  let nextY = (doc as any).lastAutoTable.finalY + 16
+  const nextY = (doc as any).lastAutoTable.finalY + 16
 
   // Tabla 2: Evolución de Pagos Recibidos
   if (params.report.paymentTrend.length > 0) {

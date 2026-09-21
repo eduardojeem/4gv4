@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo } from 'react'
-import { Layers, Package, Wrench, X } from 'lucide-react'
+import { Layers, Package, RotateCcw, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Product } from '@/types/products'
 import { isLowStock, isOutOfStock, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
@@ -65,25 +65,27 @@ function Chip({ label, count, active, onClick, icon, dotClassName }: ChipProps) 
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="ghost"
       size="sm"
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'h-7 rounded-lg px-2.5 text-xs font-medium gap-1.5 transition-colors',
+        'h-7 rounded-lg px-2 text-xs font-medium gap-1.5 transition-all shadow-none',
         active
-          ? 'border-primary/40 bg-primary/10 text-primary font-semibold hover:bg-primary/15 dark:border-primary/50 dark:bg-primary/15 dark:hover:bg-primary/20'
-          : 'border-slate-200 bg-transparent text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:bg-transparent dark:text-slate-400 dark:hover:bg-slate-800/60',
+          ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 font-bold shadow-xs border border-slate-200/80 dark:border-slate-700/80 hover:bg-white dark:hover:bg-slate-900'
+          : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent',
       )}
     >
-      {dotClassName && <span className={cn('h-1.5 w-1.5 rounded-full', dotClassName)} aria-hidden="true" />}
+      {dotClassName && <span className={cn('h-2 w-2 rounded-full ring-2 ring-white dark:ring-slate-900', dotClassName)} aria-hidden="true" />}
       {icon}
       <span>{label}</span>
       {count !== undefined && (
         <span
           className={cn(
-            'rounded px-1 text-[10px] font-semibold tabular-nums',
-            active ? 'bg-primary/15' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+            'rounded-full px-1.5 py-0.2 text-[10px] font-bold tabular-nums leading-none',
+            active
+              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200'
+              : 'bg-slate-200/70 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
           )}
         >
           {count}
@@ -96,7 +98,7 @@ function Chip({ label, count, active, onClick, icon, dotClassName }: ChipProps) 
 /** El rótulo de cada grupo, para que se lea qué decide cada fila de chips. */
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 select-none px-1">
       {children}
     </span>
   )
@@ -155,11 +157,12 @@ export function QuickFiltersBar({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 shadow-xs backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50',
+        'flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-xs backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50',
         className,
       )}
     >
-      <div className="flex items-center gap-1.5">
+      {/* Grupo 1: Tipo de Ítem (Catálogo) */}
+      <div className="flex items-center gap-1 bg-slate-100/70 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/40 dark:border-slate-700/40">
         <GroupLabel>Tipo</GroupLabel>
         <Chip
           label="Productos"
@@ -179,9 +182,34 @@ export function QuickFiltersBar({
         )}
       </div>
 
-      <span className="hidden h-5 w-px bg-slate-200 sm:inline-block dark:bg-slate-800" aria-hidden="true" />
+      {/* Grupo 2: Alertas de Inventario Crítico */}
+      <div className="flex items-center gap-1 bg-slate-100/70 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/40 dark:border-slate-700/40">
+        <GroupLabel>Alertas</GroupLabel>
+        <Chip
+          label="Bajo stock"
+          count={counts.low_stock}
+          active={alerta === 'low_stock'}
+          onClick={() => onFilterClick('low_stock')}
+          dotClassName="bg-amber-500 animate-pulse"
+        />
+        <Chip
+          label="Agotados"
+          count={counts.out_of_stock}
+          active={alerta === 'out_of_stock'}
+          onClick={() => onFilterClick('out_of_stock')}
+          dotClassName="bg-rose-500"
+        />
+        <Chip
+          label="Con variantes"
+          count={counts.variants ?? 0}
+          active={alerta === 'variants'}
+          onClick={() => onFilterClick('variants')}
+          icon={<Layers className="h-3.5 w-3.5" aria-hidden="true" />}
+        />
+      </div>
 
-      <div className="flex items-center gap-1.5">
+      {/* Grupo 3: Estado Operativo */}
+      <div className="flex items-center gap-1 bg-slate-100/70 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/40 dark:border-slate-700/40">
         <GroupLabel>Estado</GroupLabel>
         <Chip
           label="Activos"
@@ -197,44 +225,20 @@ export function QuickFiltersBar({
         />
       </div>
 
-      <span className="hidden h-5 w-px bg-slate-200 sm:inline-block dark:bg-slate-800" aria-hidden="true" />
-
-      <div className="flex items-center gap-1.5">
-        <GroupLabel>Alertas</GroupLabel>
-        <Chip
-          label="Bajo stock"
-          count={counts.low_stock}
-          active={alerta === 'low_stock'}
-          onClick={() => onFilterClick('low_stock')}
-          dotClassName="bg-amber-500"
-        />
-        <Chip
-          label="Agotados"
-          count={counts.out_of_stock}
-          active={alerta === 'out_of_stock'}
-          onClick={() => onFilterClick('out_of_stock')}
-          dotClassName="bg-red-500"
-        />
-        <Chip
-          label="Con variantes"
-          count={counts.variants ?? 0}
-          active={alerta === 'variants'}
-          onClick={() => onFilterClick('variants')}
-          icon={<Layers className="h-3.5 w-3.5" aria-hidden="true" />}
-        />
-      </div>
-
+      {/* Acción para restablecer / ver catálogo completo */}
       {hayFiltro && (
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={() => onFilterClick('all')}
-          className="ml-auto h-7 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+          className="ml-auto h-8 gap-1.5 px-3 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100/80 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 transition-all shadow-2xs"
         >
-          <X className="h-3 w-3" aria-hidden="true" />
-          Todo el catálogo
-          <span className="font-semibold tabular-nums">{counts.all}</span>
+          <RotateCcw className="h-3 w-3 text-slate-500" aria-hidden="true" />
+          <span>Todo el catálogo</span>
+          <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-1.5 py-0.2 text-[10px] font-bold tabular-nums leading-none">
+            {counts.all}
+          </span>
         </Button>
       )}
     </div>

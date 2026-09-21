@@ -78,6 +78,8 @@ import { RepairInternalCostCorrectionDialog } from './RepairInternalCostCorrecti
 import { RepairFinalPriceCorrectionDialog } from './RepairFinalPriceCorrectionDialog'
 import { calculateRepairCost } from '@/lib/repairs/cost-breakdown'
 import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
+import { UpgradeHint } from '@/components/admin/PlanGate'
 import { CustomerQuickCreateDialog, type QuickCustomerData } from './CustomerQuickCreateDialog'
 import { CustomerDetailModal } from './CustomerDetailModal'
 import { ReceptionSiblings } from './ReceptionSiblings'
@@ -168,6 +170,8 @@ export function RepairDetailDialog({
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const { isAdmin } = useAuth()
+  const { planCode, planName } = useSubscriptionStatus()
+  const canUploadPhotos = repairPhotoLimit(planCode) !== 0
   const canViewCost = useCanViewCost()
   const [warrantyClaimOpen, setWarrantyClaimOpen] = useState(false)
   // Al registrar un reclamo se remonta el bloque para que muestre el caso recien creado.
@@ -2364,16 +2368,22 @@ export function RepairDetailDialog({
                   {/* Imágenes */}
                   <TabsContent value="images" className="mt-4 space-y-4">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                        <ImageIcon className="h-4 w-4" />
-                        Galería de Imágenes
-                        {repair.images && repair.images.length > 0 && (
-                          <Badge variant="secondary" className="ml-1 text-xs">
-                            {repair.images.length}
-                          </Badge>
-                        )}
-                      </h3>
-                      {repair.status !== 'entregado' && repair.status !== 'cancelado' && !isUploadFormOpen && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4" />
+                          Galería de Imágenes
+                          {repair.images && repair.images.length > 0 && (
+                            <Badge variant="secondary" className="ml-1 text-xs">
+                              {repair.images.length}
+                            </Badge>
+                          )}
+                        </h3>
+                        <Badge className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white font-extrabold text-[10px] px-2.5 py-0.5 rounded-full border-0 shadow-xs flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" />
+                          {canUploadPhotos ? `Plan ${planName || 'Enterprise'} (Activo)` : 'Plan Enterprise'}
+                        </Badge>
+                      </div>
+                      {repair.status !== 'entregado' && repair.status !== 'cancelado' && canUploadPhotos && !isUploadFormOpen && (
                         <Button
                           type="button"
                           size="sm"
@@ -2386,8 +2396,16 @@ export function RepairDetailDialog({
                       )}
                     </div>
 
-                    {/* Formulario de carga */}
-                    {isUploadFormOpen && (
+                    {/* Aviso si el plan no permite cargar fotos */}
+                    {!canUploadPhotos && (
+                      <UpgradeHint
+                        requiredPlan="Enterprise"
+                        message={`Tu plan activo es ${planName}. La opción de agregar fotos a las reparaciones está disponible exclusivamente en el Plan Enterprise.`}
+                      />
+                    )}
+
+                    {/* Formulario de carga (solo si el plan lo permite) */}
+                    {canUploadPhotos && isUploadFormOpen && (
                       <div className="rounded-2xl border border-sky-300 bg-sky-50/40 p-4 shadow-xs dark:border-sky-800/80 dark:bg-sky-950/20 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">

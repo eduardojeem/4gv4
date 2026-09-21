@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { AnnouncementsManager } from '@/components/announcements/AnnouncementsManager'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import {
@@ -7,6 +8,9 @@ import {
   normalizeAnnouncementList,
   type Announcement,
 } from '@/lib/announcements/announcement'
+import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 
 /**
  * Los carteles que ve el cliente al entrar a la tienda. Misma lista y mismo
@@ -15,10 +19,15 @@ import {
  */
 export function AnnouncementEditor() {
   const { settings, isLoading, updateSetting } = useAdminWebsiteSettings()
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
+  const [mediaDialogOpen, setMediaDialogOpen] = useState(false)
 
   // Se sube al mismo lugar que los banners promocionales, bajo la carpeta de
   // esta organizacion.
   const upload = async (file: File) => {
+    if (isMediaAtLimit) {
+      throw new Error('Alcanzaste el límite de 20 imágenes en tu organización. Eliminá imágenes desde el Historial para liberar espacio.')
+    }
     const body = new FormData()
     body.append('file', file)
     body.append('slideId', 'aviso')
@@ -48,13 +57,23 @@ export function AnnouncementEditor() {
   )
 
   return (
-    <AnnouncementsManager
-      initial={initial}
-      max={MAX_STORE_ANNOUNCEMENTS}
-      audience="tu tienda"
-      previewScope="tienda"
-      upload={upload}
-      onSave={save}
-    />
+    <div className="space-y-6">
+      <WebsiteMediaQuotaBanner onOpenHistory={() => setMediaDialogOpen(true)} />
+      <AnnouncementsManager
+        initial={initial}
+        max={MAX_STORE_ANNOUNCEMENTS}
+        audience="tu tienda"
+        previewScope="tienda"
+        upload={upload}
+        onSave={save}
+      />
+      <WebsiteMediaLibraryDialog
+        open={mediaDialogOpen}
+        onOpenChange={setMediaDialogOpen}
+        filterSection="announcements"
+        title="Historial de Imágenes de Avisos"
+        description="Elegí una imagen ya subida o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+      />
+    </div>
   )
 }

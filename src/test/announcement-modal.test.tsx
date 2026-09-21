@@ -141,6 +141,12 @@ describe('el cartel', () => {
   })
   afterEach(() => vi.useRealTimers())
 
+  it('puede recibir un aviso después de renderizar vacío sin cambiar el orden de Hooks', () => {
+    const { rerender } = render(<AnnouncementModal announcement={null} scope="marketplace" />)
+    rerender(<AnnouncementModal announcement={aviso()} scope="marketplace" />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
   it('aparece con su título y su mensaje', () => {
     render(<AnnouncementModal announcement={aviso()} scope="marketplace" />)
     expect(screen.getByRole('dialog')).toBeInTheDocument()

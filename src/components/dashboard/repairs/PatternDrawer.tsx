@@ -185,31 +185,8 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     }
   }, [isDrawing, disabled, getCanvasCoordinates, getPointAt, selectedPoints])
 
-  // Handle mouse/touch end
-  const handleEnd = useCallback(() => {
-    if (!isDrawing) return
-
-    setIsDrawing(false)
-
-    // Generate pattern string
-    if (selectedPoints.length >= 2) {
-      setIncompleteHint(false)
-      const patternString = selectedPoints
-        .map(p => `${p.row + 1}${p.col + 1}`)
-        .join('-')
-
-      const description = generatePatternDescription(selectedPoints)
-      onChange(`${description} (${patternString})`)
-    } else if (selectedPoints.length === 1) {
-      // Un solo punto no es un patrón válido: descartarlo y avisar,
-      // antes quedaba el punto marcado sin guardarse nada.
-      setSelectedPoints([])
-      setIncompleteHint(true)
-    }
-  }, [isDrawing, selectedPoints, onChange])
-
   // Generate human-readable pattern description
-  const generatePatternDescription = (points: Point[]): string => {
+  function generatePatternDescription(points: Point[]): string {
     if (points.length < 2) return 'Patrón incompleto'
     
     const patterns = [
@@ -249,6 +226,27 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     
     return 'Patrón personalizado'
   }
+
+  // Handle mouse/touch end
+  const handleEnd = useCallback(() => {
+    if (!isDrawing) return
+
+    setIsDrawing(false)
+
+    if (selectedPoints.length >= 2) {
+      setIncompleteHint(false)
+      const patternString = selectedPoints
+        .map(p => `${p.row + 1}${p.col + 1}`)
+        .join('-')
+
+      const description = generatePatternDescription(selectedPoints)
+      onChange(`${description} (${patternString})`)
+    } else if (selectedPoints.length === 1) {
+      // Un solo punto no es un patrón válido: descartarlo y avisar.
+      setSelectedPoints([])
+      setIncompleteHint(true)
+    }
+  }, [isDrawing, selectedPoints, onChange])
 
   // Clear pattern
   const clearPattern = useCallback(() => {

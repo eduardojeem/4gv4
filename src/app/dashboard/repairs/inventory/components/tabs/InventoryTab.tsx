@@ -271,7 +271,7 @@ export function InventoryTab() {
               ¿Eliminar repuesto?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Estás a punto de eliminar <strong className="text-foreground">"{productToDelete?.name}"</strong>.
+              Estás a punto de eliminar <strong className="text-foreground">&quot;{productToDelete?.name}&quot;</strong>.
               Esta acción no se puede deshacer y eliminará también todos los movimientos asociados.
             </AlertDialogDescription>
           </AlertDialogHeader>

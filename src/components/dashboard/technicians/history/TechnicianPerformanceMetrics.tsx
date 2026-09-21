@@ -23,6 +23,89 @@ interface TechnicianPerformanceMetricsProps {
     repairs: Repair[]
 }
 
+const MetricCard = ({ 
+    title, 
+    value, 
+    change, 
+    icon: Icon, 
+    format = 'number',
+    colorScheme = 'blue' 
+}: {
+    title: string
+    value: number
+    change: number
+    icon: any
+    format?: 'number' | 'currency' | 'rating' | 'days'
+    colorScheme?: 'blue' | 'green' | 'orange' | 'purple'
+}) => {
+    const formatValue = (val: number) => {
+        switch (format) {
+            case 'currency':
+                return (
+                    <div className="flex items-center gap-1">
+                        <GSIcon className="h-5 w-5" />
+                        {val.toLocaleString()}
+                    </div>
+                )
+            case 'rating':
+                return (
+                    <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        {val.toFixed(1)}
+                    </div>
+                )
+            case 'days':
+                return `${val} días`
+            default:
+                return val.toString()
+        }
+    }
+
+    const isPositive = change > 0
+    const isNegative = change < 0
+    const changeColor = format === 'days' 
+        ? (isNegative ? 'text-green-600' : 'text-red-600') // Para tiempo, menos es mejor
+        : (isPositive ? 'text-green-600' : 'text-red-600')
+
+    const colors = {
+        blue: 'from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900 text-blue-700 dark:text-blue-300',
+        green: 'from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900 text-green-700 dark:text-green-300',
+        orange: 'from-orange-50 to-amber-50 border-orange-100 dark:from-orange-950/20 dark:to-amber-950/20 dark:border-orange-900 text-orange-700 dark:text-orange-300',
+        purple: 'from-purple-50 to-violet-50 border-purple-100 dark:from-purple-950/20 dark:to-violet-950/20 dark:border-purple-900 text-purple-700 dark:text-purple-300'
+    }
+
+    return (
+        <Card className={`bg-gradient-to-br ${colors[colorScheme]}`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                    {title}
+                </CardTitle>
+                <Icon className="h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">
+                    {formatValue(value)}
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                    {change !== 0 && (
+                        <>
+                            {(format === 'days' ? change < 0 : change > 0) ? (
+                                <TrendingUp className="h-3 w-3" />
+                            ) : (
+                                <TrendingDown className="h-3 w-3" />
+                            )}
+                            <span className={changeColor}>
+                                {Math.abs(change)}%
+                            </span>
+                        </>
+                    )}
+                    <span className="text-muted-foreground">vs mes anterior</span>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
 export function TechnicianPerformanceMetrics({ repairs }: TechnicianPerformanceMetricsProps) {
     const metrics = useMemo(() => {
         const now = new Date()
@@ -128,88 +211,6 @@ export function TechnicianPerformanceMetrics({ repairs }: TechnicianPerformanceM
         }
     }, [repairs])
 
-    const MetricCard = ({ 
-        title, 
-        value, 
-        change, 
-        icon: Icon, 
-        format = 'number',
-        colorScheme = 'blue' 
-    }: {
-        title: string
-        value: number
-        change: number
-        icon: any
-        format?: 'number' | 'currency' | 'rating' | 'days'
-        colorScheme?: 'blue' | 'green' | 'orange' | 'purple'
-    }) => {
-        const formatValue = (val: number) => {
-            switch (format) {
-                case 'currency':
-                    return (
-                        <div className="flex items-center gap-1">
-                            <GSIcon className="h-5 w-5" />
-                            {val.toLocaleString()}
-                        </div>
-                    )
-                case 'rating':
-                    return (
-                        <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                            {val.toFixed(1)}
-                        </div>
-                    )
-                case 'days':
-                    return `${val} días`
-                default:
-                    return val.toString()
-            }
-        }
-
-        const isPositive = change > 0
-        const isNegative = change < 0
-        const changeColor = format === 'days' 
-            ? (isNegative ? 'text-green-600' : 'text-red-600') // Para tiempo, menos es mejor
-            : (isPositive ? 'text-green-600' : 'text-red-600')
-
-        const colors = {
-            blue: 'from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900 text-blue-700 dark:text-blue-300',
-            green: 'from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900 text-green-700 dark:text-green-300',
-            orange: 'from-orange-50 to-amber-50 border-orange-100 dark:from-orange-950/20 dark:to-amber-950/20 dark:border-orange-900 text-orange-700 dark:text-orange-300',
-            purple: 'from-purple-50 to-violet-50 border-purple-100 dark:from-purple-950/20 dark:to-violet-950/20 dark:border-purple-900 text-purple-700 dark:text-purple-300'
-        }
-
-        return (
-            <Card className={`bg-gradient-to-br ${colors[colorScheme]}`}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                        {title}
-                    </CardTitle>
-                    <Icon className="h-4 w-4" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">
-                        {formatValue(value)}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs">
-                        {change !== 0 && (
-                            <>
-                                {(format === 'days' ? change < 0 : change > 0) ? (
-                                    <TrendingUp className="h-3 w-3" />
-                                ) : (
-                                    <TrendingDown className="h-3 w-3" />
-                                )}
-                                <span className={changeColor}>
-                                    {Math.abs(change)}%
-                                </span>
-                            </>
-                        )}
-                        <span className="text-muted-foreground">vs mes anterior</span>
-                    </div>
-                </CardContent>
-            </Card>
-        )
-    }
 
     return (
         <div className="space-y-6">

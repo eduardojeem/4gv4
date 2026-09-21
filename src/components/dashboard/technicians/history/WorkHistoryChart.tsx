@@ -24,6 +24,27 @@ interface WorkHistoryChartProps {
     repairs: Repair[]
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-background border rounded-lg shadow-lg p-3">
+                <p className="font-medium">{label}</p>
+                {payload.map((entry: any, index: number) => (
+                    <p key={index} className="text-sm" style={{ color: entry.color }}>
+                        {entry.name}: {entry.name === 'Ingresos' ? (
+                            <span className="flex items-center gap-1">
+                                <GSIcon className="h-3 w-3" />
+                                {entry.value.toLocaleString()}
+                            </span>
+                        ) : entry.value}
+                    </p>
+                ))}
+            </div>
+        )
+    }
+    return null
+}
+
 export function WorkHistoryChart({ repairs }: WorkHistoryChartProps) {
     const chartData = useMemo(() => {
         const now = new Date()
@@ -82,26 +103,6 @@ export function WorkHistoryChart({ repairs }: WorkHistoryChartProps) {
         return Object.values(deviceTypes).sort((a, b) => b.count - a.count)
     }, [repairs])
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-background border rounded-lg shadow-lg p-3">
-                    <p className="font-medium">{label}</p>
-                    {payload.map((entry: any, index: number) => (
-                        <p key={index} className="text-sm" style={{ color: entry.color }}>
-                            {entry.name}: {entry.name === 'Ingresos' ? (
-                                <span className="flex items-center gap-1">
-                                    <GSIcon className="h-3 w-3" />
-                                    {entry.value.toLocaleString()}
-                                </span>
-                            ) : entry.value}
-                        </p>
-                    ))}
-                </div>
-            )
-        }
-        return null
-    }
 
     return (
         <div className="space-y-6">

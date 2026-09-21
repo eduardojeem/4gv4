@@ -26,7 +26,9 @@ export function ProductCatalog({ products, onAddToCart, loading, onBarcodeSearch
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [showScanner, setShowScanner] = useState(false)
     const [barcodeInput, setBarcodeInput] = useState('')
-    const [barcodeValidation, setBarcodeValidation] = useState<'valid' | 'invalid' | null>(null)
+    const barcodeValidation = barcodeInput.length >= 8
+        ? (isValidEan(normalizeBarcode(barcodeInput)) ? 'valid' : 'invalid')
+        : null
     const barcodeInputRef = useRef<HTMLInputElement>(null)
 
     // Auto-focus barcode input when scanner is shown
@@ -35,17 +37,6 @@ export function ProductCatalog({ products, onAddToCart, loading, onBarcodeSearch
             barcodeInputRef.current.focus()
         }
     }, [showScanner])
-
-    // Validate barcode on input
-    useEffect(() => {
-        if (barcodeInput.length >= 8) {
-            const normalized = normalizeBarcode(barcodeInput)
-            const isValid = isValidEan(normalized)
-            setBarcodeValidation(isValid ? 'valid' : 'invalid')
-        } else {
-            setBarcodeValidation(null)
-        }
-    }, [barcodeInput])
 
     // Handle barcode search
     const handleBarcodeSearch = async () => {

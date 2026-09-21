@@ -40,6 +40,16 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'No se encontró organización activa' }, { status: 403 })
   }
 
+  // Verificar cuota de 20 imágenes
+  const { getWebsiteMediaLibrary, addWebsiteMediaItem, MAX_WEBSITE_MEDIA_COUNT } = await import('@/lib/website/website-media')
+  const currentItems = await getWebsiteMediaLibrary(organizationId, admin)
+  if (currentItems.length >= MAX_WEBSITE_MEDIA_COUNT) {
+    return NextResponse.json(
+      { error: `Alcanzaste el límite de ${MAX_WEBSITE_MEDIA_COUNT} imágenes para tu sitio web. Eliminá imágenes desde el Historial para liberar espacio.` },
+      { status: 400 }
+    )
+  }
+
   const storagePath = `website/logos/${organizationId}/${randomUUID()}.${extension}`
   const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -55,8 +65,21 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const { data: { publicUrl } } = admin.storage.from('product-images').getPublicUrl(storagePath)
+  const finalUrl = `${publicUrl}?v=${Date.now()}`
 
-  return NextResponse.json({ success: true, url: `${publicUrl}?v=${Date.now()}`, path: storagePath })
+  await addWebsiteMediaItem(
+    organizationId,
+    {
+      url: finalUrl,
+      path: storagePath,
+      name: 'Logo de la empresa',
+      size: file.size,
+      section: 'logo',
+    },
+    admin
+  )
+
+  return NextResponse.json({ success: true, url: finalUrl, path: storagePath })
 }
 
 export const POST = withAdminAuth(handler)

@@ -186,7 +186,7 @@ describe('Component Performance Tests', () => {
     it('should optimize re-renders with React.memo', () => {
       let renderCount = 0
       
-      const OptimizedComponent = React.memo(({ data }: { data: any[] }) => {
+      const OptimizedComponent = React.memo(function OptimizedComponent({ data }: { data: any[] }) {
         renderCount++
         return (
           <div data-testid="optimized-component">

@@ -61,6 +61,40 @@ interface ChartDataPoint {
   [key: string]: string | number | undefined
 }
 
+const MetricCard = ({ title, metric, unit = '', icon: Icon }: {
+  title: string
+  metric: MetricData
+  unit?: string
+  icon: React.ComponentType<{ className?: string }>
+}) => (
+  <div className="flex items-center justify-between p-4 border rounded-lg">
+    <div className="flex items-center space-x-3">
+      <div className="p-2 bg-blue-100 rounded-lg">
+        <Icon className="h-5 w-5 text-blue-600" />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-gray-600">{title}</p>
+        <p className="text-2xl font-bold">
+          {metric.current.toLocaleString()}{unit}
+        </p>
+      </div>
+    </div>
+    <div className="text-right">
+      <div className={`flex items-center space-x-1 ${
+        metric.trend === 'up' ? 'text-green-600' : 
+        metric.trend === 'down' ? 'text-red-600' : 'text-gray-600'
+      }`}>
+        {metric.trend === 'up' ? <ArrowUpRight className="h-4 w-4" /> : 
+         metric.trend === 'down' ? <ArrowDownRight className="h-4 w-4" /> : null}
+        <span className="text-sm font-medium">
+          {Math.abs(metric.change).toFixed(1)}%
+        </span>
+      </div>
+      <p className="text-xs text-gray-500">vs anterior</p>
+    </div>
+  </div>
+)
+
 // Widget de métricas en tiempo real
 function RealTimeMetricsWidget({ className, refreshInterval = 30000 }: WidgetProps) {
   const [metrics, setMetrics] = useState({
@@ -99,39 +133,6 @@ function RealTimeMetricsWidget({ className, refreshInterval = 30000 }: WidgetPro
     return () => clearInterval(interval)
   }, [isLive, refreshInterval])
 
-  const MetricCard = ({ title, metric, unit = '', icon: Icon }: {
-    title: string
-    metric: MetricData
-    unit?: string
-    icon: React.ComponentType<{ className?: string }>
-  }) => (
-    <div className="flex items-center justify-between p-4 border rounded-lg">
-      <div className="flex items-center space-x-3">
-        <div className="p-2 bg-blue-100 rounded-lg">
-          <Icon className="h-5 w-5 text-blue-600" />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold">
-            {metric.current.toLocaleString()}{unit}
-          </p>
-        </div>
-      </div>
-      <div className="text-right">
-        <div className={`flex items-center space-x-1 ${
-          metric.trend === 'up' ? 'text-green-600' : 
-          metric.trend === 'down' ? 'text-red-600' : 'text-gray-600'
-        }`}>
-          {metric.trend === 'up' ? <ArrowUpRight className="h-4 w-4" /> : 
-           metric.trend === 'down' ? <ArrowDownRight className="h-4 w-4" /> : null}
-          <span className="text-sm font-medium">
-            {Math.abs(metric.change).toFixed(1)}%
-          </span>
-        </div>
-        <p className="text-xs text-gray-500">vs anterior</p>
-      </div>
-    </div>
-  )
 
   return (
     <Card className={className}>
@@ -322,7 +323,7 @@ function ActivityHeatmapWidget({ className }: WidgetProps) {
 
 // Widget de alertas y notificaciones
 function AlertsWidget({ className }: WidgetProps) {
-  const [alerts] = useState([
+  const [alerts] = useState(() => [
     {
       id: 1,
       type: 'warning',

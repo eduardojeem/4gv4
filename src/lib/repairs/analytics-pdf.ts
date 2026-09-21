@@ -1,10 +1,10 @@
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import autoTable, { type Table } from 'jspdf-autotable'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export function generateAnalyticsPDF(analyticsData: any, organizationName: string = 'Taller') {
-  const doc = new jsPDF()
+  const doc: jsPDF & { lastAutoTable?: Table } = new jsPDF()
   
   // Encabezado
   doc.setFontSize(20)
@@ -43,8 +43,7 @@ export function generateAnalyticsPDF(analyticsData: any, organizationName: strin
   })
 
   // Distribución por Estado
-  // @ts-ignore
-  const finalY1 = doc.lastAutoTable.finalY || 55
+  const finalY1 = doc.lastAutoTable?.finalY || 55
   
   doc.setFontSize(14)
   doc.text('Distribución por Estado', 14, finalY1 + 15)
@@ -63,8 +62,7 @@ export function generateAnalyticsPDF(analyticsData: any, organizationName: strin
   })
 
   // Top Técnicos
-  // @ts-ignore
-  let finalY2 = doc.lastAutoTable.finalY || finalY1 + 20
+  let finalY2 = doc.lastAutoTable?.finalY || finalY1 + 20
   
   if (finalY2 > 230) {
     doc.addPage()

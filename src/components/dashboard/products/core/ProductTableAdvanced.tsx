@@ -54,6 +54,18 @@ interface ProductTableAdvancedProps {
 type SortField = 'name' | 'price' | 'category' | 'stock' | 'createdAt' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
+const SortButton: React.FC<{ field: SortField; children: React.ReactNode; onSort: (field: SortField) => void }> = ({ field, children, onSort }) => (
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => onSort(field)}
+    className="h-auto p-0 font-semibold"
+  >
+    {children}
+    <ArrowUpDown className="ml-1 h-3 w-3" />
+  </Button>
+);
+
 const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
   products,
   selectedProducts = [],
@@ -115,17 +127,6 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
     }
   };
 
-  const SortButton: React.FC<{ field: SortField; children: React.ReactNode }> = ({ field, children }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => handleSort(field)}
-      className="h-auto p-0 font-semibold"
-    >
-      {children}
-      <ArrowUpDown className="ml-1 h-3 w-3" />
-    </Button>
-  );
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -194,17 +195,17 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
                 </TableHead>
               )}
               <TableHead>
-                <SortButton field="name">Producto</SortButton>
+                <SortButton onSort={handleSort} field="name">Producto</SortButton>
               </TableHead>
               <TableHead>SKU</TableHead>
               <TableHead>
-                <SortButton field="category">Categoría</SortButton>
+                <SortButton onSort={handleSort} field="category">Categoría</SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="price">Precio</SortButton>
+                <SortButton onSort={handleSort} field="price">Precio</SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="stock">Stock</SortButton>
+                <SortButton onSort={handleSort} field="stock">Stock</SortButton>
               </TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>

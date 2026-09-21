@@ -47,6 +47,24 @@ interface CategoryListViewProps {
 type SortField = 'name' | 'created_at' | 'products_count' | 'is_active'
 type SortDirection = 'asc' | 'desc'
 
+function SortButton({ field, children, onSort }: {
+    field: SortField
+    children: React.ReactNode
+    onSort: (field: SortField) => void
+}) {
+    return (
+        <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 font-medium"
+            onClick={() => onSort(field)}
+        >
+            {children}
+            <ArrowUpDown className="ml-2 h-3 w-3" />
+        </Button>
+    )
+}
+
 export function CategoryListView({
     categories,
     onEdit,
@@ -117,18 +135,6 @@ export function CategoryListView({
         }
     }
 
-    const SortButton = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-        <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 font-medium"
-            onClick={() => handleSort(field)}
-        >
-            {children}
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-        </Button>
-    )
-
     return (
         <div className={cn("rounded-lg border bg-card", className)}>
             <Table>
@@ -143,18 +149,18 @@ export function CategoryListView({
                             </TableHead>
                         )}
                         <TableHead>
-                            <SortButton field="name">Nombre</SortButton>
+                            <SortButton field="name" onSort={handleSort}>Nombre</SortButton>
                         </TableHead>
                         <TableHead>Descripción</TableHead>
                         <TableHead>Categoría Padre</TableHead>
                         <TableHead>
-                            <SortButton field="is_active">Estado</SortButton>
+                            <SortButton field="is_active" onSort={handleSort}>Estado</SortButton>
                         </TableHead>
                         <TableHead>
-                            <SortButton field="products_count">Productos</SortButton>
+                            <SortButton field="products_count" onSort={handleSort}>Productos</SortButton>
                         </TableHead>
                         <TableHead>
-                            <SortButton field="created_at">Creado</SortButton>
+                            <SortButton field="created_at" onSort={handleSort}>Creado</SortButton>
                         </TableHead>
                         {hasActions && <TableHead className="w-12">Acciones</TableHead>}
                     </TableRow>

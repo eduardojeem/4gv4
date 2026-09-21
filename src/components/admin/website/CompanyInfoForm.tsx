@@ -36,12 +36,16 @@ import {
   Navigation,
   Search,
   Trash2,
+  Images,
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { STOREFRONT_STYLE_LABELS, STOREFRONT_STYLE_OPTIONS, resolveStorefrontStyle } from '@/lib/website/storefront-style'
 import { Switch } from '@/components/ui/switch'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
@@ -132,6 +136,8 @@ export function CompanyInfoForm() {
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
+  const [logoMediaOpen, setLogoMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [confirmPublication, setConfirmPublication] = useState(false)
@@ -168,6 +174,14 @@ export function CompanyInfoForm() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: máximo 20 imágenes. Eliminá imágenes desde el Historial para liberar espacio.')
+      setLogoMediaOpen(true)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
     setLogoUploading(true)
     try {
       const fd = new FormData()
@@ -393,6 +407,9 @@ export function CompanyInfoForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 md:space-y-10 pb-24 md:pb-8">
+      {/* Aviso si la cuota de imágenes llega al límite */}
+      <WebsiteMediaQuotaBanner onOpenHistory={() => setLogoMediaOpen(true)} />
+
       {/* Identidad */}
       <SectionCard icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
@@ -464,9 +481,21 @@ export function CompanyInfoForm() {
                 />
               </div>
             </div>
-            {errors.logoUrl
-              ? <p className="text-xs text-destructive">{errors.logoUrl}</p>
-              : <p className="text-[11px] text-muted-foreground">PNG/WebP/JPG hasta 2MB con fondo transparente.</p>}
+            <div className="flex items-center justify-between text-[11px] pt-1">
+              {errors.logoUrl ? (
+                <p className="text-destructive font-medium">{errors.logoUrl}</p>
+              ) : (
+                <p className="text-muted-foreground">PNG/WebP/JPG hasta 2MB con fondo transparente.</p>
+              )}
+              <button
+                type="button"
+                onClick={() => setLogoMediaOpen(true)}
+                className="font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+              >
+                <Images className="h-3.5 w-3.5" />
+                <span>Elegir del historial</span>
+              </button>
+            </div>
           </div>
 
           {/* Descripción de la Empresa */}
@@ -490,6 +519,57 @@ export function CompanyInfoForm() {
           </div>
         </div>
       </SectionCard>
+
+      {/* Historial de Logos e Imágenes — Sección Destacada debajo de Identidad */}
+      <div className="relative overflow-hidden rounded-2xl border-2 border-primary/50 bg-gradient-to-r from-primary/15 via-primary/5 to-card p-5 sm:p-6 shadow-md transition-all hover:border-primary hover:shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md ring-4 ring-primary/20">
+              <Images className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base sm:text-lg font-bold text-foreground">
+                  Historial de Logos e Imágenes
+                </h3>
+                <span className="rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-xs font-bold text-primary">
+                  Máx. 20 imágenes
+                </span>
+                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Espacio liberable
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                Visualizá, seleccioná y gestioná todas las imágenes subidas para tu sitio web (logos, banners del carrusel, carteles de aviso y marcas). Reutilizalas con un clic o eliminalas definitivamente para liberar espacio en tu cuenta.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-start sm:self-center">
+            <Button
+              type="button"
+              size="lg"
+              onClick={() => setLogoMediaOpen(true)}
+              className="gap-2.5 font-bold text-sm bg-primary hover:bg-primary/90 text-primary-foreground shadow-md px-5 h-11 rounded-xl cursor-pointer"
+            >
+              <Images className="h-4 w-4" />
+              <span>Abrir Historial de Imágenes</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <WebsiteMediaLibraryDialog
+        open={logoMediaOpen}
+        onOpenChange={setLogoMediaOpen}
+        filterSection="logo"
+        title="Historial de Logos e Imágenes"
+        description="Seleccioná un logo o imagen previamente subida o eliminá archivos definitivamente para liberar espacio (máx. 20)."
+        onSelect={(url) => {
+          handleChange('logoUrl', url)
+          toast.success('Logo seleccionado del historial')
+        }}
+      />
 
       <SectionCard icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
         <div className="space-y-6">

@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireAuth, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 })
     }
 
-    // Gating por plan: las fotos de reparación requieren plan Basic+ (Free = sin fotos).
+    // Gating por plan: las fotos de reparación requieren el plan más alto (Enterprise).
     if (bucket === 'repair-images') {
       const { user } = auth as Extract<AuthResult, { authenticated: true }>
       const organization = await getCurrentOrganizationContext(user.id)
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         if (repairPhotoLimit(planInfo.code) === 0) {
           return NextResponse.json(
             {
-              error: `Tu plan ${planInfo.name} no incluye fotos en reparaciones. Subí a Basic o superior.`,
+              error: `Tu plan ${planInfo.name} no incluye fotos en reparaciones. Esta función está reservada exclusivamente para el plan Enterprise.`,
               code: 'PLAN_LIMIT_REACHED',
               resource: 'repairPhotos',
             },

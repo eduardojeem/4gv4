@@ -24,6 +24,7 @@ import {
   EyeOff,
   Upload,
   Image as ImageIcon,
+  Images,
   X,
   Link as LinkIcon,
   Building2,
@@ -36,6 +37,9 @@ import {
 import type { BrandsSectionSettings, BrandItemSettings } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { POPULAR_PRESET_BRANDS, getBrandLogoOrFallback } from '@/lib/website/brand-catalog'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { cn } from '@/lib/utils'
 
 interface CatalogBrandInfo {
@@ -50,6 +54,7 @@ export function BrandsSectionEditor() {
   const { settings, isSaving, updateSetting } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults().brands_section!
   const [draft, setDraft] = useState<BrandsSectionSettings | null>(null)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
 
   // Estado para marcas detectadas en la tienda y catálogo
   const [catalogBrands, setCatalogBrands] = useState<CatalogBrandInfo[]>([])
@@ -65,6 +70,8 @@ export function BrandsSectionEditor() {
   const [editingLogoIndex, setEditingLogoIndex] = useState<number | null>(null)
   const [uploadingItemIndex, setUploadingItemIndex] = useState<number | null>(null)
   const itemFileInputRef = useRef<HTMLInputElement>(null)
+  const [brandMediaOpen, setBrandMediaOpen] = useState(false)
+  const [editingBrandIndexForMedia, setEditingBrandIndexForMedia] = useState<number | null>(null)
 
   const dirtyContext = useWebsiteEditorDirty()
 
@@ -168,6 +175,13 @@ export function BrandsSectionEditor() {
 
   const uploadLogoFile = async (file: File, brandId: string): Promise<string | null> => {
     if (!file) return null
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: alcanzaste el máximo de 20 imágenes en tu organización. Eliminá imágenes desde el Historial para liberar espacio.', {
+        duration: 5000,
+      })
+      setBrandMediaOpen(true)
+      return null
+    }
     if (!file.type.startsWith('image/')) {
       toast.error('Seleccioná un archivo de imagen válido (PNG, JPG, SVG, WebP)')
       return null
@@ -340,6 +354,8 @@ export function BrandsSectionEditor() {
 
   return (
     <div className="space-y-6">
+      <WebsiteMediaQuotaBanner onOpenHistory={() => setBrandMediaOpen(true)} />
+
       {/* ── Tarjeta de Control Principal ── */}
       <SectionCard
         title="Marquesina de Marcas Destacadas"
@@ -708,6 +724,20 @@ export function BrandsSectionEditor() {
                     <Upload className="h-4 w-4 text-muted-foreground" />
                   )}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 px-2.5 text-xs gap-1 shrink-0"
+                  onClick={() => {
+                    setEditingBrandIndexForMedia(null)
+                    setBrandMediaOpen(true)
+                  }}
+                  title="Elegir logo del historial de imágenes"
+                >
+                  <Images className="h-4 w-4 text-primary" />
+                  <span className="hidden sm:inline">Historial</span>
+                </Button>
               </div>
             </div>
 
@@ -745,16 +775,32 @@ export function BrandsSectionEditor() {
               Activá o desactivá la opción <strong>Público</strong> para elegir exactamente qué marcas ven los clientes, y cambiá su logo cuando quieras.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={restoreDefaults}
-            className="text-xs text-muted-foreground hover:text-foreground h-8"
-          >
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            Restaurar sugeridas
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditingBrandIndexForMedia(null)
+                setBrandMediaOpen(true)
+              }}
+              className="text-xs h-8 gap-1.5"
+              title="Ver todas las imágenes y cuota de almacenamiento"
+            >
+              <Images className="h-3.5 w-3.5 text-primary" />
+              <span>Historial</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={restoreDefaults}
+              className="text-xs text-muted-foreground hover:text-foreground h-8"
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              Restaurar sugeridas
+            </Button>
+          </div>
         </div>
 
         {current.items.length === 0 ? (
@@ -924,6 +970,20 @@ export function BrandsSectionEditor() {
                             Subir
                           </Button>
                         </label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 text-xs gap-1 shrink-0"
+                          onClick={() => {
+                            setEditingBrandIndexForMedia(index)
+                            setBrandMediaOpen(true)
+                          }}
+                          title="Elegir logo del historial de imágenes"
+                        >
+                          <Images className="h-3 w-3 text-primary" />
+                          <span className="hidden sm:inline">Historial</span>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -980,6 +1040,23 @@ export function BrandsSectionEditor() {
           </Button>
         </div>
       </div>
+
+      <WebsiteMediaLibraryDialog
+        open={brandMediaOpen}
+        onOpenChange={setBrandMediaOpen}
+        filterSection="brands"
+        title="Historial de Logos de Marcas"
+        description="Seleccioná un logo previamente subido o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+        onSelect={(url) => {
+          if (editingBrandIndexForMedia !== null) {
+            updateItem(editingBrandIndexForMedia, { imageUrl: url })
+            toast.success('Logo de marca asignado del historial')
+          } else {
+            setCustomBrandLogoUrl(url)
+            toast.success('Logo seleccionado del historial')
+          }
+        }}
+      />
     </div>
   )
 }

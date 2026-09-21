@@ -20,6 +20,7 @@ import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { SystemMetrics } from '@/hooks/use-admin-dashboard'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -86,17 +87,14 @@ const systemAlerts = [
 function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOverviewProps) {
   const [timeRange, setTimeRange] = useState('7d')
   const [isRealTime, setIsRealTime] = useState(true)
-  const [currentTime, setCurrentTime] = useState<Date | null>(null)
-  const [isClient, setIsClient] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => new Date())
+  const isClient = useHydrated()
   const [salesData, setSalesData] = useState<ChartData[]>([])
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const supabase = createClient()
 
   useEffect(() => {
-    setIsClient(true)
-    setCurrentTime(new Date())
-    
     const interval = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)

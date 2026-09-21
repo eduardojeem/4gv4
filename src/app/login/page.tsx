@@ -13,17 +13,13 @@ import {
   EyeOff,
   ArrowRight,
   ArrowLeft,
-  Cpu,
   Shield,
   CheckCircle2,
-  Store,
   Mail,
   Lock,
-  Sparkles,
-  Wrench,
-  Boxes,
-  TrendingUp,
-  ShoppingBag,
+  Store,
+  Cpu,
+  Building2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -31,10 +27,11 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { sanitizeRedirectPath, isValidEmail } from '@/lib/auth/password-validation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { logAuthEventClient } from '@/lib/auth-event-client'
-import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { siteUrl } from '@/lib/site-url'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
+import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -60,8 +57,14 @@ export default function LoginPage() {
   const supabase = createClient()
   const reduceMotion = useReducedMotion()
   const { branding } = usePlatformBranding()
+  const logoSize = resolveLogoSize(branding)
+  const currentHeight = logoSize.className || 'h-10'
+  const darkGlowClass =
+    branding.logoGlowDark !== false
+      ? 'drop-shadow-[0_3px_18px_rgba(6,182,212,0.4)]'
+      : 'drop-shadow-xs'
+
   const registeredCompany = searchParams.get('registered') === '1' ? searchParams.get('company') : null
-  /** Se acaba de registrar y todavía no confirmó el correo. */
   const esperaConfirmacion = registeredCompany !== null && searchParams.get('confirmar') === '1'
   const callbackError =
     searchParams.get('error') === 'auth_callback_error'
@@ -69,29 +72,19 @@ export default function LoginPage() {
       : ''
   const visibleError = error || callbackError
 
-  // Registration targets, kept distinct so shoppers aren't funneled into
-  // business (company) creation. The redirect is preserved across the flow.
   const rawRedirect = searchParams.get('redirect') || ''
   const redirectQuery = rawRedirect ? `?redirect=${encodeURIComponent(rawRedirect)}` : ''
   const companyRegisterHref = `/register${redirectQuery}`
-  // Customer accounts are tenant-scoped. If the redirect points to a specific
-  // store, register there; otherwise send the shopper to pick a store.
   const redirectTenantSlug = getTenantSlugFromPathname(rawRedirect)
   const customerRegisterHref = redirectTenantSlug
     ? `/${redirectTenantSlug}/cliente/registro`
     : `/cliente/registro${redirectQuery}`
-  // When arriving from the marketplace or a store, show storefront branding
-  // instead of the SaaS (business) header to avoid mixing both worlds.
   const isCustomerContext = Boolean(redirectTenantSlug) || rawRedirect.startsWith('/marketplace')
   const backHref = isCustomerContext ? rawRedirect || '/marketplace' : '/saas'
 
   const initializeActiveOrganization = async () => {
     try {
-      const response = await fetch('/api/organizations', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
+      const response = await fetch('/api/organizations', { method: 'GET', cache: 'no-store' })
       if (!response.ok && response.status !== 404) {
         console.warn('No se pudo inicializar la organización activa:', response.status)
       }
@@ -131,9 +124,7 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
 
-    if (!validateFields()) {
-      return
-    }
+    if (!validateFields()) return
 
     if (!captchaToken || loading) {
       setError('Por favor, completá la verificación de seguridad para continuar.')
@@ -218,8 +209,7 @@ export default function LoginPage() {
       toast.error('Ingresá tu correo para reenviar la confirmación.')
       return
     }
-    const emailValid = isValidEmail(targetEmail)
-    if (!emailValid) {
+    if (!isValidEmail(targetEmail)) {
       toast.error('El formato de correo no es válido.')
       return
     }
@@ -284,46 +274,30 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex flex-col min-h-screen bg-slate-950 text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Background ambient lighting and fine technical grid */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-[25%] -left-[10%] w-[60vw] h-[60vw] max-w-[700px] max-h-[700px] rounded-full bg-gradient-to-br from-blue-600/15 via-indigo-600/10 to-transparent blur-3xl" />
-        <div className="absolute top-[30%] -right-[15%] w-[65vw] h-[65vw] max-w-[800px] max-h-[800px] rounded-full bg-gradient-to-bl from-cyan-600/15 via-teal-600/10 to-transparent blur-3xl" />
-        <div className="absolute -bottom-[20%] left-[20%] w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-gradient-to-t from-blue-900/15 to-transparent blur-3xl" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.03)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_at_center,black_60%,transparent_95%)]" />
-      </div>
+    <div className="relative flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
 
       {/* Top Header Navigation */}
       {isCustomerContext ? (
-        <header className="relative z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+        <header className="relative z-30 border-b border-slate-200 bg-white/95 dark:border-slate-800/80 dark:bg-slate-950/90 backdrop-blur-xl shadow-sm">
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
             <Link href={backHref} className="flex items-center gap-3.5 group transition-transform active:scale-95">
               {branding.logoUrl ? (
-                <div className="relative flex items-center justify-center rounded-2xl border border-slate-800/90 bg-slate-900/80 px-2.5 py-1.5 shadow-sm backdrop-blur-md group-hover:border-cyan-500/40 transition-colors">
-                  <img
-                    src={branding.logoUrl}
-                    alt={branding.marketplaceName}
-                    className="h-8 w-auto max-w-[170px] object-contain"
-                  />
+                <div className="relative flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/80 px-2.5 py-1.5 shadow-sm backdrop-blur-md group-hover:border-blue-400/60 dark:group-hover:border-cyan-500/40 transition-colors">
+                  <img src={branding.logoUrl} alt={branding.marketplaceName} className="h-8 w-auto max-w-[170px] object-contain" />
                 </div>
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-950/50 border border-white/10 group-hover:shadow-cyan-500/25 transition-all">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-cyan-950/50 border border-blue-100 dark:border-white/10 transition-all">
                   <Store className="h-5 w-5" />
                 </div>
               )}
               <div>
-                <div className="text-sm font-bold leading-none text-white tracking-tight group-hover:text-cyan-400 transition-colors">
+                <div className="text-sm font-bold leading-none text-slate-800 dark:text-white tracking-tight group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors">
                   {branding.marketplaceName}
                 </div>
-                <div className="mt-1 text-xs text-slate-400">{branding.marketplaceTagline}</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{branding.marketplaceTagline}</div>
               </div>
             </Link>
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="gap-2 border-slate-800 bg-slate-900/80 text-slate-300 hover:bg-slate-800 hover:text-white rounded-xl transition-all"
-            >
+            <Button asChild variant="outline" size="sm" className="gap-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white rounded-xl transition-all shadow-sm dark:shadow-none">
               <Link href={backHref}>
                 <ArrowLeft className="h-4 w-4" />
                 Volver a la tienda
@@ -333,455 +307,273 @@ export default function LoginPage() {
         </header>
       ) : (
         <div className="relative z-30">
-          <SaaSPublicNav variant="dark" />
+          <SaaSPublicNav variant="default" />
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-        <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          
-          {/* Left Column: Feature Highlights & Brand Identity Showcase (Visible on Desktop) */}
-          <motion.div
-            initial={reduceMotion ? false : { opacity: 0, x: -20 }}
-            animate={reduceMotion ? undefined : { opacity: 1, x: 0 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="hidden lg:flex lg:col-span-6 xl:col-span-7 flex-col justify-between space-y-8 pr-4"
-          >
-            <div className="space-y-6">
-              {/* Brand Showcase Header */}
-              <div className="flex items-center gap-3.5 pb-2">
-                {branding.logoDarkUrl || branding.logoUrl ? (
-                  <div className="relative flex items-center justify-center rounded-2xl border border-slate-800/80 bg-slate-900/90 p-3 shadow-xl backdrop-blur-md ring-1 ring-white/10">
+      {/* Background Image Wallpaper with light/dark overlay */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <img
+          src="/images/login-cover.png"
+          alt="Fondo de pantalla"
+          className="w-full h-full object-cover object-center dark:brightness-[0.35] dark:saturate-60 transition-all duration-300"
+        />
+        {/* Overlay suave para legibilidad: claro blanco traslúcido, oscuro slate profundo */}
+        <div className="absolute inset-0 bg-slate-900/15 dark:bg-slate-950/75 backdrop-blur-[2px] transition-colors" />
+        <div className="absolute inset-0 bg-gradient-to-t from-white/60 via-transparent to-white/30 dark:from-slate-950/80 dark:via-transparent dark:to-slate-950/40" />
+      </div>
+
+      {/* Main Content Area — Centered clean login card */}
+      <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-8 sm:py-12">
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className="w-full max-w-md"
+        >
+          {/* Tarjeta de login flotante con bordes redondeados y glassmorphism */}
+          <div className="rounded-3xl border border-white/80 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/90 p-6 sm:p-9 shadow-2xl shadow-slate-950/15 dark:shadow-black/70 backdrop-blur-2xl">
+
+            {/* Logo + Title */}
+            <div className="mb-7 text-center">
+              {branding.logoUrl || branding.logoDarkUrl ? (
+                <div className="mb-4 flex justify-center">
+                  {branding.logoUrl && branding.logoDarkUrl ? (
+                    <>
+                      <img
+                        src={branding.logoUrl}
+                        alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
+                        className={`${currentHeight} w-auto max-w-[200px] object-contain drop-shadow-xs dark:hidden`}
+                        style={logoSize.style}
+                      />
+                      <img
+                        src={branding.logoDarkUrl}
+                        alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
+                        className={`${currentHeight} w-auto max-w-[200px] object-contain ${darkGlowClass} hidden dark:block`}
+                        style={logoSize.style}
+                      />
+                    </>
+                  ) : (
                     <img
-                      src={branding.logoDarkUrl || branding.logoUrl}
+                      src={branding.logoUrl || branding.logoDarkUrl}
                       alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
-                      className="h-10 w-auto max-w-[190px] object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
+                      className={`${currentHeight} w-auto max-w-[200px] object-contain drop-shadow-xs`}
+                      style={logoSize.style}
                     />
-                  </div>
-                ) : (
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-500 text-white shadow-xl shadow-blue-950/50 border border-white/10">
-                    {isCustomerContext ? <Store className="h-6 w-6" /> : <Cpu className="h-6 w-6" />}
-                  </div>
-                )}
-                <div>
-                  <div className="text-lg font-extrabold tracking-tight text-white flex items-center gap-2">
-                    <span>{isCustomerContext ? branding.marketplaceName : branding.platformName}</span>
-                  </div>
-                  <div className="text-xs font-medium text-cyan-400">
-                    {isCustomerContext ? branding.marketplaceTagline || 'Tu marketplace de confianza' : 'Sistema de Gestión & Ventas'}
+                  )}
+                </div>
+              ) : (
+                <div className="mb-4 flex justify-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 shadow-lg shadow-blue-500/20">
+                    <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-white" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </div>
                 </div>
-              </div>
-
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1 text-xs font-semibold text-cyan-300 shadow-sm backdrop-blur-md">
-                <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-                <span>{isCustomerContext ? 'Portal de Compras y Seguimiento' : 'Plataforma SaaS para Negocios y Talleres'}</span>
-              </div>
-
-              {/* Headline */}
-              <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                {isCustomerContext ? (
-                  <>
-                    Accedé a tus pedidos, <span className="bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-500 bg-clip-text text-transparent">favoritos y reparaciones</span> en tiempo real.
-                  </>
-                ) : (
-                  <>
-                    Control total de tu taller, <span className="bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-500 bg-clip-text text-transparent">ventas e inventario</span> en una sola plataforma.
-                  </>
-                )}
+              )}
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Iniciar sesión
               </h1>
-
-              <p className="text-sm xl:text-base text-slate-300 leading-relaxed max-w-xl">
+              <p className="mt-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                 {isCustomerContext
-                  ? 'Gestioná tus órdenes de compra, seguí el estado de tus equipos en servicio técnico y descubrí las mejores ofertas en un solo lugar.'
-                  : 'Automatizá órdenes de servicio técnico, emití presupuestos, controlá stock con variantes y publicá tus productos en tu propio e-commerce sincronizado.'}
+                  ? 'Accedé a tus pedidos y reparaciones.'
+                  : branding.loginSubtitle || 'Accedé al panel de tu empresa.'}
               </p>
-
-              {/* Visual Feature Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
-                {isCustomerContext ? (
-                  <>
-                    <div className="group rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md transition-all duration-300 hover:border-cyan-500/40 hover:bg-slate-900/90">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 mb-3 border border-cyan-500/20">
-                        <Wrench className="h-4 w-4" />
-                      </div>
-                      <h2 className="text-sm font-semibold text-slate-200">Seguimiento de Taller</h2>
-                      <p className="mt-1 text-xs text-slate-400 leading-normal">
-                        Consultá el avance y diagnóstico de tus reparaciones en vivo con código de orden.
-                      </p>
-                    </div>
-
-                    <div className="group rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md transition-all duration-300 hover:border-cyan-500/40 hover:bg-slate-900/90">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/15 text-blue-400 mb-3 border border-blue-500/20">
-                        <ShoppingBag className="h-4 w-4" />
-                      </div>
-                      <h2 className="text-sm font-semibold text-slate-200">Compras & Favoritos</h2>
-                      <p className="mt-1 text-xs text-slate-400 leading-normal">
-                        Guardá tus productos preferidos, agrupalos por tienda y gestioná tus pedidos fácilmente.
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="group rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md transition-all duration-300 hover:border-cyan-500/40 hover:bg-slate-900/90">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 mb-3 border border-cyan-500/20">
-                        <Wrench className="h-4 w-4" />
-                      </div>
-                      <h2 className="text-sm font-semibold text-slate-200">Gestión de Reparaciones</h2>
-                      <p className="mt-1 text-xs text-slate-400 leading-normal">
-                        Costos internos, rentabilidad neta por orden, asignación a técnicos y notificaciones al cliente.
-                      </p>
-                    </div>
-
-                    <div className="group rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md transition-all duration-300 hover:border-cyan-500/40 hover:bg-slate-900/90">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/15 text-blue-400 mb-3 border border-blue-500/20">
-                        <Boxes className="h-4 w-4" />
-                      </div>
-                      <h2 className="text-sm font-semibold text-slate-200">Inventario y POS Rápido</h2>
-                      <p className="mt-1 text-xs text-slate-400 leading-normal">
-                        Control multi-sucursal, lectura de código de barras, variantes y actualización de stock inmediata.
-                      </p>
-                    </div>
-
-                    <div className="group rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md transition-all duration-300 hover:border-cyan-500/40 hover:bg-slate-900/90">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 mb-3 border border-indigo-500/20">
-                        <TrendingUp className="h-4 w-4" />
-                      </div>
-                      <h2 className="text-sm font-semibold text-slate-200">Métricas y Rentabilidad</h2>
-                      <p className="mt-1 text-xs text-slate-400 leading-normal">
-                        Reportes automáticos de ganancias, ticket promedio y rendimiento por canal de venta.
-                      </p>
-                    </div>
-
-                    <div className="group rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md transition-all duration-300 hover:border-cyan-500/40 hover:bg-slate-900/90">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 mb-3 border border-emerald-500/20">
-                        <Store className="h-4 w-4" />
-                      </div>
-                      <h2 className="text-sm font-semibold text-slate-200">Tienda Online & Catálogo</h2>
-                      <p className="mt-1 text-xs text-slate-400 leading-normal">
-                        Tu propio storefront público optimizado para móviles con carrito y pedidos por WhatsApp.
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
-          </motion.div>
 
-          {/* Right Column: Sleek Auth Card */}
-          <motion.div
-            initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
-            className="w-full lg:col-span-6 xl:col-span-5 max-w-md mx-auto"
-          >
-            <div className="relative rounded-3xl p-[1px] bg-gradient-to-b from-slate-700/80 via-slate-800/50 to-slate-900/90 shadow-[0_24px_80px_rgba(2,6,23,0.7)] backdrop-blur-2xl">
-              <div className="rounded-[23px] bg-slate-900/90 p-6 sm:p-8 backdrop-blur-2xl">
-                
-                {/* Header inside Card */}
-                <div className="space-y-4 pb-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3.5">
-                      {branding.logoDarkUrl || branding.logoUrl ? (
-                        <div className="relative flex items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-950/70 p-2 shadow-md backdrop-blur-md">
-                          <img
-                            src={branding.logoDarkUrl || branding.logoUrl}
-                            alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
-                            className="h-9 w-auto max-w-[160px] object-contain drop-shadow"
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          className={`relative flex h-11 w-11 items-center justify-center rounded-2xl shadow-lg border border-white/10 ${
-                            isCustomerContext
-                              ? 'bg-gradient-to-tr from-cyan-600 to-blue-600 shadow-cyan-950/50'
-                              : 'bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-600 shadow-blue-950/50'
-                          }`}
-                        >
-                          {isCustomerContext ? (
-                            <Store className="h-5 w-5 text-white" />
-                          ) : (
-                            <Cpu className="h-5 w-5 text-white" />
-                          )}
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-sm font-bold text-slate-100 tracking-tight">
-                          {isCustomerContext ? branding.marketplaceName : branding.platformName}
-                        </p>
-                        <div className="inline-flex items-center gap-1.5 mt-0.5">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                          <p className="text-[11px] text-slate-400 font-medium">
-                            {isCustomerContext ? 'Portal Cliente' : branding.loginEyebrow || 'Acceso Empresa'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+            {/* Success: registered company */}
+            {registeredCompany && (
+              <div className="mb-5 flex gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-semibold text-xs">¡Empresa creada con éxito!</p>
+                  <p className="mt-0.5 text-xs opacity-80">
+                    {esperaConfirmacion
+                      ? `Revisá tu correo para activar la cuenta de ${registeredCompany}.`
+                      : `Iniciá sesión para configurar ${registeredCompany}.`}
+                  </p>
+                </div>
+              </div>
+            )}
 
+            {/* Form */}
+            <form onSubmit={handleLogin} className="space-y-4" noValidate>
+              {/* Email */}
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Correo electrónico
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="nombre@empresa.com"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError('') }}
+                    required
+                    autoComplete="email"
+                    autoFocus
+                    disabled={loading}
+                    className={`h-11 pl-10 rounded-xl bg-slate-50/80 text-slate-900 placeholder:text-slate-400 dark:bg-slate-950/70 dark:text-white dark:placeholder:text-slate-500 transition-all border ${
+                      emailError
+                        ? 'border-red-400 focus-visible:ring-red-400/30'
+                        : 'border-slate-200/90 dark:border-slate-800 focus-visible:border-blue-500 focus-visible:ring-blue-500/20'
+                    }`}
+                  />
+                </div>
+                {emailError && <p className="text-[11px] text-red-500 font-medium pl-1 animate-in fade-in-50 duration-200">{emailError}</p>}
+              </div>
+
+              {/* Password */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Contraseña
+                  </Label>
+                  <button type="button" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors" onClick={() => setResetOpen(true)}>
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError('') }}
+                    required
+                    autoComplete="current-password"
+                    disabled={loading}
+                    className={`h-11 pl-10 pr-11 rounded-xl bg-slate-50/80 text-slate-900 placeholder:text-slate-400 dark:bg-slate-950/70 dark:text-white dark:placeholder:text-slate-500 transition-all border ${
+                      passwordError
+                        ? 'border-red-400 focus-visible:ring-red-400/30'
+                        : 'border-slate-200/90 dark:border-slate-800 focus-visible:border-blue-500 focus-visible:ring-blue-500/20'
+                    }`}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {passwordError && <p className="text-[11px] text-red-500 font-medium pl-1 animate-in fade-in-50 duration-200">{passwordError}</p>}
+              </div>
+
+              {/* Error */}
+              <AnimatePresence>
+                {visibleError && (
+                  <motion.div
+                    initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+                    animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                    exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
+                    className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+                    role="alert"
+                    aria-live="assertive"
+                  >
+                    <Shield className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{visibleError}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Unconfirmed email */}
+              {unconfirmed && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3.5 space-y-2.5 dark:border-blue-500/30 dark:bg-blue-500/10">
+                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                    Tu cuenta aún no está confirmada. Revisá tu bandeja de entrada y spam o reenviá el enlace.
+                  </p>
+                  <Button type="button" onClick={handleResendConfirmation} disabled={loading || resendLoading} className="h-8 w-full text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-sm">
+                    {resendLoading ? <span className="inline-flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Enviando enlace...</span> : 'Reenviar correo de verificación'}
+                  </Button>
+                </div>
+              )}
+
+              {/* Captcha */}
+              <div className="flex justify-center pt-1">
+                <TurnstileChallenge action="login" onTokenChange={setCaptchaToken} resetKey={captchaResetKey} theme="auto" disabled={loading} />
+              </div>
+
+              {/* Submit */}
+              <Button type="submit" className="h-11 w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 font-semibold text-white shadow-md shadow-blue-500/20 transition-all active:scale-[0.99] disabled:opacity-50" disabled={loading || !captchaToken}>
+                {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Iniciando sesión...</> : <>Iniciar sesión<ArrowRight className="ml-2 h-4 w-4" /></>}
+              </Button>
+            </form>
+
+            {/* Sign up section */}
+            <div className="mt-6 border-t border-slate-200/80 dark:border-slate-800/80 pt-5 space-y-3.5 text-center">
+              {isCustomerContext ? (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 p-3">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">¿Querés comprar o seguir tus pedidos?</p>
                     <Link
-                      href={backHref}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800/90 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-slate-300 transition-all hover:border-slate-700 hover:bg-slate-800 hover:text-white"
+                      href={customerRegisterHref}
+                      className="mt-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-cyan-400 dark:hover:text-cyan-300 hover:underline"
                     >
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                      {isCustomerContext ? 'Volver' : 'Inicio'}
+                      Crear cuenta de cliente gratis
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                   </div>
 
-                  <div className="pt-2">
-                    <h2 className="text-2xl font-bold tracking-tight text-white">Iniciar sesión</h2>
-                    <p className="mt-1 text-xs sm:text-sm text-slate-400">
-                      {isCustomerContext
-                        ? 'Ingresá tus credenciales para continuar tus compras y reparaciones.'
-                        : branding.loginSubtitle || 'Ingresá al panel administrativo de tu empresa.'}
+                  <div className="pt-1 text-left space-y-2">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 text-center">
+                      ¿Tenés un negocio o taller?
                     </p>
-                  </div>
-                </div>
-
-                {/* Card Content & Form */}
-                <div className="space-y-5">
-                  {registeredCompany && (
-                    <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 text-sm text-emerald-200 animate-in fade-in-50">
-                      <div className="flex gap-2.5 items-start">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                        <div>
-                          <p className="font-semibold text-xs sm:text-sm text-emerald-100">¡Empresa creada con éxito!</p>
-                          <p className="mt-0.5 text-xs text-emerald-200/80">
-                            {esperaConfirmacion
-                              ? `Te mandamos un correo para activar la cuenta. Abrí ese enlace y seguís configurando ${registeredCompany}.`
-                              : `Iniciá sesión para comenzar a configurar ${registeredCompany}.`}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleLogin} className="space-y-4" noValidate>
-                    {/* Email Field */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="email" className="text-slate-200 text-xs font-medium">
-                        Correo electrónico
-                      </Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="nombre@empresa.com"
-                          value={email}
-                          onChange={(e) => {
-                            setEmail(e.target.value)
-                            if (emailError) setEmailError('')
-                          }}
-                          required
-                          autoComplete="email"
-                          autoFocus
-                          className={`h-11 pl-10 rounded-xl bg-slate-950/70 text-white placeholder:text-slate-500 transition-all ${
-                            emailError
-                              ? 'border-red-500/80 focus-visible:ring-red-500/30'
-                              : 'border-slate-700/80 focus-visible:border-cyan-500/80 focus-visible:ring-cyan-500/30'
-                          }`}
-                          disabled={loading}
-                        />
-                      </div>
-                      {emailError && (
-                        <p className="text-[11px] text-red-400 font-medium pl-1 animate-in fade-in-50 duration-200">
-                          {emailError}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Password Field */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="password" className="text-slate-200 text-xs font-medium">
-                          Contraseña
-                        </Label>
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:underline transition-colors"
-                          onClick={() => setResetOpen(true)}
-                        >
-                          ¿Olvidaste tu contraseña?
-                        </button>
-                      </div>
-                      <div className="relative">
-                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                        <Input
-                          id="password"
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={password}
-                          onChange={(e) => {
-                            setPassword(e.target.value)
-                            if (passwordError) setPasswordError('')
-                          }}
-                          required
-                          autoComplete="current-password"
-                          className={`h-11 pl-10 pr-11 rounded-xl bg-slate-950/70 text-white placeholder:text-slate-500 transition-all ${
-                            passwordError
-                              ? 'border-red-500/80 focus-visible:ring-red-500/30'
-                              : 'border-slate-700/80 focus-visible:border-cyan-500/80 focus-visible:ring-cyan-500/30'
-                          }`}
-                          disabled={loading}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition-colors hover:text-cyan-400 hover:bg-slate-800"
-                          aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      {passwordError && (
-                        <p className="text-[11px] text-red-400 font-medium pl-1 animate-in fade-in-50 duration-200">
-                          {passwordError}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Error Banner */}
-                    <AnimatePresence>
-                      {visibleError && (
-                        <motion.div
-                          initial={reduceMotion ? false : { opacity: 0, y: -6, scale: 0.98 }}
-                          animate={reduceMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-                          exit={reduceMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
-                          className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-3.5 text-xs text-red-300 leading-relaxed shadow-sm"
-                          role="alert"
-                          aria-live="assertive"
-                        >
-                          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-                          <span>{visibleError}</span>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Unconfirmed Email Alert */}
-                    {unconfirmed && (
-                      <div className="rounded-2xl border border-cyan-500/40 bg-cyan-500/10 p-3.5 space-y-2.5">
-                        <p className="text-xs text-cyan-200 leading-relaxed">
-                          Tu cuenta aún no está confirmada. Revisá tu bandeja de entrada y spam o reenviá el enlace.
-                        </p>
-                        <Button
-                          type="button"
-                          onClick={handleResendConfirmation}
-                          disabled={loading || resendLoading}
-                          className="h-8 w-full text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl shadow-sm transition-all"
-                        >
-                          {resendLoading ? (
-                            <span className="inline-flex items-center gap-2">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              Enviando enlace...
-                            </span>
-                          ) : (
-                            'Reenviar correo de verificación'
-                          )}
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Security Captcha Challenge */}
-                    <div className="pt-1 flex justify-center">
-                      <TurnstileChallenge
-                        action="login"
-                        onTokenChange={setCaptchaToken}
-                        resetKey={captchaResetKey}
-                        theme="dark"
-                        disabled={loading}
-                      />
-                    </div>
-
-                    {/* Submit Button */}
                     <Button
-                      type="submit"
-                      className="h-11 w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:via-indigo-500 hover:to-cyan-500 font-semibold text-white shadow-lg shadow-blue-900/30 transition-all rounded-xl active:scale-[0.99] disabled:opacity-50"
-                      disabled={loading || !captchaToken}
+                      asChild
+                      variant="outline"
+                      className="w-full h-11 rounded-xl border-2 border-blue-500/30 hover:border-blue-600 dark:border-cyan-500/40 dark:hover:border-cyan-400 bg-blue-50/60 hover:bg-blue-100/80 dark:bg-slate-800/90 dark:hover:bg-slate-800 text-blue-700 dark:text-cyan-300 font-bold text-sm shadow-xs transition-all active:scale-[0.99]"
                     >
-                      {loading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Iniciando sesión...
-                        </>
-                      ) : (
-                        <>
-                          Iniciar sesión
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </>
-                      )}
+                      <Link href={companyRegisterHref} className="flex items-center justify-center gap-2">
+                        <Building2 className="h-4 w-4 text-blue-600 dark:text-cyan-400 shrink-0" />
+                        <span>Registrar mi empresa</span>
+                        <ArrowRight className="h-4 w-4 ml-auto text-blue-600 dark:text-cyan-400 shrink-0" />
+                      </Link>
                     </Button>
-                  </form>
-
-                  {/* Contextual Sign Up Options */}
-                  <div className="pt-2 border-t border-slate-800/70">
-                    {isCustomerContext ? (
-                      <div className="space-y-3">
-                        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3.5 text-center">
-                          <p className="text-xs text-slate-300 font-medium">¿Querés comprar o seguir tus órdenes?</p>
-                          <Link
-                            href={customerRegisterHref}
-                            className="mt-1.5 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 hover:underline"
-                          >
-                            Crear cuenta de cliente gratis
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Link>
-                        </div>
-
-                        <p className="text-center text-xs text-slate-400">
-                          ¿Tenés un negocio o taller?{' '}
-                          <Link
-                            href={companyRegisterHref}
-                            className="font-semibold text-slate-200 hover:text-white hover:underline transition-colors"
-                          >
-                            Registrá tu empresa
-                          </Link>
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="text-center space-y-2">
-                        <p className="text-xs sm:text-sm text-slate-400">
-                          ¿No tenés una cuenta para tu empresa?{' '}
-                        </p>
-                        <Button
-                          asChild
-                          variant="outline"
-                          className="w-full h-10 border-slate-700/80 bg-slate-950/50 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-semibold transition-all"
-                        >
-                          <Link href={companyRegisterHref} className="gap-2">
-                            <span>Registrar mi empresa</span>
-                            <ArrowRight className="h-3.5 w-3.5 text-cyan-400" />
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    ¿No tenés una cuenta para tu empresa?
+                  </p>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full h-11 rounded-xl border-2 border-blue-500/35 hover:border-blue-600 dark:border-cyan-500/40 dark:hover:border-cyan-400 bg-blue-50/70 hover:bg-blue-100/90 dark:bg-slate-800/90 dark:hover:bg-slate-800 text-blue-700 dark:text-cyan-300 font-bold text-sm shadow-xs transition-all active:scale-[0.99]"
+                  >
+                    <Link href={companyRegisterHref} className="flex items-center justify-center gap-2.5">
+                      <Building2 className="h-4.5 w-4.5 text-blue-600 dark:text-cyan-400 shrink-0" />
+                      <span>Registrar mi empresa</span>
+                      <ArrowRight className="h-4 w-4 ml-auto text-blue-600 dark:text-cyan-400 shrink-0" />
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </div>
-          </motion.div>
-        </div>
+
+          </div>{/* end card */}
+        </motion.div>
       </main>
+
 
       {/* Password Reset Modal */}
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="sm:max-w-[440px] rounded-3xl border-slate-800 bg-slate-900/95 text-slate-100 shadow-2xl backdrop-blur-2xl">
+        <DialogContent className="sm:max-w-[420px] rounded-2xl border-slate-200 bg-white text-slate-900 shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
           <DialogHeader className="space-y-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 mb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 mb-1">
               <Lock className="h-5 w-5" />
             </div>
-            <DialogTitle className="text-xl font-bold tracking-tight text-white">
+            <DialogTitle className="text-xl font-bold tracking-tight">
               Restablecer contraseña
             </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm text-slate-400">
+            <DialogDescription className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               Ingresá el correo asociado a tu cuenta y te enviaremos un enlace seguro para crear una nueva contraseña.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="resetEmail" className="text-xs font-medium text-slate-200">
+              <Label htmlFor="resetEmail" className="text-xs font-medium text-slate-700 dark:text-slate-300">
                 Correo electrónico
               </Label>
               <div className="relative">
@@ -796,13 +588,15 @@ export default function LoginPage() {
                     if (resetEmailError) setResetEmailError('')
                   }}
                   disabled={resetLoading}
-                  className={`h-11 pl-10 rounded-xl bg-slate-950/80 text-white placeholder:text-slate-500 ${
-                    resetEmailError ? 'border-red-500/80' : 'border-slate-700/80 focus-visible:ring-cyan-500/30'
+                  className={`h-11 pl-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 border ${
+                    resetEmailError
+                      ? 'border-red-400 focus-visible:ring-red-400/30'
+                      : 'border-slate-200 dark:border-slate-700 focus-visible:ring-blue-500/20'
                   }`}
                 />
               </div>
               {resetEmailError && (
-                <p className="text-[11px] text-red-400 font-medium pl-1">
+                <p className="text-[11px] text-red-500 font-medium pl-1">
                   {resetEmailError}
                 </p>
               )}
@@ -813,24 +607,24 @@ export default function LoginPage() {
                 action="password_reset"
                 onTokenChange={setResetCaptchaToken}
                 resetKey={resetCaptchaKey}
-                theme="dark"
+                theme="auto"
                 disabled={resetLoading}
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-1">
               <Button
                 variant="ghost"
                 onClick={() => setResetOpen(false)}
                 disabled={resetLoading}
-                className="h-10 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-medium"
+                className="h-10 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleResetPassword}
                 disabled={!resetEmail.trim() || resetLoading || !resetCaptchaToken}
-                className="h-10 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md transition-all px-4"
+                className="h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm px-4"
               >
                 {resetLoading ? (
                   <>

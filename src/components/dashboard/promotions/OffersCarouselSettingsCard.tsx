@@ -186,130 +186,126 @@ export function OffersCarouselSettingsCard() {
         </div>
       </div>
 
-      <details className="group border-t" open={hasChanges}>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-xs font-semibold text-indigo-600 [&::-webkit-details-marker]:hidden dark:text-indigo-400">
-          <span>Opciones del carrusel</span>
-          <span>
-            <span className="group-open:hidden">Configurar ↓</span>
-            <span className="hidden group-open:inline">Ocultar ↑</span>
-          </span>
-        </summary>
-
-        <CardContent className="space-y-5 border-t pt-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="carousel-title" className="text-xs font-medium">Título de la banda</Label>
-              <Input
-                id="carousel-title"
-                value={current.title}
-                maxLength={120}
-                onChange={(event) => patch('title', event.target.value)}
-                placeholder={defaults.title}
-                className="h-9"
-              />
-            </div>
-
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="carousel-subtitle" className="text-xs font-medium">
-                Bajada <span className="text-muted-foreground">(opcional)</span>
-              </Label>
-              <Textarea
-                id="carousel-subtitle"
-                value={current.subtitle}
-                maxLength={240}
-                rows={2}
-                onChange={(event) => patch('subtitle', event.target.value)}
-                placeholder={defaults.subtitle}
-                className="resize-none text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="carousel-max-items" className="text-xs font-medium">
-                Ofertas en el carrusel
-              </Label>
-              <Input
-                id="carousel-max-items"
-                type="number"
-                inputMode="numeric"
-                min={MAX_ITEMS_MIN}
-                max={MAX_ITEMS_MAX}
-                value={current.maxItems}
-                onChange={(event) => patch('maxItems', Number(event.target.value))}
-                className="h-9"
-              />
-              <p className="text-[11px] text-muted-foreground">Entre {MAX_ITEMS_MIN} y {MAX_ITEMS_MAX}.</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="carousel-interval" className="text-xs font-medium">
-                Segundos por slide
-              </Label>
-              <Input
-                id="carousel-interval"
-                type="number"
-                inputMode="numeric"
-                min={INTERVAL_MIN}
-                max={INTERVAL_MAX}
-                disabled={!current.autoplay}
-                value={current.intervalSeconds}
-                onChange={(event) => patch('intervalSeconds', Number(event.target.value))}
-                className="h-9"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                {current.autoplay ? `Entre ${INTERVAL_MIN} y ${INTERVAL_MAX}.` : 'Requiere rotación automática.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 px-4 py-3">
-            <div>
-              <Label htmlFor="carousel-autoplay" className="text-sm font-semibold">Rotación automática</Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Se pausa sola al pasar el mouse y si el visitante prefiere menos movimiento.
-              </p>
-            </div>
-            <Switch
-              id="carousel-autoplay"
-              checked={current.autoplay}
-              onCheckedChange={(value) => patch('autoplay', value)}
+      <CardContent className="space-y-5 p-5 pt-3 border-t">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="carousel-title" className="text-xs font-semibold">Título de la banda</Label>
+            <Input
+              id="carousel-title"
+              value={current.title}
+              maxLength={120}
+              onChange={(event) => patch('title', event.target.value)}
+              placeholder={defaults.title}
+              className="h-9 text-sm"
             />
           </div>
 
-          <p className="text-[11px] text-muted-foreground">
-            La cantidad de slides y el ritmo también aplican al carrusel del inicio público. Los textos
-            de la sección y el color de acento se editan en{' '}
-            <Link href="/admin/website" className="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline dark:text-indigo-400">
-              Sitio web <ExternalLink className="h-3 w-3" />
-            </Link>
-            .
-          </p>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="carousel-subtitle" className="text-xs font-semibold">
+              Bajada o mensaje descriptivo <span className="text-muted-foreground font-normal">(opcional)</span>
+            </Label>
+            <Textarea
+              id="carousel-subtitle"
+              value={current.subtitle}
+              maxLength={240}
+              rows={2}
+              onChange={(event) => patch('subtitle', event.target.value)}
+              placeholder={defaults.subtitle}
+              className="resize-none text-xs"
+            />
+          </div>
 
-          <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setDraft(null)}
-              disabled={!hasChanges || isSaving}
-              className="gap-2"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Descartar
-            </Button>
+          <div className="space-y-1.5">
+            <Label htmlFor="carousel-max-items" className="text-xs font-semibold">
+              Ofertas en el carrusel
+            </Label>
+            <Input
+              id="carousel-max-items"
+              type="number"
+              inputMode="numeric"
+              min={MAX_ITEMS_MIN}
+              max={MAX_ITEMS_MAX}
+              value={current.maxItems}
+              onChange={(event) => patch('maxItems', Number(event.target.value))}
+              className="h-9 text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">Muestra entre {MAX_ITEMS_MIN} y {MAX_ITEMS_MAX} productos rebajados.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="carousel-interval" className="text-xs font-semibold">
+              Segundos por slide
+            </Label>
+            <Input
+              id="carousel-interval"
+              type="number"
+              inputMode="numeric"
+              min={INTERVAL_MIN}
+              max={INTERVAL_MAX}
+              disabled={!current.autoplay}
+              value={current.intervalSeconds}
+              onChange={(event) => patch('intervalSeconds', Number(event.target.value))}
+              className="h-9 text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {current.autoplay ? `Rota cada ${current.intervalSeconds} segundos.` : 'Requiere rotación automática activa.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 px-4 py-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="carousel-autoplay" className="text-xs font-semibold">Rotación automática</Label>
+            <p className="text-[11px] text-muted-foreground">
+              El carrusel avanza solo y se pausa automáticamente cuando el usuario interactúa.
+            </p>
+          </div>
+          <Switch
+            id="carousel-autoplay"
+            checked={current.autoplay}
+            onCheckedChange={(value) => patch('autoplay', value)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-t pt-4">
+          <div className="text-xs">
+            {hasChanges ? (
+              <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Cambios pendientes de guardar
+              </span>
+            ) : (
+              <span className="text-muted-foreground">Opciones sincronizadas con la tienda</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {hasChanges && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDraft(null)}
+                disabled={isSaving}
+                className="h-8.5 text-xs font-semibold"
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                Descartar
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
               onClick={handleSave}
               disabled={!hasChanges || isSaving}
-              className="gap-2"
+              className="h-8.5 text-xs font-bold gap-1.5"
             >
               {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              Guardar cambios
+              <span>Guardar carrusel</span>
             </Button>
           </div>
-        </CardContent>
-      </details>
+        </div>
+      </CardContent>
     </Card>
   )
 }

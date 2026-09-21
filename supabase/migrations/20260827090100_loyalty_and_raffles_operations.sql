@@ -431,7 +431,7 @@ create or replace function public.draw_raffle_winners(
 returns setof public.raffle_winners
 language plpgsql
 security definer
-set search_path = pg_catalog, public, auth
+set search_path = pg_catalog, public, auth, extensions
 as $$
 declare
   raffle public.raffles;
@@ -448,7 +448,7 @@ begin
     raise exception 'El sorteo no existe.' using errcode = 'no_data_found';
   end if;
 
-  if not public.has_org_permission(raffle.organization_id, 'promotions.manage') then
+  if current_setting('role', true) <> 'service_role' and not public.has_org_permission(raffle.organization_id, 'promotions.manage') then
     raise exception 'No tenés permiso para sortear.' using errcode = 'insufficient_privilege';
   end if;
 
@@ -471,7 +471,7 @@ begin
     raise exception 'El sorteo no tiene participantes.' using errcode = 'invalid_parameter_value';
   end if;
 
-  seed := coalesce(nullif(p_seed, ''), encode(gen_random_bytes(16), 'hex'));
+  seed := coalesce(nullif(p_seed, ''), md5(gen_random_uuid()::text || clock_timestamp()::text));
   -- setseed acepta [-1, 1]: se deriva un valor estable a partir del texto.
   perform setseed(
     ((('x' || substr(md5(seed), 1, 8))::bit(32)::bigint % 1000000)::numeric / 1000000)::double precision
@@ -508,7 +508,7 @@ begin
   update public.raffles
   set status = 'completed',
       drawn_at = now(),
-      drawn_by = auth.uid(),
+      drawn_by = coalesce(auth.uid(), raffle.created_by),
       draw_seed = seed,
       updated_at = now()
   where id = p_raffle_id;
@@ -820,11 +820,13 @@ revoke all on function public.draw_raffle_winners(uuid, text) from public, anon;
 revoke all on function public.adjust_loyalty_points(uuid, integer, text) from public, anon;
 revoke all on function public.set_loyalty_self_exclusion(uuid, timestamptz) from public, anon;
 
-grant execute on function public.award_loyalty_points_for_sale(uuid, uuid, numeric, uuid, text) to authenticated;
-grant execute on function public.redeem_points_for_raffle_tickets(uuid, uuid, integer) to authenticated;
-grant execute on function public.draw_raffle_winners(uuid, text) to authenticated;
-grant execute on function public.adjust_loyalty_points(uuid, integer, text) to authenticated;
-grant execute on function public.set_loyalty_self_exclusion(uuid, timestamptz) to authenticated;
-grant execute on function public.calculate_base_loyalty_points(numeric, numeric, integer, text) to authenticated;
+grant execute on function public.award_loyalty_points_for_sale(uuid, uuid, numeric, uuid, text) to authenticated, service_role;
+grant execute on function public.redeem_points_for_raffle_tickets(uuid, uuid, integer) to authenticated, service_role;
+grant execute on function public.draw_raffle_winners(uuid, text) to authenticated, service_role;
+grant execute on function public.adjust_loyalty_points(uuid, integer, text) to authenticated, service_role;
+grant execute on function public.set_loyalty_self_exclusion(uuid, timestamptz) to authenticated, service_role;
+grant execute on function public.calculate_base_loyalty_points(numeric, numeric, integer, text) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
 
 commit;

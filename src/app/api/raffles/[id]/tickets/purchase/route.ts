@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { routeParam } from '@/lib/api/route-params'
 import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
 
@@ -12,7 +13,7 @@ const schema = z.object({
 })
 
 export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'promotions' }, async (request: NextRequest, { organization }, context) => {
-  const id = (context as { params?: { id?: string } }).params?.id
+  const id = await routeParam(context, 'id')
   if (!id) return NextResponse.json({ error: 'Falta el sorteo' }, { status: 400 })
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Datos de compra inválidos', details: parsed.error.issues }, { status: 400 })

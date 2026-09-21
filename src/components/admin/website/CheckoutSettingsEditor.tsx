@@ -35,7 +35,9 @@ import {
   HelpCircle,
   Sparkles,
   MapPin,
+  Images,
 } from 'lucide-react'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { cn } from '@/lib/utils'
 
 // ─── Payment method labels & icons ───────────────────────────────────────────
@@ -99,6 +101,7 @@ function PaymentMethodCard({
 }) {
   const meta = PM_META[pmKey]
   const Icon = meta.Icon
+  const [qrMediaOpen, setQrMediaOpen] = useState(false)
   const set = <K extends keyof PaymentMethodConfig>(field: K, val: PaymentMethodConfig[K]) => {
     onChange(pmKey, { ...config, [field]: val })
   }
@@ -130,13 +133,13 @@ function PaymentMethodCard({
         </div>
         <Switch
           checked={config.enabled}
-          onCheckedChange={(v) => set('enabled', v)}
-          aria-label={`${config.enabled ? 'Deshabilitar' : 'Habilitar'} ${meta.label}`}
+          onCheckedChange={(val) => set('enabled', val)}
+          aria-label={`Habilitar ${meta.label}`}
         />
       </div>
 
       {config.enabled && (
-        <div className="space-y-3 pt-2 border-t border-border/60">
+        <div className="space-y-3 pt-3 border-t border-border/60">
           {/* Custom label */}
           <div className="space-y-1.5">
             <Label htmlFor={`${pmKey}-label`} className="text-xs font-semibold">
@@ -152,23 +155,22 @@ function PaymentMethodCard({
             />
           </div>
 
-          {/* Instructions shown to customer */}
           <div className="space-y-1.5">
             <Label htmlFor={`${pmKey}-instructions`} className="text-xs font-semibold">
-              Instrucciones para el cliente al pagar
+              Instrucciones para el cliente
             </Label>
             <Textarea
               id={`${pmKey}-instructions`}
               value={config.instructions ?? ''}
               onChange={(e) => set('instructions', e.target.value)}
-              rows={2}
-              maxLength={500}
-              className="resize-none rounded-xl text-xs bg-background"
               placeholder={meta.placeholder}
+              rows={2}
+              maxLength={300}
+              className="resize-none text-xs rounded-xl bg-background"
             />
           </div>
 
-          {/* Transfer-specific */}
+          {/* Transfer-specific options */}
           {pmKey === 'transfer' && (
             <div className="pt-2">
               <BankTransferOptionsEditor
@@ -193,17 +195,45 @@ function PaymentMethodCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="wallet-qr-url" className="text-xs font-semibold">URL de imagen QR</Label>
-                <Input
-                  id="wallet-qr-url"
-                  type="url"
-                  value={config.qrImageUrl ?? ''}
-                  onChange={(e) => set('qrImageUrl', e.target.value)}
-                  placeholder="https://cdn.tu-dominio.com/qr.png"
-                  maxLength={500}
-                  className="h-9 rounded-xl text-xs bg-background"
-                />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="wallet-qr-url" className="text-xs font-semibold">URL o imagen QR</Label>
+                  <button
+                    type="button"
+                    onClick={() => setQrMediaOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    <Images className="h-3 w-3" />
+                    <span>Elegir del historial</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="wallet-qr-url"
+                    type="url"
+                    value={config.qrImageUrl ?? ''}
+                    onChange={(e) => set('qrImageUrl', e.target.value)}
+                    placeholder="https://... o seleccioná del historial"
+                    maxLength={500}
+                    className="h-9 rounded-xl text-xs bg-background flex-1"
+                  />
+                  {config.qrImageUrl && (
+                    <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border bg-muted/40 p-0.5 flex items-center justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={config.qrImageUrl} alt="QR" className="h-full w-full object-contain" />
+                    </div>
+                  )}
+                </div>
               </div>
+              <WebsiteMediaLibraryDialog
+                open={qrMediaOpen}
+                onOpenChange={setQrMediaOpen}
+                title="Historial de Imágenes - Código QR"
+                description="Seleccioná la imagen de tu código QR de cobro o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+                onSelect={(url) => {
+                  set('qrImageUrl', url)
+                  toast.success('Imagen de QR asignada desde el historial')
+                }}
+              />
             </div>
           )}
         </div>

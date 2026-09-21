@@ -193,6 +193,8 @@ export const ModernStatsCard = memo(({
   )
 })
 
+ModernStatsCard.displayName = 'ModernStatsCard'
+
 // Componente de tarjeta de estadística compacta
 export const CompactStatsCard = ({ 
   title, 

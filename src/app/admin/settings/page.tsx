@@ -155,20 +155,6 @@ export default function AdminSettingsPage() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [hasChanges])
 
-  // Support Ctrl+S / Cmd+S shortcut to save
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        if (hasChanges && canSave && !isSaving) {
-          void handleSave()
-        }
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  })
-
   const handleThemeChange = (value: string) => {
     updateSetting('theme', value)
     setTheme(value as 'light' | 'dark' | 'system')
@@ -202,6 +188,20 @@ export default function AdminSettingsPage() {
     }
     toast.success(t.saved)
   }
+
+  // Support Ctrl+S / Cmd+S shortcut to save.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (hasChanges && canSave && !isSaving) {
+          void handleSave()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  })
 
   const handleReset = () => {
     resetSettings()

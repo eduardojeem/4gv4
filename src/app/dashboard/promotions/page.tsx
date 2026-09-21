@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -36,10 +37,12 @@ import {
   Percent,
   Coins,
   ExternalLink,
+  Settings,
 } from 'lucide-react'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { PROMOTIONS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { usePromotions } from '@/hooks/use-promotions'
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { cn } from '@/lib/utils'
 import type { Promotion } from '@/types/promotion'
 import {
@@ -100,38 +103,40 @@ function PublicBlockHeading({
   title,
   description,
   badgeText,
+  statusBadge,
 }: {
   step: number
-  icon: typeof Eye
+  icon: React.ElementType
   title: string
   description: string
   badgeText?: string
+  statusBadge?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 dark:border-slate-800/80 dark:bg-slate-900/60">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 text-xs font-bold text-white shadow-2xs">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 sm:px-4 sm:py-3 dark:border-slate-800/80 dark:bg-slate-900/60 shadow-2xs">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 text-xs font-bold text-white shadow-2xs">
           {step}
         </span>
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-              <Icon className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+              <Icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
               <span>{title}</span>
-            </h2>
+            </h3>
             {badgeText && (
-              <Badge variant="outline" className="hidden sm:inline-flex text-[10px] py-0 px-1.5 font-medium text-cyan-700 dark:text-cyan-300 border-cyan-500/30 bg-cyan-50/50 dark:bg-cyan-950/30">
+              <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium text-cyan-700 dark:text-cyan-300 border-cyan-500/30 bg-cyan-50/50 dark:bg-cyan-950/30">
                 {badgeText}
               </Badge>
             )}
           </div>
-          <p className="text-[11px] text-muted-foreground">{description}</p>
+          <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">{description}</p>
         </div>
       </div>
-      {badgeText && (
-        <Badge variant="outline" className="sm:hidden self-start text-[10px] py-0 px-1.5 font-medium text-cyan-700 dark:text-cyan-300 border-cyan-500/30 bg-cyan-50/50 dark:bg-cyan-950/30">
-          {badgeText}
-        </Badge>
+      {statusBadge && (
+        <div className="shrink-0 self-start sm:self-auto">
+          {statusBadge}
+        </div>
       )}
     </div>
   )
@@ -170,12 +175,31 @@ export default function PromotionsPage() {
     expiredActiveArray,
   } = usePromotions()
 
+  const { settings: websiteSettings } = useAdminWebsiteSettings()
+  const [orgSlug, setOrgSlug] = useState('')
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)
   const [duplicatingPromotion, setDuplicatingPromotion] = useState<Promotion | null>(null)
   const [deletingPromotion, setDeletingPromotion] = useState<Promotion | null>(null)
   const [tab, setTab] = useState('promociones')
   const [publicSectionTab, setPublicSectionTab] = useState<'all' | 'header' | 'carousel' | 'banners'>('all')
+
+  useEffect(() => {
+    fetch('/api/onboarding/status')
+      .then(r => r.json())
+      .catch(() => null)
+      .then((d: { organization?: { slug?: string } } | null) => {
+        setOrgSlug(d?.organization?.slug || '')
+      })
+
+    const handleSlugUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<string>
+      if (customEvent.detail) setOrgSlug(customEvent.detail)
+    }
+    window.addEventListener('website-slug-updated', handleSlugUpdate)
+    return () => window.removeEventListener('website-slug-updated', handleSlugUpdate)
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -189,6 +213,37 @@ export default function PromotionsPage() {
       setPublicSectionTab(block)
     }
   }, [])
+
+  const offersSectionEnabled = websiteSettings?.offers_section?.enabled ?? true
+  const carouselEnabled = websiteSettings?.offers_section?.carousel?.enabled ?? true
+  const bannerSlidesCount = websiteSettings?.offers_carousel?.slides?.length ?? 0
+  const liveOffersUrl = orgSlug ? `/${orgSlug}/ofertas` : '/ofertas'
+
+  const handleSelectPublicTab = (subTab: 'all' | 'banners' | 'header' | 'carousel') => {
+    setPublicSectionTab(subTab)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', 'publica')
+      if (subTab === 'all') {
+        url.searchParams.delete('block')
+      } else {
+        url.searchParams.set('block', subTab)
+      }
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+
+  const handleTabChange = (newTab: string) => {
+    setTab(newTab)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', newTab)
+      if (newTab !== 'publica') {
+        url.searchParams.delete('block')
+      }
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
 
   // Get alerts data — derivado de allPromotions (no filtradas)
   // para que las alertas no se oculten cuando el user aplica filtros
@@ -326,7 +381,7 @@ export default function PromotionsPage() {
           }}
         />
 
-        <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full max-w-2xl grid-cols-3 bg-slate-100/90 p-1 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-xl h-11">
             <TabsTrigger value="promociones" className="gap-1.5 text-xs font-semibold sm:text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs">
               <Percent className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
@@ -390,148 +445,215 @@ export default function PromotionsPage() {
           <TabsContent value="publica" className="mt-6 flex flex-col gap-6">
             {canEdit ? (
               <>
-                {/* Banner compacto de acceso rápido e información clara */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-cyan-200/80 bg-gradient-to-r from-cyan-50/70 via-white to-sky-50/40 p-3.5 sm:p-4 dark:border-cyan-900/40 dark:from-cyan-950/30 dark:via-slate-900/60 dark:to-sky-950/20 shadow-xs">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-xs">
-                      <Store className="h-4.5 w-4.5" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-50 truncate">
-                          Diseño y Experiencia de Ofertas en tu Tienda Web
-                        </h2>
-                        <Badge variant="outline" className="text-[10px] font-mono border-cyan-500/30 bg-cyan-50/60 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 shrink-0">
-                          /ofertas
-                        </Badge>
+                {/* Hero / Banner principal con estado en vivo y accesos directos */}
+                <div className="relative overflow-hidden rounded-2xl border border-cyan-200/80 bg-gradient-to-br from-cyan-50/80 via-white to-sky-50/50 p-4 sm:p-5 dark:border-cyan-900/40 dark:from-cyan-950/40 dark:via-slate-900/70 dark:to-sky-950/30 shadow-xs">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-cyan-600 to-sky-500 text-white shadow-sm ring-4 ring-cyan-500/10">
+                        <Store className="h-5 w-5" />
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-2xl">
-                        Configura cómo tus clientes ven los banners, carruseles de productos rebajados y textos en la página de ofertas.
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                            Página Pública de Ofertas
+                          </h2>
+                          <Badge variant="outline" className="font-mono text-xs border-cyan-500/30 bg-cyan-100/50 dark:bg-cyan-950/50 text-cyan-800 dark:text-cyan-300">
+                            {liveOffersUrl}
+                          </Badge>
+                          {offersSectionEnabled ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Página Visible
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              Página Oculta
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                          Personaliza la experiencia de tus clientes organizando los 3 bloques en el orden real que aparecen en tu tienda web.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold h-9 shadow-2xs hover:border-cyan-500"
+                      >
+                        <Link href="/admin/website">
+                          <Settings className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Configurar Sitio Web</span>
+                        </Link>
+                      </Button>
+
+                      <Button
+                        asChild
+                        size="sm"
+                        className="gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold h-9 shadow-xs"
+                      >
+                        <a href={liveOffersUrl} target="_blank" rel="noreferrer">
+                          <span>Ver /ofertas en vivo</span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5 shrink-0 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold h-8.5 shadow-xs hover:border-cyan-500 self-start sm:self-auto"
-                  >
-                    <a href="/ofertas" target="_blank" rel="noreferrer">
-                      <Store className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                      <span>Ver /ofertas en vivo</span>
-                      <ExternalLink className="h-3 w-3 opacity-60" />
-                    </a>
-                  </Button>
                 </div>
 
-                {/* Selector rápido y ordenado de sección para no tener que hacer scroll infinito */}
-                <div className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-slate-100/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Button
-                      size="sm"
-                      variant={publicSectionTab === 'carousel' ? 'default' : 'ghost'}
-                      className={cn(
-                        'rounded-xl text-xs h-8 px-3.5 gap-1.5 font-bold transition-all',
-                        publicSectionTab === 'carousel'
-                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
-                      )}
-                      onClick={() => setPublicSectionTab('carousel')}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      <span>2. Carrusel de Rebajados</span>
-                    </Button>
-
+                {/* Selector rápido y ordenado por pasos visuales */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-2 bg-slate-100/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 flex-1">
                     <Button
                       size="sm"
                       variant={publicSectionTab === 'banners' ? 'default' : 'ghost'}
                       className={cn(
-                        'rounded-xl text-xs h-8 px-3.5 gap-1.5 font-bold transition-all',
+                        'justify-start sm:justify-center rounded-xl text-xs h-9 px-3 gap-2 font-medium transition-all',
                         publicSectionTab === 'banners'
-                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700'
+                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700 font-semibold'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
                       )}
-                      onClick={() => setPublicSectionTab('banners')}
+                      onClick={() => handleSelectPublicTab('banners')}
                     >
-                      <GalleryHorizontalEnd className="h-3.5 w-3.5" />
-                      <span>3. Banners Publicitarios</span>
+                      <GalleryHorizontalEnd className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">1. Banners de Campaña</span>
+                      <Badge variant="outline" className={cn(
+                        "ml-auto sm:ml-1 text-[10px] py-0 px-1.5 font-normal",
+                        publicSectionTab === 'banners'
+                          ? "border-white/30 text-white bg-white/10"
+                          : "border-slate-300 dark:border-slate-700 text-slate-500"
+                      )}>
+                        {bannerSlidesCount}
+                      </Badge>
                     </Button>
 
                     <Button
                       size="sm"
                       variant={publicSectionTab === 'header' ? 'default' : 'ghost'}
                       className={cn(
-                        'rounded-xl text-xs h-8 px-3.5 gap-1.5 font-bold transition-all',
+                        'justify-start sm:justify-center rounded-xl text-xs h-9 px-3 gap-2 font-medium transition-all',
                         publicSectionTab === 'header'
-                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700'
+                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700 font-semibold'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
                       )}
-                      onClick={() => setPublicSectionTab('header')}
+                      onClick={() => handleSelectPublicTab('header')}
                     >
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>1. Encabezado & Colores</span>
+                      <Eye className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">2. Encabezado & Estilo</span>
+                      <Badge variant="outline" className={cn(
+                        "ml-auto sm:ml-1 text-[10px] py-0 px-1.5 font-normal",
+                        publicSectionTab === 'header'
+                          ? "border-white/30 text-white bg-white/10"
+                          : "border-slate-300 dark:border-slate-700 text-slate-500"
+                      )}>
+                        {offersSectionEnabled ? 'Activo' : 'Oculto'}
+                      </Badge>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant={publicSectionTab === 'carousel' ? 'default' : 'ghost'}
+                      className={cn(
+                        'justify-start sm:justify-center rounded-xl text-xs h-9 px-3 gap-2 font-medium transition-all',
+                        publicSectionTab === 'carousel'
+                          ? 'bg-cyan-600 text-white shadow-xs hover:bg-cyan-700 font-semibold'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                      )}
+                      onClick={() => handleSelectPublicTab('carousel')}
+                    >
+                      <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">3. Carrusel Rebajados</span>
+                      <Badge variant="outline" className={cn(
+                        "ml-auto sm:ml-1 text-[10px] py-0 px-1.5 font-normal",
+                        publicSectionTab === 'carousel'
+                          ? "border-white/30 text-white bg-white/10"
+                          : "border-slate-300 dark:border-slate-700 text-slate-500"
+                      )}>
+                        {carouselEnabled ? 'ON' : 'OFF'}
+                      </Badge>
                     </Button>
                   </div>
 
-                  <Button
-                    size="sm"
-                    variant={publicSectionTab === 'all' ? 'default' : 'ghost'}
-                    className={cn(
-                      'rounded-xl text-xs h-8 px-3 font-bold transition-all',
-                      publicSectionTab === 'all'
-                        ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                    )}
-                    onClick={() => setPublicSectionTab('all')}
-                  >
-                    Mostrar Todo (3 Pasos)
-                  </Button>
+                  <div className="flex items-center justify-end pt-1 md:pt-0 border-t md:border-t-0 border-slate-200 dark:border-slate-800">
+                    <Button
+                      size="sm"
+                      variant={publicSectionTab === 'all' ? 'default' : 'ghost'}
+                      className={cn(
+                        'w-full md:w-auto rounded-xl text-xs h-9 px-3.5 font-semibold transition-all',
+                        publicSectionTab === 'all'
+                          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                      )}
+                      onClick={() => handleSelectPublicTab('all')}
+                    >
+                      Ver Todo el Flujo
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Bloque 1: Configuración General */}
-                {(publicSectionTab === 'all' || publicSectionTab === 'header') && (
-                  <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
+                {/* Paso 1: Carrusel de Banners de Campañas (Arriba de todo en la tienda) */}
+                {(publicSectionTab === 'all' || publicSectionTab === 'banners') && (
+                  <div className="space-y-3 animate-in fade-in-50 duration-200">
                     <PublicBlockHeading
                       step={1}
-                      icon={Eye}
-                      title="Sección y Encabezado de /ofertas"
-                      description="Activa o desactiva la página pública entera, y personaliza su título, descripción y color de acento."
-                      badgeText="Configuración General"
-                    />
-                    <OffersSectionEditor className="max-w-none" />
-                  </section>
-                )}
-
-                {/* Bloque 2: Carrusel Automático de Rebajados */}
-                {(publicSectionTab === 'all' || publicSectionTab === 'carousel') && (
-                  <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
-                    <PublicBlockHeading
-                      step={2}
-                      icon={Sparkles}
-                      title="Carrusel Automático de Productos Rebajados"
-                      description="Se alimenta solo con tus ofertas automáticas activas, ordenadas de mayor a menor descuento."
-                      badgeText="Automático en Vivo"
-                    />
-                    <OffersCarouselSettingsCard />
-                  </section>
-                )}
-
-                {/* Bloque 3: Carrusel de Banners de Campañas */}
-                {(publicSectionTab === 'all' || publicSectionTab === 'banners') && (
-                  <section className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
-                    <PublicBlockHeading
-                      step={3}
                       icon={GalleryHorizontalEnd}
-                      title="Carrusel de Banners y Campañas Gráficas"
-                      description="Publica diapositivas publicitarias diseñadas por ti (imagen, texto y botón de compra). Hasta 6 banners."
-                      badgeText="Banners Personalizados"
+                      title="Banners Publicitarios y Campañas"
+                      description="Carrusel superior con diapositivas destacadas, imágenes llamativas y botones directos de compra."
+                      badgeText="Banners Gráficos"
+                      statusBadge={
+                        <Badge variant="outline" className="text-xs font-semibold border-cyan-500/30 text-cyan-700 dark:text-cyan-300">
+                          {bannerSlidesCount} / 6 banners configurados
+                        </Badge>
+                      }
                     />
                     <OffersPromoCarouselEditor
                       settingKey="offers_carousel"
                       title="Banners de la página de ofertas"
-                      description="Publica campañas con imágenes llamativas y enlaces directos a categorías en /ofertas"
+                      description="Publica campañas con imágenes llamativas y enlaces directos a colecciones o productos."
                     />
-                  </section>
+                  </div>
+                )}
+
+                {/* Paso 2: Configuración General y Encabezado */}
+                {(publicSectionTab === 'all' || publicSectionTab === 'header') && (
+                  <div className="space-y-3 animate-in fade-in-50 duration-200">
+                    <PublicBlockHeading
+                      step={2}
+                      icon={Eye}
+                      title="Encabezado y Estilo de /ofertas"
+                      description="Controla la visibilidad pública de la página, título principal, descripción y paleta de colores de acento."
+                      badgeText="Textos y Estilo"
+                      statusBadge={
+                        <Badge variant="outline" className={cn("text-xs font-semibold", offersSectionEnabled ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400" : "border-amber-500/30 text-amber-700 dark:text-amber-400")}>
+                          {offersSectionEnabled ? 'Visible al público' : 'Oculto temporalmente'}
+                        </Badge>
+                      }
+                    />
+                    <OffersSectionEditor className="max-w-none" />
+                  </div>
+                )}
+
+                {/* Paso 3: Carrusel Automático de Rebajados */}
+                {(publicSectionTab === 'all' || publicSectionTab === 'carousel') && (
+                  <div className="space-y-3 animate-in fade-in-50 duration-200">
+                    <PublicBlockHeading
+                      step={3}
+                      icon={Sparkles}
+                      title="Carrusel de Productos Rebajados"
+                      description="Vitrina interactiva que muestra automáticamente los productos de tu catálogo con mayor porcentaje de descuento."
+                      badgeText="Automático en Vivo"
+                      statusBadge={
+                        <Badge variant="outline" className={cn("text-xs font-semibold", carouselEnabled ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400" : "border-slate-300 text-slate-500")}>
+                          {carouselEnabled ? 'Carrusel Activado' : 'Carrusel Desactivado'}
+                        </Badge>
+                      }
+                    />
+                    <OffersCarouselSettingsCard />
+                  </div>
                 )}
               </>
             ) : (

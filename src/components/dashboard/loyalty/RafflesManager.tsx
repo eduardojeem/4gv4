@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Coins,
   Gift,
+  Dice5,
   Loader2,
   Plus,
   ShieldAlert,
@@ -33,17 +34,27 @@ import {
   HelpCircle,
   Calendar,
   CheckCircle2,
-  Dice5,
   Eye,
-  Info,
+  EyeOff,
   Crown,
   Medal,
   ChevronDown,
   ChevronUp,
   Search,
-  ShoppingCart,
+  PartyPopper,
+  Copy,
+  Check,
+  Share2,
+  MessageCircle,
+  ShieldCheck,
+  Phone,
+  Mail,
+  ExternalLink,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { responsiblePlayNotice } from '@/lib/raffles/responsible-play'
+import { formatCurrency } from '@/lib/currency'
+import { explainSpending } from '@/lib/loyalty/explain'
 import { RaffleRedeemDialog } from './RaffleRedeemDialog'
 import type { RaffleRow } from '@/hooks/use-loyalty'
 
@@ -118,8 +129,8 @@ export const RAFFLE_TEMPLATES: RaffleTemplate[] = [
     terms: 'Sorteo transparente certificado por sistema. Los ganadores se anunciarán en nuestras redes y serán contactados por WhatsApp.',
     points_per_ticket: 50,
     min_purchase_amount: 100000,
-    auto_entry_on_sale: true,
-    allow_point_purchase: true,
+    auto_entry_on_sale: false,
+    allow_point_purchase: false,
     point_purchase_price: 1000,
     max_tickets_per_customer: '20',
     max_tickets_total: 1000,
@@ -143,8 +154,8 @@ export const RAFFLE_TEMPLATES: RaffleTemplate[] = [
     terms: 'Válido para clientes con ficha y teléfono verificado. Notificación directa al ganador.',
     points_per_ticket: 30,
     min_purchase_amount: 50000,
-    auto_entry_on_sale: true,
-    allow_point_purchase: true,
+    auto_entry_on_sale: false,
+    allow_point_purchase: false,
     point_purchase_price: 1000,
     max_tickets_per_customer: '10',
     max_tickets_total: 500,
@@ -167,8 +178,8 @@ export const RAFFLE_TEMPLATES: RaffleTemplate[] = [
     terms: 'Sorteo automático este domingo a las 20:00 hs.',
     points_per_ticket: 20,
     min_purchase_amount: 30000,
-    auto_entry_on_sale: true,
-    allow_point_purchase: true,
+    auto_entry_on_sale: false,
+    allow_point_purchase: false,
     point_purchase_price: 1000,
     max_tickets_per_customer: '5',
     max_tickets_total: 250,
@@ -186,6 +197,21 @@ function formatDateTimeLocal(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/**
+ * Un sorteo nuevo arranca con el camino simple: el cliente junta puntos
+ * comprando y los canjea por tickets cuando quiere.
+ *
+ * Las dos opciones que estaban prendidas por defecto quedan apagadas, porque
+ * ninguna de las dos es lo que el nombre sugiere:
+ *
+ * - `auto_entry_on_sale` no reparte números por comprar: **gasta los puntos
+ *   del cliente** al cerrar la venta, hasta cinco tickets, sin preguntarle
+ *   (ver `tryAutoRaffleEntryForSale`). Gastar el saldo de alguien sin que lo
+ *   pida no puede ser el valor por defecto.
+ * - `allow_point_purchase` deja pagar los puntos en efectivo, o sea vender
+ *   números de sorteo por plata. Es una decisión del negocio, no algo que
+ *   deba venir puesto.
+ */
 const EMPTY_RAFFLE = {
   name: '',
   description: '',
@@ -195,8 +221,8 @@ const EMPTY_RAFFLE = {
   ends_at: '',
   points_per_ticket: 50,
   min_purchase_amount: 100000,
-  auto_entry_on_sale: true,
-  allow_point_purchase: true,
+  auto_entry_on_sale: false,
+  allow_point_purchase: false,
   point_purchase_price: 1000,
   max_tickets_per_customer: '',
   max_tickets_total: 1000,
@@ -205,6 +231,22 @@ const EMPTY_RAFFLE = {
 
 function ticketCount(raffle: RaffleRow) {
   return raffle.tickets?.[0]?.count ?? 0
+}
+
+/** Oculta parcialmente un número de teléfono para privacidad (ej. 0981 •••• 456 o +595 981 •••• 456) */
+function maskPhone(phone?: string | null): string {
+  if (!phone) return ''
+  const trimmed = phone.trim()
+  const digits = trimmed.replace(/\D/g, '')
+  if (digits.length <= 4) return trimmed
+
+  const startDigits = digits.length >= 10 ? 4 : 3
+  const endDigits = 3
+  const start = digits.slice(0, startDigits)
+  const end = digits.slice(-endDigits)
+  const isPlus = trimmed.startsWith('+')
+
+  return `${isPlus ? '+' : ''}${start} •••• ${end}`
 }
 
 export function RafflesManager({
@@ -220,6 +262,7 @@ export function RafflesManager({
   const [saving, setSaving] = useState(false)
   const [drawing, setDrawing] = useState<string | null>(null)
   const [confirmDraw, setConfirmDraw] = useState<RaffleRow | null>(null)
+  const [confirmClose, setConfirmClose] = useState<RaffleRow | null>(null)
   const [draft, setDraft] = useState(EMPTY_RAFFLE)
   const [prizes, setPrizes] = useState<Array<{ position: number; title: string }>>([
     { position: 1, title: '' },
@@ -253,7 +296,14 @@ export function RafflesManager({
   const [viewWinnersRaffle, setViewWinnersRaffle] = useState<RaffleRow | null>(null)
   const [winnersData, setWinnersData] = useState<WinnerItem[]>([])
   const [loadingWinners, setLoadingWinners] = useState(false)
+  const [copiedWinners, setCopiedWinners] = useState(false)
+  const [showAuditDetails, setShowAuditDetails] = useState(false)
+  const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({})
   const [showGuide, setShowGuide] = useState(false)
+
+  const toggleRevealPhone = (key: string) => {
+    setRevealedPhones((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   // Modal para ver participantes de un sorteo
   const [viewParticipantsRaffle, setViewParticipantsRaffle] = useState<RaffleRow | null>(null)
@@ -305,15 +355,25 @@ export function RafflesManager({
 
   const handleDraw = async () => {
     if (!confirmDraw) return
-    const id = confirmDraw.id
+    const raffleToDraw = confirmDraw
+    const id = raffleToDraw.id
     setDrawing(id)
     const result = await onDraw(id)
     setDrawing(null)
     setConfirmDraw(null)
 
-    // Cargar automáticamente los ganadores para mostrar el podio
+    // Cargar y mostrar inmediatamente el modal de ganadores al terminar el sorteo
     if (result) {
-      handleViewWinners(confirmDraw)
+      const completedRaffle: RaffleRow = {
+        ...raffleToDraw,
+        status: 'completed',
+        drawn_at: new Date().toISOString(),
+      }
+      setViewWinnersRaffle(completedRaffle)
+      if (Array.isArray(result) && result.length > 0) {
+        setWinnersData(result as WinnerItem[])
+      }
+      await handleViewWinners(completedRaffle)
     }
   }
 
@@ -324,6 +384,9 @@ export function RafflesManager({
       const res = await fetch(`/api/raffles/${raffle.id}`)
       if (res.ok) {
         const body = await res.json()
+        if (body.raffle) {
+          setViewWinnersRaffle(body.raffle)
+        }
         setWinnersData(body.winners || [])
       }
     } catch {
@@ -331,6 +394,51 @@ export function RafflesManager({
     } finally {
       setLoadingWinners(false)
     }
+  }
+
+  const handleCopyWinners = () => {
+    if (!viewWinnersRaffle || winnersData.length === 0) return
+    const dateStr = viewWinnersRaffle.drawn_at
+      ? new Date(viewWinnersRaffle.drawn_at).toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : new Date().toLocaleDateString('es-AR')
+
+    const lines = [
+      `🎉 ¡GANADORES DEL SORTEO OFICIAL! 🎉`,
+      `🏆 Sorteo: ${viewWinnersRaffle.name}`,
+      `📅 Realizado: ${dateStr}`,
+      '',
+      '🥇 LISTA DE GANADORES:',
+      ...winnersData.map((w) => {
+        const medal =
+          w.prize_position === 1
+            ? '🥇 1º Puesto'
+            : w.prize_position === 2
+            ? '🥈 2º Puesto'
+            : w.prize_position === 3
+            ? '🥉 3º Puesto'
+            : `🎖️ ${w.prize_position}º Puesto`
+        const ticket = w.ticket?.ticket_number ? ` (Boleto #${w.ticket.ticket_number})` : ''
+        const name = w.customer?.name || 'Cliente Registrado'
+        return `${medal}: ${w.prize_title}\n   Ganador: ${name}${ticket}`
+      }),
+      '',
+      viewWinnersRaffle.draw_seed
+        ? `🔐 Semilla de Auditoría: ${viewWinnersRaffle.draw_seed}`
+        : '',
+      '',
+      '¡Felicitaciones a los afortunados y gracias a todos por participar!',
+    ].filter(Boolean)
+
+    navigator.clipboard.writeText(lines.join('\n'))
+    setCopiedWinners(true)
+    toast.success('Lista de ganadores copiada al portapapeles')
+    setTimeout(() => setCopiedWinners(false), 3000)
   }
 
   const handleViewParticipants = async (raffle: RaffleRow) => {
@@ -678,7 +786,10 @@ export function RafflesManager({
                               size="sm"
                               variant="outline"
                               className="rounded-xl text-xs"
-                              onClick={() => onUpdateStatus(raffle.id, 'closed')}
+                              // Cerrar no tiene vuelta atrás: un sorteo cerrado no se
+                              // puede volver a publicar y ya nadie puede canjear. Antes
+                              // se hacía de un clic, sin preguntar nada.
+                              onClick={() => setConfirmClose(raffle)}
                             >
                               Cerrar venta
                             </Button>
@@ -688,7 +799,11 @@ export function RafflesManager({
                               size="sm"
                               className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold text-xs shadow-md shadow-amber-500/20"
                               onClick={() => setConfirmDraw(raffle)}
-                              disabled={drawing === raffle.id}
+                              // Sin números canjeados no hay entre quiénes sortear: la
+                              // base lo rechaza. Antes el botón invitaba igual, pedía
+                              // confirmar «esta acción es definitiva» y recién ahí fallaba.
+                              disabled={drawing === raffle.id || ticketCount(raffle) === 0}
+                              title={ticketCount(raffle) === 0 ? 'Todavía nadie canjeó números en este sorteo' : undefined}
                             >
                               {drawing === raffle.id ? (
                                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -697,6 +812,12 @@ export function RafflesManager({
                               )}
                               Sortear Ahora
                             </Button>
+                          )}
+                          {(raffle.status === 'closed' || (raffle.status === 'published' && ended)) &&
+                            ticketCount(raffle) === 0 && (
+                            <span className="text-[11px] text-muted-foreground">
+                              Nadie canjeó números: no hay a quién sortear.
+                            </span>
                           )}
                         </>
                       )}
@@ -825,92 +946,273 @@ export function RafflesManager({
 
       {/* ── MODAL: VER GANADORES DEL SORTEO ───────────────────────────── */}
       <Dialog open={!!viewWinnersRaffle} onOpenChange={(open) => !open && setViewWinnersRaffle(null)}>
-        <DialogContent className="max-w-lg rounded-2xl">
-          <DialogHeader>
-            <div className="flex items-center gap-2 text-amber-600">
-              <Trophy className="h-5 w-5" />
-              <DialogTitle className="text-base font-extrabold">
-                Ganadores del Sorteo: {viewWinnersRaffle?.name}
-              </DialogTitle>
+        <DialogContent className="sm:max-w-[620px] max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl border border-amber-500/30 shadow-2xl bg-card">
+          <DialogHeader className="p-5 pb-4 bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-emerald-500/15 dark:from-amber-950/40 dark:via-yellow-950/30 dark:to-emerald-950/40 border-b border-amber-500/20 text-left">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/25">
+                <Trophy className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-500/30 text-[10px] uppercase font-bold tracking-wider">
+                    🎉 Resultados Oficiales
+                  </Badge>
+                  {viewWinnersRaffle?.drawn_at && (
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
+                      <Calendar className="h-3 w-3" />
+                      {new Date(viewWinnersRaffle.drawn_at).toLocaleDateString('es-AR', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                </div>
+                <DialogTitle className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate mt-1">
+                  {viewWinnersRaffle?.name}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-600 dark:text-slate-400">
+                  Ganadores certificados y seleccionados al azar mediante algoritmo auditado.
+                </DialogDescription>
+              </div>
             </div>
-            <DialogDescription className="text-xs">
-              Resultados certificados extraídos al azar con semilla inmutable.
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
-            {loadingWinners ? (
-              <div className="flex items-center justify-center py-8 text-xs text-slate-500">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin text-cyan-600" />
-                Cargando ganadores...
+          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            {loadingWinners && winnersData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-500 space-y-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 animate-pulse">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+                <p className="text-xs font-semibold">Cargando ganadores certificados...</p>
               </div>
             ) : winnersData.length === 0 ? (
-              <p className="rounded-xl border border-dashed py-6 text-center text-xs text-slate-500">
-                No se registraron ganadores para este sorteo.
-              </p>
+              <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 py-10 text-center space-y-2">
+                <HelpCircle className="h-8 w-8 text-slate-400 mx-auto" />
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  No se registraron ganadores para este sorteo.
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Verificá que el sorteo haya tenido participantes activos al momento de cerrarlo.
+                </p>
+              </div>
             ) : (
-              <div className="space-y-2.5">
-                {winnersData.map((winner, idx) => (
-                  <div
-                    key={winner.id || idx}
-                    className={`flex items-center justify-between rounded-xl border p-3.5 transition-all ${
-                      winner.prize_position === 1
-                        ? 'border-amber-300 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/30'
-                        : winner.prize_position === 2
-                        ? 'border-slate-300 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-900/50'
-                        : 'border-orange-200 bg-orange-50/50 dark:border-orange-950 dark:bg-orange-950/20'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-extrabold text-sm shadow-xs ${
-                          winner.prize_position === 1
-                            ? 'bg-amber-500 text-slate-950'
-                            : winner.prize_position === 2
-                            ? 'bg-slate-400 text-white'
-                            : 'bg-orange-400 text-white'
-                        }`}
-                      >
-                        {winner.prize_position === 1 ? (
-                          <Crown className="h-5 w-5" />
-                        ) : (
-                          `${winner.prize_position}º`
-                        )}
+              <div className="space-y-3">
+                {winnersData.map((winner, idx) => {
+                  const isFirst = winner.prize_position === 1
+                  const isSecond = winner.prize_position === 2
+                  const isThird = winner.prize_position === 3
+                  const customerName = winner.customer?.name || 'Cliente Registrado'
+                  const customerPhone = winner.customer?.phone
+                  const customerEmail = winner.customer?.email
+                  const ticketNumber = winner.ticket?.ticket_number ?? '---'
+                  const rawPhone = customerPhone ? customerPhone.replace(/\D/g, '') : null
+
+                  return (
+                    <div
+                      key={winner.id || idx}
+                      className={`relative rounded-2xl border p-4 transition-all ${
+                        isFirst
+                          ? 'border-amber-400/90 bg-gradient-to-br from-amber-500/15 via-amber-400/5 to-transparent shadow-md shadow-amber-500/10 dark:border-amber-500/40 dark:from-amber-950/40'
+                          : isSecond
+                          ? 'border-slate-300 bg-gradient-to-br from-slate-200/40 to-transparent dark:border-slate-700 dark:bg-slate-900/50'
+                          : isThird
+                          ? 'border-orange-200 bg-gradient-to-br from-orange-100/40 to-transparent dark:border-orange-900/40 dark:bg-orange-950/30'
+                          : 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30'
+                      }`}
+                    >
+                      {/* Cabecera del Ganador: Posición y Premio */}
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-200/60 dark:border-slate-800/60">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-black text-sm shadow-xs ${
+                              isFirst
+                                ? 'bg-gradient-to-tr from-amber-400 to-yellow-400 text-slate-950 shadow-amber-500/20'
+                                : isSecond
+                                ? 'bg-slate-300 text-slate-900 dark:bg-slate-700 dark:text-slate-100'
+                                : isThird
+                                ? 'bg-orange-400 text-white shadow-orange-500/20'
+                                : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            }`}
+                          >
+                            {isFirst ? (
+                              <Crown className="h-5 w-5" />
+                            ) : isSecond || isThird ? (
+                              <Medal className="h-5 w-5" />
+                            ) : (
+                              `${winner.prize_position}º`
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <span
+                              className={`text-[10px] font-black uppercase tracking-wider block ${
+                                isFirst
+                                  ? 'text-amber-700 dark:text-amber-400'
+                                  : isSecond
+                                  ? 'text-slate-600 dark:text-slate-300'
+                                  : isThird
+                                  ? 'text-orange-600 dark:text-orange-400'
+                                  : 'text-slate-500'
+                              }`}
+                            >
+                              {winner.prize_position}º Puesto
+                            </span>
+                            <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 truncate">
+                              {winner.prize_title}
+                            </h4>
+                          </div>
+                        </div>
+
+                        {/* Boleto Ganador */}
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+                            Boleto Ganador
+                          </span>
+                          <Badge className="bg-slate-950 text-amber-400 font-mono text-xs px-2.5 py-0.5 border border-amber-400/30 dark:bg-black dark:text-amber-300">
+                            <Ticket className="h-3 w-3 mr-1 text-amber-400" />
+                            #{ticketNumber}
+                          </Badge>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          {winner.prize_position}º Premio: {winner.prize_title}
-                        </p>
-                        <p className="truncate text-sm font-extrabold text-slate-900 dark:text-slate-50">
-                          {winner.customer?.name || 'Cliente registrado'}
-                        </p>
-                        {(winner.customer?.phone || winner.customer?.email) && (
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {winner.customer?.phone || winner.customer?.email}
+
+                      {/* Datos del Cliente y Acciones de Contacto */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 truncate">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-extrabold text-slate-700 dark:text-slate-300">
+                              {customerName.charAt(0).toUpperCase()}
+                            </span>
+                            {customerName}
                           </p>
+                          {(customerPhone || customerEmail) && (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+                              {customerPhone && (
+                                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100/90 dark:bg-slate-800/90 px-2 py-0.5 rounded-lg border border-slate-200/70 dark:border-slate-700/70">
+                                  <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                                  <span>
+                                    {revealedPhones[winner.id || String(idx)]
+                                      ? customerPhone
+                                      : maskPhone(customerPhone)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleRevealPhone(winner.id || String(idx))}
+                                    className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 ml-0.5 transition-colors p-0.5 rounded hover:bg-slate-200/60 dark:hover:bg-slate-700/60"
+                                    title={revealedPhones[winner.id || String(idx)] ? 'Ocultar número' : 'Ver número completo'}
+                                    aria-label={revealedPhones[winner.id || String(idx)] ? 'Ocultar número' : 'Ver número completo'}
+                                  >
+                                    {revealedPhones[winner.id || String(idx)] ? (
+                                      <EyeOff className="h-3 w-3" />
+                                    ) : (
+                                      <Eye className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                </span>
+                              )}
+                              {customerEmail && (
+                                <span className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3 text-slate-400" />
+                                  {customerEmail}
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Botón WhatsApp directo si tiene teléfono */}
+                        {rawPhone && (
+                          <div className="shrink-0">
+                            <a
+                              href={`https://wa.me/${rawPhone}?text=${encodeURIComponent(
+                                `¡Hola ${customerName}! 🎉 Te escribimos desde el local para darte una gran noticia: ¡Sos el ganador/a del ${winner.prize_position}º Premio (${winner.prize_title}) en nuestro sorteo "${viewWinnersRaffle?.name}" con el boleto #${ticketNumber}! ¡Muchas felicitaciones!`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors"
+                              title="Enviar mensaje de felicitación por WhatsApp"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              <span>Avisar por WhatsApp</span>
+                            </a>
+                          </div>
                         )}
                       </div>
                     </div>
+                  )
+                })}
+              </div>
+            )}
 
-                    <div className="text-right shrink-0">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                        Número ganador
-                      </span>
-                      <Badge className="bg-slate-900 text-white font-mono text-xs px-2.5 py-0.5 dark:bg-white dark:text-slate-900">
-                        #{winner.ticket?.ticket_number ?? '---'}
-                      </Badge>
+            {/* Auditoría y Semilla Criptográfica */}
+            {viewWinnersRaffle?.draw_seed && (
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/60 mt-3">
+                <div
+                  className="flex items-center justify-between cursor-pointer select-none text-xs font-semibold text-slate-700 dark:text-slate-300"
+                  onClick={() => setShowAuditDetails(!showAuditDetails)}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    <span>Auditoría de Transparencia</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                    {showAuditDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </span>
+                </div>
+                {showAuditDetails && (
+                  <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5 text-[11px] text-slate-500">
+                    <p>
+                      El sorteo fue ejecutado de forma pseudoaleatoria determinística con semilla inmutable. Esto garantiza que el orden de ganadores no puede ser alterado ni repetido.
+                    </p>
+                    <div className="flex items-center justify-between bg-white dark:bg-slate-950 p-2 rounded-xl border font-mono text-[10px]">
+                      <span className="truncate mr-2">Semilla: {viewWinnersRaffle.draw_seed}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[10px]"
+                        onClick={() => {
+                          navigator.clipboard.writeText(viewWinnersRaffle.draw_seed || '')
+                          toast.success('Semilla copiada al portapapeles')
+                        }}
+                      >
+                        Copiar
+                      </Button>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="p-4 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex flex-row items-center justify-between gap-2 sm:justify-between">
             <Button
               type="button"
               variant="outline"
-              className="rounded-xl text-xs"
+              size="sm"
+              className="gap-1.5 rounded-xl text-xs font-semibold border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              onClick={handleCopyWinners}
+              disabled={winnersData.length === 0}
+            >
+              {copiedWinners ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>¡Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Copiar para Redes</span>
+                </>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="rounded-xl text-xs px-5 bg-slate-900 text-white dark:bg-white dark:text-slate-950"
               onClick={() => setViewWinnersRaffle(null)}
             >
               Cerrar
@@ -939,33 +1241,25 @@ export function RafflesManager({
           </DialogHeader>
 
           <div className="space-y-5 pt-2">
-            {/* Plantillas Rápidas Pre-cargadas */}
-            <div className="rounded-2xl border border-cyan-200/90 bg-gradient-to-r from-cyan-50/70 via-blue-50/50 to-indigo-50/40 p-3.5 dark:border-cyan-900/60 dark:from-cyan-950/30 dark:via-blue-950/20 dark:to-indigo-950/20 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-950 dark:text-cyan-200">
-                  <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                  <span>Plantillas Rápidas Pre-cargadas</span>
-                </div>
-                <span className="text-[10px] text-cyan-700/90 dark:text-cyan-400 font-semibold">1-clic para autocompletar</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Las plantillas son el camino principal: dejan el sorteo casi
+                armado y después se corrige lo que haga falta. */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Empezá con un sorteo armado
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {RAFFLE_TEMPLATES.map((tpl) => (
                   <button
                     key={tpl.id}
                     type="button"
                     onClick={() => applyTemplate(tpl)}
-                    className="flex flex-col items-start gap-1 rounded-xl border border-cyan-200/70 bg-white/90 p-2.5 text-left transition-all hover:border-cyan-500 hover:bg-cyan-50/60 hover:shadow-xs dark:border-slate-800 dark:bg-slate-900/80 dark:hover:bg-slate-800/80 cursor-pointer"
+                    className="flex flex-col items-start gap-1 rounded-xl border border-slate-200 bg-white p-2.5 text-left transition-colors hover:border-cyan-500 hover:bg-cyan-50/60 dark:border-slate-800 dark:bg-slate-900/80 dark:hover:bg-slate-800/80"
                   >
-                    <div className="flex items-center justify-between w-full">
-                      <span className="text-base">{tpl.icon}</span>
-                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">
-                        {tpl.badge}
-                      </span>
-                    </div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight mt-0.5">
+                    <span className="text-base">{tpl.icon}</span>
+                    <span className="text-xs font-bold leading-tight text-slate-900 dark:text-slate-100">
                       {tpl.label}
                     </span>
-                    <span className="text-[10px] text-slate-500 line-clamp-2 leading-tight">
+                    <span className="line-clamp-2 text-[11px] leading-tight text-muted-foreground">
                       {tpl.description}
                     </span>
                   </button>
@@ -973,60 +1267,27 @@ export function RafflesManager({
               </div>
             </div>
 
-            {/* 1. Datos Principales */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-600 text-white text-[10px] font-bold">1</span>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Información Básica
-                </h4>
-              </div>
-
+            {/* ── Lo básico: sin esto no hay sorteo ── */}
+            <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="raffle-name" className="text-xs font-semibold">
-                  Nombre de la Campaña de Sorteo <span className="text-rose-500">*</span>
+                <Label htmlFor="raffle-name" className="text-sm font-semibold">
+                  ¿Cómo se llama el sorteo? <span className="text-rose-500">*</span>
                 </Label>
                 <Input
                   id="raffle-name"
-                  placeholder="Ej: Gran Sorteo Aniversario 2026 / Sorteo Mayoristas"
+                  placeholder="Ej: Sorteo de aniversario"
                   value={draft.name}
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                  className="rounded-xl text-xs bg-white dark:bg-slate-950 font-medium h-10"
+                  className="h-10 rounded-xl bg-white text-sm font-medium dark:bg-slate-950"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="raffle-requirements" className="text-xs font-semibold">
-                  Requisitos / Términos de Participación <span className="text-[11px] font-normal text-slate-400">(opcional)</span>
-                </Label>
-                <Textarea
-                  id="raffle-requirements"
-                  rows={2}
-                  placeholder="Ej: Participan compras mayores a Gs. 100.000 registradas en el mes con cliente identificado."
-                  value={draft.requirements}
-                  onChange={(e) => setDraft((d) => ({ ...d, requirements: e.target.value }))}
-                  className="rounded-xl text-xs bg-white dark:bg-slate-950 resize-none"
-                />
-              </div>
-            </div>
-
-            {/* 2. Premios a Sortear */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold">2</span>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Podio de Premios
-                  </h4>
-                </div>
-                <span className="text-[11px] text-slate-400 font-medium">Orden de asignación</span>
-              </div>
-
-              <div className="space-y-2.5">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">¿Qué se sortea?</Label>
                 {prizes.map((prize, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-black text-xs shadow-xs ${
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
                         index === 0
                           ? 'bg-amber-500 text-slate-950'
                           : index === 1
@@ -1039,10 +1300,8 @@ export function RafflesManager({
                     <Input
                       placeholder={
                         index === 0
-                          ? '1º Premio (ej: Smartphone Xiaomi Note 13)'
-                          : index === 1
-                          ? '2º Premio (ej: Auriculares Inalámbricos)'
-                          : `${index + 1}º Premio (ej: Vale de Compra Gs. 500.000)`
+                          ? 'Primer premio (ej: un celular)'
+                          : `${index + 1}º premio (ej: un vale de compra)`
                       }
                       value={prize.title}
                       onChange={(e) =>
@@ -1050,7 +1309,7 @@ export function RafflesManager({
                           current.map((p, i) => (i === index ? { ...p, title: e.target.value } : p))
                         )
                       }
-                      className="rounded-xl text-xs bg-white dark:bg-slate-950 font-medium h-9.5"
+                      className="h-9.5 rounded-xl bg-white text-xs font-medium dark:bg-slate-950"
                     />
                     {prizes.length > 1 && (
                       <Button
@@ -1065,47 +1324,171 @@ export function RafflesManager({
                     )}
                   </div>
                 ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-full justify-center gap-1.5 rounded-xl border-dashed text-xs"
+                  onClick={() => setPrizes((current) => [...current, { position: current.length + 1, title: '' }])}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Agregar otro premio
+                </Button>
               </div>
 
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1.5 text-xs text-cyan-700 hover:bg-cyan-50 dark:text-cyan-300 rounded-xl border-dashed h-8 w-full justify-center"
-                onClick={() => setPrizes((current) => [...current, { position: current.length + 1, title: '' }])}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Agregar otro premio al sorteo
-              </Button>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="raffle-end" className="text-sm font-semibold">
+                    ¿Hasta cuándo se participa?
+                  </Label>
+                  <Input
+                    id="raffle-end"
+                    type="datetime-local"
+                    value={draft.ends_at}
+                    onChange={(e) => setDraft((d) => ({ ...d, ends_at: e.target.value }))}
+                    className="h-10 rounded-xl bg-white text-xs dark:bg-slate-950"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Ese día se cierra y se puede sortear.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="raffle-cost" className="text-sm font-semibold">
+                    ¿Cuántos puntos cuesta un número?
+                  </Label>
+                  <Input
+                    id="raffle-cost"
+                    type="number"
+                    min={1}
+                    value={draft.points_per_ticket}
+                    onChange={(e) => setDraft((d) => ({ ...d, points_per_ticket: Number(e.target.value) }))}
+                    className="h-10 rounded-xl bg-white text-xs font-semibold tabular-nums dark:bg-slate-950"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {explainSpending({ points_per_ticket: draft.points_per_ticket, name: draft.name }) ??
+                      'El cliente canjea sus puntos por números.'}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {/* 3. Reglas de Participación Automática en Compras (POS / Caja) */}
-            <div className="rounded-2xl border border-cyan-200/80 bg-cyan-50/40 p-4 dark:border-cyan-900/40 dark:bg-cyan-950/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-600 text-white text-[10px] font-bold">3</span>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-950 dark:text-cyan-200">
-                    Participación Directa por Compra en Caja (POS)
-                  </h4>
+            {/* ── Todo lo demás, plegado ── */}
+            <details className="group rounded-xl border border-slate-200 dark:border-slate-800">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 [&::-webkit-details-marker]:hidden">
+                <span>Opciones avanzadas</span>
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  <span className="group-open:hidden">Ver ↓</span>
+                  <span className="hidden group-open:inline">Ocultar ↑</span>
+                </span>
+              </summary>
+
+              <div className="space-y-5 border-t border-slate-100 p-4 dark:border-slate-800">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raffle-start" className="text-xs font-semibold">Desde cuándo</Label>
+                    <Input
+                      id="raffle-start"
+                      type="datetime-local"
+                      value={draft.starts_at}
+                      onChange={(e) => setDraft((d) => ({ ...d, starts_at: e.target.value }))}
+                      className="h-9.5 rounded-xl bg-white text-xs dark:bg-slate-950"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Vacío: arranca ahora.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raffle-per-customer" className="text-xs font-semibold">
+                      Máximo de números por cliente
+                    </Label>
+                    <Input
+                      id="raffle-per-customer"
+                      type="number"
+                      min={1}
+                      placeholder="Sin límite"
+                      value={draft.max_tickets_per_customer}
+                      onChange={(e) => setDraft((d) => ({ ...d, max_tickets_per_customer: e.target.value }))}
+                      className="h-9.5 rounded-xl bg-white text-xs tabular-nums dark:bg-slate-950"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raffle-pool" className="text-xs font-semibold">
+                      Cuántos números tiene el talonario
+                    </Label>
+                    <Input
+                      id="raffle-pool"
+                      type="number"
+                      min={10}
+                      step={50}
+                      value={draft.max_tickets_total}
+                      onChange={(e) => setDraft((d) => ({ ...d, max_tickets_total: Number(e.target.value) }))}
+                      className="h-9.5 rounded-xl bg-white text-xs tabular-nums dark:bg-slate-950"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Del #1 al #{Number(draft.max_tickets_total || 1000).toLocaleString('es-PY')}, sin repetidos.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raffle-age" className="text-xs font-semibold">Edad mínima</Label>
+                    <Input
+                      id="raffle-age"
+                      type="number"
+                      min={0}
+                      max={99}
+                      value={draft.min_age}
+                      onChange={(e) => setDraft((d) => ({ ...d, min_age: Number(e.target.value) }))}
+                      className="h-9.5 rounded-xl bg-white text-xs tabular-nums dark:bg-slate-950"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      {Number(draft.min_age) > 0 ? `${draft.min_age}+ años` : '0 = sin restricción'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="auto-entry-switch" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                    {draft.auto_entry_on_sale ? 'Activado' : 'Desactivado'}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="raffle-requirements" className="text-xs font-semibold">
+                    Condiciones, si querés aclarar alguna
                   </Label>
-                  <Switch
-                    id="auto-entry-switch"
-                    checked={draft.auto_entry_on_sale}
-                    onCheckedChange={(checked) => setDraft((d) => ({ ...d, auto_entry_on_sale: checked }))}
+                  <Textarea
+                    id="raffle-requirements"
+                    rows={2}
+                    placeholder="Ej: participan clientes con ficha y teléfono."
+                    value={draft.requirements}
+                    onChange={(e) => setDraft((d) => ({ ...d, requirements: e.target.value }))}
+                    className="resize-none rounded-xl bg-white text-xs dark:bg-slate-950"
                   />
                 </div>
-              </div>
 
-              {draft.auto_entry_on_sale ? (
-                <div className="space-y-3 pt-1">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
+                {/*
+                  Este interruptor decía «Participación Directa por Compra» y
+                  mostraba «cada Gs. 100.000 = +1 número». No es lo que hace:
+                  `tryAutoRaffleEntryForSale` le **gasta los puntos** al cliente
+                  al cerrar la venta, hasta cinco números. Acá se dice eso.
+                */}
+                <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Label htmlFor="auto-entry-switch" className="text-xs font-semibold">
+                        Canjear los puntos solo, al cobrar
+                      </Label>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        Cuando la compra llega al monto de abajo, el sistema le canjea al cliente
+                        los puntos que tenga por números (hasta 5), sin preguntarle.
+                      </p>
+                    </div>
+                    <Switch
+                      id="auto-entry-switch"
+                      checked={draft.auto_entry_on_sale}
+                      onCheckedChange={(checked) => setDraft((d) => ({ ...d, auto_entry_on_sale: checked }))}
+                    />
+                  </div>
+
+                  {draft.auto_entry_on_sale && (
+                    <div className="space-y-1.5 pt-1">
                       <Label htmlFor="min-purchase" className="text-xs font-semibold">
-                        Monto Mínimo de Compra para Recibir Número
+                        Desde qué monto de compra
                       </Label>
                       <Input
                         id="min-purchase"
@@ -1114,84 +1497,39 @@ export function RafflesManager({
                         step={10000}
                         value={draft.min_purchase_amount}
                         onChange={(e) => setDraft((d) => ({ ...d, min_purchase_amount: Number(e.target.value) }))}
-                        className="rounded-xl text-xs bg-white dark:bg-slate-950 font-semibold h-9.5"
+                        className="h-9.5 rounded-xl bg-white text-xs font-semibold tabular-nums dark:bg-slate-950"
                       />
-                      <p className="text-[10px] text-slate-500">Ej: 100.000 Gs (compras desde este monto participan)</p>
                     </div>
+                  )}
+                </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">
-                        Generación Escalonada
+                {/*
+                  Vender puntos en efectivo es vender números de sorteo por
+                  plata. Se puede, pero es una decisión del negocio: viene
+                  apagado y dice de frente lo que significa.
+                */}
+                <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Label htmlFor="point-purchase-switch" className="text-xs font-semibold">
+                        Vender puntos en caja
                       </Label>
-                      <div className="rounded-xl border border-slate-200/80 bg-white p-2 text-xs font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 h-9.5 flex items-center">
-                        Cada <strong>Gs. {Number(draft.min_purchase_amount || 100000).toLocaleString('es-PY')}</strong> de compra = <strong>+1 número</strong>
-                      </div>
-                      <p className="text-[10px] text-slate-500">Se acumulan números proporcionales al total</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        El cliente paga y recibe puntos sin comprar nada más: en los hechos, le
+                        vendés números del sorteo.
+                      </p>
                     </div>
+                    <Switch
+                      id="point-purchase-switch"
+                      checked={draft.allow_point_purchase}
+                      onCheckedChange={(checked) => setDraft((d) => ({ ...d, allow_point_purchase: checked }))}
+                    />
                   </div>
 
-                  {/* Simulador Interactivo en Vivo */}
-                  <div className="rounded-xl border border-cyan-200 bg-white/90 p-3 dark:border-cyan-900/60 dark:bg-slate-900/80 space-y-1.5">
-                    <p className="text-[11px] font-bold text-cyan-950 dark:text-cyan-100 flex items-center gap-1.5">
-                      <ShoppingCart className="h-3.5 w-3.5 text-cyan-600" />
-                      Simulación en Vivo de cómo se calculan los números en Caja:
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-2 border border-slate-200/60 dark:border-slate-700">
-                        <span className="text-slate-500 block text-[10px]">Compra menor:</span>
-                        <strong>Gs. {(Number(draft.min_purchase_amount || 100000) * 0.5).toLocaleString('es-PY')}</strong>
-                        <span className="block text-slate-400 text-[10px]">→ 0 números</span>
-                      </div>
-                      <div className="rounded-lg bg-cyan-50 dark:bg-cyan-950/40 p-2 border border-cyan-200 dark:border-cyan-800">
-                        <span className="text-cyan-700 dark:text-cyan-300 block text-[10px]">Compra calificada:</span>
-                        <strong>Gs. {Number(draft.min_purchase_amount || 100000).toLocaleString('es-PY')}</strong>
-                        <span className="block text-cyan-700 dark:text-cyan-300 font-bold text-[10px]">→ 1 número (#142)</span>
-                      </div>
-                      <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 p-2 border border-emerald-200 dark:border-emerald-800">
-                        <span className="text-emerald-700 dark:text-emerald-300 block text-[10px]">Compra triple:</span>
-                        <strong>Gs. {(Number(draft.min_purchase_amount || 100000) * 3).toLocaleString('es-PY')}</strong>
-                        <span className="block text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">→ 3 números (#042, #189, #705)</span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
-                      🧾 Los números asignados se imprimen automáticamente en el comprobante fiscal/ticket de venta del cliente.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Modo manual: Los números solo se obtendrán cuando el cliente canjee o compre puntos en caja.
-                </p>
-              )}
-            </div>
-
-            {/* 4. Opción de Compra Directa de Puntos para el Sorteo */}
-            <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold">4</span>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950 dark:text-emerald-200">
-                    Opción de Compra de Puntos / Números en Caja
-                  </h4>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="point-purchase-switch" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                    {draft.allow_point_purchase ? 'Habilitado' : 'Deshabilitado'}
-                  </Label>
-                  <Switch
-                    id="point-purchase-switch"
-                    checked={draft.allow_point_purchase}
-                    onCheckedChange={(checked) => setDraft((d) => ({ ...d, allow_point_purchase: checked }))}
-                  />
-                </div>
-              </div>
-
-              {draft.allow_point_purchase ? (
-                <div className="space-y-3 pt-1">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
+                  {draft.allow_point_purchase && (
+                    <div className="space-y-1.5 pt-1">
                       <Label htmlFor="point-price" className="text-xs font-semibold">
-                        Monto por cada Punto (en Guaraníes)
+                        Precio de cada punto
                       </Label>
                       <Input
                         id="point-price"
@@ -1200,200 +1538,29 @@ export function RafflesManager({
                         step={100}
                         value={draft.point_purchase_price}
                         onChange={(e) => setDraft((d) => ({ ...d, point_purchase_price: Number(e.target.value) }))}
-                        className="rounded-xl text-xs bg-white dark:bg-slate-950 font-semibold h-9.5"
+                        className="h-9.5 rounded-xl bg-white text-xs font-semibold tabular-nums dark:bg-slate-950"
                       />
-                      <p className="text-[10px] text-slate-500">Ej: Gs. 1.000 por cada punto</p>
+                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                        Un número le sale{' '}
+                        {formatCurrency(
+                          (Number(draft.point_purchase_price) || 0) * (Number(draft.points_per_ticket) || 0),
+                        )}
+                        .
+                      </p>
                     </div>
+                  )}
+                </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">
-                        Precio Equivalente por Número de Sorteo
-                      </Label>
-                      <div className="rounded-xl border border-emerald-200/80 bg-white p-2 text-xs font-medium text-emerald-800 dark:border-emerald-800 dark:bg-slate-950 dark:text-emerald-300 h-9.5 flex items-center">
-                        <strong>Gs. {((Number(draft.point_purchase_price) || 1000) * (Number(draft.points_per_ticket) || 50)).toLocaleString('es-PY')}</strong>
-                        <span className="ml-1 text-[11px] text-slate-500">({draft.points_per_ticket} pts × Gs. {(Number(draft.point_purchase_price) || 1000).toLocaleString('es-PY')})</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500">Precio directo si el cliente no tiene puntos previos</p>
-                    </div>
+                {Number(draft.min_age) > 0 && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/20">
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+                      {responsiblePlayNotice({ minAge: Number(draft.min_age) })}
+                    </p>
                   </div>
-                  <p className="text-[11px] text-emerald-800/90 dark:text-emerald-300/90 bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40">
-                    💡 <strong>Venta en Caja:</strong> El cliente puede comprar puntos en caja en efectivo o transferencia. En la ventana de canje, podrás seleccionar <strong>&quot;Comprar Puntos&quot;</strong>, cobrar el monto y emitir los números de sorteo en el acto.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Solo se podrá participar acumulando puntos en compras regulares o canjeando puntos preexistentes.
-                </p>
-              )}
-            </div>
-
-            {/* 5. Fechas y Horarios */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold">5</span>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Período de Participación
-                </h4>
+                )}
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="raffle-start" className="text-xs font-semibold">
-                    Inicio de Canje / Venta
-                  </Label>
-                  <Input
-                    id="raffle-start"
-                    type="datetime-local"
-                    value={draft.starts_at}
-                    onChange={(e) => setDraft((d) => ({ ...d, starts_at: e.target.value }))}
-                    className="rounded-xl text-xs bg-white dark:bg-slate-950 h-9.5"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="raffle-end" className="text-xs font-semibold">
-                    Cierre y Fecha de Sorteo
-                  </Label>
-                  <Input
-                    id="raffle-end"
-                    type="datetime-local"
-                    value={draft.ends_at}
-                    onChange={(e) => setDraft((d) => ({ ...d, ends_at: e.target.value }))}
-                    className="rounded-xl text-xs bg-white dark:bg-slate-950 h-9.5"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 6. Reglas de Tickets y Puntos */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800/80 dark:bg-slate-900/40 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold">6</span>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Reglas de Tickets y Puntos
-                </h4>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="raffle-cost" className="text-xs font-semibold">
-                    Puntos por Número
-                  </Label>
-                  <Input
-                    id="raffle-cost"
-                    type="number"
-                    min={1}
-                    value={draft.points_per_ticket}
-                    onChange={(e) => setDraft((d) => ({ ...d, points_per_ticket: Number(e.target.value) }))}
-                    className="rounded-xl text-xs bg-white dark:bg-slate-950 h-9.5"
-                  />
-                  <p className="text-[10px] text-slate-400">Puntos a descontar</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="raffle-per-customer" className="text-xs font-semibold">
-                    Máx. por Cliente
-                  </Label>
-                  <Input
-                    id="raffle-per-customer"
-                    type="number"
-                    min={1}
-                    placeholder="Sin límite"
-                    value={draft.max_tickets_per_customer}
-                    onChange={(e) => setDraft((d) => ({ ...d, max_tickets_per_customer: e.target.value }))}
-                    className="rounded-xl text-xs bg-white dark:bg-slate-950 h-9.5"
-                  />
-                  <p className="text-[10px] text-slate-400">Dejar vacío = Ilimitado</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="raffle-pool" className="text-xs font-semibold">
-                    Cupo Total Números
-                  </Label>
-                  <Input
-                    id="raffle-pool"
-                    type="number"
-                    min={1}
-                    value={draft.max_tickets_total}
-                    onChange={(e) => setDraft((d) => ({ ...d, max_tickets_total: Number(e.target.value) }))}
-                    className="rounded-xl text-xs bg-white dark:bg-slate-950 h-9.5"
-                  />
-                  <p className="text-[10px] text-slate-400">Pool máx. (ej: 1000)</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="raffle-age" className="text-xs font-semibold">
-                    Edad Mínima
-                  </Label>
-                  <Input
-                    id="raffle-age"
-                    type="number"
-                    min={0}
-                    max={99}
-                    value={draft.min_age}
-                    onChange={(e) => setDraft((d) => ({ ...d, min_age: Number(e.target.value) }))}
-                    className="rounded-xl text-xs bg-white dark:bg-slate-950 h-9.5"
-                  />
-                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                    {Number(draft.min_age) > 0 ? `${draft.min_age}+ años` : '0 = Sin restricción'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Guía Explicativa de Reglas y Ejemplos en Vivo */}
-              <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3 dark:border-indigo-900/40 dark:bg-indigo-950/20 space-y-2 text-xs">
-                <p className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5 text-[11px]">
-                  <Info className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                  ¿Cómo funcionan estas reglas? Ejemplos prácticos:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                  <div className="rounded-lg bg-white dark:bg-slate-900/80 p-2.5 border border-indigo-100 dark:border-indigo-900/30">
-                    <strong className="text-indigo-700 dark:text-indigo-300 block mb-0.5">
-                      🎟️ Puntos por Número ({draft.points_per_ticket} pts):
-                    </strong>
-                    Si un cliente acumuló 150 puntos y el ticket cuesta {draft.points_per_ticket} pts, puede canjear {Math.floor(150 / (Number(draft.points_per_ticket) || 1))} números en caja.
-                  </div>
-                  <div className="rounded-lg bg-white dark:bg-slate-900/80 p-2.5 border border-indigo-100 dark:border-indigo-900/30">
-                    <strong className="text-indigo-700 dark:text-indigo-300 block mb-0.5">
-                      👤 Máx. por Cliente ({draft.max_tickets_per_customer ? `${draft.max_tickets_per_customer} tickets` : 'Ilimitado'}):
-                    </strong>
-                    {draft.max_tickets_per_customer
-                      ? `Ningún cliente podrá tener más de ${draft.max_tickets_per_customer} números, garantizando que nadie acapare los premios.`
-                      : 'Sin límite: un cliente puede acumular todos los números que alcance con sus compras.'}
-                  </div>
-                  <div className="rounded-lg bg-white dark:bg-slate-900/80 p-2.5 border border-indigo-100 dark:border-indigo-900/30">
-                    <strong className="text-indigo-700 dark:text-indigo-300 block mb-0.5">
-                      📦 Cupo Total ({Number(draft.max_tickets_total || 1000).toLocaleString('es-PY')} números):
-                    </strong>
-                    Talonario del #1 al #{Number(draft.max_tickets_total || 1000).toLocaleString('es-PY')}. Los números se eligen al azar del pool libre sin duplicados.
-                  </div>
-                  <div className="rounded-lg bg-white dark:bg-slate-900/80 p-2.5 border border-indigo-100 dark:border-indigo-900/30">
-                    <strong className="text-indigo-700 dark:text-indigo-300 block mb-0.5">
-                      🎂 Edad ({Number(draft.min_age) > 0 ? `${draft.min_age}+ años` : 'Todas las edades'}):
-                    </strong>
-                    {Number(draft.min_age) > 0
-                      ? `Exclusivo para mayores de ${draft.min_age} años con control de juego responsable.`
-                      : '0 = Sin restricción de edad. Apto para familias y todo público.'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Indicador de Restricción de Edad */}
-              {Number(draft.min_age) > 0 ? (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/20">
-                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
-                    {responsiblePlayNotice({ minAge: Number(draft.min_age) })}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-emerald-50/50 px-3 py-2 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <p className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
-                    Sorteo apto para todas las edades (Sin restricción de edad por defecto).
-                  </p>
-                </div>
-              )}
-            </div>
+            </details>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -1424,6 +1591,42 @@ export function RafflesManager({
         onRedeemed={onRefresh}
       />
 
+      {/* ── MODAL: CONFIRMAR CIERRE ───────────────────────────────────── */}
+      <AlertDialog open={!!confirmClose} onOpenChange={(value) => !value && setConfirmClose(null)}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-bold">
+              ¿Cerrar «{confirmClose?.name}»?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild className="text-xs">
+              <div className="space-y-2">
+                <p>
+                  Nadie va a poder canjear más números, y un sorteo cerrado{' '}
+                  <strong>no se puede volver a abrir</strong>.
+                </p>
+                {confirmClose && ticketCount(confirmClose) === 0 && (
+                  <p className="font-semibold text-rose-600 dark:text-rose-400">
+                    Todavía no canjeó nadie: si lo cerrás ahora, este sorteo queda sin uso.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl text-xs">Mejor no</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-xl text-xs"
+              onClick={() => {
+                if (confirmClose) void onUpdateStatus(confirmClose.id, 'closed')
+                setConfirmClose(null)
+              }}
+            >
+              Cerrar el sorteo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* ── MODAL: CONFIRMAR SORTEO ───────────────────────────────────── */}
       <AlertDialog open={!!confirmDraw} onOpenChange={(value) => !value && setConfirmDraw(null)}>
         <AlertDialogContent className="rounded-2xl">
@@ -1432,14 +1635,18 @@ export function RafflesManager({
               <Trophy className="h-5 w-5 text-amber-500" />
               ¿Realizar Sorteo &laquo;{confirmDraw?.name}&raquo;?
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-xs space-y-2">
-              <p>
-                Se seleccionará al azar <strong>1 ganador único por cada premio</strong> entre los{' '}
-                <strong>{confirmDraw ? ticketCount(confirmDraw) : 0} números canjeados</strong>.
-              </p>
-              <p className="font-semibold text-rose-600 dark:text-rose-400">
-                ⚠️ Esta acción es definitiva: se ejecuta una sola vez y no se puede revertir ni repetir.
-              </p>
+            {/* `asChild`: la descripción de Radix es un <p>, y un <p> no puede
+                contener otro. Sin esto, React avisa al hidratar. */}
+            <AlertDialogDescription asChild className="text-xs">
+              <div className="space-y-2">
+                <p>
+                  Se seleccionará al azar <strong>1 ganador único por cada premio</strong> entre los{' '}
+                  <strong>{confirmDraw ? ticketCount(confirmDraw) : 0} números canjeados</strong>.
+                </p>
+                <p className="font-semibold text-rose-600 dark:text-rose-400">
+                  Esta acción es definitiva: se ejecuta una sola vez y no se puede revertir ni repetir.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

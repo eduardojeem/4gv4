@@ -630,7 +630,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                         </Badge>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Si tu logotipo gráfico ya contiene el nombre (ej: "MitiendaPy"), activa esta opción para que no se duplique en texto plano al costado.
+                        Si tu logotipo gráfico ya contiene el nombre (ej: &quot;MitiendaPy&quot;), activa esta opción para que no se duplique en texto plano al costado.
                       </p>
                     </div>
                     <Switch

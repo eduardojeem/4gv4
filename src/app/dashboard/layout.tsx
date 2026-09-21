@@ -11,6 +11,7 @@ import { RepairsProvider } from '@/contexts/RepairsContext'
 import { SessionTrackingProvider } from '@/components/providers/session-tracking-provider'
 import { DashboardGuard } from '@/components/dashboard/DashboardGuard'
 import { ActiveOrganizationProvider } from '@/contexts/ActiveOrganizationContext'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export default function DashboardLayout({
   children,
@@ -24,25 +25,27 @@ export default function DashboardLayout({
           <DashboardGuard>
           <DashboardLayoutProvider>
               <RepairsProvider>
-                <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
-                  <Sidebar />
-                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                    <Header />
-                    <SubscriptionBanner />
-                    <main
-                      id="dashboard-main"
-                      className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative"
-                    >
-                      <div className="min-h-full">
-                        <DemoBanner />
-                        {children}
-                      </div>
-                    </main>
-                    <MobileNav />
-                    <ScrollToTop />
-                    <ScrollRestoration />
+                <TooltipProvider delayDuration={150}>
+                  <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
+                    <Sidebar />
+                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                      <Header />
+                      <SubscriptionBanner />
+                      <main
+                        id="dashboard-main"
+                        className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative"
+                      >
+                        <div className="min-h-full">
+                          <DemoBanner />
+                          {children}
+                        </div>
+                      </main>
+                      <MobileNav />
+                      <ScrollToTop />
+                      <ScrollRestoration />
+                    </div>
                   </div>
-                </div>
+                </TooltipProvider>
               </RepairsProvider>
           </DashboardLayoutProvider>
           </DashboardGuard>

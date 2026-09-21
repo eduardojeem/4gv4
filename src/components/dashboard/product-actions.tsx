@@ -526,7 +526,7 @@ export function ProductActions({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que quieres eliminar "{productToDelete?.name}"?
+              ¿Estás seguro de que quieres eliminar &quot;{productToDelete?.name}&quot;?
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

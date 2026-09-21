@@ -296,7 +296,7 @@ export const PerformanceUtils = {
     let inThrottle: boolean
     return ((...args: any[]) => {
       if (!inThrottle) {
-        func.apply(null, args)
+        func.call(null, ...args)
         inThrottle = true
         setTimeout(() => inThrottle = false, limit)
       }
@@ -308,7 +308,7 @@ export const PerformanceUtils = {
     let timeout: NodeJS.Timeout
     return ((...args: any[]) => {
       clearTimeout(timeout)
-      timeout = setTimeout(() => func.apply(null, args), wait)
+      timeout = setTimeout(() => func.call(null, ...args), wait)
     }) as T
   },
 

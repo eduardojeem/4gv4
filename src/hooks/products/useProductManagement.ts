@@ -76,8 +76,8 @@ export function useProductManagement(
   const { loadProducts } = useProducts()
 
   // Validaciones
-  const validateProductData = useCallback((product: Partial<Product>): void => {
-    if (!product.name?.trim()) {
+  const validateProductData = useCallback((product: Partial<Product>, requireName = true): void => {
+    if ((requireName || product.name !== undefined) && !product.name?.trim()) {
       throw createProductError.productValidationFailed(
         { name: 'El nombre del producto es requerido' },
         product.id
@@ -105,7 +105,6 @@ export function useProductManagement(
 
   const validateProductIds = useCallback((productIds: string[]): void => {
     if (productIds.length === 0) {
-      // @ts-ignore
       throw createProductError.invalidProductData({ message: 'No se proporcionaron IDs de productos' }, undefined)
     }
 
@@ -113,7 +112,6 @@ export function useProductManagement(
     const invalidIds = productIds.filter(id => !existingIds.has(id))
     
     if (invalidIds.length > 0) {
-      // @ts-ignore
       throw createProductError.productNotFound(invalidIds[0])
     }
   }, [products])
@@ -189,7 +187,6 @@ export function useProductManagement(
         }
         
         if (typeof filters.featured === 'boolean') {
-          // @ts-ignore
           result = result.filter(product => product.featured === filters.featured)
         }
         
@@ -274,7 +271,7 @@ export function useProductManagement(
 
       // Validaciones
       validateProductIds(productIds)
-      validateProductData(updates)
+      validateProductData(updates, false)
 
       // Verificar rendimiento para datasets grandes
       const largeDatasetThreshold = performanceConfig.optimization?.largeDatasetThreshold || 1000
@@ -288,26 +285,18 @@ export function useProductManagement(
       // Procesar en chunks para mejor rendimiento
       const results = await PerformanceUtils.processArrayAsync(
         productIds,
-        async (chunk) => {
-          // @ts-ignore
-          const promises = chunk.map(async (id: string) => {
-            try {
-              // Cast updates to any to bypass Partial<Product> vs Update type mismatch
-              // Supabase client should handle the partial update correctly
-              return await updateProduct(id, updates as any)
-            } catch (error) {
-              const productError = handleProductError(error, `bulk update product ${id}`)
-              return { success: false, error: productError.message, productId: id }
-            }
-          })
-          return Promise.all(promises)
+        async (id) => {
+          try {
+            const result = await updateProduct(id, updates as Parameters<typeof updateProduct>[1])
+            return { ...result, productId: id }
+          } catch (error) {
+            const productError = handleProductError(error, `bulk update product ${id}`)
+            return { success: false, error: productError.message, productId: id }
+          }
         },
         performanceConfig.optimization?.chunkSize || 100
       )
 
-      // Process the nested arrays manually to avoid TypeScript confusion
-      const chunkResults = results as unknown as any[][]
-      const flatResults = chunkResults.flat()
       const duration = performance.now() - startTime
       
       recordMetric({
@@ -323,11 +312,9 @@ export function useProductManagement(
         console.warn('Performance warning:', warning.message)
       }
 
-      // @ts-ignore
-      const failedUpdates = flatResults.filter(result => !result.success)
+      const failedUpdates = results.filter(result => !result.success)
       const failedProductIds = failedUpdates
-        .map((result: any) => result.productId || result.data?.id)
-        .filter(Boolean)
+        .map(result => result.productId)
       
       if (failedUpdates.length > 0) {
         const error = createProductError.bulkOperationFailed(
@@ -390,24 +377,18 @@ export function useProductManagement(
       // Procesar en chunks para mejor rendimiento
       const results = await PerformanceUtils.processArrayAsync(
         productIds,
-        async (chunk) => {
-          // @ts-ignore
-          const promises = chunk.map(async (id: string) => {
-            try {
-              return await deleteProduct(id)
-            } catch (error) {
-              const productError = handleProductError(error, `bulk delete product ${id}`)
-              return { success: false, error: productError.message, productId: id }
-            }
-          })
-          return Promise.all(promises)
+        async (id) => {
+          try {
+            const result = await deleteProduct(id)
+            return { ...result, productId: id }
+          } catch (error) {
+            const productError = handleProductError(error, `bulk delete product ${id}`)
+            return { success: false, error: productError.message, productId: id }
+          }
         },
         performanceConfig.optimization?.chunkSize || 100
       )
 
-      // Process the nested arrays manually to avoid TypeScript confusion
-      const chunkResults = results as unknown as any[][]
-      const flatResults = chunkResults.flat()
       const duration = performance.now() - startTime
       
       recordMetric({
@@ -423,11 +404,9 @@ export function useProductManagement(
         console.warn('Performance warning:', warning.message)
       }
 
-      // @ts-ignore
-      const failedDeletes = flatResults.filter(result => !result.success)
+      const failedDeletes = results.filter(result => !result.success)
       const failedProductIds = failedDeletes
-        .map((result: any) => result.productId || result.data?.id)
-        .filter(Boolean)
+        .map(result => result.productId)
       
       if (failedDeletes.length > 0) {
         const error = createProductError.bulkOperationFailed(

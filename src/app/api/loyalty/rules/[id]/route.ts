@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { routeParam } from '@/lib/api/route-params'
 import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
 import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
 
@@ -17,13 +18,10 @@ const patchSchema = z.object({
   is_active: z.boolean().optional(),
 })
 
-function ruleId(routeContext: unknown): string | null {
-  const params = (routeContext as { params?: { id?: string } } | undefined)?.params
-  return params?.id ?? null
-}
+
 
 export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization }, routeContext) => {
-  const id = ruleId(routeContext)
+  const id = await routeParam(routeContext, 'id')
   if (!id) return NextResponse.json({ error: 'Falta el identificador de la promoción' }, { status: 400 })
 
   const body = await request.json().catch(() => null)
@@ -60,7 +58,7 @@ export const PATCH = withTenantAuth({ permission: 'promotions.manage', module: '
 })
 
 export const DELETE = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (_request, { organization }, routeContext) => {
-  const id = ruleId(routeContext)
+  const id = await routeParam(routeContext, 'id')
   if (!id) return NextResponse.json({ error: 'Falta el identificador de la promoción' }, { status: 400 })
 
   const supabase = await createOrgScopedClient(organization.id)

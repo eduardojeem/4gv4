@@ -314,6 +314,20 @@ export interface StoreAnnouncement {
   updatedAt?: string
 }
 
+/** Sección donde se originó o utilizó la imagen */
+export type WebsiteMediaSection = 'logo' | 'promotions' | 'announcements' | 'brands' | 'general'
+
+/** Imagen registrada en el historial de medios del sitio web */
+export interface WebsiteMediaItem {
+  id: string
+  url: string
+  path: string
+  name: string
+  size?: number
+  section?: WebsiteMediaSection
+  createdAt: string
+}
+
 export interface WebsiteSettings {
   company_info: CompanyInfo
   hero_content?: HeroContent
@@ -335,6 +349,9 @@ export interface WebsiteSettings {
   announcements?: StoreAnnouncement[]
   maintenance_mode?: MaintenanceMode
   checkout?: CheckoutSettings
+  /** Historial de imágenes usadas en el sitio web (máximo 20 por organización) */
+  media_library?: WebsiteMediaItem[]
 }
 
 export type WebsiteSettingKey = keyof WebsiteSettings
+

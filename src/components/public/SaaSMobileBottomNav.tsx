@@ -10,6 +10,7 @@ import {
   Sparkles,
   Store,
   User,
+  LogIn,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { AuthModal } from '@/components/public/AuthModal'
@@ -19,6 +20,7 @@ export function SaaSMobileBottomNav() {
   const pathname = usePathname()
   const { user } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
+  const isLoginPage = pathname === '/login' || pathname?.startsWith('/login')
 
   const canAccessDashboard =
     user?.role === 'super_admin' ||
@@ -118,17 +120,26 @@ export function SaaSMobileBottomNav() {
               {canAccessDashboard ? 'Panel' : 'Cuenta'}
             </span>
           </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAuthOpen(true)}
+        ) : isLoginPage ? (
+          <Link
+            href="/register"
             className="group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all select-none"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-xl group-hover:bg-muted text-muted-foreground transition-all duration-200">
-              <User className="h-4.5 w-4.5" />
+              <Building2 className="h-4.5 w-4.5" />
             </div>
-            <span className="truncate leading-none">Acceder</span>
-          </button>
+            <span className="truncate leading-none">Registrarse</span>
+          </Link>
+        ) : (
+          <Link
+            href="/login"
+            className="group flex flex-1 flex-col items-center justify-center gap-1 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all select-none"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl group-hover:bg-muted text-muted-foreground transition-all duration-200">
+              <LogIn className="h-4.5 w-4.5" />
+            </div>
+            <span className="truncate leading-none">Iniciar sesión</span>
+          </Link>
         )}
       </nav>
 

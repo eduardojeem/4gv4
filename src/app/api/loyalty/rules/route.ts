@@ -44,7 +44,8 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
 
   if (error) {
     if (isLoyaltyModuleMissing(error)) {
-      return NextResponse.json({ moduleInstalled: false, rules: [], message: LOYALTY_MIGRATION_HINT })
+      logger.warn('loyalty rules: modulo reportado como no instalado', { code: error.code, message: error.message })
+      return NextResponse.json({ moduleInstalled: false, rules: [], message: LOYALTY_MIGRATION_HINT, reason: error.message, code: error.code })
     }
     logger.error('loyalty rules read failed', { error })
     return NextResponse.json({ error: 'No se pudieron cargar las promociones de puntos' }, { status: 500 })

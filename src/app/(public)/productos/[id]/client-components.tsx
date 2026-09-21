@@ -15,6 +15,11 @@ import {
   Check,
   XCircle,
   Tag,
+  ZoomIn,
+  Maximize2,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { resolveProductImageUrl } from '@/lib/images'
@@ -162,6 +167,44 @@ export function ProductDetailInteractive({
   const [selectedImage, setSelectedImage] = useState(0)
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({})
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false)
+  const [isImageZoomed, setIsImageZoomed] = useState(false)
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 })
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Keyboard navigation & scroll lock for fullscreen modal (ESC to close, Left/Right arrows)
+  useEffect(() => {
+    if (!isFullscreen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreen(false)
+      } else if (e.key === 'ArrowLeft' && galleryImages.length > 1) {
+        setSelectedImage((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1))
+      } else if (e.key === 'ArrowRight' && galleryImages.length > 1) {
+        setSelectedImage((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0))
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = originalOverflow
+    }
+  }, [isFullscreen, galleryImages.length])
+
+  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    setZoomPosition({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    })
+  }
 
   // Sincronizar imagen cuando cambia la variante o el color seleccionado
   useEffect(() => {
@@ -377,32 +420,77 @@ export function ProductDetailInteractive({
     <div className="grid gap-10 lg:grid-cols-2">
       {/* ── COLUMNA IZQUIERDA: GALERÍA DE IMÁGENES ── */}
       <div className="space-y-4">
-        <div className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted/40 shadow-xs">
+        <div
+          className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted/40 shadow-xs group cursor-crosshair select-none"
+          onMouseEnter={() => setIsImageZoomed(true)}
+          onMouseMove={handleImageMouseMove}
+          onMouseLeave={() => {
+            setIsImageZoomed(false)
+            setZoomPosition({ x: 50, y: 50 })
+          }}
+          onDoubleClick={() => setIsFullscreen(true)}
+          title="Doble clic para ver en pantalla completa"
+        >
           {galleryImages.length > 0 && !imageErrors[selectedImage] ? (
-            <Image
-              src={galleryImages[selectedImage]!}
-              alt={product.name}
-              fill
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-contain p-4 transition-all duration-300"
-              priority
-              onError={() => setImageErrors((prev) => ({ ...prev, [selectedImage]: true }))}
-              unoptimized={
-                galleryImages[selectedImage]!.startsWith('data:') ||
-                galleryImages[selectedImage]! === '/placeholder-product.svg'
-              }
-            />
+            <div
+              className="relative w-full h-full transition-transform duration-150 ease-out will-change-transform"
+              style={{
+                transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                transform: isImageZoomed ? 'scale(2.3)' : 'scale(1)',
+              }}
+            >
+              <Image
+                src={galleryImages[selectedImage]!}
+                alt={product.name}
+                fill
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                className="object-contain p-4 pointer-events-none"
+                priority
+                onError={() => setImageErrors((prev) => ({ ...prev, [selectedImage]: true }))}
+                unoptimized={
+                  galleryImages[selectedImage]!.startsWith('data:') ||
+                  galleryImages[selectedImage]! === '/placeholder-product.svg'
+                }
+              />
+            </div>
           ) : (
             <div className="flex h-full items-center justify-center bg-muted/20">
               <Package className="h-24 w-24 text-muted-foreground/20" />
             </div>
           )}
 
+          {/* Zoom & Fullscreen hint badge */}
+          {galleryImages.length > 0 && !imageErrors[selectedImage] && (
+            <div
+              className={cn(
+                "absolute bottom-3 left-3 z-10 hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-200 pointer-events-none shadow-sm",
+                isImageZoomed
+                  ? "bg-blue-600 text-white backdrop-blur-md opacity-95 scale-100 ring-2 ring-blue-400/50"
+                  : "bg-background/85 text-foreground/90 backdrop-blur-sm opacity-70 group-hover:opacity-100 border border-border/50"
+              )}
+            >
+              <ZoomIn className="h-3 w-3" />
+              <span>{isImageZoomed ? 'Zoom 2.3x · Doble clic: pantalla completa' : 'Pasa el cursor o doble clic para pantalla completa'}</span>
+            </div>
+          )}
+
+          {/* Botón de pantalla completa */}
+          <Button
+            variant="secondary"
+            size="icon"
+            className="absolute right-13 top-3 z-10 h-9 w-9 rounded-full shadow-md bg-background/80 backdrop-blur-sm border-0 hover:bg-background"
+            onClick={() => setIsFullscreen(true)}
+            aria-label="Pantalla completa"
+            title="Ver en pantalla completa (o doble clic)"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+
           {/* Botón de compartir */}
           <Button
             variant="secondary"
             size="icon"
-            className="absolute right-3 top-3 h-9 w-9 rounded-full shadow-md bg-background/80 backdrop-blur-sm border-0 hover:bg-background"
+            className="absolute right-3 top-3 z-10 h-9 w-9 rounded-full shadow-md bg-background/80 backdrop-blur-sm border-0 hover:bg-background"
             onClick={handleShare}
             aria-label="Compartir producto"
           >
@@ -410,7 +498,7 @@ export function ProductDetailInteractive({
           </Button>
 
           {/* Badges de producto */}
-          <div className="absolute left-3 top-3 flex flex-col gap-1.5 pointer-events-none">
+          <div className="absolute left-3 top-3 z-10 flex flex-col gap-1.5 pointer-events-none">
             {product.featured && (
               <Badge className="bg-foreground text-background border-0 text-xs shadow-sm font-medium">
                 Destacado
@@ -423,6 +511,111 @@ export function ProductDetailInteractive({
             )}
           </div>
         </div>
+
+        {/* Modal / Lightbox de Pantalla Completa al hacer doble clic */}
+        {isFullscreen && galleryImages[selectedImage] && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-4 sm:p-6 animate-in fade-in-0 duration-200 select-none"
+            onClick={() => setIsFullscreen(false)}
+          >
+            {/* Barra superior de controles */}
+            <div className="w-full flex items-center justify-between text-white z-20">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-white/90 truncate max-w-[280px] sm:max-w-md">
+                  {product.name}
+                </span>
+                {galleryImages.length > 1 && (
+                  <span className="text-xs bg-white/15 px-2.5 py-0.5 rounded-full font-mono text-white/80">
+                    {selectedImage + 1} / {galleryImages.length}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/50 hidden sm:inline">Doble clic o ESC para salir</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 text-white/80 hover:text-white hover:bg-white/20 rounded-full"
+                  onClick={() => setIsFullscreen(false)}
+                  title="Cerrar pantalla completa (ESC)"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Contenedor central de la imagen con escala completa */}
+            <div
+              className="relative flex-1 w-full flex items-center justify-center overflow-hidden my-auto"
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={() => setIsFullscreen(false)}
+            >
+              <img
+                src={galleryImages[selectedImage]!}
+                alt={product.name}
+                className="max-w-[95vw] max-h-[82vh] w-auto h-auto object-contain drop-shadow-2xl rounded-lg cursor-zoom-out"
+                title="Doble clic para salir de pantalla completa"
+              />
+
+              {/* Flechas de navegación si hay múltiples imágenes */}
+              {galleryImages.length > 1 && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-black/60 hover:bg-black/90 text-white shadow-xl border border-white/10"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedImage((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1))
+                    }}
+                    title="Imagen anterior (Flecha izquierda)"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-black/60 hover:bg-black/90 text-white shadow-xl border border-white/10"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedImage((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0))
+                    }}
+                    title="Imagen siguiente (Flecha derecha)"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {/* Miniaturas inferiores en pantalla completa */}
+            {galleryImages.length > 1 && (
+              <div
+                className="flex items-center gap-2 overflow-x-auto max-w-full py-2 z-20 scrollbar-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {galleryImages.map((img, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedImage(idx)}
+                    className={cn(
+                      'relative w-14 h-14 rounded-xl overflow-hidden border-2 transition-all shrink-0 bg-white/10',
+                      selectedImage === idx
+                        ? 'border-blue-500 ring-2 ring-blue-400/60 scale-105'
+                        : 'border-white/20 opacity-60 hover:opacity-100'
+                    )}
+                  >
+                    <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Thumbnails con sincronización */}
         {galleryImages.length > 1 && (

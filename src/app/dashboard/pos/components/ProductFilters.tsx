@@ -196,7 +196,7 @@ export function ProductFilters({
         <span>{totalResults} productos encontrados</span>
         {state.searchTerm && (
           <Badge variant="secondary">
-            Buscando: "{state.searchTerm}"
+            Buscando: &quot;{state.searchTerm}&quot;
           </Badge>
         )}
       </div>

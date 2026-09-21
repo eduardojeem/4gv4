@@ -14,8 +14,27 @@ const withPWAInit = process.env.NODE_ENV === 'production'
       aggressiveFrontEndNavCaching: true,
       reloadOnOnline: true,
       swcMinify: true,
+      // El service worker guardaba en la cache `apis` la respuesta de
+      // CUALQUIER GET a /api/ durante 24 horas (NetworkFirst con 10 s de
+      // espera). Con la red lenta o caida servia esa copia como si fuera
+      // actual: se guardaba una promocion, la lista volvia a pintar lo de
+      // antes y solo recargar lo arreglaba. Ademas son respuestas de una
+      // sesion y una organizacion concretas guardadas en el navegador, que en
+      // un equipo compartido las ve el siguiente.
+      //
+      // `extendDefaultRuntimeCaching` mantiene el resto de las reglas (fuentes,
+      // imagenes, estaticos) y solo reemplaza la entrada con este `cacheName`.
+      extendDefaultRuntimeCaching: true,
       workboxOptions: {
         disableDevLogs: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, url }: { sameOrigin: boolean; url: URL }) =>
+              sameOrigin && url.pathname.startsWith('/api/'),
+            handler: 'NetworkOnly' as const,
+            options: { cacheName: 'apis' },
+          },
+        ],
       },
     })
   : identityConfig

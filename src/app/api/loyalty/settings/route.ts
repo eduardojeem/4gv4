@@ -26,7 +26,13 @@ export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.c
 
   if (error) {
     if (isLoyaltyModuleMissing(error)) {
-      return NextResponse.json({ moduleInstalled: false, message: LOYALTY_MIGRATION_HINT }, { status: 200 })
+      // Este camino se tragaba el error: decía «falta la migración» y no
+      // dejaba rastro de qué había fallado en realidad.
+      logger.warn('loyalty settings: módulo reportado como no instalado', { code: error.code, message: error.message })
+      return NextResponse.json(
+        { moduleInstalled: false, message: LOYALTY_MIGRATION_HINT, reason: error.message, code: error.code },
+        { status: 200 }
+      )
     }
     logger.error('loyalty settings read failed', { error })
     return NextResponse.json({ error: 'No se pudo cargar la configuración de puntos' }, { status: 500 })

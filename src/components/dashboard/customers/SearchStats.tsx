@@ -58,7 +58,7 @@ export function SearchStats({
         </span>
         {query && (
           <span>
-            para <strong className="text-blue-600 dark:text-blue-400">"{query}"</strong>
+            para <strong className="text-blue-600 dark:text-blue-400">&quot;{query}&quot;</strong>
           </span>
         )}
       </div>

@@ -107,6 +107,20 @@ const filterPresets: FilterPreset[] = [
   }
 ]
 
+const FilterSection = ({ title, icon: Icon, children }: {
+  title: string
+  icon: any
+  children: React.ReactNode
+}) => (
+  <div className="space-y-3">
+    <div className="flex items-center space-x-2">
+      <Icon className="h-4 w-4 text-muted-foreground" />
+      <Label className="text-sm font-medium">{title}</Label>
+    </div>
+    {children}
+  </div>
+)
+
 export const AdvancedProductFilters = ({
   className,
   onFiltersChange,
@@ -147,19 +161,6 @@ export const AdvancedProductFilters = ({
     setActivePreset(null) // Desactivar preset al cambiar filtros manualmente
   }
 
-  const FilterSection = ({ title, icon: Icon, children }: {
-    title: string
-    icon: any
-    children: React.ReactNode
-  }) => (
-    <div className="space-y-3">
-      <div className="flex items-center space-x-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <Label className="text-sm font-medium">{title}</Label>
-      </div>
-      {children}
-    </div>
-  )
 
   const content = (
     <div className="space-y-6">

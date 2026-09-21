@@ -34,6 +34,7 @@ import {
   Boxes,
   ShieldAlert,
   Loader2,
+  ZoomIn,
 } from 'lucide-react'
 import {
   Dialog,
@@ -51,6 +52,13 @@ import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { resolveProductImageUrl } from '@/lib/images'
+import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 
 export interface ProductQuickViewModalProps {
@@ -61,6 +69,8 @@ export interface ProductQuickViewModalProps {
   onViewFullDetails?: (product: Product) => void
   /** Imprime la etiqueta con el codigo de barras de este producto. */
   onPrintLabel?: (product: Product) => void
+  /** Permite activar o desactivar el producto directamente desde el modal de detalle */
+  onToggleActive?: (product: Product, newActiveState: boolean) => Promise<void> | void
 }
 
 const STOCK_LABEL: Record<'in_stock' | 'low_stock' | 'out_of_stock', { label: string; badge: string; text: string; bg: string }> = {
@@ -157,7 +167,7 @@ function getNormalizedVariants(product: Product): NormalizedVariant[] {
       : []
 
   return rawVariants.map((v: any, index: number) => {
-    let attributes: Record<string, string> = {}
+    const attributes: Record<string, string> = {}
     if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
       for (const [k, val] of Object.entries(v.attributes)) {
         if (val !== undefined && val !== null) attributes[k] = String(val)
@@ -215,12 +225,28 @@ export function ProductQuickViewModal({
   onEdit,
   onViewFullDetails,
   onPrintLabel,
+  onToggleActive,
 }: ProductQuickViewModalProps) {
   const canViewCost = useCanViewCost()
 
   // Dynamic product state & hydration
   const [hydratedProduct, setHydratedProduct] = useState<Product | null>(null)
   const [isLoadingHydration, setIsLoadingHydration] = useState(false)
+  const [isTogglingActive, setIsTogglingActive] = useState(false)
+
+  const handleToggleActiveClick = async () => {
+    if (!product || !onToggleActive || isTogglingActive) return
+    const nextState = !product.is_active
+    setIsTogglingActive(true)
+    try {
+      await onToggleActive(product, nextState)
+      setHydratedProduct((prev) => (prev ? { ...prev, is_active: nextState } : { ...product, is_active: nextState }))
+    } catch (err) {
+      console.error('Error al alternar estado activo:', err)
+    } finally {
+      setIsTogglingActive(false)
+    }
+  }
 
   // Interactive controls
   const [activeTab, setActiveTab] = useState<string>('variants')
@@ -230,6 +256,19 @@ export function ProductQuickViewModal({
   const [selectedColor, setSelectedColor] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'matrix' | 'table'>('matrix')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [isImageZoomed, setIsImageZoomed] = useState<boolean>(false)
+  const [zoomPosition, setZoomPosition] = useState<{ x: number; y: number }>({ x: 50, y: 50 })
+
+  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    setZoomPosition({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    })
+  }
 
   // Determine if initialProduct specifies variants
   const initialHasVariants = Boolean(
@@ -455,31 +494,55 @@ export function ProductQuickViewModal({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
-
-        {/* ── HEADER / HERO (FIXED) ── */}
+    <TooltipProvider delayDuration={150}>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+        <DialogContent className="max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
+          <TooltipProvider delayDuration={150}>
+            {/* ── HEADER / HERO (FIXED) ── */}
         <div className="shrink-0 p-5 sm:p-6 pb-4 bg-gradient-to-b from-slate-50/90 via-slate-50/40 to-transparent dark:from-slate-850 dark:via-slate-900/50 border-b border-slate-100 dark:border-slate-800/80">
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
 
-            {/* Gallery / Main Photo */}
+            {/* Gallery / Main Photo with Interactive Hover Zoom */}
             <div className="flex flex-col gap-2 shrink-0">
-              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 ring-1 ring-slate-200/80 dark:ring-slate-700 shadow-inner flex items-center justify-center group">
-                <Image
-                  src={activeImageUrl}
-                  alt={product.name}
-                  fill
-                  sizes="(max-width: 640px) 96px, 112px"
-                  className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-                  onError={(e) => {
-                    ;(e.target as HTMLImageElement).src = '/placeholder-product.svg'
+              <div
+                className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 ring-1 ring-slate-200/80 dark:ring-slate-700 shadow-inner flex items-center justify-center group cursor-crosshair select-none"
+                onMouseEnter={() => setIsImageZoomed(true)}
+                onMouseMove={handleImageMouseMove}
+                onMouseLeave={() => {
+                  setIsImageZoomed(false)
+                  setZoomPosition({ x: 50, y: 50 })
+                }}
+              >
+                <div
+                  className="relative w-full h-full transition-transform duration-150 ease-out will-change-transform"
+                  style={{
+                    transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                    transform: isImageZoomed ? 'scale(2.5)' : 'scale(1)',
                   }}
-                />
+                >
+                  <Image
+                    src={activeImageUrl}
+                    alt={product.name}
+                    fill
+                    sizes="(max-width: 640px) 96px, 112px"
+                    className="object-contain p-2 pointer-events-none"
+                    onError={(e) => {
+                      ;(e.target as HTMLImageElement).src = '/placeholder-product.svg'
+                    }}
+                  />
+                </div>
                 {product.featured && (
-                  <div className="absolute top-1.5 right-1.5 shadow-sm">
+                  <div className="absolute top-1.5 right-1.5 shadow-sm z-10 pointer-events-none">
                     <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0 px-1.5 py-0.2 text-[9px] font-bold">
                       <Star className="h-2.5 w-2.5 mr-0.5 fill-white" /> Destacado
                     </Badge>
+                  </div>
+                )}
+                {/* Floating zoom indicator on hover */}
+                {isImageZoomed && (
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10 bg-black/75 backdrop-blur-xs text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-md pointer-events-none flex items-center gap-1 shadow-sm">
+                    <ZoomIn className="h-2.5 w-2.5" />
+                    <span>2.5x</span>
                   </div>
                 )}
               </div>
@@ -570,26 +633,62 @@ export function ProductQuickViewModal({
                   {statusConfig.label}
                 </Badge>
 
-                {/* Visibility Badge */}
+                {/* Operational Status (Active / Inactive) with interactive 1-click toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isTogglingActive || !onToggleActive}
+                      onClick={handleToggleActiveClick}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shadow-2xs select-none',
+                        onToggleActive ? 'cursor-pointer hover:opacity-90 active:scale-95' : 'cursor-default',
+                        'disabled:opacity-60 disabled:cursor-not-allowed',
+                        product.is_active
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                          : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 ring-2 ring-amber-500/20'
+                      )}
+                    >
+                      {isTogglingActive ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-current" />
+                      ) : product.is_active ? (
+                        <>
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          <span>Activo</span>
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                          <span>Inactivo{onToggleActive ? ' · Clic para activar' : ''}</span>
+                        </>
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs max-w-xs">
+                    {product.is_active
+                      ? (onToggleActive ? 'Producto activo para ventas en caja/POS y catálogo. Clic para desactivar.' : 'Producto activo.')
+                      : (onToggleActive ? 'Producto inactivo (no disponible para ventas). Hacé clic para activarlo inmediatamente.' : 'Producto inactivo.')}
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Storefront Visibility Badge */}
                 <Badge
                   variant="outline"
                   className={cn(
                     'text-xs font-semibold px-2.5 py-1',
-                    (!product.is_active || (product as any).visibility === 'hidden')
+                    (product as any).visibility === 'hidden'
                       ? 'text-slate-500 border-slate-200 dark:border-slate-800'
                       : (product as any).visibility === 'wholesale'
                         ? 'text-indigo-600 border-indigo-200 bg-indigo-50/50 dark:text-indigo-400 dark:border-indigo-900/50 dark:bg-indigo-950/30'
                         : 'text-emerald-600 border-emerald-200 bg-emerald-50/50 dark:text-emerald-400 dark:border-emerald-900/50 dark:bg-emerald-950/30',
                   )}
                 >
-                  {!product.is_active ? (
-                    <><EyeOff className="h-3 w-3 mr-1" /> Inactivo</>
-                  ) : (product as any).visibility === 'hidden' ? (
-                    <><EyeOff className="h-3 w-3 mr-1" /> Oculto</>
+                  {(product as any).visibility === 'hidden' ? (
+                    <><EyeOff className="h-3 w-3 mr-1" /> Catálogo Oculto</>
                   ) : (product as any).visibility === 'wholesale' ? (
                     <><Globe className="h-3 w-3 mr-1 text-indigo-500" /> Mayorista</>
                   ) : (
-                    <><Globe className="h-3 w-3 mr-1 text-emerald-500" /> Visible en Tienda</>
+                    <><Globe className="h-3 w-3 mr-1 text-emerald-500" /> Tienda Online</>
                   )}
                 </Badge>
               </div>
@@ -599,6 +698,45 @@ export function ProductQuickViewModal({
 
         {/* ── SCROLLABLE BODY (CONTAINS KPIS, TABS & CONTENT) ── */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-5 scrollbar-thin">
+
+          {/* Banner Prominente si el Producto está Inactivo con Botón para Activar */}
+          {!product.is_active && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-amber-300 dark:border-amber-800/80 bg-gradient-to-r from-amber-50 via-amber-50/60 to-orange-50/40 dark:from-amber-950/40 dark:via-amber-950/30 dark:to-orange-950/20 shadow-xs animate-in fade-in duration-200">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0">
+                  <EyeOff className="h-5 w-5" />
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    <span>Producto actualmente Inactivo</span>
+                    <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                      Fuera de venta
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 leading-relaxed">
+                    Este producto no aparece en las búsquedas de caja/POS ni en el catálogo público hasta que sea activado.
+                  </p>
+                </div>
+              </div>
+
+              {onToggleActive && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isTogglingActive}
+                  onClick={handleToggleActiveClick}
+                  className="shrink-0 h-9 px-4 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow-md transition-all gap-1.5 self-start sm:self-center"
+                >
+                  {isTogglingActive ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  <span>Activar Producto</span>
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* KPI METRICS CARDS */}
           <div className={cn(
@@ -1241,6 +1379,29 @@ export function ProductQuickViewModal({
                     </span>
                   </div>
 
+                  {/* Operational Status Switch */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                    <div className="space-y-0.5 pr-3">
+                      <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-xs font-bold">
+                        <CheckCircle2 className={cn("h-3.5 w-3.5", product.is_active ? "text-emerald-500" : "text-amber-500")} />
+                        Estado Operativo ({product.is_active ? 'Activo' : 'Inactivo'})
+                      </span>
+                      <p className="text-[11px] text-muted-foreground leading-tight">
+                        {product.is_active
+                          ? 'Habilitado para cobros en caja/POS y movimientos de inventario.'
+                          : 'Deshabilitado. No aparecerá en ventas de caja ni catálogo.'}
+                      </p>
+                    </div>
+                    {onToggleActive && (
+                      <Switch
+                        checked={product.is_active}
+                        onCheckedChange={handleToggleActiveClick}
+                        disabled={isTogglingActive}
+                        aria-label="Alternar estado activo del producto"
+                      />
+                    )}
+                  </div>
+
                   {/* Visibility */}
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                     <span className="text-slate-500 flex items-center gap-1.5 font-medium">
@@ -1308,6 +1469,31 @@ export function ProductQuickViewModal({
           </Button>
 
           <div className="flex items-center gap-2">
+            {onToggleActive && (
+              <Button
+                type="button"
+                variant={product.is_active ? "outline" : "default"}
+                size="sm"
+                disabled={isTogglingActive}
+                onClick={handleToggleActiveClick}
+                className={cn(
+                  "rounded-xl h-9 text-xs font-bold gap-1.5 shadow-xs transition-all",
+                  product.is_active
+                    ? "text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300 hover:border-amber-300"
+                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                )}
+              >
+                {isTogglingActive ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : product.is_active ? (
+                  <EyeOff className="h-3.5 w-3.5 text-slate-500" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                <span>{product.is_active ? 'Desactivar' : 'Activar Producto'}</span>
+              </Button>
+            )}
+
             {onPrintLabel && (
               <Button
                 variant="outline"
@@ -1339,8 +1525,10 @@ export function ProductQuickViewModal({
             )}
           </div>
         </DialogFooter>
+          </TooltipProvider>
       </DialogContent>
     </Dialog>
+    </TooltipProvider>
   )
 }
 

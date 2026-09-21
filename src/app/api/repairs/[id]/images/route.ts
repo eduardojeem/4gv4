@@ -5,6 +5,8 @@ import {
   isNextResponse,
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { repairPhotoLimit } from '@/lib/saas/plan-features'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -35,6 +37,24 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     const exists = await assertRepairExists(ctx, id)
     if (!exists) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+
+    const orgId = ctx.organizationId
+    if (orgId) {
+      const { data: org } = await ctx.supabase
+        .from('organizations')
+        .select('subscription_plan')
+        .eq('id', orgId)
+        .maybeSingle()
+
+      const userPlan = (org?.subscription_plan || 'free').toUpperCase() as import('@/lib/saas/plan-features').PlanCode
+      const photoLimit = repairPhotoLimit(userPlan)
+      if (photoLimit === 0) {
+        return NextResponse.json(
+          { error: 'La opción de agregar fotos a las reparaciones está disponible exclusivamente en el Plan Enterprise.' },
+          { status: 402 }
+        )
+      }
+    }
 
     const rowsToInsert = rawImages.length > 0
       ? rawImages.map((img: any) => ({

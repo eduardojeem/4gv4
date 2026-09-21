@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 
 type Theme = 'light' | 'dark'
 
@@ -13,25 +14,19 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('light')
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-    // Verificar si hay un tema guardado en localStorage
-    const savedTheme = localStorage.getItem('theme') as Theme
-    if (savedTheme) {
-      setTheme(savedTheme)
-    } else {
-      // Verificar preferencia del sistema
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      setTheme(prefersDark ? 'dark' : 'light')
-    }
-  }, [])
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'light'
+    try {
+      const savedTheme = localStorage.getItem('theme')
+      if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme
+    } catch { /* El almacenamiento puede estar bloqueado por el navegador. */ }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
+  const mounted = useHydrated()
 
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem('theme', theme)
+      try { localStorage.setItem('theme', theme) } catch { /* El tema sigue funcionando sin persistencia. */ }
       // Aplicar clase al documento
       if (theme === 'dark') {
         document.documentElement.classList.add('dark')

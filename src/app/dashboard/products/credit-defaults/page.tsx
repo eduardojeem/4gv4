@@ -52,7 +52,7 @@ export default function ProductCreditDefaultsPage() {
               </li>
             </ul>
             <p className="font-medium bg-sky-100 dark:bg-sky-900/40 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800/50 mt-4">
-              💡 <strong>¿Qué pasa al crear un producto?</strong> Cuando marques un producto como "Habilitar venta a crédito", el sistema copiará toda esta configuración automáticamente. Podrás dejarla tal cual para ahorrar tiempo, o modificarla individualmente solo para ese producto si necesitás una excepción.
+              💡 <strong>¿Qué pasa al crear un producto?</strong> Cuando marques un producto como &quot;Habilitar venta a crédito&quot;, el sistema copiará toda esta configuración automáticamente. Podrás dejarla tal cual para ahorrar tiempo, o modificarla individualmente solo para ese producto si necesitás una excepción.
             </p>
           </div>
         </div>

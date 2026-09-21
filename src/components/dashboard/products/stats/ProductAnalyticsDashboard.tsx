@@ -252,6 +252,10 @@ export const ProductAnalyticsDashboard = ({
 }: ProductAnalyticsDashboardProps) => {
   const [activeTab, setActiveTab] = useState('overview')
   const [showDetails, setShowDetails] = useState(true)
+  const [dateRange] = useState(() => ({
+    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    end: new Date()
+  }))
 
   const {
     dashboardStats,
@@ -261,10 +265,7 @@ export const ProductAnalyticsDashboard = ({
     loading,
     refreshAnalytics
   } = useProductAnalytics([], {
-    dateRange: {
-      start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      end: new Date()
-    },
+    dateRange,
     includeAlerts: true,
     includeMovements: true
   })

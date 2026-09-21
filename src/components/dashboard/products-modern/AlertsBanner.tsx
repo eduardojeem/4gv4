@@ -48,22 +48,22 @@ export function AlertsBanner({
 
   // Determine primary alert type and theme
   let primaryType: 'out_of_stock' | 'low_stock' | 'missing_data' = 'low_stock'
-  let toneClass = 'bg-amber-500/10 border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200'
+  let toneClass = 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200'
   let iconClass = 'text-amber-600 dark:text-amber-400'
-  let buttonClass = 'hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+  let buttonClass = 'bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-900 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700/80'
   let IconComponent = AlertTriangle
 
   if (outOfStockCount > 0) {
     primaryType = 'out_of_stock'
-    toneClass = 'bg-red-500/10 border-red-300 dark:border-red-800/60 text-red-900 dark:text-red-200'
-    iconClass = 'text-red-600 dark:text-red-400'
-    buttonClass = 'hover:bg-red-500/20 text-red-800 dark:text-red-200 border-red-300 dark:border-red-800'
+    toneClass = 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 text-rose-900 dark:text-rose-200'
+    iconClass = 'text-rose-600 dark:text-rose-400'
+    buttonClass = 'bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-900 text-rose-900 dark:text-rose-200 border-rose-300 dark:border-rose-700/80'
     IconComponent = ShieldAlert
   } else if (missingDataCount > 0 && lowStockCount === 0) {
     primaryType = 'missing_data'
-    toneClass = 'bg-blue-500/10 border-blue-300 dark:border-blue-800/60 text-blue-900 dark:text-blue-200'
+    toneClass = 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/60 text-blue-900 dark:text-blue-200'
     iconClass = 'text-blue-600 dark:text-blue-400'
-    buttonClass = 'hover:bg-blue-500/20 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-800'
+    buttonClass = 'bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-900 text-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700/80'
     IconComponent = Info
   }
 
@@ -75,37 +75,37 @@ export function AlertsBanner({
   return (
     <div
       className={cn(
-        'relative rounded-xl border p-3 md:py-2.5 md:px-4 text-xs transition-all shadow-xs backdrop-blur-md animate-in fade-in duration-300',
+        'relative rounded-2xl border p-2.5 sm:px-4 sm:py-2.5 text-xs transition-all shadow-xs backdrop-blur-md animate-in fade-in duration-200',
         toneClass,
         className
       )}
     >
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 md:gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-4">
         {/* Left side: Icon + Counts */}
         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-          <div className="p-1 rounded-md bg-white/70 dark:bg-black/20 shrink-0">
-            <IconComponent className={cn('h-4 w-4', iconClass)} />
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/90 dark:bg-slate-900/90 shadow-2xs shrink-0">
+            <IconComponent className={cn('h-3.5 w-3.5', iconClass)} />
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-bold">
+            <span className="font-bold text-slate-900 dark:text-slate-100">
               {activeAlerts.length === 1 ? '1 alerta de inventario:' : `${activeAlerts.length} alertas de inventario:`}
             </span>
 
             {outOfStockCount > 0 && (
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-bold bg-red-100/80 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-300/80 dark:border-red-800/80">
+              <Badge variant="outline" className="px-2 py-0 text-[10px] font-bold rounded-full bg-rose-100/90 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border-rose-300/80 dark:border-rose-800/80 shadow-2xs">
                 {outOfStockCount} {outOfStockCount === 1 ? 'agotado' : 'agotados'}
               </Badge>
             )}
 
             {lowStockCount > 0 && (
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-bold bg-amber-100/80 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300/80 dark:border-amber-800/80">
+              <Badge variant="outline" className="px-2 py-0 text-[10px] font-bold rounded-full bg-amber-100/90 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-300/80 dark:border-amber-800/80 shadow-2xs">
                 {lowStockCount} bajo stock
               </Badge>
             )}
 
             {missingDataCount > 0 && (
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-bold bg-blue-100/80 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-300/80 dark:border-blue-800/80">
+              <Badge variant="outline" className="px-2 py-0 text-[10px] font-bold rounded-full bg-blue-100/90 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border-blue-300/80 dark:border-blue-800/80 shadow-2xs">
                 {missingDataCount} datos incompletos
               </Badge>
             )}
@@ -113,13 +113,13 @@ export function AlertsBanner({
         </div>
 
         {/* Right side: Action buttons & Close button */}
-        <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => onAlertClick(primaryType)}
-            className={cn('h-7 px-2.5 text-xs font-semibold rounded-lg', buttonClass)}
+            className={cn('h-7 px-3 text-xs font-semibold rounded-xl shadow-2xs transition-all', buttonClass)}
           >
             <Eye className="h-3.5 w-3.5 mr-1" />
             Ver productos
@@ -131,9 +131,9 @@ export function AlertsBanner({
             size="icon"
             onClick={handleDismissBanner}
             title="Ocultar notificación"
-            className="h-7 w-7 rounded-lg text-current opacity-70 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
+            className="h-6 w-6 rounded-lg text-current opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-opacity"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
             <span className="sr-only">Ocultar</span>
           </Button>
         </div>

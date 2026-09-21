@@ -807,7 +807,7 @@ function AuditHowItWorksDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <strong>Situación:</strong> El administrador nota una salida de 150.000 Gs. a las 15:30.
               </p>
               <div className="p-2 rounded-xl bg-background/80 border border-blue-200/60 dark:border-blue-900/40 text-[11px] font-mono text-blue-950 dark:text-blue-100">
-                En la Bitácora busca "150.000" y visualiza: Usuario "carlos@taller.com" · Motivo: "Factura repuestos N° 8492" · Timestamp exacto.
+                En la Bitácora busca &quot;150.000&quot; y visualiza: Usuario &quot;carlos@taller.com&quot; · Motivo: &quot;Factura repuestos N° 8492&quot; · Timestamp exacto.
               </div>
             </div>
 

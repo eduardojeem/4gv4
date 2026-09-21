@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -61,10 +61,11 @@ export function ProductCard(props: ProductCardProps) {
 
   // La galeria incluye las fotos de las variantes: sin eso, elegir un color no
   // tenia ninguna foto que mostrar.
-  const galleryImages = galleryWithVariantImages(
+  const publicVariants = useMemo(() => (product.variants ?? []).filter((variant) => variant.is_active), [product.variants])
+  const galleryImages = useMemo(() => galleryWithVariantImages(
     [product.image, ...(Array.isArray(product.images) ? product.images : [])],
-    (product.variants ?? []).filter((variant) => variant.is_active),
-  )
+    publicVariants,
+  ), [product.image, product.images, publicVariants])
   const activeImage = galleryImages[activeImageIdx] ?? null
   const resolvedActive = resolveProductImageUrl(activeImage)
 
@@ -87,20 +88,19 @@ export function ProductCard(props: ProductCardProps) {
   // La misma función que usa el checkout: si la vitrina y el cobro calcularan
   // por separado, vuelven a divergir como pasaba con el precio mayorista.
   const displayPrice = resolvePublicVariantPrice({ isWholesale, product, variant: null })
-  const publicVariants = (product.variants ?? []).filter((variant) => variant.is_active)
   const hasVariants = Boolean(product.has_variants && publicVariants.length > 0)
   const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
 
-  // La foto sigue a la variante elegida, como en la pagina de detalle.
-  const variantImageIdx = useMemo(
-    () => variantImageIndex(galleryImages, selectedVariant, publicVariants),
-    [galleryImages, selectedVariant, publicVariants],
-  )
-  useEffect(() => {
+  const handleVariantSelect = (variantId: string) => {
+    setSelectedVariantId(variantId)
+    setQuantity(1)
+    if (variantId === selectedVariantId) return
+    const nextVariant = publicVariants.find((variant) => variant.id === variantId) ?? null
+    const variantImageIdx = variantImageIndex(galleryImages, nextVariant, publicVariants)
     if (variantImageIdx === -1) return
     setImageError(false)
     setActiveImageIdx(variantImageIdx)
-  }, [variantImageIdx])
+  }
   const selectedPrice = selectedVariant
     ? resolvePublicVariantPrice({ isWholesale, product, variant: selectedVariant })
     : displayPrice
@@ -650,10 +650,7 @@ export function ProductCard(props: ProductCardProps) {
                             <button
                               key={variant.id}
                               type="button"
-                              onClick={() => {
-                                setSelectedVariantId(variant.id)
-                                setQuantity(1)
-                              }}
+                              onClick={() => handleVariantSelect(variant.id)}
                               aria-pressed={isSelected}
                               className={cn(
                                 'flex flex-col justify-between rounded-xl border p-2.5 text-left text-xs transition-all',
