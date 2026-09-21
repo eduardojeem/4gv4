@@ -231,7 +231,6 @@ export function ProductCatalog({ products, onAddToCart, loading, onBarcodeSearch
                                 onClick={() => {
                                     setShowScanner(false)
                                     setBarcodeInput('')
-                                    setBarcodeValidation(null)
                                 }}
                             >
                                 Cerrar
