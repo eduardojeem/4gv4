@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
 import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
@@ -69,7 +69,12 @@ interface CreditPaymentDialogProps {
     }
 }
 
-export function CreditPaymentDialog({
+export function CreditPaymentDialog(props: CreditPaymentDialogProps) {
+    if (!props.open) return null
+    return <CreditPaymentDialogContent key={`${props.creditInfo?.id ?? ''}:${props.initialAmount ?? ''}`} {...props} />
+}
+
+function CreditPaymentDialogContent({
     open,
     onOpenChange,
     onConfirm,
@@ -81,7 +86,7 @@ export function CreditPaymentDialog({
 }: CreditPaymentDialogProps) {
     const { format, changeFormat, issuer } = useCreditPrinting()
     const [method, setMethod] = useState<PaymentMethod>('cash')
-    const [amount, setAmount] = useState<string>('')
+    const [amount, setAmount] = useState<string>(() => initialAmount === undefined ? '' : String(initialAmount))
     const [cashTendered, setCashTendered] = useState<string>('')
     const [reference, setReference] = useState<string>('')
     const [notes, setNotes] = useState<string>('')
@@ -89,17 +94,6 @@ export function CreditPaymentDialog({
     const [submitting, setSubmitting] = useState(false)
     const [paymentDone, setPaymentDone] = useState<{ method: PaymentMethod; amount: number; reference?: string; notes?: string; date: Date } | null>(null)
 
-    useEffect(() => {
-        if (open && initialAmount !== undefined) {
-            setAmount(String(initialAmount))
-            setCashTendered('')
-            setError('')
-            setReference('')
-            setNotes('')
-            setSubmitting(false)
-            setPaymentDone(null)
-        }
-    }, [open, initialAmount])
 
     const handleAmountChange = (value: string) => {
         const rawNumber = parseThousands(value)

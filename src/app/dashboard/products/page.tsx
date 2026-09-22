@@ -411,17 +411,21 @@ export default function ProductsPage() {
           ? quickFilterIsActive
           : filters.is_active,
       catalogKind: quickFilterCatalogKind,
+      deviceBrand: filters.device_brand || "",
+      deviceModel: filters.device_model || "",
     };
   }, [filters, serverSearch]);
 
   const mappedServerSort = useMemo(() => {
-    const fieldMap: Record<string, "name" | "sku" | "price" | "stock" | "created_at"> = {
+    const fieldMap: Record<string, "name" | "sku" | "price" | "stock" | "created_at" | "device"> = {
       name: "name",
       sku: "sku",
       sale_price: "price",
       stock_quantity: "stock",
       created_at: "created_at",
       updated_at: "created_at",
+      // Marca y modelo del celular: agrupa los repuestos del mismo teléfono.
+      device_model: "device",
     };
 
     return {
@@ -444,7 +448,9 @@ export default function ProductsPage() {
         prev.isActive === next.isActive &&
         // Sin comparar el tipo, pasar de «productos» a «servicios» (que no
         // cambia ningun otro campo) no llegaba nunca al servidor.
-        prev.catalogKind === next.catalogKind
+        prev.catalogKind === next.catalogKind &&
+        prev.deviceBrand === next.deviceBrand &&
+        prev.deviceModel === next.deviceModel
       ) {
         return prev;
       }
@@ -1447,7 +1453,7 @@ export default function ProductsPage() {
             <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-600 dark:text-slate-300">
               ¿Estás seguro de que quieres eliminar{" "}
-              <span className="font-semibold text-slate-900 dark:text-white">"{productToDelete?.name}"</span>?
+              <span className="font-semibold text-slate-900 dark:text-white">&quot;{productToDelete?.name}&quot;</span>?
               <span className="block mt-2 text-xs text-slate-500 dark:text-slate-400">
                 Esta acción es permanente. Si el producto ya cuenta con ventas o reparaciones en el historial, el sistema te ofrecerá desactivarlo para proteger tus registros contables.
               </span>

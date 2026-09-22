@@ -44,9 +44,9 @@ interface UsePerformanceMonitorReturn {
 }
 
 export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
-  const [performanceScore, setPerformanceScore] = useState(100)
   const [isMonitoring, setIsMonitoring] = useState(true)
-  const [lastReport, setLastReport] = useState<ReturnType<typeof getPerformanceReport> | null>(null)
+  const [lastReport, setLastReport] = useState<ReturnType<typeof getPerformanceReport> | null>(() => getPerformanceReport())
+  const performanceScore = lastReport?.summary.performanceScore ?? 100
   const [webVitals, setWebVitals] = useState<Record<string, number>>({})
   const reportIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -127,7 +127,6 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   const generateReport = useCallback((timeRange?: { start: Date; end: Date }) => {
     const report = getPerformanceReport(timeRange)
     setLastReport(report)
-    setPerformanceScore(report.summary.performanceScore)
     return report
   }, [])
 
@@ -140,7 +139,8 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   const setMonitoring = useCallback((enabled: boolean) => {
     setIsMonitoring(enabled)
     posPerformanceMonitor.setEnabled(enabled)
-  }, [])
+    if (enabled) generateReport()
+  }, [generateReport])
 
   // Configurar thresholds
   const setThresholds = useCallback((thresholds: any) => {
@@ -162,9 +162,6 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   // Configurar reporte automático cada 30 segundos
   useEffect(() => {
     if (isMonitoring) {
-      // Generar reporte inicial
-      generateReport()
-      
       // Configurar intervalo para reportes automáticos
       reportIntervalRef.current = setInterval(() => {
         generateReport()
@@ -281,19 +278,13 @@ export const useOperationPerformance = () => {
 
 // Hook para alertas de performance
 export const usePerformanceAlerts = () => {
-  const { lastReport, refreshReport } = usePerformanceMonitor()
-  const [alerts, setAlerts] = useState<any[]>([])
-
-  useEffect(() => {
-    if (lastReport?.alerts) {
-      setAlerts(lastReport.alerts)
-    }
-  }, [lastReport])
+  const { lastReport } = usePerformanceMonitor()
+  const [dismissedReport, setDismissedReport] = useState<typeof lastReport>(null)
+  const alerts = lastReport === dismissedReport ? [] : lastReport?.alerts ?? []
 
   const clearAlerts = useCallback(() => {
-    setAlerts([])
-    refreshReport()
-  }, [refreshReport])
+    setDismissedReport(lastReport)
+  }, [lastReport])
 
   const getCriticalAlerts = useCallback(() => {
     return alerts.filter(alert => alert.type === 'critical')

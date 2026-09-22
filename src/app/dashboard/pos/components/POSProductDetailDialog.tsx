@@ -249,15 +249,17 @@ export function POSProductDetailDialog({
     }
   }, [open, autoScrollToCredit])
 
-  // Reset al abrir o cerrar
-  useEffect(() => {
+  // Resetear la selección antes de renderizar un producto o apertura nuevos.
+  const [previousSelection, setPreviousSelection] = useState({ open, id: product?.id })
+  if (previousSelection.open !== open || previousSelection.id !== product?.id) {
+    setPreviousSelection({ open, id: product?.id })
     if (open) {
       setSelectedVariant(null)
       setSelectedAttributes({})
       setQuantity(1)
       setCopiedBarcode(false)
     }
-  }, [open, product?.id])
+  }
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {

@@ -4,9 +4,9 @@ import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
  * Read active product filter state from URLSearchParams.
  */
 export function readActiveProductFilters(searchParams: URLSearchParams) {
-  const query = searchParams.get('query')
-  const categoryId = searchParams.get('category_id')
-  const brand = searchParams.get('brand')
+  const query = searchParams.get('query') || searchParams.get('q')
+  const categoryId = searchParams.get('category_id') || searchParams.get('categoria')
+  const brand = searchParams.get('brand') || searchParams.get('marca')
   const branchId = searchParams.get('branch_id')
   const inStock = searchParams.get('in_stock') === 'true'
   const audience = searchParams.get('audience')
@@ -26,8 +26,11 @@ export function readActiveProductFilters(searchParams: URLSearchParams) {
 export function clearAllProductFilters(searchParams: URLSearchParams): URLSearchParams {
   const params = new URLSearchParams(searchParams.toString())
   params.delete('query')
+  params.delete('q')
   params.delete('category_id')
+  params.delete('categoria')
   params.delete('brand')
+  params.delete('marca')
   params.delete('branch_id')
   params.delete('min_price')
   params.delete('max_price')

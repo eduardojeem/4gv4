@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { normalizeTenantSlug, validateTenantSlug, type TenantSlugProblem } from '@/lib/saas/reserved-slugs'
 
 /**
@@ -23,34 +23,12 @@ const ESPERA_MS = 450
 export function useSlugAvailability(valor: string): SlugAvailabilityState {
   const [state, setState] = useState<SlugAvailabilityState>({ estado: 'vacio' })
 
-  // Cada consulta lleva su numero: si dos salen juntas, la respuesta vieja no
-  // puede pisar a la nueva y dejar el campo diciendo lo contrario de lo que hay.
-  const secuenciaRef = useRef(0)
+  const slug = normalizeTenantSlug(valor)
+  const formato = validateTenantSlug(slug)
+  const valid = Boolean(slug) && formato.ok
 
   useEffect(() => {
-    const slug = normalizeTenantSlug(valor)
-
-    if (!slug) {
-      setState({ estado: 'vacio' })
-      return
-    }
-
-    // El formato se resuelve sin salir a la red: no tiene sentido consultar por
-    // un slug que igual va a ser rechazado.
-    const formato = validateTenantSlug(slug)
-    if (formato.ok === false) {
-      setState({
-        estado: 'invalido',
-        slug,
-        mensaje: formato.message,
-        razon: formato.reason,
-        sugerencia: formato.reason === 'reserved' ? `${slug}-tienda` : null,
-      })
-      return
-    }
-
-    const secuencia = ++secuenciaRef.current
-    setState({ estado: 'consultando', slug })
+    if (!valid) return
 
     const control = new AbortController()
     const temporizador = window.setTimeout(async () => {
@@ -59,7 +37,7 @@ export function useSlugAvailability(valor: string): SlugAvailabilityState {
           signal: control.signal,
         })
 
-        if (secuencia !== secuenciaRef.current) return
+        if (control.signal.aborted) return
 
         if (!res.ok) {
           // Sin respuesta util no se puede afirmar que esta libre: decirlo
@@ -75,7 +53,7 @@ export function useSlugAvailability(valor: string): SlugAvailabilityState {
           suggestion?: string | null
         }
 
-        if (secuencia !== secuenciaRef.current) return
+        if (control.signal.aborted) return
 
         if (payload.available) {
           setState({ estado: 'libre', slug })
@@ -89,7 +67,7 @@ export function useSlugAvailability(valor: string): SlugAvailabilityState {
           sugerencia: payload.suggestion ?? null,
         })
       } catch (error) {
-        if (control.signal.aborted || secuencia !== secuenciaRef.current) return
+        if (control.signal.aborted) return
         setState({ estado: 'error', slug, mensaje: 'No pudimos verificarla. Se revisa al crear la cuenta.' })
       }
     }, ESPERA_MS)
@@ -98,7 +76,12 @@ export function useSlugAvailability(valor: string): SlugAvailabilityState {
       window.clearTimeout(temporizador)
       control.abort()
     }
-  }, [valor])
+  }, [slug, valid])
 
-  return state
+  if (!slug) return { estado: 'vacio' }
+  if (formato.ok === false) return {
+    estado: 'invalido', slug, mensaje: formato.message, razon: formato.reason,
+    sugerencia: formato.reason === 'reserved' ? `${slug}-tienda` : null,
+  }
+  return 'slug' in state && state.slug === slug ? state : { estado: 'consultando', slug }
 }

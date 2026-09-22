@@ -72,14 +72,10 @@ interface ProductMeta {
 }
 
 function FavoriteProductImage({ src, alt }: { src?: string | null; alt: string }) {
-  const [err, setErr] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const imageSrc = src ? resolveProductImageUrl(src) : null
 
-  useEffect(() => {
-    setErr(false)
-  }, [src])
-
-  if (!imageSrc || err || imageSrc === '/placeholder-product.svg') {
+  if (!imageSrc || failedSrc === imageSrc || imageSrc === '/placeholder-product.svg') {
     return (
       <div className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground/40 transition-colors">
         <Package className="h-10 w-10 sm:h-12 sm:w-12" />
@@ -95,7 +91,7 @@ function FavoriteProductImage({ src, alt }: { src?: string | null; alt: string }
       fill
       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
       className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
-      onError={() => setErr(true)}
+      onError={() => setFailedSrc(imageSrc)}
       unoptimized
     />
   )
@@ -116,11 +112,14 @@ function FavoriteDetailModal({
   const [imgError, setImgError] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
+  const selectionKey = JSON.stringify([item?.productId, open])
+  const [previousSelectionKey, setPreviousSelectionKey] = useState(selectionKey)
+  if (previousSelectionKey !== selectionKey) {
+    setPreviousSelectionKey(selectionKey)
     setActiveImageIdx(0)
     setImgError(false)
     setCopied(false)
-  }, [item?.productId, open])
+  }
 
   if (!item) return null
 

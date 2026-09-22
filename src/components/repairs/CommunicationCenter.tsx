@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,24 +32,16 @@ export function CommunicationCenter({ repair, templates, messages, onSendMessage
     deviceModel: repair?.device || "",
   }), [repair]);
   
-  const [preview, setPreview] = useState<string>("");
+  const template = templates.find(t => t.id === selectedTemplateId);
+  const preview = selectedTemplateId === "custom"
+    ? customMessage
+    : template ? expandTemplate(template.content, variables) : "";
 
   // Filtrar plantillas por canal seleccionado
   const channelTemplates = useMemo(() => 
     templates.filter(t => t.channel === selectedChannel),
   [templates, selectedChannel]);
 
-  // Actualizar mensaje cuando cambia la plantilla o las variables
-  useEffect(() => {
-    if (selectedTemplateId === "custom") {
-      setPreview(customMessage);
-    } else {
-      const tmpl = templates.find(t => t.id === selectedTemplateId);
-      if (tmpl) {
-        setPreview(expandTemplate(tmpl.content, variables));
-      }
-    }
-  }, [selectedTemplateId, variables, templates, customMessage]);
 
   const handleSend = async () => {
     if (!repair) {

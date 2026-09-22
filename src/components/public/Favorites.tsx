@@ -57,14 +57,10 @@ function formatCurrency(amount?: number | null) {
 }
 
 function FavoriteModalThumbnail({ src, alt }: { src?: string | null; alt: string }) {
-  const [err, setErr] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const imageSrc = src ? resolveProductImageUrl(src) : null
 
-  useEffect(() => {
-    setErr(false)
-  }, [src])
-
-  if (!imageSrc || err || imageSrc === '/placeholder-product.svg') {
+  if (!imageSrc || failedSrc === imageSrc || imageSrc === '/placeholder-product.svg') {
     return (
       <div className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground/40">
         <Package className="h-5 w-5" />
@@ -80,7 +76,7 @@ function FavoriteModalThumbnail({ src, alt }: { src?: string | null; alt: string
       fill
       sizes="64px"
       className="object-contain p-1.5 transition-transform duration-300 group-hover:scale-105"
-      onError={() => setErr(true)}
+      onError={() => setFailedSrc(imageSrc)}
       unoptimized
     />
   )
@@ -126,7 +122,7 @@ export function PublicFavorites() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [metadata, setMetadata] = useState<Record<string, ProductMeta>>({})
-  const [loadingMeta, setLoadingMeta] = useState(false)
+  const [completedMetadataKey, setCompletedMetadataKey] = useState<string | null>(null)
   const [viewScope, setViewScope] = useState<'store' | 'all'>('store')
 
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -145,7 +141,10 @@ export function PublicFavorites() {
   // Si está en la sección de una tienda/organización, muestra la cantidad únicamente de esa tienda
   const headerCount = tenantSlug ? storeFavorites.length : state.items.length
 
-  useEffect(() => {
+  const scopeKey = JSON.stringify([open, tenantSlug])
+  const [previousScopeKey, setPreviousScopeKey] = useState(scopeKey)
+  if (previousScopeKey !== scopeKey) {
+    setPreviousScopeKey(scopeKey)
     if (open) {
       if (tenantSlug) {
         setViewScope('store')
@@ -153,7 +152,7 @@ export function PublicFavorites() {
         setViewScope('all')
       }
     }
-  }, [open, tenantSlug])
+  }
 
   const currentScope = tenantSlug ? viewScope : 'all'
   const displayedItems = currentScope === 'store' ? storeFavorites : state.items
@@ -168,16 +167,16 @@ export function PublicFavorites() {
     return () => window.removeEventListener('storage', refreshGuestFavorites)
   }, [])
 
+  const metadataKey = JSON.stringify(state.items.map(item => item.productId).filter(Boolean))
+  const loadingMeta = open && metadataKey !== '[]' && completedMetadataKey !== metadataKey
   // Fetch metadata when modal opens
   useEffect(() => {
     if (!open || state.items.length === 0) return
 
     let isMounted = true
-    setLoadingMeta(true)
 
     const productIds = Array.from(new Set(state.items.map(item => item.productId).filter(Boolean)))
     if (productIds.length === 0) {
-      setLoadingMeta(false)
       return
     }
 
@@ -197,13 +196,13 @@ export function PublicFavorites() {
       })
       .catch(() => {})
       .finally(() => {
-        if (isMounted) setLoadingMeta(false)
+        if (isMounted) setCompletedMetadataKey(metadataKey)
       })
 
     return () => {
       isMounted = false
     }
-  }, [open, state.items])
+  }, [open, state.items, metadataKey])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -536,5 +535,4 @@ export function PublicFavorites() {
     </Dialog>
   )
 }
-
 

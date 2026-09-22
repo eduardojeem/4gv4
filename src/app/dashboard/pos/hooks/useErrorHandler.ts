@@ -3,7 +3,7 @@
  * Proporciona una interfaz React-friendly para el sistema de error handling
  */
 
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState } from 'react'
 import { 
   handlePOSError, 
   handleNetworkError, 
@@ -44,11 +44,11 @@ interface UseErrorHandlerReturn {
 }
 
 export const useErrorHandler = (): UseErrorHandlerReturn => {
-  const [errorState, setErrorState] = useState({
-    hasErrors: false,
-    errorCount: 0,
-    lastError: null as POSError | null
-  })
+  const [errorState, setErrorState] = useState(() => ({
+    hasErrors: getErrorStats().total > 0,
+    errorCount: getErrorStats().total,
+    lastError: getRecentErrors(1)[0] || null as POSError | null
+  }))
 
   // Actualizar estado cuando ocurren errores
   const updateErrorState = useCallback(() => {
@@ -130,9 +130,6 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
   }, [handleError])
 
   // Actualizar estado inicial
-  useEffect(() => {
-    updateErrorState()
-  }, [updateErrorState])
 
   return {
     // Estado

@@ -1,37 +1,21 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 
 export type ConnectionStatus = 'checking' | 'connected' | 'disconnected'
 
 export function useConnectionStatus() {
-    const [status, setStatus] = useState<ConnectionStatus>('checking')
     const supabase = useMemo(() => createClient(), [])
-
-    const checkConnection = useCallback(async () => {
-        if (!config.supabase.isConfigured) {
-            setStatus('disconnected')
-            return
-        }
-
-        try {
-            // Use getSession for a reliable connection check that doesn't depend on RLS
-            const { error } = await supabase.auth.getSession()
-            if (error) {
-                console.warn('Supabase connection check failed:', error)
-                setStatus('disconnected')
-            } else {
-                setStatus('connected')
-            }
-        } catch (err) {
-            console.error('Supabase connection check error:', err)
-            setStatus('disconnected')
-        }
-    }, [supabase])
-
-    useEffect(() => {
-        checkConnection()
-    }, [checkConnection])
-
+    const { data, error, mutate } = useSWR(
+        config.supabase.isConfigured ? 'connection-status' : null,
+        async () => {
+            const result = await supabase.auth.getSession()
+            return result.error ? 'disconnected' as const : 'connected' as const
+        },
+        { revalidateOnFocus: false }
+    )
+    const status: ConnectionStatus = !config.supabase.isConfigured || error ? 'disconnected' : data ?? 'checking'
+    const checkConnection = () => mutate()
     return { status, checkConnection }
 }

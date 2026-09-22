@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
 import { ArrowRight, ChevronLeft, ChevronRight, Clock, Columns2, Layers, Pause, Play, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -218,7 +219,19 @@ function AnnouncementImageView({
  * Soporta carrusel automático con rotación cada 3 segundos, modo dual cuando hay 2 imágenes,
  * botón de cierre rápido visible y temporizador de auto-cierre con pausa inteligente.
  */
-export function AnnouncementModal({
+export function AnnouncementModal(props: {
+  announcement: Announcement | null
+  scope: string
+  isOpen?: boolean
+  onClose?: () => void
+  isPreview?: boolean
+}) {
+  const hydrated = useHydrated()
+  if (!hydrated || !props.announcement) return null
+  return <AnnouncementModalContent key={JSON.stringify([props.scope, props.announcement, props.isPreview])} {...props} />
+}
+
+function AnnouncementModalContent({
   announcement,
   scope,
   isOpen,
@@ -231,7 +244,16 @@ export function AnnouncementModal({
   onClose?: () => void
   isPreview?: boolean
 }) {
-  const [internalOpen, setInternalOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(() => {
+    if (!announcement) return false
+    if (isPreview) return true
+    const key = announcementStorageKey(scope, announcement)
+    let lastSeen: string | null = null
+    let sessionSeen = false
+    try { lastSeen = window.localStorage.getItem(key) } catch {}
+    try { sessionSeen = window.sessionStorage.getItem(key) === 'seen' } catch {}
+    return shouldShowAnnouncement(announcement, new Date(), lastSeen, sessionSeen)
+  })
   const open = isOpen !== undefined ? isOpen : internalOpen
   const [imageIndex, setImageIndex] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -244,7 +266,7 @@ export function AnnouncementModal({
   const imageBackdrop = announcement?.imageBackdrop ?? 'ambient'
   const imageFit = announcement?.imageFit ?? 'contain'
   const imageEffect = announcement?.imageEffect ?? 'zoom'
-  const [timeLeft, setTimeLeft] = useState<number | null>(null)
+  const [timeLeft, setTimeLeft] = useState<number | null>(() => internalOpen && autoCloseSeconds > 0 ? autoCloseSeconds : null)
   const images = announcementImages(announcement)
 
   // Navegación accesible con teclado (flechas izquierda / derecha)
@@ -262,41 +284,6 @@ export function AnnouncementModal({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, images.length])
-
-  useEffect(() => {
-    if (!announcement) return
-    if (isPreview) {
-      setInternalOpen(true)
-      setTimeLeft(null)
-      return
-    }
-
-    const key = announcementStorageKey(scope, announcement)
-    let lastSeen: string | null = null
-    let sessionSeen = false
-
-    try {
-      lastSeen = window.localStorage.getItem(key)
-    } catch {
-      // Navegador sin almacenamiento: se muestra igual, es preferible a no mostrarlo.
-      lastSeen = null
-    }
-
-    try {
-      sessionSeen = window.sessionStorage.getItem(key) === 'seen'
-    } catch {
-      sessionSeen = false
-    }
-
-    if (shouldShowAnnouncement(announcement, new Date(), lastSeen, sessionSeen)) {
-      setInternalOpen(true)
-      if (autoCloseSeconds > 0) {
-        setTimeLeft(autoCloseSeconds)
-      } else {
-        setTimeLeft(null)
-      }
-    }
-  }, [announcement, scope, autoCloseSeconds, isPreview])
 
   // Rotación automática del carrusel cuando hay 2 o más imágenes
   useEffect(() => {

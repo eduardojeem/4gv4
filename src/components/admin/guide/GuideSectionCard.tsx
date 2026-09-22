@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -25,10 +25,14 @@ import { examplesForVertical, type GuideSection } from '@/lib/guide/types'
 import type { BusinessVertical } from '@/lib/organization/business-profile'
 import { GuideVisualPreview } from './GuideVisualPreview'
 
+const subscribeHash = (listener: () => void) => {
+  window.addEventListener('hashchange', listener)
+  return () => window.removeEventListener('hashchange', listener)
+}
+
 function HighlightedText({ text, query }: { text: string; query?: string }): ReactNode {
   if (!query || !query.trim()) return <>{text}</>
   const needle = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  try {
     const parts = text.split(new RegExp(`(${needle})`, 'gi'))
     return (
       <>
@@ -43,9 +47,6 @@ function HighlightedText({ text, query }: { text: string; query?: string }): Rea
         )}
       </>
     )
-  } catch {
-    return <>{text}</>
-  }
 }
 
 export function GuideSectionCard({
@@ -69,26 +70,20 @@ export function GuideSectionCard({
   isRead?: boolean
   onToggleRead?: (id: string) => void
 }) {
-  const [localOpen, setLocalOpen] = useState(defaultOpen)
+  const [localOpen, setLocalOpen] = useState<boolean | null>(null)
+  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash, () => '')
   const [copied, setCopied] = useState(false)
 
   const isOperation = section.group === 'operations'
   const isAnalytics = section.group === 'analytics'
-  const openState = isOpen !== undefined ? isOpen : localOpen
+  const openState = isOpen ?? localOpen ?? (hash === `#guia-${section.id}` || defaultOpen)
   const examples = examplesForVertical(section, vertical)
-
-  useEffect(() => {
-    if (isOpen !== undefined) {
-      setLocalOpen(isOpen)
-    }
-  }, [isOpen])
 
   // Deep linking: abrir automáticamente si la URL coincide con #guia-{id}
   useEffect(() => {
     if (typeof window === 'undefined') return
     const targetHash = `#guia-${section.id}`
     if (window.location.hash === targetHash) {
-      setLocalOpen(true)
       const el = document.getElementById(`guia-${section.id}`)
       if (el) {
         setTimeout(() => {
@@ -96,7 +91,7 @@ export function GuideSectionCard({
         }, 200)
       }
     }
-  }, [section.id])
+  }, [section.id, hash])
 
   const handleToggle = (e: React.SyntheticEvent) => {
     const target = e.currentTarget as HTMLDetailsElement

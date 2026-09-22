@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -237,11 +237,13 @@ export function CashRegisterGuideDialog({
 }: CashRegisterGuideDialogProps) {
   const [activeSection, setActiveSection] = useState<GuideSectionKey>(initialSection)
 
-  useEffect(() => {
-    if (open && initialSection) {
+  const [previous, setPrevious] = useState({ open, initialSection })
+  if (previous.open !== open || previous.initialSection !== initialSection) {
+    setPrevious({ open, initialSection })
+    if (open) {
       setActiveSection(initialSection)
     }
-  }, [open, initialSection])
+  }
 
   const section = SECTIONS_DATA[activeSection] || SECTIONS_DATA.overview
 

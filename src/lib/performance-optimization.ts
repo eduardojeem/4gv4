@@ -183,124 +183,56 @@ export function usePerformanceMetrics() {
 }
 
 // Hook para memoización avanzada con TTL
-export function useAdvancedMemoization<T extends (...args: unknown[]) => unknown>(
-  factoryOrFn: T | (() => ReturnType<T>),
+export function useAdvancedMemoization<T>(
+  factoryOrFn: () => T,
   deps: React.DependencyList,
-  config: { ttl?: number; key?: string; keyGenerator?: (...args: any[]) => string } = {}
-) {
-  const cacheRef = useRef<TTLCache<ReturnType<T>> | null>(null)
-  
-  if (!cacheRef.current) {
-    cacheRef.current = new TTLCache(config.ttl)
+  _config: { ttl?: number; key?: string; keyGenerator?: (...args: any[]) => string } = {}
+): T {
+  const [inputs, setInputs] = useState(() => ({ deps, factory: factoryOrFn }))
+  if (deps.length !== inputs.deps.length || deps.some((dep, i) => !Object.is(dep, inputs.deps[i]))) {
+    setInputs({ deps, factory: factoryOrFn })
   }
-
-  const depsRef = useRef<React.DependencyList | undefined>(undefined)
-
-  // Support for "memoize" and "clear" return pattern if used as a utility hook
-  // But primarily acts as useMemo/useCallback hybrid
-
-  const memoizedFn = useCallback((...args: Parameters<T>): ReturnType<T> => {
-    const key = config.key || (config.keyGenerator ? config.keyGenerator(...args) : JSON.stringify(args))
-    const cached = cacheRef.current?.get(key)
-    if (cached !== undefined) return cached
-
-    // If factoryOrFn is a function that takes args, call it
-    // If it's a factory () => value, this pattern doesn't quite fit standard useMemo
-    // Assuming usage as a memoized callback wrapper based on useProductFiltering.ts
-
-    const result = (factoryOrFn as any)(...args)
-    cacheRef.current?.set(key, result)
-    return result
-  }, deps) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const clear = useCallback(() => {
-    cacheRef.current?.clear()
-  }, [])
-
-  // If used as `const { memoize, clear } = useAdvancedMemoization(...)`
-  // We need to return an object. 
-  // But if used as `const result = useAdvancedMemoization(...)`
-  // We need to return the function.
-  // This is ambiguous. 
-  // Based on useProductFiltering.ts, it's used in TWO ways.
-  // 1. const { memoize, clear } = useAdvancedMemoization(...)
-  // 2. const filtered = useAdvancedMemoization(fn, deps)(args)
-
-  // To support both, we can assign properties to the returned function
-  const result = memoizedFn as any
-  result.memoize = memoizedFn
-  result.clear = clear
-
-  return result
+  return useMemo(() => inputs.factory(), [inputs])
 }
 
-// Hook para debouncing optimizado
+// Debounce con una ventana maxWait que no se reinicia con cada tecla.
 export function useOptimizedDebounce<T>(
   value: T,
   delay: number,
-  options: {
-    leading?: boolean
-    trailing?: boolean
-    maxWait?: number
-  } = {}
+  options: { leading?: boolean; trailing?: boolean; maxWait?: number } = {}
 ) {
-  const [debouncedValue, setDebouncedValue] = useState(value)
-  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
-  const maxTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
-  const lastCallTimeRef = useRef<number | undefined>(undefined)
-
   const { leading = false, trailing = true, maxWait } = options
+  const [state, setState] = useState(() => ({ input: value, output: value, inBurst: false }))
+  const latestValue = useRef(value)
+  const maxTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  if (!Object.is(state.input, value)) {
+    setState({
+      input: value,
+      output: leading && !state.inBurst ? value : state.output,
+      inBurst: true,
+    })
+  }
 
   useEffect(() => {
-    const now = Date.now()
-
-    // Limpiar timeouts existentes
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
+    latestValue.current = value
+    const finish = () => {
+      setState(prev => ({ ...prev, output: trailing ? latestValue.current : prev.output, inBurst: false }))
+      clearTimeout(maxTimeoutRef.current)
+      maxTimeoutRef.current = undefined
     }
-
-    // Leading edge
-    if (leading && !lastCallTimeRef.current) {
-      setDebouncedValue(value)
-      lastCallTimeRef.current = now
+    const timer = setTimeout(finish, delay)
+    if (maxWait && maxTimeoutRef.current === undefined) {
+      maxTimeoutRef.current = setTimeout(finish, maxWait)
     }
+    return () => clearTimeout(timer)
+  }, [value, delay, trailing, maxWait])
 
-    // Configurar timeout para trailing edge
-    if (trailing) {
-      timeoutRef.current = setTimeout(() => {
-        setDebouncedValue(value)
-        lastCallTimeRef.current = undefined
+  useEffect(() => () => {
+    clearTimeout(maxTimeoutRef.current)
+  }, [])
 
-        if (maxTimeoutRef.current) {
-          clearTimeout(maxTimeoutRef.current)
-          maxTimeoutRef.current = undefined
-        }
-      }, delay)
-    }
-
-    // MaxWait timeout
-    if (maxWait && !maxTimeoutRef.current) {
-      maxTimeoutRef.current = setTimeout(() => {
-        setDebouncedValue(value)
-        lastCallTimeRef.current = undefined
-
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-        }
-      }, maxWait)
-    }
-
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      if (maxTimeoutRef.current) {
-        clearTimeout(maxTimeoutRef.current)
-      }
-    }
-  }, [value, delay, leading, trailing, maxWait])
-
-  return debouncedValue
+  return state.output
 }
 
 // Hook para virtualización de listas grandes

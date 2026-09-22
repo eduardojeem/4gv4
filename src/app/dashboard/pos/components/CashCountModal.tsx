@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -160,13 +160,15 @@ export function CashCountModal({
   const [coinCounts, setCoinCounts] = useState<Record<string, number>>({})
   const [note, setNote] = useState('')
 
-  useEffect(() => {
+  const [previousOpen, setPreviousOpen] = useState(isOpen)
+  if (previousOpen !== isOpen) {
+    setPreviousOpen(isOpen)
     if (isOpen) {
       setBillCounts({})
       setCoinCounts({})
       setNote('')
     }
-  }, [isOpen])
+  }
 
   const billTotal = useMemo(() => {
     return denominations.bills.reduce((sum, denom) => {

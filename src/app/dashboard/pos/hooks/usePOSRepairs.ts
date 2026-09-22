@@ -89,40 +89,42 @@ export function usePOSRepairs({
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
   const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
+  const repairScope = `${enabled}:${selectedCustomer}:${selectedBranchId}`
+  const [previousScope, setPreviousScope] = useState(repairScope)
+  if (previousScope !== repairScope) {
+    setPreviousScope(repairScope)
+    setCustomerRepairs([])
+    if (!selectedCustomer || !enabled) setSelectedRepairIds([])
+  }
+  const [deliveryContext, setDeliveryContext] = useState({ isCheckoutOpen, selectedRepairIds })
+  if (deliveryContext.isCheckoutOpen !== isCheckoutOpen || deliveryContext.selectedRepairIds !== selectedRepairIds) {
+    setDeliveryContext({ isCheckoutOpen, selectedRepairIds })
+    setMarkRepairDelivered(isCheckoutOpen && selectedRepairIds.length > 0)
+    if (!isCheckoutOpen) setDeliveryOutcome('repaired')
+  }
 
   // --- Carga desde Supabase + suscripción Realtime ---
   useEffect(() => {
     if (!selectedCustomer || !enabled) {
-      setCustomerRepairs([])
-      setSelectedRepairIds(prev => (prev.length ? [] : prev))
       return
     }
-
+    const controller = new AbortController()
     const loadRepairs = async () => {
       const branchQuery = selectedBranchId && selectedBranchId !== 'all' ? `&branch_id=${encodeURIComponent(selectedBranchId)}` : ''
-      const response = await fetch(`/api/customers/${selectedCustomer}/repairs?limit=20${branchQuery}`, { cache: 'no-store' })
+      const response = await fetch(`/api/customers/${selectedCustomer}/repairs?limit=20${branchQuery}`, { cache: 'no-store', signal: controller.signal })
       const payload = await response.json().catch(() => null) as { repairs?: Array<Record<string, unknown>>; error?: string } | null
       if (!response.ok || !Array.isArray(payload?.repairs)) throw new Error(payload?.error || 'No se pudieron cargar las reparaciones')
-      setCustomerRepairs(payload.repairs.map(repair => ({ ...repair, notes: repair.problem_description })))
+      if (!controller.signal.aborted) setCustomerRepairs(payload.repairs.map(repair => ({ ...repair, notes: repair.problem_description })))
     }
     loadRepairs().catch(error => {
+      if (controller.signal.aborted) return
       console.warn('No se pudieron cargar reparaciones del cliente en el POS:', error)
       setCustomerRepairs([])
     })
+    return () => controller.abort()
   }, [selectedCustomer, selectedBranchId, enabled])
 
   // --- Toggles de entrega ---
-  useEffect(() => {
-    if (!isCheckoutOpen) {
-      setMarkRepairDelivered(false)
-      setDeliveryOutcome('repaired')
-    }
-  }, [isCheckoutOpen, selectedRepairIds])
-
-  useEffect(() => {
-    if (!isCheckoutOpen) return
-    setMarkRepairDelivered(selectedRepairIds.length > 0)
-  }, [selectedRepairIds, isCheckoutOpen])
 
   // --- Resolución de reparaciones seleccionadas ---
   const selectedRepairs = useMemo(() => {

@@ -48,14 +48,14 @@ describe('el contador sale de la base, no de una lista', () => {
   })
 
   it('respeta la tienda y la sucursal elegidas', () => {
-    expect(HOOK).toContain(".eq('organization_id', organization.id)")
+    expect(HOOK).toContain(".eq('organization_id', organizationId)")
     expect(HOOK).toContain('withBranchFilter(query, selectedBranchId)')
   })
 
   it('se actualiza cuando entra una alerta, sin recargar', () => {
     // Es justo el momento en que sirve.
     expect(HOOK).toContain("table: 'cash_alerts',")
-    expect(HOOK).toContain('filter: `organization_id=eq.${organization.id}`')
+    expect(HOOK).toContain('filter: `organization_id=eq.${organizationId}`')
   })
 
   it('un contador que falla no rompe el menu', () => {

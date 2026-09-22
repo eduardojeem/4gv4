@@ -155,7 +155,7 @@ export function BrandPicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={abrir}>
+    <Popover open={open} onOpenChange={abrir} modal={true}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -174,10 +174,27 @@ export function BrandPicker({
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] min-w-[280px] max-w-[calc(100vw-2rem)] p-0 z-50 shadow-lg"
+        align="start"
+        collisionPadding={16}
+        sideOffset={4}
+        onOpenAutoFocus={(e) => {
+          // En dispositivos táctiles (móviles/tablets), evitamos abrir automáticamente el teclado
+          // virtual para que no tape las opciones ni rompa el scroll táctil de la lista.
+          const esTactil =
+            typeof window !== 'undefined' &&
+            (window.matchMedia?.('(pointer: coarse)')?.matches ||
+              'ontouchstart' in window ||
+              navigator.maxTouchPoints > 0)
+          if (esTactil) {
+            e.preventDefault()
+          }
+        }}
+      >
         {/* `shouldFilter` apagado: el orden lo decide `filterBrands`, y crear
             tiene que seguir a la vista aunque nada coincida. */}
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} className="touch-pan-y">
           <div className="flex items-center gap-2 border-b px-3">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
@@ -195,7 +212,7 @@ export function BrandPicker({
             />
           </div>
 
-          <CommandList className="max-h-72">
+          <CommandList className="max-h-60 sm:max-h-72 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]">
             {/* Crear primero: es a lo que se viene. Salvo que ya exista, o que
                 todavía se esté preguntando si existe. */}
             {puedeCrear && (

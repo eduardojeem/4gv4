@@ -34,6 +34,9 @@ export function FilterBadges({
   const removeFilter = (key: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.delete(key)
+    if (key === 'brand') params.delete('marca')
+    if (key === 'category_id') params.delete('categoria')
+    if (key === 'query') params.delete('q')
     params.set('page', '1')
     startTransition(() => {
       router.push(`?${params.toString()}`, { scroll: false })

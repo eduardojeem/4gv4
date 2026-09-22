@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -68,15 +69,12 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
   const [isAnimating, setIsAnimating] = useState(false)
   // isMounted evita hydration mismatch: el servidor y el primer render del cliente
   // ven los mismos datos vacíos. SWR puede tener cache en el cliente pero no en el servidor.
-  const [isMounted, setIsMounted] = useState(false)
-  useEffect(() => { setIsMounted(true) }, [])
+  const isMounted = useHydrated()
 
   // Mantener índice en rango válido si cambia candidateProducts
-  useEffect(() => {
-    if (candidateProducts.length > 0 && currentIndex >= candidateProducts.length) {
-      setCurrentIndex(0)
-    }
-  }, [candidateProducts.length, currentIndex])
+  if (currentIndex !== 0 && currentIndex >= candidateProducts.length) {
+    setCurrentIndex(0)
+  }
 
   const changeSlide = useCallback((newIdx: number) => {
     setIsAnimating(true)

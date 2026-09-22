@@ -146,7 +146,12 @@ function RoleBadge({ role }: { role: DashboardUserRole }) {
 }
 
 // Componente para editar usuario
-function EditUserDialog({ 
+function EditUserDialog(props: React.ComponentProps<typeof EditUserDialogContent>) {
+  if (!props.open) return null
+  return <EditUserDialogContent key={props.user?.id ?? 'new'} {...props} />
+}
+
+function EditUserDialogContent({
   user, 
   open, 
   onOpenChange, 
@@ -157,14 +162,9 @@ function EditUserDialog({
   onOpenChange: (open: boolean) => void
   onSave: (user: User) => void 
 }) {
-  const [formData, setFormData] = useState<Partial<User>>({})
+  const [formData, setFormData] = useState<Partial<User>>(() => user ?? {})
   const { canManageUser } = useAuth()
 
-  useEffect(() => {
-    if (user) {
-      setFormData(user)
-    }
-  }, [user])
 
   const handleSave = () => {
     if (!user || !formData.role) return

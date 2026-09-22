@@ -128,7 +128,7 @@ export function InventoryAlertsPanel({
     }
 
     products.forEach(product => {
-      const alertId = `${product.id}-${Date.now()}`
+      const alertId = product.id
 
       // Alerta de sin stock
       if (product.stock_quantity === 0) {

@@ -49,9 +49,11 @@ describe('el buscador del teléfono se comporta', () => {
   })
 
   it('se cierra al cambiar de ruta, como el menú', () => {
-    const efecto = NAV.slice(NAV.indexOf('setMobileDrawerOpen(false)\n    setMobileSearchOpen(false)'))
-    expect(efecto.slice(0, 120)).toContain('setMobileSearchOpen(false)')
-    expect(NAV).toContain('}, [pathname])')
+    // Se ajusta durante el render al detectar otra ruta, no en un efecto: así
+    // no hay un frame con el buscador abierto en la página nueva.
+    const cambio = NAV.slice(NAV.indexOf('if (previousPathname !== pathname) {'))
+    expect(cambio.slice(0, 200)).toContain('setMobileDrawerOpen(false)')
+    expect(cambio.slice(0, 200)).toContain('setMobileSearchOpen(false)')
   })
 
   it('el botón dice en qué estado está', () => {

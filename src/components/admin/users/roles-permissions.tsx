@@ -195,7 +195,8 @@ export default function RolesPermissions() {
   const [permissionSearch, setPermissionSearch] = useState('')
   const [permissionSearchDebounced, setPermissionSearchDebounced] = useState('')
   const [permissionCategory, setPermissionCategory] = useState<string>('all')
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null)
+  const [selectedRoleSnapshot, setSelectedRole] = useState<Role | null>(null)
+  const selectedRole = roles.find(role => role.id === selectedRoleSnapshot?.id) ?? null
   const [isCreateRoleOpen, setIsCreateRoleOpen] = useState(false)
   const [isAssignRoleOpen, setIsAssignRoleOpen] = useState(false)
 
@@ -240,14 +241,6 @@ export default function RolesPermissions() {
     }))
   }
 
-  // Mantener el modal del rol sincronizado con cambios en roles
-  useEffect(() => {
-    if (!selectedRole) return
-    const updated = roles.find(r => r.id === selectedRole.id)
-    if (updated && updated !== selectedRole) {
-      setSelectedRole(updated)
-    }
-  }, [roles, selectedRole])
 
   const getRoleColor = (color: string) => {
     const colors = {

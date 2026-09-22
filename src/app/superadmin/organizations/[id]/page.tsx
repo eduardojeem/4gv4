@@ -38,6 +38,11 @@ type Props = {
 
 export default async function SuperAdminOrganizationDetailPage({ params }: Props) {
   const { id } = await params
+  const detailData = await loadOrganizationDetail(id)
+  return <OrganizationDetailView data={detailData} />
+}
+
+async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetail> {
   const admin = createAdminSupabase()
 
   // Find organization by ID or by slug
@@ -415,5 +420,5 @@ export default async function SuperAdminOrganizationDetailPage({ params }: Props
         },
   }
 
-  return <OrganizationDetailView data={detailData} />
+  return detailData
 }

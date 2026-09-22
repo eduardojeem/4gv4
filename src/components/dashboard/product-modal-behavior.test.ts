@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress } from './product-modal-behavior'
+import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress, calculateWholesalePriceFromCost, calculateWholesalePriceFromSale } from './product-modal-behavior'
 
 describe('getFirstProductErrorTab', () => {
   it('opens the first section that contains a validation error after submit', () => {
@@ -86,3 +86,34 @@ describe('getProductRequirementsProgress', () => {
     expect(getProductRequirementsProgress({ ...complete, sale_price: 'abc' }).isComplete).toBe(false)
   })
 })
+
+describe('cálculo de precio mayorista', () => {
+  it('suma porcentaje sobre el precio de costo correctamente', () => {
+    // Costo: 100.000 Gs. + 15% = 115.000 Gs.
+    expect(calculateWholesalePriceFromCost(100000, 15)).toBe(115000)
+    // Costo: 50.000 Gs. + 20% = 60.000 Gs.
+    expect(calculateWholesalePriceFromCost(50000, 20)).toBe(60000)
+    // Costo: 80.000 Gs. + 5% = 84.000 Gs.
+    expect(calculateWholesalePriceFromCost(80000, 5)).toBe(84000)
+  })
+
+  it('devuelve 0 si el costo o el porcentaje es menor o igual a cero', () => {
+    expect(calculateWholesalePriceFromCost(0, 15)).toBe(0)
+    expect(calculateWholesalePriceFromCost(-1000, 15)).toBe(0)
+    expect(calculateWholesalePriceFromCost(100000, 0)).toBe(0)
+    expect(calculateWholesalePriceFromCost(100000, -5)).toBe(0)
+  })
+
+  it('calcula descuento sobre precio público correctamente', () => {
+    // Venta: 150.000 Gs. - 10% = 135.000 Gs.
+    expect(calculateWholesalePriceFromSale(150000, 10)).toBe(135000)
+    // Venta: 200.000 Gs. - 20% = 160.000 Gs.
+    expect(calculateWholesalePriceFromSale(200000, 20)).toBe(160000)
+  })
+
+  it('devuelve 0 si el precio de venta o porcentaje de descuento es menor o igual a cero', () => {
+    expect(calculateWholesalePriceFromSale(0, 10)).toBe(0)
+    expect(calculateWholesalePriceFromSale(150000, 0)).toBe(0)
+  })
+})
+

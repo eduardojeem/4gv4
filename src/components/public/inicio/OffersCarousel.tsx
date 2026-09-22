@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ArrowRight, Tag } from 'lucide-react'
@@ -132,10 +132,7 @@ export function OffersCarousel({ companyName, settings }: OffersCarouselProps) {
   // Garantiza que servidor y cliente rendericen lo mismo en el primer paint.
   // Sin esto, el servidor ve isLoading=true (skeleton) pero el cliente puede ver
   // datos ya cacheados (carousel), causando el mismatch de hidratación.
-  const [isMounted, setIsMounted] = useState(false)
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
+  const isMounted = useHydrated()
 
   return (
     <section className={cn('border-y py-14 md:py-20', accent.section)}>

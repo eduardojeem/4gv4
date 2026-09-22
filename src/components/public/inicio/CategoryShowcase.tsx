@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -267,12 +268,9 @@ export function CategoryShowcase() {
 }
 
 function ClassicCategoryShowcase() {
-  const [mounted, setMounted] = useState(false)
+  const mounted = useHydrated()
   const [showAll, setShowAll] = useState(false)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)

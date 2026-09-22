@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
 import {
   AlertTriangle,
@@ -147,31 +148,26 @@ function iconFor(section: GuideSection): LucideIcon {
 export type MainGuideTab = 'summary' | 'all' | 'dashboard' | 'admin' | 'rubro' | 'first-steps' | 'faq'
 
 export function GuideView() {
+  const hydrated = useHydrated()
+  return hydrated ? <GuideViewContent /> : null
+}
+
+function GuideViewContent() {
   const [query, setQuery] = useState('')
   const [activeTab, setActiveTab] = useState<MainGuideTab>('summary')
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
-  const [readSections, setReadSections] = useState<string[]>([])
+  const [readSections, setReadSections] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('4g-guide-read-sections-v1') ?? '[]')
+      return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []
+    } catch { return [] }
+  })
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const { hasPermission, isAdmin } = useAuth()
   const { effectiveModules, businessVertical } = useSubscriptionStatus()
-  const [selectedVertical, setSelectedVertical] = useState<BusinessVertical>(
-    (businessVertical as BusinessVertical) || 'electronics',
-  )
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const saved = localStorage.getItem('4g-guide-read-sections-v1')
-      if (saved) setReadSections(JSON.parse(saved))
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    if (businessVertical) {
-      setSelectedVertical(businessVertical as BusinessVertical)
-    }
-  }, [businessVertical])
+  const [verticalOverride, setSelectedVertical] = useState<BusinessVertical | null>(null)
+  const selectedVertical = verticalOverride ?? (businessVertical as BusinessVertical) ?? 'electronics'
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

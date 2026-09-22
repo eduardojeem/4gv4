@@ -47,7 +47,12 @@ const BUSINESS_TYPES = [
   { value: 'retailer', label: 'Minorista' },
 ]
 
-export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading = false }: SupplierModalProps) {
+export function SupplierModal(props: SupplierModalProps) {
+  if (!props.isOpen) return null
+  return <SupplierModalContent key={`${props.mode}:${props.supplier?.id ?? 'new'}`} {...props} />
+}
+
+function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading = false }: SupplierModalProps) {
   const [activeTab, setActiveTab] = useState('basic')
   const [generalError, setGeneralError] = useState<string | null>(null)
 
@@ -73,8 +78,6 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
   // Reset form when modal opens or supplier changes
   useEffect(() => {
     if (isOpen) {
-      setGeneralError(null)
-      setActiveTab('basic')
       
       const values: any = {
         name: supplier?.name || '',

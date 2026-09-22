@@ -193,45 +193,32 @@ export function useLazyImage(
   src: string,
   config: CriticalPerformanceConfig = CRITICAL_PERFORMANCE_CONFIG
 ) {
-  const [imageSrc, setImageSrc] = useState<string>('')
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [isError, setIsError] = useState(false)
-  const imgRef = useRef<HTMLImageElement | null>(null)
+  const [result, setResult] = useState<{ src: string; status: 'loaded' | 'error' } | null>(null)
 
   useEffect(() => {
-    if (!config.enableImageLazyLoading || !src) {
-      setImageSrc(src)
-      return
-    }
+    if (!config.enableImageLazyLoading || !src) return
 
     const img = new Image()
-    imgRef.current = img
-
     img.onload = () => {
-      setImageSrc(src)
-      setIsLoaded(true)
-      setIsError(false)
+      setResult({ src, status: 'loaded' })
     }
 
     img.onerror = () => {
-      setIsError(true)
-      setIsLoaded(false)
+      setResult({ src, status: 'error' })
     }
 
     img.src = src
 
     return () => {
-      if (imgRef.current) {
-        imgRef.current.onload = null
-        imgRef.current.onerror = null
-      }
+      img.onload = null
+      img.onerror = null
     }
   }, [src, config.enableImageLazyLoading])
 
   return {
-    src: imageSrc,
-    isLoaded,
-    isError
+    src: !config.enableImageLazyLoading ? src : result?.src === src && result.status === 'loaded' ? src : '',
+    isLoaded: result?.src === src && result.status === 'loaded',
+    isError: result?.src === src && result.status === 'error'
   }
 }
 

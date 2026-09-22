@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { toast } from 'sonner'
 import { hasProductCredit } from '../lib/product-credit'
 import { applyProductCreditFilter, type ProductCreditSort } from '../lib/product-credit-filter'
@@ -173,15 +174,17 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
       setViewportWidth(window.innerWidth)
       setViewportHeight(window.innerHeight)
     }
-    update()
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [])
 
   // Resetear página al cambiar filtros
-  useEffect(() => {
+  const filterKey = JSON.stringify([debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort, catalogView])
+  const [previousFilterKey, setPreviousFilterKey] = useState(filterKey)
+  if (previousFilterKey !== filterKey) {
+    setPreviousFilterKey(filterKey)
     setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy, creditOnly, minimumInstallments, creditSort, catalogView])
+  }
 
   // Al cambiar de vista la categoría elegida puede no existir en la otra.
   const setCatalogView = useCallback((view: POSCatalogView) => {
@@ -190,12 +193,13 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
   }, [])
 
   // Restaurar preferencias desde localStorage (solo al montar)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  const hydrated = useHydrated()
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  if (hydrated && !preferencesLoaded) {
+    setPreferencesLoaded(true)
     try {
       const saved = localStorage.getItem(PREFS_KEY)
-      if (!saved) return
-      const prefs = JSON.parse(saved)
+      const prefs = saved ? JSON.parse(saved) : {}
       if (prefs.selectedCategory) setSelectedCategory(prefs.selectedCategory)
       if (typeof prefs.showFeatured === 'boolean') setShowFeatured(prefs.showFeatured)
       if (prefs.sortBy) setSortBy(prefs.sortBy)
@@ -223,11 +227,11 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
     } catch (e) {
       console.warn('No se pudo restaurar preferencias POS', e)
     }
-  }, [])
+  }
 
   // Persistir preferencias
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!preferencesLoaded) return
     try {
       localStorage.setItem(
         PREFS_KEY,
@@ -249,6 +253,7 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
       console.error('Error guardando preferencias POS', e)
     }
   }, [
+    preferencesLoaded,
     selectedCategory,
     showFeatured,
     sortBy,

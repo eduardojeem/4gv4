@@ -37,8 +37,7 @@ describe('el hook de disponibilidad', () => {
   it('descarta respuestas que llegan fuera de orden', () => {
     // Dos consultas seguidas podrían dejar el campo diciendo lo contrario de lo
     // que hay escrito.
-    expect(HOOK).toContain('secuenciaRef')
-    expect(HOOK).toMatch(/secuencia !== secuenciaRef\.current/)
+    expect(HOOK).toContain('if (control.signal.aborted) return')
     expect(HOOK).toContain('AbortController')
   })
 

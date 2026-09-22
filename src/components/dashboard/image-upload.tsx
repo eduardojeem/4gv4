@@ -201,7 +201,7 @@ export function ImageUpload({
 
     const preparedFiles: ImageFile[] = []
     for (const file of validFiles) {
-      const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+      const id = crypto.randomUUID()
       const { blob } = await processImage(file, {
         quality,
         maxWidth,

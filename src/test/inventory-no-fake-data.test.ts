@@ -35,7 +35,8 @@ describe('la busqueda avanzada no inventa el catalogo', () => {
     // Radix desmonta el contenido inactivo: vivian en estado de React y se
     // perdian al salir de la pestaña.
     expect(BUSQUEDA).toContain("const SAVED_SEARCHES_KEY = 'mipos:inventory:saved-searches'")
-    expect(BUSQUEDA).toContain('setSavedSearches(readSavedSearches())')
+    // Se leen al montar, en el estado inicial: sin un frame vacío.
+    expect(BUSQUEDA).toContain('useState<SavedSearch[]>(readSavedSearches)')
     expect(BUSQUEDA).toContain('writeSavedSearches(next)')
     // Ventana privada o almacenamiento bloqueado no puede romper la pantalla.
     expect(BUSQUEDA).toContain('} catch {')

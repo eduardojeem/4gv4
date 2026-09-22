@@ -70,10 +70,12 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
   const { branding } = usePlatformBranding(initialBranding)
 
   // Cerrar drawer al cambiar de ruta
-  useEffect(() => {
+  const [previousPathname, setPreviousPathname] = useState(pathname)
+  if (previousPathname !== pathname) {
+    setPreviousPathname(pathname)
     setMobileDrawerOpen(false)
     setMobileSearchOpen(false)
-  }, [pathname])
+  }
 
   // Bloquear scroll cuando el drawer está abierto
   useEffect(() => {

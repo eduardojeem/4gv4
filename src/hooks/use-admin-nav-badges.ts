@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useBranch } from '@/contexts/branch-context'
@@ -8,6 +9,7 @@ import { withBranchFilter } from '@/lib/branches/client'
 import type { NavBadgeKey } from '@/config/admin-navigation'
 
 export type AdminNavBadges = Partial<Record<NavBadgeKey, number>>
+const EMPTY_BADGES: AdminNavBadges = {}
 
 /**
  * Contadores para el menu del admin.
@@ -21,22 +23,18 @@ export type AdminNavBadges = Partial<Record<NavBadgeKey, number>>
  * recargar, que es el momento en que sirve.
  */
 export function useAdminNavBadges(): AdminNavBadges {
-  const [badges, setBadges] = useState<AdminNavBadges>({})
   const { organization } = useActiveOrganization()
+  const organizationId = organization?.id
   const { selectedBranchId } = useBranch()
-
-  const refresh = useCallback(async () => {
-    if (!organization?.id) {
-      setBadges({})
-      return
-    }
-
+  const key = useMemo(() => organizationId ? ['admin-nav-badges', organizationId, selectedBranchId] as const : null,
+    [organizationId, selectedBranchId])
+  const { data: badges = EMPTY_BADGES, mutate: refresh } = useSWR(key, async () => {
     try {
       const supabase = createClient()
       let query = supabase
         .from('cash_alerts')
         .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organization.id)
+        .eq('organization_id', organizationId)
         .eq('is_resolved', false)
 
       query = withBranchFilter(query, selectedBranchId)
@@ -45,29 +43,26 @@ export function useAdminNavBadges(): AdminNavBadges {
       // Un menu no puede romperse por un contador: si falla, no se muestra nada.
       if (error) return
 
-      setBadges({ 'cash-alerts': count ?? 0 })
+      return { 'cash-alerts': count ?? 0 } as AdminNavBadges
     } catch {
       // Ídem: el menu sigue funcionando sin el punto.
     }
-  }, [organization?.id, selectedBranchId])
+    return EMPTY_BADGES
+  }, { revalidateOnFocus: false })
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  useEffect(() => {
-    if (!organization?.id) return
+    if (!organizationId) return
 
     let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null
     try {
       const supabase = createClient()
       channel = supabase
-        .channel(`admin-nav-badges:${organization.id}`)
+        .channel(`admin-nav-badges:${organizationId}`)
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'cash_alerts',
-          filter: `organization_id=eq.${organization.id}`,
+          filter: `organization_id=eq.${organizationId}`,
         }, () => {
           void refresh()
         })
@@ -85,7 +80,7 @@ export function useAdminNavBadges(): AdminNavBadges {
         }
       }
     }
-  }, [organization?.id, refresh])
+  }, [organizationId, refresh])
 
-  return badges
+  return organizationId ? badges : EMPTY_BADGES
 }

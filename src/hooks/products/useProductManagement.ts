@@ -8,7 +8,6 @@ import { useErrorHandler } from '@/lib/error-handling'
 import { useDebounce } from '@/lib/notification-performance'
 import { 
   usePerformanceMetrics, 
-  useAdvancedMemoization, 
   PerformanceUtils,
   DEFAULT_PERFORMANCE_CONFIG,
   type PerformanceConfig
@@ -42,8 +41,6 @@ export function useProductManagement(
 
   // Hooks de rendimiento
   const { recordMetric, getMetrics, clearMetrics } = usePerformanceMetrics()
-  // No necesitamos usar memoize aquí directamente, solo la instancia
-  const { clear: clearMemoization } = useAdvancedMemoization(() => {}, [], performanceConfig.memoization || {})
   
   // Hooks de manejo de errores
 
@@ -497,8 +494,7 @@ export function useProductManagement(
   // Funciones de limpieza de rendimiento
   const clearPerformanceData = useCallback(() => {
     clearMetrics()
-    clearMemoization()
-  }, [clearMetrics, clearMemoization])
+  }, [clearMetrics])
 
   const getPerformanceReport = useCallback(() => {
     const metrics = getMetrics()

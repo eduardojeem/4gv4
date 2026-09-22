@@ -105,12 +105,12 @@ export function ProductsClient({
   
   const sortRef = useRef<HTMLDivElement>(null)
   const gridTopRef = useRef<HTMLDivElement>(null)
-  const lastFiltersRef = useRef({
-    query: initialQuery,
-    category: initialCategory,
-    subcategory: initialSubcategory,
-    brand: initialBrand,
-  })
+  const filterKey = JSON.stringify([initialQuery, initialCategory, initialSubcategory, initialBrand, onlyOffers, sort])
+  const [previousFilterKey, setPreviousFilterKey] = useState(filterKey)
+  if (previousFilterKey !== filterKey) {
+    setPreviousFilterKey(filterKey)
+    setPage(1)
+  }
 
   // Cerrar dropdown de ordenamiento al hacer clic fuera
   useEffect(() => {
@@ -147,35 +147,6 @@ export function ProductsClient({
 
     return () => clearTimeout(handler)
   }, [query, router, pathname, searchParams])
-
-  // Resetear página local al cambiar filtros o ordenamientos locales
-  useEffect(() => {
-    setPage(1)
-  }, [onlyOffers, sort])
-
-  // Sincronizar inputs si cambian los parámetros en la URL
-  useEffect(() => {
-    const filtersChanged =
-      lastFiltersRef.current.query !== initialQuery ||
-      lastFiltersRef.current.category !== initialCategory ||
-      lastFiltersRef.current.subcategory !== initialSubcategory ||
-      lastFiltersRef.current.brand !== initialBrand
-
-    if (filtersChanged) {
-      // Aca habia un `setQuery(initialQuery)`. `initialQuery` llega recien cuando
-      // responde el servidor, asi que una respuesta vieja pisaba lo que la persona
-      // ya habia terminado de escribir: escribias "notebook", volvia la respuesta
-      // de "note" y el campo retrocedia. El input es el dueño de su texto; la URL
-      // lo sigue, no al reves.
-      setPage(1)
-      lastFiltersRef.current = {
-        query: initialQuery,
-        category: initialCategory,
-        subcategory: initialSubcategory,
-        brand: initialBrand,
-      }
-    }
-  }, [initialQuery, initialCategory, initialSubcategory, initialBrand])
 
   // ─── Funciones para actualizar filtros en URL ──────────────────────────────
   const updateUrlParam = (key: string, value: string) => {

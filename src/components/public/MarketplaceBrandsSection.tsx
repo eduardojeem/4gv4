@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
@@ -181,9 +181,12 @@ export function MarketplaceBrandsSection({
   const [isPaused, setIsPaused] = useState(false)
 
   // Resetear página al buscar o cambiar de orden
-  useEffect(() => {
+  const filterKey = JSON.stringify([searchQuery, sortBy])
+  const [previousFilterKey, setPreviousFilterKey] = useState(filterKey)
+  if (previousFilterKey !== filterKey) {
+    setPreviousFilterKey(filterKey)
     setCurrentPage(1)
-  }, [searchQuery, sortBy])
+  }
 
   // Filtrar marcas activas (solo marcas con productos disponibles)
   const activeBrands = useMemo(() => {

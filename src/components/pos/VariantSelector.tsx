@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import {
   ProductWithVariants,
   ProductVariant,
@@ -88,14 +88,19 @@ function resolveColorHex(colorName: string, explicitHex?: string): string | null
   return COLOR_HEX_MAP[lower] || null
 }
 
-export function VariantSelector({
+export function VariantSelector(props: VariantSelectorProps) {
+  if (!props.isOpen) return null
+  return <VariantSelectorContent key={props.product.id} {...props} />
+}
+
+function VariantSelectorContent({
   product,
   isOpen,
   onClose,
   onAddToCart,
   formatCurrency = defaultFormatCurrency,
 }: VariantSelectorProps) {
-  const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({})
+  const [attributeChoices, setSelectedAttributes] = useState<Record<string, string>>({})
   const [quantity, setQuantity] = useState(1)
   const [activeTab, setActiveTab] = useState<'attributes' | 'catalog'>('attributes')
   const [searchQuery, setSearchQuery] = useState('')
@@ -169,22 +174,11 @@ export function VariantSelector({
       }))
   }, [product.variants])
 
-  // Auto-selección inicial inteligente: si un atributo tiene solo 1 opción, seleccionarlo
-  useEffect(() => {
-    if (isOpen && productAttributes.length > 0) {
-      setSelectedAttributes(prev => {
-        const next = { ...prev }
-        let changed = false
-        productAttributes.forEach(attr => {
-          if (!next[attr.id] && attr.options.length === 1) {
-            next[attr.id] = attr.options[0].id
-            changed = true
-          }
-        })
-        return changed ? next : prev
-      })
-    }
-  }, [isOpen, productAttributes])
+  // Las opciones únicas son valores derivados; solo guardamos elecciones del usuario.
+  const selectedAttributes = Object.fromEntries(productAttributes.flatMap(attr => {
+    const selected = attributeChoices[attr.id] ?? (attr.options.length === 1 ? attr.options[0].id : undefined)
+    return selected ? [[attr.id, selected]] : []
+  }))
 
   // Reset al cerrar o cambiar producto
   const handleClose = useCallback(() => {

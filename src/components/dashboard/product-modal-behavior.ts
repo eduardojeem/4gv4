@@ -83,3 +83,19 @@ export function getProductRequirementsProgress(values: ProductRequirementValues)
     isComplete: completed === requirements.length,
   }
 }
+
+/**
+ * Calcula el precio mayorista sumando un porcentaje sobre el precio de costo.
+ */
+export function calculateWholesalePriceFromCost(cost: number, markupPercentage: number): number {
+  if (cost <= 0 || markupPercentage <= 0) return 0
+  return Number((cost * (1 + markupPercentage / 100)).toFixed(2))
+}
+
+/**
+ * Calcula el precio mayorista aplicando un descuento sobre el precio de venta al público.
+ */
+export function calculateWholesalePriceFromSale(salePrice: number, discountPercentage: number): number {
+  if (salePrice <= 0 || discountPercentage <= 0) return 0
+  return Number((salePrice * (1 - discountPercentage / 100)).toFixed(2))
+}

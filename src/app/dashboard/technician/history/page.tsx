@@ -275,8 +275,12 @@ export default function TechnicianHistoryPage() {
     return filtered
   }, [myRepairs, dateFilter, statusFilter, searchTerm, sortBy])
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1) }, [dateFilter, statusFilter, searchTerm, sortBy])
+  const criteria = `${dateFilter}|${statusFilter}|${searchTerm}|${sortBy}`
+  const [pageCriteria, setPageCriteria] = useState(criteria)
+  if (pageCriteria !== criteria) {
+    setPageCriteria(criteria)
+    setPage(1)
+  }
 
   // KPIs (consolidated — no duplication)
   const kpis = useMemo(() => {

@@ -37,7 +37,7 @@ describe('el boton no desaparece cuando se rechaza la instalacion', () => {
     // El recuerdo del rechazo no debe sobrevivir a la instalacion.
     expect(BOTON).toContain('if (isStandalone) return null')
     const alInstalar = BOTON.slice(BOTON.indexOf('const installedHandler'))
-    expect(alInstalar.slice(0, 200)).toContain('setIsStandalone(true)')
+    expect(alInstalar.slice(0, 200)).toContain('setInstalled(true)')
   })
 })
 
@@ -81,10 +81,9 @@ describe('el iPad moderno cuenta como iOS', () => {
     expect(BOTON).toContain('/iPad|iPhone|iPod/.test(nav.userAgent) || iPadOS')
   })
 
-  it('la deteccion sigue en un efecto', () => {
-    // Leer `navigator` en el render rompe la hidratacion.
-    const efecto = BOTON.slice(BOTON.indexOf('useEffect(() => {'))
-    expect(efecto.slice(0, 400)).toContain('window.navigator as Navigator')
+  it('espera la hidratacion antes de mostrar la instalacion', () => {
+    expect(BOTON).toContain('const hydrated = useHydrated()')
+    expect(BOTON).toContain('const isStandalone = !hydrated || installed')
   })
 })
 

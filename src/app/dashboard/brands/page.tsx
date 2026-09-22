@@ -52,7 +52,7 @@ export default function BrandsPage() {
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   
   // Local state for search input to allow debouncing
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState(filters.search ?? '')
   const debouncedSearch = useDebounce(searchTerm, 500)
 
   // Sync debounced search with hook filters
@@ -63,11 +63,6 @@ export default function BrandsPage() {
         fetchBrands({ search: debouncedSearch, page: 1 })
     }
   }, [debouncedSearch, fetchBrands, filters.search])
-
-  // Initialize local search term from filters on mount (if navigating back)
-  useEffect(() => {
-    if (filters.search) setSearchTerm(filters.search)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEdit = (brand: Brand) => {
     setEditingBrand(brand)
@@ -324,4 +319,3 @@ export default function BrandsPage() {
     </RouteGuard>
   )
 }
-

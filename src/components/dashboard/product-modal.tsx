@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, ArrowRight } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, ArrowRight, TrendingUp, Percent } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice, cn } from '@/lib/utils'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -68,6 +68,8 @@ import { NewProductChecklist } from '@/components/dashboard/products/NewProductC
 import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { BrandPicker } from '@/components/dashboard/brands/BrandPicker'
+import { DeviceCompatibilityFields } from '@/components/dashboard/products/DeviceCompatibilityFields'
+import { usesDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
@@ -77,7 +79,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
 import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
-import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress } from './product-modal-behavior'
+import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress, calculateWholesalePriceFromCost, calculateWholesalePriceFromSale } from './product-modal-behavior'
 import { FASHION_AUDIENCES, getFashionAudienceFromTags, mergeFashionAudienceTag } from '@/lib/products/fashion-filters'
 import { ProductVariantsEditor } from '@/components/dashboard/products/ProductVariantsEditor'
 import { ProductVariantReview } from '@/components/dashboard/products/ProductVariantReview'
@@ -157,7 +159,7 @@ export function normalizeProductVariantsForForm(product: any): {
   const normalizedVariants = rawVariants
     .filter((v: any) => v && typeof v === 'object')
     .map((v: any, index: number) => {
-      let attributes: Record<string, string> = {}
+    const attributes: Record<string, string> = {}
       if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
         for (const [k, val] of Object.entries(v.attributes)) {
           if (val !== undefined && val !== null) {
@@ -288,7 +290,9 @@ export function ProductModal({
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
   const canViewCost = useCanViewCost()
-  const { businessVertical } = useSubscriptionStatus()
+  const { businessVertical, operatingModel } = useSubscriptionStatus()
+  // Marca y modelo del celular: sólo para tecnología y talleres de celulares.
+  const muestraCelular = usesDeviceCompatibility({ businessVertical, operatingModel })
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
@@ -314,6 +318,8 @@ export function ProductModal({
       category_id: '',
       brand: '',
       brand_id: '',
+      device_brand: '',
+      device_models: [],
       supplier_id: '',
       purchase_price: 0,
       sale_price: 0,
@@ -373,6 +379,9 @@ export function ProductModal({
   // Elección al activar cuotas: usar los predeterminados o cargar desde cero.
   // 'pending' muestra el panel; cualquier otro valor lo oculta.
   const [creditChoice, setCreditChoice] = useState<'pending' | 'defaults' | 'manual'>('pending')
+  // Modo de cálculo de precio mayorista ('cost': sumar % sobre costo, 'sale': descuento % sobre precio público)
+  const [wholesaleCalcMode, setWholesaleCalcMode] = useState<'cost' | 'sale'>('cost')
+  const [customWholesaleCostPct, setCustomWholesaleCostPct] = useState<string>('')
   // Se lee del endpoint admin. Si el usuario no tiene ese rol simplemente no
   // hay predeterminados y queda el flujo manual de siempre.
   const { settings: websiteSettings } = useAdminWebsiteSettings()
@@ -502,6 +511,8 @@ export function ProductModal({
         category_id: product.category_id || '',
         brand: product.brand || '',
         brand_id: (product as any).brand_id || '',
+        device_brand: (product as { device_brand?: string | null }).device_brand || '',
+        device_models: (product as { device_models?: string[] | null }).device_models ?? [],
         supplier_id: product.supplier_id || '',
         purchase_price: product.purchase_price || 0,
         sale_price: product.sale_price || 0,
@@ -541,6 +552,8 @@ export function ProductModal({
         category_id: '',
         brand: '',
         brand_id: '',
+        device_brand: '',
+        device_models: [],
         supplier_id: '',
         purchase_price: 0,
         sale_price: 0,
@@ -683,6 +696,12 @@ export function ProductModal({
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
     delete (rest as any).fashion_audience
+    // Un negocio que no ve los campos del celular no los manda: así no se
+    // escriben vacíos en cada guardado ni se pisa lo que haya quedado cargado.
+    if (!muestraCelular) {
+      delete (rest as Record<string, unknown>).device_brand
+      delete (rest as Record<string, unknown>).device_models
+    }
 
     // Si no hay producto (creación), no enviamos ID
     if (!product) {
@@ -965,7 +984,7 @@ export function ProductModal({
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
         showCloseButton={!isSubmitting && !isUploadingImages}
-        className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none flex flex-col"
+        className="w-full max-w-full sm:max-w-[95vw] lg:max-w-6xl h-[100dvh] sm:h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none flex flex-col rounded-none sm:rounded-2xl"
       >
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} className="flex flex-col flex-1 overflow-hidden h-full">
@@ -978,27 +997,27 @@ export function ProductModal({
               <div className="absolute top-0 right-0 -mr-16 -mt-16 w-56 h-56 bg-blue-500/8 dark:bg-blue-400/8 rounded-full blur-3xl pointer-events-none" />
               <div className="absolute bottom-0 left-1/3 w-40 h-24 bg-indigo-400/6 dark:bg-indigo-400/6 rounded-full blur-2xl pointer-events-none" />
 
-              <div className="px-4 py-4 md:px-8 md:py-5 relative">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
+              <div className="px-3 py-2 sm:px-6 sm:py-3.5 md:px-8 md:py-4 relative pr-10 sm:pr-6 md:pr-8">
+                <div className="flex items-center sm:items-start justify-between gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                     {/* Icon badge */}
-                    <div className={`relative flex-shrink-0 p-2.5 rounded-xl shadow-sm border ${product
+                    <div className={`relative flex-shrink-0 p-1 sm:p-2 md:p-2.5 rounded-lg sm:rounded-xl shadow-sm border ${product
                       ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
                       : 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-400/30 shadow-blue-500/25'
                     }`}>
-                      <Package className={`h-5 w-5 ${product ? 'text-blue-600 dark:text-blue-400' : 'text-white'}`} />
+                      <Package className={`h-3.5 w-3.5 sm:h-5 sm:w-5 ${product ? 'text-blue-600 dark:text-blue-400' : 'text-white'}`} />
                       {!product && (
-                        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900">
-                          <span className="text-[8px] font-bold text-white">+</span>
+                        <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-1 ring-white dark:ring-slate-900">
+                          <span className="text-[6px] sm:text-[8px] font-bold text-white">+</span>
                         </span>
                       )}
                     </div>
 
                     <div className="min-w-0">
-                      <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                      <DialogTitle className="text-sm sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 truncate">
                         {product ? 'Editar Producto' : 'Nuevo Producto'}
                       </DialogTitle>
-                      <DialogDescription className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                      <DialogDescription className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate hidden sm:block">
                         {product
                           ? <span>SKU: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{product.sku}</span></span>
                           : 'Completá la información básica para dar de alta el producto'
@@ -1007,14 +1026,14 @@ export function ProductModal({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                     {product && (
-                      <Badge variant={product.is_active ? 'default' : 'secondary'} className="px-3 py-1 shadow-sm">
+                      <Badge variant={product.is_active ? 'default' : 'secondary'} className="px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-xs shadow-sm">
                         {product.is_active ? '● Activo' : '○ Inactivo'}
                       </Badge>
                     )}
                     {!product && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
                         <div className="hidden sm:flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-2xs">
                           <span className="flex h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse" />
                           <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
@@ -1030,7 +1049,12 @@ export function ProductModal({
                             />
                           </div>
                         </div>
-                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800 px-2.5 py-1 text-xs font-semibold">
+                        {/* Indicador ultra compacto para móvil */}
+                        <div className="sm:hidden flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-blue-800/80 px-2 py-0.5 rounded-full shadow-2xs">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                          <span>{currentStepIndex + 1}/{PRODUCT_TABS.length}</span>
+                        </div>
+                        <Badge className="hidden sm:inline-flex bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800 px-2.5 py-1 text-xs font-semibold">
                           ✦ Nuevo
                         </Badge>
                       </div>
@@ -1038,9 +1062,9 @@ export function ProductModal({
                   </div>
                 </div>
 
-                {/* Asistente guiado rápido para producto nuevo */}
+                {/* Asistente guiado rápido para producto nuevo - oculto en móvil para no consumir espacio vertical */}
                 {!product && (
-                  <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="hidden sm:grid mt-3.5 sm:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setActiveTab('basic')}
@@ -1123,9 +1147,120 @@ export function ProductModal({
             )}
 
             <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="flex min-h-0 flex-col md:flex-row flex-1 overflow-hidden">
-              {/* Sidebar */}
-              <div className="w-full md:w-64 lg:w-72 bg-slate-50/80 dark:bg-slate-900/50 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 p-3 md:p-4 overflow-hidden md:overflow-y-auto shrink-0 flex flex-col gap-4">
-                  <div className="hidden md:flex items-center justify-between px-1">
+              {/* Barra de Navegación Móvil (solo pantallas pequeñas) */}
+              <div className="md:hidden px-3 py-2 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('basic')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                      activeTab === 'basic'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Tag className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Básica</span>
+                    {tabErrorMap.basic && (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'basic' ? 'bg-amber-300' : 'bg-red-500'}`} />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('pricing')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                      activeTab === 'pricing'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="font-black text-[10px] shrink-0">Gs</span>
+                    <span className="truncate">Precios</span>
+                    {tabErrorMap.pricing && (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'pricing' ? 'bg-amber-300' : 'bg-red-500'}`} />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('inventory')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                      activeTab === 'inventory'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Warehouse className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Stock</span>
+                    {tabErrorMap.inventory && (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'inventory' ? 'bg-amber-300' : 'bg-red-500'}`} />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('variants')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                      activeTab === 'variants'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Layers3 className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Variantes</span>
+                    {Boolean(variantValue.variants?.length) && (
+                      <span className={`text-[9px] font-bold px-1 rounded-full ${activeTab === 'variants' ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                        {variantValue.variants.length}
+                      </span>
+                    )}
+                    {tabErrorMap.variants && (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'variants' ? 'bg-amber-300' : 'bg-red-500'}`} />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('post-sale')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                      activeTab === 'post-sale'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <RefreshCw className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Postventa</span>
+                    {tabErrorMap.postSale && (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'post-sale' ? 'bg-amber-300' : 'bg-red-500'}`} />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('images')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                      activeTab === 'images'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Upload className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Fotos</span>
+                    {Boolean(watchedImages?.length) && (
+                      <span className={`text-[9px] font-bold px-1 rounded-full ${activeTab === 'images' ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                        {watchedImages.length}
+                      </span>
+                    )}
+                    {tabErrorMap.images && (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'images' ? 'bg-amber-300' : 'bg-red-500'}`} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Barra Lateral de Escritorio (Modo Normal - md:flex) */}
+              <div className="hidden md:flex w-64 lg:w-72 bg-slate-50/70 dark:bg-slate-900/40 border-r border-slate-200 dark:border-slate-800 p-4 lg:p-5 flex-col gap-4 overflow-y-auto shrink-0">
+                  <div className="flex items-center justify-between px-1">
                     <span className="text-[11px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
                       Secciones
                     </span>
@@ -1134,167 +1269,97 @@ export function ProductModal({
                     </span>
                   </div>
 
-                  <TabsList className="grid grid-cols-3 md:flex md:flex-col h-auto bg-transparent w-full gap-2 p-0">
+                  <TabsList className="flex flex-col h-auto bg-transparent w-full gap-1.5 p-0 text-slate-500 dark:text-slate-400">
                     {/* 1. Información Básica */}
                     <TabsTrigger
                       value="basic"
-                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-blue-500 dark:data-[state=active]:border-blue-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-blue-500/20 data-[state=active]:text-blue-900 dark:data-[state=active]:text-blue-100"
+                      className="w-full justify-start gap-3 px-3.5 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-xl whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
-                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/50 group-data-[state=active]:bg-blue-600 group-data-[state=active]:text-white group-data-[state=active]:border-blue-600 group-data-[state=active]:shadow-xs">
-                        <Tag className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-blue-600 dark:group-data-[state=active]:text-blue-400 truncate">
-                            <span className="hidden md:inline">Información Básica</span>
-                            <span className="md:hidden">Básica</span>
-                          </span>
-                          {tabErrorMap.basic && (
-                            <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                          )}
-                        </div>
-                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
-                          SKU, nombre y marca
-                        </span>
-                      </div>
+                      <Tag className="h-4 w-4 shrink-0" />
+                      <span>Información Básica</span>
+                      {tabErrorMap.basic && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
                     </TabsTrigger>
 
-                    {/* 2. Precios y Ofertas (con Gs destacado) */}
+                    {/* 2. Precios y Ofertas */}
                     <TabsTrigger
                       value="pricing"
-                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-emerald-500 dark:data-[state=active]:border-emerald-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-emerald-500/20 data-[state=active]:text-emerald-900 dark:data-[state=active]:text-emerald-100"
+                      className="w-full justify-start gap-3 px-3.5 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-xl whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
-                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 font-black text-xs tracking-tight transition-all bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/50 group-data-[state=active]:bg-emerald-600 group-data-[state=active]:text-white group-data-[state=active]:border-emerald-600 group-data-[state=active]:shadow-xs">
-                        Gs
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-emerald-600 dark:group-data-[state=active]:text-emerald-400 truncate">
-                            <span className="hidden md:inline">Precios y Ofertas</span>
-                            <span className="md:hidden">Precios</span>
+                      <GSIcon className="h-4 w-4 shrink-0" />
+                      <span>Precios y Ofertas</span>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        {hasOffer && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                            Oferta
                           </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {hasOffer && (
-                              <span className="hidden md:inline-flex text-[9px] font-bold px-1 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                                Oferta
-                              </span>
-                            )}
-                            {tabErrorMap.pricing && (
-                              <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                            )}
-                          </div>
-                        </div>
-                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
-                          Venta, costo y promos
-                        </span>
+                        )}
+                        {tabErrorMap.pricing && (
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        )}
                       </div>
                     </TabsTrigger>
 
                     {/* 3. Inventario */}
                     <TabsTrigger
                       value="inventory"
-                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-amber-500 dark:data-[state=active]:border-amber-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-amber-500/20 data-[state=active]:text-amber-900 dark:data-[state=active]:text-amber-100"
+                      className="w-full justify-start gap-3 px-3.5 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-xl whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
-                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-amber-500/15 text-amber-700 dark:bg-amber-500/25 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50 group-data-[state=active]:bg-amber-600 group-data-[state=active]:text-white group-data-[state=active]:border-amber-600 group-data-[state=active]:shadow-xs">
-                        <Warehouse className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-amber-600 dark:group-data-[state=active]:text-amber-400 truncate">
-                            <span className="hidden md:inline">Inventario</span>
-                            <span className="md:hidden">Stock</span>
-                          </span>
-                          {tabErrorMap.inventory && (
-                            <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                          )}
-                        </div>
-                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
-                          Stock físico y control
-                        </span>
-                      </div>
+                      <Warehouse className="h-4 w-4 shrink-0" />
+                      <span>Inventario</span>
+                      {tabErrorMap.inventory && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
                     </TabsTrigger>
 
                     {/* 4. Variantes */}
                     <TabsTrigger
                       value="variants"
-                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-indigo-500 dark:data-[state=active]:border-indigo-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-indigo-500/20 data-[state=active]:text-indigo-900 dark:data-[state=active]:text-indigo-100"
+                      className="w-full justify-start gap-3 px-3.5 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-xl whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
-                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-indigo-500/15 text-indigo-700 dark:bg-indigo-500/25 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 group-data-[state=active]:bg-indigo-600 group-data-[state=active]:text-white group-data-[state=active]:border-indigo-600 group-data-[state=active]:shadow-xs">
-                        <Layers3 className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-indigo-600 dark:group-data-[state=active]:text-indigo-400 truncate">
-                            Variantes
+                      <Layers3 className="h-4 w-4 shrink-0" />
+                      <span>Variantes</span>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        {Boolean(variantValue.variants?.length) && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                            {variantValue.variants.length}
                           </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {Boolean(variantValue.variants?.length) && (
-                              <span className="hidden md:inline-flex text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
-                                {variantValue.variants.length}
-                              </span>
-                            )}
-                            {tabErrorMap.variants && (
-                              <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                            )}
-                          </div>
-                        </div>
-                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
-                          Talles, colores y opciones
-                        </span>
+                        )}
+                        {tabErrorMap.variants && (
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        )}
                       </div>
                     </TabsTrigger>
 
                     {/* 5. Postventa */}
                     <TabsTrigger
                       value="post-sale"
-                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-teal-500 dark:data-[state=active]:border-teal-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-teal-500/20 data-[state=active]:text-teal-900 dark:data-[state=active]:text-teal-100"
+                      className="w-full justify-start gap-3 px-3.5 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-xl whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
-                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-teal-500/15 text-teal-700 dark:bg-teal-500/25 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/50 group-data-[state=active]:bg-teal-600 group-data-[state=active]:text-white group-data-[state=active]:border-teal-600 group-data-[state=active]:shadow-xs">
-                        <RefreshCw className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-teal-600 dark:group-data-[state=active]:text-teal-400 truncate">
-                            Postventa
-                          </span>
-                          {tabErrorMap.postSale && (
-                            <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                          )}
-                        </div>
-                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
-                          Garantía y devoluciones
-                        </span>
-                      </div>
+                      <RefreshCw className="h-4 w-4 shrink-0" />
+                      <span>Postventa</span>
+                      {tabErrorMap.postSale && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
                     </TabsTrigger>
 
                     {/* 6. Imágenes */}
                     <TabsTrigger
                       value="images"
-                      className="group relative w-full flex flex-col md:flex-row items-center md:items-start text-center md:text-left gap-2 md:gap-3 p-2 md:p-2.5 text-xs md:text-sm font-medium transition-all rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white/70 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-xs data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:border-purple-500 dark:data-[state=active]:border-purple-500 data-[state=active]:shadow-md data-[state=active]:ring-1 data-[state=active]:ring-purple-500/20 data-[state=active]:text-purple-900 dark:data-[state=active]:text-purple-100"
+                      className="w-full justify-start gap-3 px-3.5 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-xl whitespace-nowrap hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
-                      <div className="h-8 w-8 min-w-[32px] rounded-lg flex items-center justify-center shrink-0 transition-all bg-purple-500/15 text-purple-700 dark:bg-purple-500/25 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/50 group-data-[state=active]:bg-purple-600 group-data-[state=active]:text-white group-data-[state=active]:border-purple-600 group-data-[state=active]:shadow-xs">
-                        <Upload className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 group-data-[state=active]:text-purple-600 dark:group-data-[state=active]:text-purple-400 truncate">
-                            <span className="hidden md:inline">Imágenes</span>
-                            <span className="md:hidden">Fotos</span>
+                      <Upload className="h-4 w-4 shrink-0" />
+                      <span>Imágenes</span>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        {Boolean(watchedImages?.length) && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                            {watchedImages.length}
                           </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {Boolean(watchedImages?.length) && (
-                              <span className="hidden md:inline-flex text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
-                                {watchedImages.length}
-                              </span>
-                            )}
-                            {tabErrorMap.images && (
-                              <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                            )}
-                          </div>
-                        </div>
-                        <span className="hidden md:block text-[11px] text-slate-500 dark:text-slate-400 font-normal truncate mt-0.5">
-                          Galería y fotos
-                        </span>
+                        )}
+                        {tabErrorMap.images && (
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        )}
                       </div>
                     </TabsTrigger>
                   </TabsList>
@@ -1312,21 +1377,21 @@ export function ProductModal({
 
                 {/* Quick Info Sidebar */}
                 {product && (
-                  <div className="hidden md:block mt-6 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm space-y-3 border border-gray-100 dark:border-gray-700">
-                    <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Vista Rápida</h4>
+                  <div className="mt-2 p-4 bg-white dark:bg-slate-800 rounded-xl shadow-xs space-y-3 border border-slate-200/80 dark:border-slate-700">
+                    <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Vista Rápida</h4>
                     <div className="space-y-2 text-sm">
                       <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Stock</p>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">{stockQuantity} unidades</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Stock</p>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">{stockQuantity} unidades</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Precio Venta</p>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(salePrice)}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Precio Venta</p>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(salePrice)}</p>
                       </div>
                       {hasOffer && (
                         <div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">Precio Oferta</p>
-                          <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(offerPrice || 0)}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Precio Oferta</p>
+                          <p className="font-semibold text-rose-600 dark:text-rose-400">{formatCurrency(offerPrice || 0)}</p>
                         </div>
                       )}
                     </div>
@@ -1335,8 +1400,8 @@ export function ProductModal({
               </div>
 
             {/* Main Content */}
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50/40 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y p-3 sm:p-4 md:p-6 bg-slate-50/40 dark:bg-slate-900/60 text-slate-900 dark:text-slate-100 [-webkit-overflow-scrolling:touch]">
+              <div className="mb-3 sm:mb-4 hidden sm:flex flex-wrap items-center justify-between gap-2 px-1">
                 <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
@@ -1355,9 +1420,9 @@ export function ProductModal({
               </div>
 
                 {/* Basic Info */}
-                <TabsContent value="basic" className="space-y-6 py-2">
-                  {/* Tip contextual - Pestaña Básica */}
-                  <div className="flex items-start gap-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/25 border border-blue-200/60 dark:border-blue-800/40 p-3.5 shadow-2xs">
+                <TabsContent value="basic" className="space-y-4 sm:space-y-6 py-1 sm:py-2">
+                  {/* Tip contextual - Pestaña Básica (oculto en móvil para ver campos inmediatamente) */}
+                  <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/25 border border-blue-200/60 dark:border-blue-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Tag className="h-3.5 w-3.5" />
                     </div>
@@ -1373,10 +1438,24 @@ export function ProductModal({
                     <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                       <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        Identificación y Clasificación
+                        Datos Principales
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+                    <CardContent className="p-4 sm:p-6 space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nombre del Producto <FieldRequirement required /></FormLabel>
+                            <FormControl>
+                              <Input placeholder="Ej: iPhone 14 Pro" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -1404,60 +1483,114 @@ export function ProductModal({
                           )}
                         />
 
-                        {businessVertical === 'clothing' && (
-                          <FormField
-                            control={form.control}
-                            name="fashion_audience"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Público <FieldRequirement /></FormLabel>
-                                <Select
-                                  onValueChange={(value) => field.onChange(value === '__none' ? '' : value)}
-                                  value={field.value || '__none'}
-                                >
+                        <FormField
+                          control={form.control}
+                          name="category_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Categoría <FieldRequirement required /></FormLabel>
+                              <div className="flex gap-2">
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
                                   <FormControl>
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Mujer, hombre, niños…" />
+                                      <SelectValue placeholder="Seleccionar categoría" />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value="__none">Sin definir</SelectItem>
-                                    {FASHION_AUDIENCES.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
+                                    {categoryOptions.map(({ category, depth, parentName }) => (
+                                      <SelectItem key={category.id} value={category.id}>
+                                        <span className={depth > 0 ? 'text-muted-foreground' : 'font-medium'}>
+                                          {getCategoryIndent(depth)}
+                                        </span>
+                                        {category.name}
+                                        {parentName && (
+                                          <span className="ml-1.5 text-xs text-muted-foreground">
+                                            en {parentName}
+                                          </span>
+                                        )}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                <FormDescription>
-                                  Se usa para organizar y filtrar la tienda pública; el talle se configura en Variantes.
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        )}
-
-                        <FormField
-                          control={form.control}
-                          name="name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Nombre del Producto <FieldRequirement required /></FormLabel>
-                              <FormControl>
-                                <Input placeholder="Ej: iPhone 14 Pro" {...field} />
-                              </FormControl>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => setIsCategoryModalOpen(true)}
+                                  aria-label="Crear nueva categoría"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
+                      </div>
 
+                      {businessVertical === 'clothing' && (
+                        <FormField
+                          control={form.control}
+                          name="fashion_audience"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Público <FieldRequirement /></FormLabel>
+                              <Select
+                                onValueChange={(value) => field.onChange(value === '__none' ? '' : value)}
+                                value={field.value || '__none'}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Mujer, hombre, niños…" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="__none">Sin definir</SelectItem>
+                                  {FASHION_AUDIENCES.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormDescription className="hidden sm:block text-[11px]">
+                                Se usa para organizar y filtrar la tienda pública; el talle se configura en Variantes.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
+                        <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        Detalles y Clasificación
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+                      {/* Para qué celular es: marca y modelos. Va antes que la marca
+                          del repuesto porque es por lo que se busca en el mostrador. */}
+                      {muestraCelular && (
+                        <DeviceCompatibilityFields
+                          brand={form.watch('device_brand')}
+                          models={form.watch('device_models')}
+                          onBrandChange={(valor) => setValue('device_brand', valor, { shouldDirty: true })}
+                          onModelsChange={(valor) => setValue('device_models', valor, { shouldDirty: true })}
+                        />
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
                           name="brand_id"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Marca <FieldRequirement /></FormLabel>
+                              {/* Quién fabricó la pieza. El celular al que pertenece va arriba. */}
+                              <FormLabel>{muestraCelular ? 'Marca del repuesto' : 'Marca'} <FieldRequirement /></FormLabel>
                               <FormControl>
                                 <BrandPicker
                                   brands={localBrands}
@@ -1472,7 +1605,7 @@ export function ProductModal({
                                   }}
                                 />
                               </FormControl>
-                              <FormDescription>
+                              <FormDescription className="hidden sm:block text-[11px]">
                                 Escribí el nombre: si ya la tenés cargada aparece en la lista, y si no, se crea.
                               </FormDescription>
                               <FormMessage />
@@ -1535,7 +1668,7 @@ export function ProductModal({
                                     <Sparkles className="h-4 w-4" />
                                   </Button>
                                 </div>
-                                <FormDescription className="text-[11px]">
+                                <FormDescription className="hidden sm:block text-[11px]">
                                   💡 Si el producto físico ya tiene código de barras, podés posicionar el cursor aquí y <strong>disparar con tu lector láser</strong>.
                                 </FormDescription>
                                 <FormMessage />
@@ -1548,111 +1681,6 @@ export function ProductModal({
                             )}
                           />
                         </div>
-                      </div>
-
-                      <FormField
-                        control={form.control}
-                        name="description"
-                        render={({ field }) => (
-                          <FormItem>
-                            <div className="flex items-center justify-between flex-wrap gap-1">
-                              <FormLabel>Descripción <FieldRequirement /></FormLabel>
-                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                <span className="font-semibold text-primary">Plantillas rápidas:</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setValue('description', '• Características principales:\n• Material / Composición:\n• Medidas / Dimensiones:\n• Incluye en el paquete:\n• Recomendaciones de uso:', { shouldDirty: true })}
-                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                                >
-                                  📦 General
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setValue('description', '• Confección y tela:\n• Calce y estilo:\n• Cuidados: Lavar con agua fría, no planchar sobre estampas.\n• Talles disponibles:', { shouldDirty: true })}
-                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                                >
-                                  👕 Ropa
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setValue('description', '• Marca y Modelo:\n• Especificaciones técnicas:\n• Conectividad / Puertos:\n• Batería / Autonomía:\n• Contenido de la caja:', { shouldDirty: true })}
-                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                                >
-                                  📱 Tecnología
-                                </button>
-                              </div>
-                            </div>
-                            <FormControl>
-                              <Textarea
-                                placeholder="Descripción detallada del producto..."
-                                className="resize-none"
-                                rows={6}
-                                {...field}
-                                value={field.value || ""}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Máximo 2000 caracteres.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
-                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
-                      <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
-                        <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                        Categorización
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 sm:p-6 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="category_id"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Categoría <FieldRequirement required /></FormLabel>
-                              <div className="flex gap-2">
-                                <Select onValueChange={field.onChange} value={field.value || ""}>
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Seleccionar categoría" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {categoryOptions.map(({ category, depth, parentName }) => (
-                                      <SelectItem key={category.id} value={category.id}>
-                                        <span className={depth > 0 ? 'text-muted-foreground' : 'font-medium'}>
-                                          {getCategoryIndent(depth)}
-                                        </span>
-                                        {category.name}
-                                        {parentName && (
-                                          <span className="ml-1.5 text-xs text-muted-foreground">
-                                            en {parentName}
-                                          </span>
-                                        )}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => setIsCategoryModalOpen(true)}
-                                  aria-label="Crear nueva categoría"
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
 
                         <FormField
                           control={form.control}
@@ -1689,21 +1717,44 @@ export function ProductModal({
                             </FormItem>
                           )}
                         />
+
+                        <FormField
+                          control={form.control}
+                          name="visibility"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Visibilidad en tienda <FieldRequirement /></FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value || 'public'}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar visibilidad" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="public">Público — visible para todos</SelectItem>
+                                  <SelectItem value="wholesale">Mayorista — solo clientes mayoristas</SelectItem>
+                                  <SelectItem value="hidden">Oculto — no se muestra en la tienda</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
 
                       <FormField
                         control={form.control}
                         name="is_active"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0 pt-1">
                             <FormControl>
                               <Switch
                                 checked={field.value}
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <FormLabel className="font-normal cursor-pointer">
-                              Producto activo <FieldRequirement />
+                            <FormLabel className="font-normal cursor-pointer text-sm">
+                              Producto activo para la venta
                             </FormLabel>
                           </FormItem>
                         )}
@@ -1711,22 +1762,48 @@ export function ProductModal({
 
                       <FormField
                         control={form.control}
-                        name="visibility"
+                        name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Visibilidad en tienda pública <FieldRequirement /></FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || 'public'}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar visibilidad" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="public">Público — visible para todos</SelectItem>
-                                <SelectItem value="wholesale">Mayorista — solo clientes mayoristas</SelectItem>
-                                <SelectItem value="hidden">Oculto — no se muestra en la tienda</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                              <FormLabel>Descripción <FieldRequirement /></FormLabel>
+                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <span className="font-semibold text-primary">Plantillas:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('description', '• Características principales:\n• Material / Composición:\n• Medidas / Dimensiones:\n• Incluye en el paquete:\n• Recomendaciones de uso:', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  📦 General
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('description', '• Confección y tela:\n• Calce y estilo:\n• Cuidados: Lavar con agua fría, no planchar sobre estampas.\n• Talles disponibles:', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  👕 Ropa
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setValue('description', '• Marca y Modelo:\n• Especificaciones técnicas:\n• Conectividad / Puertos:\n• Batería / Autonomía:\n• Contenido de la caja:', { shouldDirty: true })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                  📱 Tech
+                                </button>
+                              </div>
+                            </div>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Descripción detallada del producto..."
+                                className="resize-none"
+                                rows={3}
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormDescription className="hidden sm:block text-[11px]">
+                              Máximo 2000 caracteres.
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1738,9 +1815,9 @@ export function ProductModal({
                 </TabsContent>
 
                 {/* Pricing */}
-                <TabsContent value="pricing" className="space-y-6 py-2">
-                  {/* Tip contextual - Pestaña Precios */}
-                  <div className="flex items-start gap-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200/60 dark:border-emerald-800/40 p-3.5 shadow-2xs">
+                <TabsContent value="pricing" className="space-y-4 sm:space-y-6 py-1 sm:py-2">
+                  {/* Tip contextual - Pestaña Precios (oculto en móvil) */}
+                  <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200/60 dark:border-emerald-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 font-extrabold text-xs shadow-xs">
                       Gs
                     </div>
@@ -1857,60 +1934,222 @@ export function ProductModal({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
                         <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                            <Users className="h-4 w-4" />
-                            Precio Mayorista <FieldRequirement />
-                          </CardTitle>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                              <Users className="h-4 w-4" />
+                              Precio Mayorista <FieldRequirement />
+                            </CardTitle>
+                            {Number(wholesalePrice) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setValue('wholesale_price', null, { shouldDirty: true, shouldValidate: true })}
+                                className="text-[11px] text-slate-400 hover:text-rose-600 transition-colors font-medium"
+                              >
+                                Limpiar
+                              </button>
+                            )}
+                          </div>
                         </CardHeader>
                         <CardContent className="p-4 sm:p-6 space-y-3">
                           <FormField
                             control={form.control}
                             name="wholesale_price"
                             render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    className="text-lg"
-                                    {...field}
-                                    value={field.value ?? ""}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                                {/* ── Sugerencias precio mayorista ── */}
-                                {Number(salePrice) > 0 && (
-                                  <div className="space-y-1.5">
-                                    <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
-                                      💡 Descuento sobre precio público:
-                                    </p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {[5, 10, 15, 20, 25, 30].map(disc => {
-                                        const suggested = Number((Number(salePrice) * (1 - disc / 100)).toFixed(2))
-                                        const isActive = Math.abs(Number(wholesalePrice) - suggested) < 0.01
-                                        return (
-                                          <button
-                                            key={disc}
-                                            type="button"
-                                            onClick={() => setValue('wholesale_price', suggested, { shouldDirty: true, shouldValidate: true })}
-                                            className={`inline-flex flex-col items-center rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all shadow-2xs select-none ${
-                                              isActive
-                                                ? 'border-blue-500 bg-blue-500 text-white'
-                                                : 'border-blue-100 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30'
-                                            }`}
-                                            title={`${disc}% descuento sobre precio público`}
-                                          >
-                                            <span className="font-bold">-{disc}%</span>
-                                            <span className="text-[9px] opacity-80">{formatCurrency(suggested)}</span>
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
-                                    <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 leading-snug">
-                                      El precio mayorista se aplica automáticamente a clientes con perfil mayorista. Si no lo cargás, estos clientes ven el precio público normal.
-                                    </p>
+                              <FormItem className="space-y-3">
+                                <div>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      className="text-lg font-semibold"
+                                      placeholder="0"
+                                      {...field}
+                                      value={field.value ?? ""}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </div>
+
+                                {/* Indicador de métricas en vivo si hay precio mayorista */}
+                                {Number(wholesalePrice) > 0 && (
+                                  <div className="flex flex-wrap items-center gap-2 text-xs pt-0.5">
+                                    {canViewCost && Number(purchasePrice) > 0 && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-medium text-[11px] border border-emerald-200/60 dark:border-emerald-800/40">
+                                        Margen s/ costo: +{(((Number(wholesalePrice) - Number(purchasePrice)) / Number(purchasePrice)) * 100).toFixed(1)}% ({formatCurrency(Number(wholesalePrice) - Number(purchasePrice))})
+                                      </span>
+                                    )}
+                                    {Number(salePrice) > 0 && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 font-medium text-[11px] border border-blue-200/60 dark:border-blue-800/40">
+                                        Descuento s/ venta: -{(((Number(salePrice) - Number(wholesalePrice)) / Number(salePrice)) * 100).toFixed(1)}%
+                                      </span>
+                                    )}
                                   </div>
                                 )}
+
+                                {/* Selector de método de cálculo */}
+                                <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                                      Calcular precio:
+                                    </span>
+                                    <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                                      <button
+                                        type="button"
+                                        onClick={() => setWholesaleCalcMode('cost')}
+                                        className={cn(
+                                          "px-2 py-0.5 text-[10px] font-medium rounded-md transition-all flex items-center gap-1",
+                                          wholesaleCalcMode === 'cost'
+                                            ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 font-bold shadow-2xs"
+                                            : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                                        )}
+                                      >
+                                        <TrendingUp className="h-3 w-3" />
+                                        <span>Sumar s/ Costo</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setWholesaleCalcMode('sale')}
+                                        className={cn(
+                                          "px-2 py-0.5 text-[10px] font-medium rounded-md transition-all flex items-center gap-1",
+                                          wholesaleCalcMode === 'sale'
+                                            ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 font-bold shadow-2xs"
+                                            : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                                        )}
+                                      >
+                                        <Percent className="h-3 w-3" />
+                                        <span>Descuento s/ Venta</span>
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Modo 1: Sumar sobre costo */}
+                                  {wholesaleCalcMode === 'cost' && (
+                                    <div className="space-y-2">
+                                      {canViewCost && Number(purchasePrice) > 0 ? (
+                                        <>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {[5, 10, 15, 20, 25, 30, 40, 50].map((pct) => {
+                                              const suggested = calculateWholesalePriceFromCost(Number(purchasePrice), pct)
+                                              const isActive = Math.abs(Number(wholesalePrice) - suggested) < 0.01
+                                              const wouldExceedSale = Number(salePrice) > 0 && suggested >= Number(salePrice)
+                                              return (
+                                                <button
+                                                  key={pct}
+                                                  type="button"
+                                                  onClick={() => setValue('wholesale_price', suggested, { shouldDirty: true, shouldValidate: true })}
+                                                  className={`inline-flex flex-col items-center rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all shadow-2xs select-none ${
+                                                    isActive
+                                                      ? 'border-blue-500 bg-blue-500 text-white'
+                                                      : wouldExceedSale
+                                                        ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300'
+                                                        : 'border-blue-100 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                                                  }`}
+                                                  title={
+                                                    wouldExceedSale
+                                                      ? `+${pct}% (${formatCurrency(suggested)}) supera o iguala el precio de venta (${formatCurrency(Number(salePrice))})`
+                                                      : `+${pct}% sobre el precio de costo (${formatCurrency(Number(purchasePrice))})`
+                                                  }
+                                                >
+                                                  <span className="font-bold">+{pct}%</span>
+                                                  <span className="text-[9px] opacity-80">{formatCurrency(suggested)}</span>
+                                                </button>
+                                              )
+                                            })}
+                                          </div>
+                                          {/* Porcentaje personalizado sobre costo */}
+                                          <div className="flex items-center gap-1.5 pt-1">
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                              Otro % sobre costo:
+                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              <div className="relative w-20">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">+</span>
+                                                <Input
+                                                  type="number"
+                                                  min="1"
+                                                  max="500"
+                                                  placeholder="18"
+                                                  value={customWholesaleCostPct}
+                                                  onChange={(e) => setCustomWholesaleCostPct(e.target.value)}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                      e.preventDefault()
+                                                      const p = parseFloat(customWholesaleCostPct)
+                                                      if (!isNaN(p) && p > 0 && Number(purchasePrice) > 0) {
+                                                        const calc = calculateWholesalePriceFromCost(Number(purchasePrice), p)
+                                                        setValue('wholesale_price', calc, { shouldDirty: true, shouldValidate: true })
+                                                      }
+                                                    }
+                                                  }}
+                                                  className="h-7 pl-5 pr-5 text-xs rounded-md"
+                                                />
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                              </div>
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                  const p = parseFloat(customWholesaleCostPct)
+                                                  if (!isNaN(p) && p > 0 && Number(purchasePrice) > 0) {
+                                                    const calc = calculateWholesalePriceFromCost(Number(purchasePrice), p)
+                                                    setValue('wholesale_price', calc, { shouldDirty: true, shouldValidate: true })
+                                                  }
+                                                }}
+                                                disabled={!customWholesaleCostPct || isNaN(parseFloat(customWholesaleCostPct))}
+                                                className="h-7 px-2 text-[11px] font-semibold border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                                              >
+                                                Aplicar
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200/60 dark:border-amber-800/40">
+                                          Ingresá primero el <strong>Precio de Compra (Costo)</strong> arriba para sumar un porcentaje sobre el costo.
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Modo 2: Descuento sobre precio público */}
+                                  {wholesaleCalcMode === 'sale' && (
+                                    <div className="space-y-2">
+                                      {Number(salePrice) > 0 ? (
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {[5, 10, 15, 20, 25, 30].map((disc) => {
+                                            const suggested = calculateWholesalePriceFromSale(Number(salePrice), disc)
+                                            const isActive = Math.abs(Number(wholesalePrice) - suggested) < 0.01
+                                            return (
+                                              <button
+                                                key={disc}
+                                                type="button"
+                                                onClick={() => setValue('wholesale_price', suggested, { shouldDirty: true, shouldValidate: true })}
+                                                className={`inline-flex flex-col items-center rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all shadow-2xs select-none ${
+                                                  isActive
+                                                    ? 'border-blue-500 bg-blue-500 text-white'
+                                                    : 'border-blue-100 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                                                }`}
+                                                title={`${disc}% descuento sobre precio público`}
+                                              >
+                                                <span className="font-bold">-{disc}%</span>
+                                                <span className="text-[9px] opacity-80">{formatCurrency(suggested)}</span>
+                                              </button>
+                                            )
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200/60 dark:border-amber-800/40">
+                                          Ingresá primero el <strong>Precio de Venta al Público</strong> arriba para aplicar descuentos.
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70 leading-snug">
+                                  El precio mayorista se aplica automáticamente a clientes con perfil mayorista. Si no lo cargás, estos clientes ven el precio público normal.
+                                </p>
                               </FormItem>
                             )}
                           />
@@ -2545,9 +2784,9 @@ export function ProductModal({
                 </TabsContent>
 
                 {/* Inventory */}
-                <TabsContent value="inventory" className="space-y-6 py-2">
-                  {/* Tip contextual - Inventario */}
-                  <div className="flex items-start gap-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/60 dark:border-amber-800/40 p-3.5 shadow-2xs">
+                <TabsContent value="inventory" className="space-y-4 sm:space-y-6 py-1 sm:py-2">
+                  {/* Tip contextual - Inventario (oculto en móvil) */}
+                  <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/60 dark:border-amber-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Warehouse className="h-3.5 w-3.5" />
                     </div>
@@ -2560,23 +2799,25 @@ export function ProductModal({
                       </ul>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
-                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                          <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                          Stock Actual <FieldRequirement required />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 sm:p-6">
+                  <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                    <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
+                      <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                        <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        Control de Stock Físico
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <FormField
                           control={form.control}
                           name="stock_quantity"
                           render={({ field }) => (
                             <FormItem>
+                              <FormLabel>Stock Actual <FieldRequirement required /></FormLabel>
                               <FormControl>
                                 <Input
                                   type="number"
+                                  placeholder="0"
                                   {...field}
                                   value={field.value ?? ""}
                                 />
@@ -2585,76 +2826,60 @@ export function ProductModal({
                             </FormItem>
                           )}
                         />
-                      </CardContent>
-                    </Card>
 
-                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
-                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                          <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                          Stock Mínimo <FieldRequirement required />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 sm:p-6">
                         <FormField
                           control={form.control}
                           name="min_stock"
                           render={({ field }) => (
                             <FormItem>
+                              <FormLabel>Stock Mínimo <FieldRequirement required /></FormLabel>
                               <FormControl>
                                 <Input
                                   type="number"
+                                  placeholder="0"
                                   {...field}
                                   value={field.value ?? ""}
                                 />
                               </FormControl>
-                              <FormDescription>
-                                Se generará una alerta cuando el stock esté por debajo de este valor
+                              <FormDescription className="hidden sm:block text-[11px]">
+                                Alerta cuando baje de este valor
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                      </CardContent>
-                    </Card>
 
-                    <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs md:col-span-2">
-                      <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                          <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                          Stock Máximo <FieldRequirement />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 sm:p-6">
                         <FormField
                           control={form.control}
                           name="max_stock"
                           render={({ field }) => (
                             <FormItem>
+                              <FormLabel>Stock Máximo <FieldRequirement /></FormLabel>
                               <FormControl>
                                 <Input
                                   type="number"
+                                  placeholder="Opcional"
                                   {...field}
-                                    value={field.value ?? ""}
-                                  />
+                                  value={field.value ?? ""}
+                                />
                               </FormControl>
-                              <FormDescription>
-                                Límite superior recomendado para este producto
+                              <FormDescription className="hidden sm:block text-[11px]">
+                                Límite superior recomendado
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                      </CardContent>
-                    </Card>
-                  </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
                   {renderStepNavigation('inventory')}
                 </TabsContent>
 
                 <TabsContent value="variants" className="space-y-5 py-2">
-                  {/* Tip contextual - Variantes */}
-                  <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/25 border border-indigo-200/60 dark:border-indigo-800/40 p-3.5 shadow-2xs">
+                  {/* Tip contextual - Variantes (oculto en móvil) */}
+                  <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/25 border border-indigo-200/60 dark:border-indigo-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Layers3 className="h-3.5 w-3.5" />
                     </div>
@@ -2714,9 +2939,9 @@ export function ProductModal({
                 </TabsContent>
 
                 {/* Post-Sale */}
-                <TabsContent value="post-sale" className="space-y-4 py-2">
-                  {/* Tip contextual - Postventa */}
-                  <div className="flex items-start gap-3 rounded-2xl bg-teal-50/70 dark:bg-teal-950/25 border border-teal-200/60 dark:border-teal-800/40 p-3.5 shadow-2xs">
+                <TabsContent value="post-sale" className="space-y-4 py-1 sm:py-2">
+                  {/* Tip contextual - Postventa (oculto en móvil) */}
+                  <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-teal-50/70 dark:bg-teal-950/25 border border-teal-200/60 dark:border-teal-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <RefreshCw className="h-3.5 w-3.5" />
                     </div>
@@ -2986,8 +3211,8 @@ export function ProductModal({
 
                 {/* Images */}
                 <TabsContent value="images" className="space-y-5 py-2">
-                  {/* Tip contextual - Imágenes */}
-                  <div className="flex items-start gap-3 rounded-2xl bg-purple-50/70 dark:bg-purple-950/25 border border-purple-200/60 dark:border-purple-800/40 p-3.5 shadow-2xs">
+                  {/* Tip contextual - Imágenes (oculto en móvil) */}
+                  <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-purple-50/70 dark:bg-purple-950/25 border border-purple-200/60 dark:border-purple-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Upload className="h-3.5 w-3.5" />
                     </div>
@@ -3037,31 +3262,31 @@ export function ProductModal({
           </Tabs>
 
             {/* Footer */}
-            <div className="sticky bottom-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200/90 dark:border-slate-800 px-4 py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0 z-10">
+            <div className="sticky bottom-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200/90 dark:border-slate-800 px-3 py-2 sm:px-6 sm:py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-3 shrink-0 z-10">
               <div
                 id="product-form-status"
                 role="status"
-                className={`flex items-start sm:items-center gap-2 text-sm ${submitState.ready ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}
+                className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${submitState.ready ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}
               >
                 {submitState.ready ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                 ) : (
-                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                 )}
-                <span className="font-medium text-xs sm:text-sm">{submitState.status}</span>
+                <span className="font-medium text-xs sm:text-sm truncate">{submitState.status}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto sm:ml-auto">
+              <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 w-full sm:w-auto sm:ml-auto">
                 {/* Botón paso anterior en footer */}
                 {prevTab && (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={goToPrevTab}
-                    className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium px-3 text-xs sm:text-sm"
+                    className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg sm:rounded-xl font-medium px-2 sm:px-3 text-xs sm:text-sm h-8 sm:h-9"
                     title={`Volver a ${prevTab.label}`}
                   >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    <span>Anterior</span>
+                    <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Anterior</span>
                   </Button>
                 )}
 
@@ -3071,11 +3296,11 @@ export function ProductModal({
                     type="button"
                     variant="outline"
                     onClick={goToNextTab}
-                    className="border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-xl font-medium px-3 text-xs sm:text-sm"
+                    className="border-blue-200 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg sm:rounded-xl font-medium px-2 sm:px-3 text-xs sm:text-sm h-8 sm:h-9"
                     title={`Avanzar a ${nextTab.label}`}
                   >
-                    <span>Siguiente</span>
-                    <ChevronRight className="h-4 w-4 ml-1" />
+                    <span className="hidden sm:inline">Siguiente</span>
+                    <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:ml-1" />
                   </Button>
                 )}
 
@@ -3084,7 +3309,7 @@ export function ProductModal({
                   variant="outline"
                   onClick={requestClose}
                   disabled={isSubmitting || isUploadingImages}
-                  className="min-w-[80px] border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium text-xs sm:text-sm"
+                  className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg sm:rounded-xl font-medium px-2 sm:px-3 text-xs sm:text-sm h-8 sm:h-9"
                 >
                   Cancelar
                 </Button>
@@ -3092,7 +3317,7 @@ export function ProductModal({
                   type="submit"
                   disabled={isSubmitting || isUploadingImages || !isExistingVariantDataReady}
                   aria-describedby="product-form-status"
-                  className={`min-w-[150px] sm:min-w-[180px] text-white rounded-xl font-medium transition-all text-xs sm:text-sm ${
+                  className={`flex-1 sm:flex-initial sm:min-w-[180px] text-white rounded-lg sm:rounded-xl font-medium transition-all text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 ${
                     submitState.ready
                       ? 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 dark:bg-blue-600 dark:hover:bg-blue-500'
                       : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20 dark:bg-amber-600 dark:hover:bg-amber-500'

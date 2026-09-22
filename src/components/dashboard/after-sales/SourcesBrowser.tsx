@@ -633,13 +633,14 @@ export function SourceDetailDialog({
     onReprint?: () => void
     onClaim?: () => void
 }) {
+    const [openedAt] = useState(Date.now)
     if (!detail) return null
 
     const isSale = detail.type === 'sale'
     const isRepair = detail.type === 'repair'
 
     const repairWarrantyExpired = isRepair && detail.warrantyExpiresAt
-        ? new Date(detail.warrantyExpiresAt).getTime() < Date.now()
+        ? new Date(detail.warrantyExpiresAt).getTime() < openedAt
         : false
 
     return (

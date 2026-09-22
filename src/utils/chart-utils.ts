@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 // Chart data types
 export interface ChartDataPoint {
@@ -51,6 +51,7 @@ export const useChartData = <T extends ChartDataPoint>(
   })
 
   const [retryCount, setRetryCount] = useState(0)
+  const loadDataRef = useRef<() => void>(() => {})
 
   const loadData = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
@@ -93,10 +94,12 @@ export const useChartData = <T extends ChartDataPoint>(
 
       if (retryOnError && retryCount < maxRetries) {
         setRetryCount(prev => prev + 1)
-        setTimeout(() => loadData(), Math.pow(2, retryCount) * 1000) // Exponential backoff
+        setTimeout(() => loadDataRef.current(), Math.pow(2, retryCount) * 1000) // Exponential backoff
       }
     }
   }, [fetchData, retryOnError, maxRetries, retryCount, cacheKey])
+
+  useEffect(() => { loadDataRef.current = loadData }, [loadData])
 
   // Load cached data on mount
   useEffect(() => {

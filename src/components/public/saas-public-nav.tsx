@@ -51,9 +51,11 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   const isLoginPage = pathname === '/login' || pathname?.startsWith('/login')
 
   // Cerrar drawer al cambiar de ruta
-  useEffect(() => {
+  const [previousPathname, setPreviousPathname] = useState(pathname)
+  if (previousPathname !== pathname) {
+    setPreviousPathname(pathname)
     setMobileOpen(false)
-  }, [pathname])
+  }
 
   // Bloquear scroll cuando el drawer está abierto
   useEffect(() => {

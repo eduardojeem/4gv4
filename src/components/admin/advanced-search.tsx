@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -105,7 +106,12 @@ function formatRangeBound(filter: SearchFilter, value: number | undefined) {
   return filter.id === 'priceRange' ? formatCurrency(numero) : numero.toLocaleString('es-PY')
 }
 
-const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
+const AdvancedSearch: React.FC<AdvancedSearchProps> = (props) => {
+  const hydrated = useHydrated()
+  return hydrated ? <AdvancedSearchContent {...props} /> : null
+}
+
+const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
   onSearch,
   onClearFilters,
   isLoading = false,
@@ -115,8 +121,8 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
   stockCeiling
 }) => {
   // Estados
-  const [filters, setFilters] = useState<SearchFilter[]>([])
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
+  const [filterValues, setFilters] = useState<SearchFilter[]>([])
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(readSavedSearches)
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
   const [saveSearchName, setSaveSearchName] = useState('')
@@ -218,27 +224,14 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     }
   ], [effectiveCategoryOptions, effectiveSupplierOptions, priceMax, priceStep, stockMax])
 
-  // Efectos
-  useEffect(() => {
-    setFilters(prev => {
-      if (prev.length === 0) return availableFilters.map(f => ({ ...f }))
-
-      return availableFilters.map(filter => {
-        const current = prev.find(f => f.id === filter.id)
-        return current ? { ...filter, value: current.value } : { ...filter }
-      })
-    })
-  }, [availableFilters])
-
-  // Las busquedas guardadas vivian solo en estado de React: Radix desmonta el
-  // contenido de la pestaña inactiva, asi que se perdian al cambiar de pestaña.
-  useEffect(() => {
-    setSavedSearches(readSavedSearches())
-  }, [])
+  const filters = availableFilters.map(filter => {
+    const current = filterValues.find(value => value.id === filter.id)
+    return current ? { ...filter, value: current.value } : filter
+  })
 
   // Funciones
   const updateFilter = (filterId: string, value: any) => {
-    setFilters(prev => prev.map(filter => 
+    setFilters(filters.map(filter =>
       filter.id === filterId ? { ...filter, value } : filter
     ))
   }
@@ -287,7 +280,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     if (!saveSearchName.trim()) return
 
     const newSearch: SavedSearch = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: saveSearchName,
       filters: getActiveFilters(),
       createdAt: new Date(),

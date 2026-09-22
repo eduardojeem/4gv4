@@ -207,8 +207,8 @@ export function ProductDetailInteractive({
   }
 
   // Sincronizar imagen cuando cambia la variante o el color seleccionado
-  useEffect(() => {
-    if (!selectedVariant && Object.keys(selectedAttributes).length === 0) return
+  const variantImageIndex = useMemo(() => {
+    if (!selectedVariant && Object.keys(selectedAttributes).length === 0) return null
 
     // 1. Verificar si la variante seleccionada tiene una imagen directa
     const selectedVariantImage = selectedVariant?.image_url || selectedVariant?.attributes?.image_url
@@ -219,8 +219,7 @@ export function ProductDetailInteractive({
     if (variantImg) {
       const idx = galleryImages.findIndex((img) => img === variantImg)
       if (idx !== -1) {
-        setSelectedImage(idx)
-        return
+        return idx
       }
     }
 
@@ -241,11 +240,17 @@ export function ProductDetailInteractive({
       if (colorImg) {
         const idx = galleryImages.findIndex((img) => img === colorImg)
         if (idx !== -1) {
-          setSelectedImage(idx)
+          return idx
         }
       }
     }
+    return null
   }, [selectedVariant, selectedAttributes, galleryImages, variants])
+  const [previousVariantImageIndex, setPreviousVariantImageIndex] = useState<number | null>(null)
+  if (previousVariantImageIndex !== variantImageIndex) {
+    setPreviousVariantImageIndex(variantImageIndex)
+    if (variantImageIndex !== null) setSelectedImage(variantImageIndex)
+  }
 
   // Al hacer clic en un thumbnail de la galería, si pertenece a un color, seleccionar ese color
   const handleThumbnailClick = useCallback(

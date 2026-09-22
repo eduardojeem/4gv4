@@ -52,7 +52,6 @@ export function useSmartSearch({
   
   const [query, setQuery] = useState('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
-  const [isSearching, setIsSearching] = useState(false)
   
   const debouncedQuery = useDebounce(query, debounceMs)
   const searchCacheRef = useRef<Map<string, SearchResult[]>>(new Map())
@@ -309,27 +308,26 @@ export function useSmartSearch({
   }, [products, minQueryLength, maxResults, exactSearch, partialSearch, fuzzySearch, semanticSearch])
 
   // Resultados de búsqueda - Managed via useEffect to avoid state updates during render
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [completedSearch, setCompletedSearch] = useState<{ query: string; products: typeof products; results: SearchResult[] } | null>(null)
+  const validQuery = debouncedQuery.length >= minQueryLength && debouncedQuery.length > 0
+  const searchResults = validQuery && completedSearch?.query === debouncedQuery && completedSearch.products === products ? completedSearch.results : []
+  const isSearching = validQuery && (completedSearch?.query !== debouncedQuery || completedSearch?.products !== products)
 
   useEffect(() => {
     // If query is empty, clear results immediately
     if (!debouncedQuery || debouncedQuery.length < minQueryLength) {
-      setSearchResults([])
-      setIsSearching(false)
       return
     }
 
-    setIsSearching(true)
     
     // Use setTimeout to allow UI to update and avoid blocking render
     const timer = setTimeout(() => {
       const results = performSearch(debouncedQuery)
-      setSearchResults(results)
-      setIsSearching(false)
+      setCompletedSearch({ query: debouncedQuery, products, results })
     }, 0)
 
     return () => clearTimeout(timer)
-  }, [debouncedQuery, performSearch, minQueryLength])
+  }, [debouncedQuery, performSearch, minQueryLength, products])
 
   // Generar sugerencias
   const suggestions = useMemo((): SearchSuggestion[] => {

@@ -34,23 +34,28 @@ export function useCreditPortfolio(dateRange: DateRange | undefined, enabled: bo
 
   const from = dateRange?.from ? startOfDay(dateRange.from).toISOString() : null
   const to = dateRange?.from ? endOfDay(dateRange.to || dateRange.from).toISOString() : null
+  const requestKey = enabled && from && to ? `${from}:${to}` : null
+  const [previousRequestKey, setPreviousRequestKey] = useState(requestKey)
+  if (previousRequestKey !== requestKey) {
+    setPreviousRequestKey(requestKey)
+    setState({ status: requestKey ? 'loading' : 'idle' })
+  }
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal): Promise<CreditPortfolioState | undefined> => {
       if (!from || !to) return
-      setState({ status: 'loading' })
       try {
         const params = new URLSearchParams({ from, to })
         const res = await fetch(`/api/reports/credits?${params.toString()}`, { cache: 'no-store', signal })
         const body = (await res.json().catch(() => null)) as { success?: boolean; data?: CreditReport; error?: string } | null
+        if (signal?.aborted) return
         if (!res.ok || !body?.success || !body.data) {
-          setState({ status: 'error', message: body?.error ?? 'No se pudo cargar la cartera de créditos.' })
-          return
+          return { status: 'error', message: body?.error ?? 'No se pudo cargar la cartera de créditos.' }
         }
-        setState({ status: 'ready', report: body.data })
+        return { status: 'ready', report: body.data }
       } catch (err) {
         if ((err as { name?: string })?.name === 'AbortError') return
-        setState({ status: 'error', message: 'Error de conexión al cargar la cartera de créditos.' })
+        return { status: 'error', message: 'Error de conexión al cargar la cartera de créditos.' }
       }
     },
     [from, to]
@@ -59,11 +64,18 @@ export function useCreditPortfolio(dateRange: DateRange | undefined, enabled: bo
   useEffect(() => {
     if (!enabled) return
     const controller = new AbortController()
-    void load(controller.signal)
+    void load(controller.signal).then(result => {
+      if (result && !controller.signal.aborted) setState(result)
+    })
     return () => controller.abort()
   }, [enabled, load])
 
-  const refetch = useCallback(() => load(), [load])
+  const refetch = useCallback(async () => {
+    if (!enabled || !from || !to) return
+    setState({ status: 'loading' })
+    const result = await load()
+    if (result) setState(result)
+  }, [enabled, from, to, load])
 
-  return { state, refetch }
+  return { state: requestKey && state.status === 'idle' ? { status: 'loading' } : state, refetch }
 }

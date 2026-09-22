@@ -1085,7 +1085,7 @@ export function RepairFormDialogV2({
                         2. Crear Caso de Garantía
                       </span>
                       <span className="text-slate-600 dark:text-slate-400">
-                        Ve al Detalle de la Reparación y pulsa <strong>"Procesar Garantía"</strong>.
+                        Ve al Detalle de la Reparación y pulsa <strong>&quot;Procesar Garantía&quot;</strong>.
                       </span>
                     </div>
                     <div className="bg-amber-50/60 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">

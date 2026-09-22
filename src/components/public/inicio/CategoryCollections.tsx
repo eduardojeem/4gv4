@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
@@ -35,10 +35,7 @@ interface CollectionItem {
 }
 
 export function CategoryCollections({ style: _style }: { style: Exclude<StorefrontStyle, 'classic'> }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useHydrated()
 
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)

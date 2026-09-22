@@ -3,7 +3,7 @@
  * Mejora significativa de performance en catálogos grandes
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { Product } from '@/types/product-unified'
 import { getSearchOptimizer } from '../lib/search-optimizer'
 
@@ -33,76 +33,38 @@ export function useOptimizedSearch({
   maxResults = 50
 }: UseOptimizedSearchOptions): UseOptimizedSearchResult {
   const [query, setQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [isSearching, setIsSearching] = useState(false)
-  const [searchTime, setSearchTime] = useState(0)
-  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [completed, setCompleted] = useState({ query: '', products: null as Product[] | null, maxResults, results: [] as Product[], searchTime: 0, suggestions: [] as string[], indexSize: 0 })
 
   const optimizer = useMemo(() => getSearchOptimizer(), [])
 
-  // Construir índice cuando cambian los productos
-  useEffect(() => {
-    if (products.length === 0) return
-
-    const startTime = performance.now()
-    optimizer.buildIndex(products)
-    const endTime = performance.now()
-
-    console.log(`Index built in ${(endTime - startTime).toFixed(2)}ms for ${products.length} products`)
-  }, [products, optimizer])
-
-  // Debounce del query
+  // Indexar y medir la búsqueda cuando termina el debounce, fuera del render.
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedQuery(query)
+      optimizer.buildIndex(products)
+      const startTime = performance.now()
+      const byId = new Map(products.map(product => [product.id, product]))
+      const results = optimizer.search(query, {})
+        .map(id => byId.get(id))
+        .filter((product): product is Product => product !== undefined)
+        .slice(0, maxResults)
+      setCompleted({ query, products, maxResults, results, searchTime: performance.now() - startTime,
+        suggestions: query ? optimizer.getSuggestions(query, 5) : [], indexSize: optimizer.getStats().totalTokens })
     }, debounceMs)
-
     return () => clearTimeout(timer)
-  }, [query, debounceMs])
-
-  // Generar sugerencias
-  useEffect(() => {
-    if (query.length > 0) {
-      const newSuggestions = optimizer.getSuggestions(query, 5)
-      setSuggestions(newSuggestions)
-    } else {
-      setSuggestions([])
-    }
-  }, [query, optimizer])
-
-  // Realizar búsqueda — resultado puro sin side-effects en memo
-  const searchResult = useMemo(() => {
-    if (products.length === 0) return { products: [] as Product[], elapsed: 0 }
-
-    const startTime = performance.now()
-    const productIds = optimizer.search(debouncedQuery, {})
-    const foundProducts = productIds
-      .map(id => products.find(p => p.id === id))
-      .filter((p): p is Product => p !== undefined)
-      .slice(0, maxResults)
-    const elapsed = performance.now() - startTime
-
-    return { products: foundProducts, elapsed }
-  }, [debouncedQuery, products, optimizer, maxResults])
-
-  // Sincronizar estado de búsqueda y tiempo una vez calculado el resultado
-  const results = searchResult.products
-  useEffect(() => {
-    setIsSearching(true)
-    // El memo ya corrió; marcamos done en el mismo microtask
-    setIsSearching(false)
-    setSearchTime(searchResult.elapsed)
-  }, [searchResult])
+  }, [query, debounceMs, products, optimizer, maxResults])
+  const results = completed.products === products ? completed.results : []
+  const isSearching = completed.query !== query || completed.products !== products || completed.maxResults !== maxResults
+  const searchTime = completed.searchTime
+  const suggestions = query && completed.query === query ? completed.suggestions : []
 
   // Estadísticas
   const stats = useMemo(() => {
-    const optimizerStats = optimizer.getStats()
     return {
       totalProducts: products.length,
       filteredCount: results.length,
-      indexSize: optimizerStats.totalTokens
+      indexSize: completed.indexSize
     }
-  }, [products.length, results.length, optimizer])
+  }, [products.length, results.length, completed.indexSize])
 
   return {
     query,

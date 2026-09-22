@@ -1,7 +1,7 @@
 "use client"
 
 import useSWR, { mutate as globalMutate } from 'swr'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import customerService from '@/services/customer-service'
 import { cacheUtils } from '@/providers/swr-provider'
 import type { Customer } from '@/hooks/use-customer-state'
@@ -17,6 +17,11 @@ interface UseOptimizedCustomersOptions {
  * Hook optimizado para manejo de clientes con cache inteligente
  */
 export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
   const {
     segment,
     status = 'all',
@@ -158,11 +163,11 @@ export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}
       segments: [...new Set(data.map(c => c.segment).filter(Boolean))],
       recentlyAdded: data.filter(c => {
         const addedDate = new Date(c.registration_date)
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
         return addedDate > weekAgo
       }).length
     }
-  }, [data])
+  }, [data, now])
 
   return {
     customers: data || [],

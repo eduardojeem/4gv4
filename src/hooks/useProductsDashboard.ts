@@ -3,6 +3,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { Product, ProductAlert, Category, Supplier } from '@/types/product-unified'
 import { DashboardFilters, DashboardMetrics, SortConfig, ViewMode } from '@/types/products-dashboard'
 import {
@@ -71,7 +72,10 @@ export function useProductsDashboard({
   initialFilters,
 }: UseProductsDashboardProps): UseProductsDashboardReturn {
   // UI State
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const hydrated = useHydrated()
+  const [preferredViewMode, setViewMode] = useState<ViewMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'table')
+  const viewMode = hydrated ? preferredViewMode : 'table'
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [searchQuery, setSearchQuery] = useState('')
@@ -83,13 +87,6 @@ export function useProductsDashboard({
   })
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false)
-
-  // Auto-detect mobile screen and switch to grid mode
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setViewMode('grid')
-    }
-  }, [])
 
   // Debounced search handler
   const debouncedSearch = useMemo(
@@ -125,10 +122,14 @@ export function useProductsDashboard({
     return sortProducts(filteredProducts, sortConfig)
   }, [filteredProducts, sortConfig, serverPaginated])
 
-  // Reset page when filters change
-  useEffect(() => {
+  // Reset before children render, rather than briefly showing the old page.
+  const [pageCriteria, setPageCriteria] = useState({ filters, searchQuery, sortConfig, debouncedSearchQuery, itemsPerPage })
+  if (pageCriteria.filters !== filters || pageCriteria.searchQuery !== searchQuery ||
+      pageCriteria.sortConfig !== sortConfig || pageCriteria.debouncedSearchQuery !== debouncedSearchQuery ||
+      pageCriteria.itemsPerPage !== itemsPerPage) {
+    setPageCriteria({ filters, searchQuery, sortConfig, debouncedSearchQuery, itemsPerPage })
     setCurrentPage(1)
-  }, [filters, searchQuery, sortConfig])
+  }
 
   // Apply pagination
   const paginatedProducts = useMemo(() => {

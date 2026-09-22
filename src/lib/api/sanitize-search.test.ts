@@ -70,6 +70,8 @@ describe('sanitizeFilterTerm', () => {
     expect(sanitizeFilterTerm('unauthorized_admin_access_attempt')).toBe('unauthorized_admin_access_attempt')
     expect(sanitizeFilterTerm('/api/admin/users')).toBe('/api/admin/users')
     expect(sanitizeFilterTerm('2001:db8::1')).toBe('2001:db8::1')
+    expect(sanitizeFilterTerm('aftermarket plus: soft')).toBe('aftermarket plus: soft')
+    expect(sanitizeFilterTerm('Dolce & Gabbana')).toBe('Dolce & Gabbana')
   })
 
   it('el helper general sí las rompería', () => {

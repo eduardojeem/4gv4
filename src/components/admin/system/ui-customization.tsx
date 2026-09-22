@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { useTheme } from "@/contexts/theme-context"
+import { useHydrated } from '@/hooks/use-hydrated'
   import { 
     Palette, Monitor, Smartphone, Tablet, Sun, Moon, 
     Settings, Save, RotateCcw, Eye, Download, Upload, Copy,
@@ -201,9 +202,22 @@ const customComponents: CustomComponent[] = [
   }
 ]
 
+function readCustomTheme(): ThemeConfig {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('custom-theme') ?? 'null')
+    if (parsed?.colors && parsed?.typography && parsed?.layout && parsed?.components) return parsed
+  } catch {}
+  return defaultThemes[0]
+}
+
 export default function UICustomization() {
-  const [activeTheme, setActiveTheme] = useState<ThemeConfig>(defaultThemes[0])
-  const [customTheme, setCustomTheme] = useState<ThemeConfig>(defaultThemes[0])
+  const hydrated = useHydrated()
+  return hydrated ? <UICustomizationContent /> : null
+}
+
+function UICustomizationContent() {
+  const [activeTheme, setActiveTheme] = useState<ThemeConfig>(readCustomTheme)
+  const [customTheme, setCustomTheme] = useState<ThemeConfig>(readCustomTheme)
   const [activeTab, setActiveTab] = useState('themes')
   const [previewMode, setPreviewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -254,18 +268,8 @@ export default function UICustomization() {
   }
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('custom-theme')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed && parsed.colors && parsed.typography && parsed.layout && parsed.components) {
-          setCustomTheme(parsed)
-          setActiveTheme(parsed)
-          applyCustomThemeToCSSVariables(parsed)
-        }
-      }
-    } catch {}
-  }, [])
+    applyCustomThemeToCSSVariables(activeTheme)
+  }, [activeTheme])
 
   const updateThemeColor = (colorKey: keyof ThemeConfig['colors'], value: string) => {
     // Validación HEX

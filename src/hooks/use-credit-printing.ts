@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import {
   readCreditPaperFormat,
@@ -25,14 +26,9 @@ export type CreditIssuer = {
 
 export function useCreditPrinting() {
   const { settings } = useSharedSettings()
-  const [format, setFormat] = useState<CreditPaperFormat>('80mm')
-
-  // La preferencia se lee despues del montaje: en el servidor no hay
-  // localStorage, y leerla durante el render daria un HTML distinto al del
-  // cliente.
-  useEffect(() => {
-    setFormat(readCreditPaperFormat())
-  }, [])
+  const hydrated = useHydrated()
+  const [preferredFormat, setFormat] = useState<CreditPaperFormat>(readCreditPaperFormat)
+  const format = hydrated ? preferredFormat : '80mm'
 
   const changeFormat = useCallback((next: CreditPaperFormat) => {
     setFormat(next)

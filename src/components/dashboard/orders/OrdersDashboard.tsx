@@ -611,27 +611,24 @@ function CancelConfirmBanner({ onConfirm, onDismiss }: { onConfirm: () => void; 
   )
 }
 
-function CollectionDialog({ order, open, submitting, onOpenChange, onConfirm }: {
+function CollectionDialog(props: React.ComponentProps<typeof CollectionDialogContent>) {
+  if (!props.open) return null
+  return <CollectionDialogContent key={props.order?.id ?? 'new'} {...props} />
+}
+
+function CollectionDialogContent({ order, open, submitting, onOpenChange, onConfirm }: {
   order: CustomerOrder | null
   open: boolean
   submitting: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: (input: { amount: number; method: PaymentMethod; reference: string; note: string; idempotencyKey: string }) => void
 }) {
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState<PaymentMethod>('CASH')
+  const [amount, setAmount] = useState(() => order ? String(order.amount_due) : '')
+  const [method, setMethod] = useState<PaymentMethod>(() => order?.payment_method ?? 'CASH')
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
   const idempotencyRef = useRef(crypto.randomUUID())
 
-  useEffect(() => {
-    if (!open || !order) return
-    setAmount(String(order.amount_due))
-    setMethod(order.payment_method)
-    setReference('')
-    setNote('')
-    idempotencyRef.current = crypto.randomUUID()
-  }, [open, order])
 
   const numericAmount = Number(amount)
   const referenceRequired = method !== 'CASH'

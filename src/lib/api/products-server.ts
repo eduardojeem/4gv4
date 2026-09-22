@@ -12,6 +12,7 @@ import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/publ
 import { buildVisibleCategoryTree, resolveEffectiveProductStock } from '@/lib/public/catalog'
 import { getVariantFashionValue, type FashionAudience } from '@/lib/products/fashion-filters'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
 
 import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 
@@ -162,10 +163,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const page = Math.max(1, Math.floor(rawPage) || 1)
   const query = sanitizeSearch(rawQuery)
 
-  // #2 — Sanitizar brand igual que query para prevenir inyección PostgREST.
-  const brand = sanitizeSearch(rawBrand ?? '')
-  const size = sanitizeSearch(rawSize)
-  const color = sanitizeSearch(rawColor)
+  // Sanitizar brand preservando caracteres legítimos de marcas (: & . - + / etc.)
+  // pero previniendo inyección de PostgREST (, " ( ) % \).
+  const brand = sanitizeFilterTerm(rawBrand ?? '', 100)
+  const size = sanitizeFilterTerm(rawSize ?? '', 50)
+  const color = sanitizeFilterTerm(rawColor ?? '', 50)
 
   // #4 — max_price negativo o cero produce un rango [0,0] vacío sin aviso.
   // Se trata cualquier valor <= 0 o no-finito como "sin límite superior".
@@ -305,7 +307,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       .from('brands')
       .select('id')
       .eq('organization_id', organization.id)
-      .eq('name', brand)
+      .ilike('name', brand)
       .maybeSingle()
     brandRowId = brandRow?.id ?? null
   }
@@ -368,9 +370,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       if (brandRowId) {
         // Valor citado y sin comillas/backslashes para el .or() de PostgREST.
         const quotedBrand = `"${brand.replace(/[\\"]/g, '')}"`
-        q = q.or(`brand.eq.${quotedBrand},brand_id.eq.${brandRowId}`)
+        q = q.or(`brand.ilike.${quotedBrand},brand_id.eq.${brandRowId}`)
       } else {
-        q = q.eq('brand', brand)
+        q = q.ilike('brand', brand)
       }
     }
 

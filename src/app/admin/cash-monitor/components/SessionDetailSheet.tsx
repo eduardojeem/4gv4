@@ -63,19 +63,27 @@ const movementTypeConfig: Record<string, { label: string; icon: typeof DollarSig
 }
 
 export function SessionDetailSheet({ session, open, onClose, onAction, fetchMovements }: SessionDetailSheetProps) {
+  return <SessionDetailContent key={`${session?.id ?? 'none'}:${open}`} session={session} open={open} onClose={onClose} onAction={onAction} fetchMovements={fetchMovements} />
+}
+
+function SessionDetailContent({ session, open, onClose, onAction, fetchMovements }: SessionDetailSheetProps) {
   const [movements, setMovements] = useState<CashMovementAdmin[]>([])
-  const [loadingMovements, setLoadingMovements] = useState(false)
+  const [loadingMovements, setLoadingMovements] = useState(Boolean(session && open))
   const [movementFilter, setMovementFilter] = useState<'all' | 'sale' | 'cash_in' | 'cash_out'>('all')
   const [movementSearch, setMovementSearch] = useState('')
 
   useEffect(() => {
+    let cancelled = false
     if (session && open) {
-      setLoadingMovements(true)
       fetchMovements(session.id).then(data => {
+        if (cancelled) return
         setMovements(data)
         setLoadingMovements(false)
+      }).catch(() => {
+        if (!cancelled) setLoadingMovements(false)
       })
     }
+    return () => { cancelled = true }
   }, [session, open, fetchMovements])
 
   const filteredMovements = useMemo(() => {

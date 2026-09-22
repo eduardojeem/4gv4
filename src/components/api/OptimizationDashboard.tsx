@@ -176,9 +176,9 @@ export default function OptimizationDashboard() {
     // Simular datos de tiempo de respuesta
     return Array.from({ length: 24 }, (_, i) => ({
       hour: `${i}:00`,
-      responseTime: Math.random() * 200 + 50,
-      cacheHitRate: Math.random() * 30 + 70,
-      requestCount: Math.floor(Math.random() * 1000) + 100
+      responseTime: 50 + ((i * 37) % 200),
+      cacheHitRate: 70 + ((i * 11) % 30),
+      requestCount: 100 + ((i * 137) % 1000)
     }))
   }, [])
 
@@ -298,7 +298,7 @@ export default function OptimizationDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Tiempo de Respuesta</CardTitle>
-                <CardDescription>Rendimiento de API en tiempo real</CardDescription>
+                <CardDescription>Datos ilustrativos; no representan mediciones en tiempo real</CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -706,7 +706,7 @@ export default function OptimizationDashboard() {
                         </td>
                         <td className="p-2 text-right">
                           <span className="text-blue-600">
-                            {(Math.random() * 30 + 70).toFixed(1)}%
+                            —
                           </span>
                         </td>
                       </tr>

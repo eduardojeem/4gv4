@@ -362,7 +362,7 @@ export default function ProductDetailPage() {
     if (!product) return []
     const rawVariants = Array.isArray((product as any).variants) ? (product as any).variants : []
     return rawVariants.map((v: any, index: number) => {
-      let attributes: Record<string, string> = {}
+      const attributes: Record<string, string> = {}
       if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
         for (const [k, val] of Object.entries(v.attributes)) {
           if (val !== undefined && val !== null) attributes[k] = String(val)

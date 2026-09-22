@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { useCriticalDebounce } from '@/lib/critical-performance'
 
 export interface BarcodeResult {
   code: string
@@ -71,9 +70,6 @@ export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeS
   const scanBufferRef = useRef('')
   const lastKeypressRef = useRef(0)
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Debounce para entrada manual
-  const debouncedManualInput = useCriticalDebounce(manualInput, 300)
 
   // Validar código de barras
   const validateBarcode = useCallback((code: string): boolean => {
@@ -202,16 +198,17 @@ export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeS
     }
   }, [isScanning, opts.enableKeyboardScanner, handleKeyPress])
 
-  // Auto-envío de entrada manual cuando se detiene de escribir
+  // Auto-envío de entrada manual tras 300 ms sin escribir.
   useEffect(() => {
-    if (opts.enableManualInput && debouncedManualInput && debouncedManualInput !== manualInput) {
-      // Solo auto-enviar si parece un código válido
-      if (validateBarcode(debouncedManualInput)) {
-        processScan(debouncedManualInput, 'manual')
+    if (!opts.enableManualInput || !manualInput) return
+    const timer = setTimeout(() => {
+      if (validateBarcode(manualInput)) {
+        processScan(manualInput, 'manual')
         setManualInput('')
       }
-    }
-  }, [debouncedManualInput, manualInput, opts.enableManualInput, validateBarcode, processScan])
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [manualInput, opts.enableManualInput, validateBarcode, processScan])
 
   // Cleanup
   useEffect(() => {

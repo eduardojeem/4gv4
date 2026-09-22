@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   Loader2,
   Coins,
@@ -42,16 +43,10 @@ export function LoyaltyRafflesPanel({ canManage }: { canManage: boolean }) {
     refresh,
   } = useLoyalty()
 
-  const [subTab, setSubTab] = useState<'puntos' | 'sorteos' | 'resumen'>('puntos')
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const section = params.get('section')
-    if (section === 'puntos' || section === 'sorteos' || section === 'resumen') {
-      setSubTab(section)
-    }
-  }, [])
+  const params = useSearchParams()
+  const section = params.get('section')
+  const [selectedTab, setSubTab] = useState<'puntos' | 'sorteos' | 'resumen' | null>(null)
+  const subTab = selectedTab ?? (section === 'sorteos' || section === 'resumen' ? section : 'puntos')
 
   const handleSelectSubTab = (tabValue: 'puntos' | 'sorteos' | 'resumen') => {
     setSubTab(tabValue)
