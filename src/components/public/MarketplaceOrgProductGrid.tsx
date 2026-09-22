@@ -49,6 +49,12 @@ type Props = {
   organizations: Org[]
 }
 
+/**
+ * Una tarjeta mide unos 240 px: en el ancho del contenido entran cinco. Desde
+ * seis productos la fila se llena y el desplazamiento no muestra repetidos.
+ */
+export const MIN_PRODUCTOS_PARA_DESPLAZAR = 6
+
 function OrgProductCard({
   product,
   org,
@@ -248,16 +254,17 @@ function OrgProductSection({
       })
     : null
 
-  // Lista base repetida hasta tener al menos 6 items para bucle continuo impecable
-  const baseList = useMemo(() => {
-    const list = org.featured_products || []
-    if (list.length === 0) return []
-    let repeated = [...list]
-    while (repeated.length < 6) {
-      repeated = [...repeated, ...list]
-    }
-    return repeated
-  }, [org.featured_products])
+  /*
+   * Antes la lista se rellenaba repitiéndose hasta tener seis productos, y
+   * después se duplicaba entera para que el desplazamiento no se corte: una
+   * tienda con un producto lo mostraba doce veces, seis pegadas en pantalla.
+   *
+   * Ahora cada producto va una vez. Sólo se desplaza si hay suficientes para
+   * llenar la fila; ahí la copia del bucle queda fuera de la vista y no se nota.
+   * Con menos, la fila queda quieta.
+   */
+  const baseList = useMemo(() => org.featured_products || [], [org.featured_products])
+  const desplaza = baseList.length >= MIN_PRODUCTOS_PARA_DESPLAZAR
 
   // Duración dinámica para mantener una velocidad suave y constante (~4.5s por producto)
   const animationDuration = useMemo(() => {
@@ -362,6 +369,7 @@ function OrgProductSection({
           {/* Botones de control de movimiento continuo y acceso a la tienda */}
           <div className="flex items-center justify-between sm:justify-end gap-2.5">
             {/* Badge de estado animado (En movimiento / Pausado) */}
+            {desplaza && (
             <button
               type="button"
               suppressHydrationWarning
@@ -388,8 +396,10 @@ function OrgProductSection({
               </span>
               <span>{!isPaused ? 'En movimiento' : 'Pausado'}</span>
             </button>
+            )}
 
             {/* Botón de Play/Pausa de movimiento */}
+            {desplaza && (
             <button
               type="button"
               suppressHydrationWarning
@@ -407,6 +417,7 @@ function OrgProductSection({
                 <Play className="h-3.5 w-3.5 fill-current ml-0.5" />
               )}
             </button>
+            )}
 
             <Button
               asChild
@@ -422,8 +433,20 @@ function OrgProductSection({
           </div>
         </div>
 
-        {/* Carrusel Continuo de Productos tipo Marquee con pausa en hover */}
-        {baseList.length > 0 ? (
+        {/* Pocos productos: cada uno una vez, sin moverse. */}
+        {baseList.length > 0 && !desplaza ? (
+          <div className="flex items-center gap-3.5 overflow-x-auto py-3 sm:gap-4">
+            {baseList.map((product) => (
+              <OrgProductCard
+                key={product.id}
+                product={product}
+                org={org}
+                onSelectProduct={onSelectProduct}
+              />
+            ))}
+            <OrgCatalogCard org={org} />
+          </div>
+        ) : baseList.length > 0 ? (
           <div className="relative w-full overflow-hidden select-none py-1">
             {/* Sombras laterales de desvanecimiento para entrada y salida suave */}
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 sm:w-20 bg-gradient-to-r from-background to-transparent" />

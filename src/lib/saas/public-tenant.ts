@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { isOrganizationStoreBlocked } from '@/lib/saas/store-status'
 import { getTenantSlugFromRequest, normalizeDefaultPublicOrgSlug } from '@/lib/saas/tenant'
 
 export type PublicOrganization = {
@@ -38,12 +39,27 @@ export function isPublicStorefrontEnabled(organization: Pick<PublicOrganization,
   return organization?.storefront_public === true
 }
 
+/**
+ * La tienda sólo abre si está publicada **y** su suscripción no la cierra.
+ * Antes miraba nada más `storefront_public`: una tienda en `past_due` salía del
+ * marketplace pero su catálogo seguía abierto en `/[slug]/productos`. Ver
+ * `store-status.ts`.
+ */
+async function openStorefrontOrNull<T extends Pick<PublicOrganization, 'storefront_public'> & { id: string }>(
+  organization: T | null,
+  supabase: SupabaseClient,
+): Promise<T | null> {
+  if (!isPublicStorefrontEnabled(organization)) return null
+  if (await isOrganizationStoreBlocked(supabase, (organization as T).id)) return null
+  return organization
+}
+
 export async function resolvePublicStorefrontOrganization(
   request: NextRequest,
   supabase: SupabaseClient = createAdminSupabase()
 ) {
   const organization = await resolvePublicOrganization(request, supabase)
-  return isPublicStorefrontEnabled(organization) ? organization : null
+  return openStorefrontOrNull(organization, supabase)
 }
 
 export async function resolvePublicStorefrontOrganizationBySlug(
@@ -51,7 +67,7 @@ export async function resolvePublicStorefrontOrganizationBySlug(
   supabase: SupabaseClient = createAdminSupabase()
 ) {
   const organization = await resolvePublicOrganizationBySlug(requestedSlug, supabase)
-  return isPublicStorefrontEnabled(organization) ? organization : null
+  return openStorefrontOrNull(organization, supabase)
 }
 
 export async function resolvePublicOrganizationBySlug(

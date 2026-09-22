@@ -4,6 +4,7 @@ import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapP
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
 import { unstable_cache } from 'next/cache'
+import { BLOCKED_STORE_SUBSCRIPTION_STATUSES } from '@/lib/saas/store-status'
 import type { PublicProductVariant } from '@/types/public'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 
@@ -12,6 +13,8 @@ import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 // materializar miles de filas en cada funcion de Vercel.
 export const MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 30
 export const MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS = 300
+/** Cuántos productos lleva la fila de cada tienda en el inicio del marketplace. */
+export const FEATURED_PRODUCTS_PER_ORGANIZATION = 12
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -70,7 +73,8 @@ async function resolveCategoryIds(
  * `storefront_public`—: excluir por un dato faltante vaciaría la sección sin
  * que nadie sepa por qué.
  */
-export const SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES = ['past_due', 'canceled', 'suspended'] as const
+// Es la misma regla que abre o cierra la tienda propia: una sola lista.
+export const SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES = BLOCKED_STORE_SUBSCRIPTION_STATUSES
 
 export function blockedShowcaseOrganizationIds(
   rows: Array<{ organization_id: string; status: string | null }> | null | undefined
@@ -321,6 +325,30 @@ async function getMarketplaceOrganizationsUncached(
   const organizationRows = organizations as OrganizationRow[]
   const organizationIds = organizationRows.map((organization) => organization.id)
 
+  /*
+   * Los destacados de cada tienda se piden por separado, con su propio tope.
+   *
+   * Antes salían de un único pozo de `limit * 12` productos ordenado a nivel
+   * global: las tiendas con catálogos grandes se llevaban casi todo y las
+   * demás quedaban con uno o ninguno. Con Store Center (175) y MA (106), 4G
+   * celulares mostraba 1 de sus 5 productos publicados. Es el mismo error que
+   * ya se había corregido para `products_count`, más abajo.
+   */
+  const productsPorTienda = Promise.all(
+    organizationIds.map((organizationId) =>
+      supabase
+        .from('products')
+        .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .eq('visibility', 'public')
+        .gt('stock_quantity', 0)
+        .order('featured', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(FEATURED_PRODUCTS_PER_ORGANIZATION)
+    )
+  ).then((respuestas) => ({ data: respuestas.flatMap((respuesta) => respuesta.data ?? []) }))
+
   const [
     { data: products },
     { data: orgSettings },
@@ -329,16 +357,7 @@ async function getMarketplaceOrganizationsUncached(
     { data: countRows },
     { data: subscriptionRows },
   ] = await Promise.all([
-    supabase
-      .from('products')
-      .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
-      .in('organization_id', organizationIds)
-      .eq('is_active', true)
-      .eq('visibility', 'public')
-      .gt('stock_quantity', 0)
-      .order('featured', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(limit * 12),
+    productsPorTienda,
     supabase
       .from('organization_settings')
       .select('organization_id, city, company_address')
@@ -487,7 +506,7 @@ async function getMarketplaceOrganizationsUncached(
       business_type: businessType,
       products_count: productCountByOrganization.get(organization.id) ?? 0,
       products_total: productTotalByOrganization.get(organization.id) ?? 0,
-      featured_products: organizationProducts.slice(0, 12).map(toPublicProduct),
+      featured_products: organizationProducts.slice(0, FEATURED_PRODUCTS_PER_ORGANIZATION).map(toPublicProduct),
       review_rating_avg: organization.review_rating_avg ?? null,
       review_count: organization.review_count ?? null,
     }
