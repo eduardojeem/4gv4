@@ -4,6 +4,12 @@ import {
   ProductAttributeDefinitionSchema,
   ProductVariantInputSchema,
 } from '@/lib/products/variant-contract'
+import {
+  MAX_LARGO_DE_NOMBRE,
+  MAX_MODELOS_POR_PRODUCTO,
+  normalizeDeviceBrand,
+  normalizeDeviceModels,
+} from '@/lib/products/device-compatibility'
 
 /**
  * Esquemas de validación de los endpoints.
@@ -165,6 +171,21 @@ const productBaseSchema = z.object({
     .max(2048, 'La URL de la imagen no puede superar los 2048 caracteres')
     .optional()
     .nullable(),
+
+  // Para qué celular es el repuesto. Sin `default`: una edición que no los
+  // manda no tiene que borrarlos (ver `productUpdateSchema`).
+  device_brand: z.string()
+    .max(MAX_LARGO_DE_NOMBRE, `La marca del celular no puede superar los ${MAX_LARGO_DE_NOMBRE} caracteres`)
+    .nullable()
+    .optional()
+    .transform((valor) => (valor === undefined ? undefined : normalizeDeviceBrand(valor))),
+
+  device_models: z.array(
+    z.string().max(MAX_LARGO_DE_NOMBRE, `Cada modelo puede tener hasta ${MAX_LARGO_DE_NOMBRE} caracteres`)
+  )
+    .max(MAX_MODELOS_POR_PRODUCTO, `Se pueden cargar hasta ${MAX_MODELOS_POR_PRODUCTO} modelos por producto`)
+    .optional()
+    .transform((valor) => (valor === undefined ? undefined : normalizeDeviceModels(valor))),
 
   ...productVariantsFields,
 })

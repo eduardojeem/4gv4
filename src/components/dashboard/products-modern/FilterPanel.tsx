@@ -20,6 +20,9 @@ import { Category, Supplier, Product } from '@/types/products'
 import { DashboardFilters } from '@/types/products-dashboard'
 import { applyFilters, getUniqueBrands } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
+import { DeviceFilterFields } from '@/components/dashboard/products/DeviceFilterFields'
+import { usesDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 export interface FilterPanelProps {
   /** Sin módulo de servicios ni servicios cargados, no se ofrece filtrar por servicio. */
@@ -53,6 +56,10 @@ export function FilterPanel({
   resultCount,
   className
 }: FilterPanelProps) {
+  // Marca y modelo del celular: sólo para tecnología y talleres de celulares.
+  const { businessVertical, operatingModel } = useSubscriptionStatus()
+  const muestraCelular = usesDeviceCompatibility({ businessVertical, operatingModel })
+
   const ALL_OPTION_VALUE = '__all__'
 
   // Prefer the full brand list; otherwise derive from the products in view.
@@ -155,7 +162,7 @@ export function FilterPanel({
 
           <div className="space-y-1.5">
             <Label htmlFor="brand-filter" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Marca
+              {muestraCelular ? 'Marca del repuesto' : 'Marca'}
             </Label>
             <Select
               value={filters.brand || ALL_OPTION_VALUE}
@@ -174,6 +181,16 @@ export function FilterPanel({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Para qué celular es el repuesto. No aparece hasta que haya algún
+              producto con celular cargado. */}
+          {muestraCelular && (
+            <DeviceFilterFields
+              deviceBrand={filters.device_brand}
+              deviceModel={filters.device_model}
+              onChange={(cambios) => onFiltersChange(cambios)}
+            />
+          )}
         </div>
 
         {/* Columna 2: Tipo de Ítem y Proveedor */}

@@ -27,7 +27,11 @@ export const productSchema = z
       .nullable(),
     category_id: z.string().min(1, "La categoria es requerida"),
     brand_id: z.string().optional().nullable(),
+    // Marca del repuesto (quién fabricó la pieza). Para qué celular es va aparte.
     brand: z.string().optional().nullable(),
+    // Marca y modelos del celular al que pertenece el repuesto.
+    device_brand: z.string().max(60, "La marca del celular puede tener hasta 60 caracteres").optional().nullable(),
+    device_models: z.array(z.string().max(60, "Cada modelo puede tener hasta 60 caracteres")).max(20, "Se pueden cargar hasta 20 modelos").optional(),
     supplier_id: z.string().optional().nullable(),
 
     // Pricing

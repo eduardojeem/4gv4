@@ -65,6 +65,10 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   variant_attribute_config?: ProductAttributeDefinition[] | null
   variants?: ProductVariantRecord[]
 
+  // Para qué celular es el repuesto. `brand` es la marca del repuesto.
+  device_brand?: string | null
+  device_models?: string[] | null
+
   // Legacy compatibility - ensure these exist
   stock_quantity: number
   sale_price: number

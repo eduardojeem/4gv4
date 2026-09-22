@@ -15,11 +15,15 @@ export interface DashboardFilters extends BaseProductFilters {
    * antes, pedir «bajo stock» volvia a mezclar los servicios en la lista.
    */
   catalog_kind?: 'part' | 'service'
+  /** Marca del celular al que pertenece el repuesto (Apple, Samsung). */
+  device_brand?: string
+  /** Un modelo de celular: trae todo lo que sirve para él. */
+  device_model?: string
 }
 
 // Sort configuration
 export interface SortConfig {
-  field: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at'
+  field: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at' | 'device_model'
   direction: 'asc' | 'desc'
 }
 

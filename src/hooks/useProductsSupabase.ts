@@ -17,6 +17,9 @@ interface ProductFilters {
   category?: string
   supplier?: string
   brand?: string
+  /** Marca y modelo del celular al que pertenece el repuesto. */
+  deviceBrand?: string
+  deviceModel?: string
   stockStatus?: 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
   priceMin?: number
   priceMax?: number
@@ -30,7 +33,7 @@ interface ProductFilters {
 }
 
 interface ProductSort {
-  field: 'name' | 'sku' | 'category' | 'price' | 'stock' | 'supplier' | 'margin' | 'created_at'
+  field: 'name' | 'sku' | 'category' | 'price' | 'stock' | 'supplier' | 'margin' | 'created_at' | 'device'
   direction: 'asc' | 'desc'
 }
 
@@ -108,6 +111,18 @@ function getProductApiError(payload: ProductApiPayload | null, fallback: string)
   }
 
   return payload.message || payload.error || fallback
+}
+
+/**
+ * Si la base todavía no tiene las columnas del celular, la API guarda el
+ * producto igual y avisa. Se muestra, porque si no el usuario cree que la
+ * marca y el modelo del celular quedaron guardados.
+ */
+function avisarSiFaltoElCelular(payload: unknown) {
+  const respuesta = payload as { device_fields_skipped?: boolean; message?: string } | null
+  if (respuesta?.device_fields_skipped) {
+    toast.warning(respuesta.message || 'No se guardaron la marca ni el modelo del celular.')
+  }
 }
 
 export function useProductsSupabase(options?: { enabled?: boolean }) {
@@ -263,6 +278,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       if (activeFilters.isActive !== undefined) params.set('is_active', String(activeFilters.isActive))
       if (activeFilters.featured !== undefined) params.set('featured', String(activeFilters.featured))
       if (activeFilters.catalogKind) params.set('catalog_kind', activeFilters.catalogKind)
+      if (activeFilters.deviceBrand) params.set('device_brand', activeFilters.deviceBrand)
+      if (activeFilters.deviceModel) params.set('device_model', activeFilters.deviceModel)
       if (selectedBranchId) params.set('strict_branch_stock', 'true')
 
       const response = await fetch(`/api/products?${params.toString()}`, {
@@ -476,6 +493,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       // Actualizar estado local inmediatamente
       const newProduct = payload.data as Product
+      avisarSiFaltoElCelular(payload)
       
       // Ensure local state update happens with functional update to avoid stale closures
       setProducts(prev => {
@@ -538,6 +556,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       const payload = await response.json().catch(() => null) as ProductApiPayload | null
 
       const responseData = payload?.data
+      avisarSiFaltoElCelular(payload)
       const updatedProduct = responseData && 'product' in responseData
         ? ({ ...responseData.product, variants: responseData.variants ?? [] } as Product)
         : responseData as Product | undefined

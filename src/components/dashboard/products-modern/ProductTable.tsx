@@ -11,8 +11,7 @@ import {
   TrendingUp, AlertTriangle, XCircle,
   Sparkles, Globe, EyeOff, MoreHorizontal,
   Wrench, Layers3, ChevronDown, ChevronUp,
-  Barcode, Tag, CheckCircle2, ShieldCheck,
-} from 'lucide-react'
+  Barcode, Tag, CheckCircle2, ShieldCheck, Smartphone} from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -42,6 +41,8 @@ import { Product } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
 import { getStockStatus, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
+import { describeDeviceCompatibility, usesDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { formatCurrency } from '@/lib/currency'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
@@ -218,6 +219,10 @@ export function ProductTable({
   className,
   viewMode = 'table',
 }: ProductTableProps) {
+  // Marca y modelo del celular: sólo para tecnología y talleres de celulares.
+  const { businessVertical, operatingModel } = useSubscriptionStatus()
+  const muestraCelular = usesDeviceCompatibility({ businessVertical, operatingModel })
+
   const isCompact = viewMode === 'compact'
   const canViewCost = useCanViewCost()
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -293,7 +298,14 @@ export function ProductTable({
 
                 {/* Product info (Name, brand, SKU) */}
                 <TableHead className="min-w-[220px]">
-                  <SortButton label="Producto" field="name" sortConfig={sortConfig} onSort={onSort} />
+                  {/* Ordenar por celular junta los repuestos del mismo teléfono:
+                      todas las piezas de iPhone 13 una detrás de otra. */}
+                  <div className="flex items-center gap-4">
+                    <SortButton label="Producto" field="name" sortConfig={sortConfig} onSort={onSort} />
+                    {muestraCelular && (
+                      <SortButton label="Celular" field="device_model" sortConfig={sortConfig} onSort={onSort} />
+                    )}
+                  </div>
                 </TableHead>
 
                 {/* Category & variants */}
@@ -464,9 +476,19 @@ export function ProductTable({
                                 </span>
                               </div>
 
+                              {/* Para qué celular es: lo que se busca en el mostrador. */}
+                              {muestraCelular && describeDeviceCompatibility(product.device_brand, product.device_models) && (
+                                <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                  <Smartphone className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                                  <span className="truncate">
+                                    {describeDeviceCompatibility(product.device_brand, product.device_models)}
+                                  </span>
+                                </div>
+                              )}
+
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap text-xs">
                                 {product.brand && (
-                                  <span className="text-[11px] font-medium text-muted-foreground/80 truncate">
+                                  <span className="text-[11px] font-medium text-muted-foreground/80 truncate" title="Marca del repuesto">
                                     {product.brand}
                                   </span>
                                 )}

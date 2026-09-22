@@ -16,6 +16,8 @@ import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
 import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { recordStockAdjustment } from '@/lib/products/stock-movements'
+import { persistDeviceFields } from '@/lib/products/device-persist'
+import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
 
 function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
   try {
@@ -147,8 +149,13 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       supplier: 'supplier_id',
       margin: 'sale_price',
       created_at: 'created_at',
+      // Marca y modelo del celular, con los números rellenados para que
+      // «iPhone 8» vaya antes que «iPhone 11». Ver la migración de compatibilidad.
+      device: 'device_sort_key',
     }
     const sortColumn = sortColumns[requestedSort] || 'name'
+    const deviceBrandFilter = searchParams.get('device_brand')?.trim() || null
+    const deviceModelFilter = searchParams.get('device_model')?.trim() || null
     const sortAscending = searchParams.get('direction') !== 'desc'
     const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
     const catalogKind = parseProductCatalogKind(searchParams.get('catalog_kind'))
@@ -209,6 +216,20 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       queryBuilder = queryBuilder.ilike('brand', brand)
     }
 
+    // Filtrar y ordenar por celular sólo si la base ya tiene las columnas: antes
+    // de la migración, pedirlas hace fallar el listado entero.
+    const puedeUsarCelular = (deviceBrandFilter || deviceModelFilter || sortColumn === 'device_sort_key')
+      ? await productsHaveDeviceColumns(supabase as never)
+      : false
+
+    if (puedeUsarCelular && deviceBrandFilter) {
+      queryBuilder = queryBuilder.eq('device_brand', deviceBrandFilter)
+    }
+
+    if (puedeUsarCelular && deviceModelFilter) {
+      queryBuilder = queryBuilder.contains('device_models', [deviceModelFilter])
+    }
+
     if (priceMin !== null && Number.isFinite(priceMin)) {
       queryBuilder = queryBuilder.gte('sale_price', priceMin)
     }
@@ -247,7 +268,14 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       stockMax !== null ||
       catalogKind !== null
 
-    queryBuilder = queryBuilder.order(sortColumn, { ascending: sortAscending })
+    if (sortColumn === 'device_sort_key' && puedeUsarCelular) {
+      // Los productos sin celular cargado van al final, en cualquier dirección.
+      queryBuilder = queryBuilder
+        .order('device_sort_key', { ascending: sortAscending, nullsFirst: false })
+        .order('name', { ascending: true })
+    } else {
+      queryBuilder = queryBuilder.order(sortColumn === 'device_sort_key' ? 'name' : sortColumn, { ascending: sortAscending })
+    }
     if (!needsInMemoryPagination) {
       queryBuilder = queryBuilder.range(from, to)
     } else {
@@ -570,14 +598,21 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         return visible
       })
 
+      const dispositivo = await persistDeviceFields(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
       revalidateProductStorefront(organization.slug, organization.id, savedProductId)
 
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost(product as Record<string, unknown>, user.role),
+          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}) }, user.role),
           variants: visibleVariants,
         },
+        ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
       }, { status: 201 })
     }
 
@@ -694,11 +729,18 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         )[0]
       : product
     
+    const dispositivo = await persistDeviceFields(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
     revalidateProductStorefront(organization.slug, organization.id, String(product.id))
 
     return NextResponse.json({
       success: true,
-      data: responseProduct
+      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}) },
+      ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
     }, { status: 201 })
   } catch (error) {
     logger.error('Product creation error', { error })
@@ -958,15 +1000,22 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         return visible
       })
 
+      const dispositivo = await persistDeviceFields(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
       revalidateProductStorefront(organization.slug, organization.id, savedProductId)
 
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost(product as Record<string, unknown>, user.role),
+          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}) }, user.role),
           variants: visibleVariants,
         },
         warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
+        ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
       })
     }
 
@@ -1128,11 +1177,18 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }
     }
     
+    const dispositivo = await persistDeviceFields(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
     revalidateProductStorefront(organization.slug, organization.id, String(product.id))
 
     return NextResponse.json({
       success: true,
-      data: responseProduct
+      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}) },
+      ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
     })
   } catch (error) {
     logger.error('Product update error', { error })
