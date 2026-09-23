@@ -108,7 +108,10 @@ export function StoreTrustBar({
       ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto'
       : activeItems.length === 3
       ? 'grid-cols-1 sm:grid-cols-3 max-w-5xl mx-auto'
-      : 'grid-cols-2 md:grid-cols-4'
+      // Con cuatro beneficios, dos columnas en un teléfono dejan 81px de texto:
+      // «A domicilio o retiro en tienda» se leía «A domicilio o r…». Una
+      // columna hasta sm, dos desde ahí.
+      : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
 
   return (
     <div className={cn('border-b border-primary/15 bg-gradient-to-r from-primary/[0.04] via-card/85 to-primary/[0.05] backdrop-blur-xs py-5 sm:py-6', className)}>
@@ -135,11 +138,12 @@ export function StoreTrustBar({
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-xs sm:text-sm font-bold text-foreground truncate">
+                  {/* Sin `truncate`: el beneficio se lee entero o no sirve. */}
+                  <h4 className="text-xs sm:text-sm font-bold text-foreground leading-snug">
                     {b.title}
                   </h4>
                   {b.description && (
-                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    <p className="text-[11px] leading-snug text-muted-foreground mt-0.5">
                       {b.description}
                     </p>
                   )}

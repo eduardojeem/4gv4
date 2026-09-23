@@ -22,7 +22,13 @@ export function FloatingWhatsAppButton({ fallbackPhone = '' }: { fallbackPhone?:
   if (!whatsappHref) return null
 
   return (
-    <aside aria-label="Contacto rápido" className="fixed bottom-6 left-6 z-50 pointer-events-auto">
+    <aside
+      aria-label="Contacto rápido"
+      // En el teléfono la barra inferior mide 64px: con `bottom-6` el botón le
+      // tapaba la pestaña «Inicio». Sube por encima de ella y vuelve abajo
+      // cuando la barra desaparece (lg).
+      className="fixed bottom-24 left-4 z-50 pointer-events-auto lg:bottom-6 lg:left-6"
+    >
       <a
         aria-label="Contactar por WhatsApp"
         href={whatsappHref}

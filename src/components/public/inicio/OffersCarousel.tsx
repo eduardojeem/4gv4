@@ -134,6 +134,18 @@ export function OffersCarousel({ companyName, settings }: OffersCarouselProps) {
   // datos ya cacheados (carousel), causando el mismatch de hidratación.
   const isMounted = useHydrated()
 
+  /**
+   * Sin ofertas no hay sección.
+   *
+   * Antes el inicio reservaba 400px para decir «cuando actives productos con
+   * precio en oferta aparecerán aquí»: una instrucción del panel puesta en la
+   * vitrina, que al cliente no le dice nada y al negocio lo deja con un hueco
+   * en la portada. Si la consulta falló sí se avisa, porque ahí puede haber
+   * ofertas que no se vieron.
+   */
+  const sinOfertas = isMounted && !isLoading && displayedOffers.length === 0
+  if (sinOfertas && !offersFetchFailed) return null
+
   return (
     <section className={cn('border-y py-14 md:py-20', accent.section)}>
       <div className="container">
@@ -165,11 +177,9 @@ export function OffersCarousel({ companyName, settings }: OffersCarouselProps) {
           </div>
         ) : displayedOffers.length === 0 ? (
           <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
-            <p className="text-base font-semibold">No hay ofertas activas en este momento</p>
+            <p className="text-base font-semibold">No pudimos cargar las ofertas</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              {offersFetchFailed
-                ? 'No pudimos cargar las ofertas. Intenta nuevamente en unos minutos.'
-                : 'Cuando actives productos con precio en oferta, apareceran aqui automaticamente.'}
+              Probá de nuevo en unos minutos o mirá el catálogo completo.
             </p>
           </div>
         ) : (

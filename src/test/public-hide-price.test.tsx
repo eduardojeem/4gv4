@@ -25,6 +25,8 @@ const FORMULARIO = leer('src/components/dashboard/product-modal.tsx')
 const MODAL_PRECIO = leer('src/components/public/PriceAccessDialog.tsx')
 const AYUDA = leer('src/components/dashboard/products/VisibilityHelpDialog.tsx')
 const MIGRACION = leer('supabase/migrations/20260923090000_products_hide_price.sql')
+const API_PUBLICA = leer('src/app/api/public/products/route.ts')
+const INICIO_OFERTAS = leer('src/components/public/inicio/OffersCarousel.tsx')
 
 afterEach(() => {
   forgetHidePriceColumnCheck()
@@ -172,9 +174,29 @@ describe('lo que ve el cliente en la tienda', () => {
     expect(mensaje).not.toContain('Precio:')
   })
 
+  it('el inicio de la tienda tambien lo respeta', () => {
+    // El inicio no usa `getPublicProducts`: se sirve por esta API, que no
+    // llevaba la columna y mostraba el precio de los 20 productos que la
+    // tienda habia publicado «solo para mayoristas».
+    expect(API_PUBLICA).toContain("conPrecioOculto ? ', hide_price' : ''")
+    expect(API_PUBLICA).toContain('hide_price: p.hide_price === true && !isWholesale')
+  })
+
   it('la consulta pública trae el dato, y sin la columna no rompe el catálogo', () => {
     expect(CATALOGO).toContain("conPrecioOculto ? ', hide_price' : ''")
     expect(CATALOGO).toContain('hide_price: p.hide_price === true')
+  })
+})
+
+describe('la vitrina no muestra secciones vacias', () => {
+  it('sin ofertas activas, la seccion no existe para el visitante', () => {
+    // Antes reservaba 400px para explicarle al dueño como activar ofertas.
+    expect(INICIO_OFERTAS).toContain('if (sinOfertas && !offersFetchFailed) return null')
+    expect(INICIO_OFERTAS).not.toContain('Cuando actives productos con precio en oferta')
+  })
+
+  it('pero si la consulta fallo, avisa: puede haber ofertas que no se vieron', () => {
+    expect(INICIO_OFERTAS).toContain('No pudimos cargar las ofertas')
   })
 })
 

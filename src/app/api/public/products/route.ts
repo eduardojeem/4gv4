@@ -8,6 +8,7 @@ import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from
 import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { parsePublicProductsQuery } from '@/lib/public/products-query'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -61,10 +62,15 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
     const automaticPromotions = (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
 
+    // El inicio de la tienda se sirve por acá: sin esta columna mostraba el
+    // precio de los productos publicados «solo para mayoristas».
+    const conPrecioOculto = await productsHaveHidePriceColumn(supabase)
+    const campoPrecioOculto = conPrecioOculto ? ', hide_price' : ''
+
     // Build query - only active products, never select wholesale_price for non-wholesale
-    const selectFields = isWholesale
+    const selectFields = (isWholesale
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)') + campoPrecioOculto
 
     let queryBuilder = supabase.from('products')
       .select(selectFields as '*', { count: 'exact' })
@@ -175,6 +181,8 @@ export async function GET(request: NextRequest) {
         category: cat ? { id: cat.id, name: cat.name } : undefined,
         sale_price: p.sale_price as number,
         wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
+        // Igual que en el catálogo: al mayorista registrado no se le esconde.
+        hide_price: p.hide_price === true && !isWholesale,
         stock_quantity: effectiveHasVariants && productVariants.length > 0
           ? publicStock
           : Number(p.stock_quantity ?? 0), // stock_quantity: Number(p.stock_quantity ?? 0)
