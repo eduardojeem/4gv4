@@ -492,6 +492,16 @@ export default function TenantCustomerLoginPage() {
                         Ir al panel interno
                       </Link>
                     </Button>
+                    {/* Entrar con la cuenta del equipo no obliga a elegir: se
+                        puede seguir mirando la tienda, que es lo que la persona
+                        estaba haciendo antes de iniciar sesión. */}
+                    <Button
+                      asChild
+                      variant="ghost"
+                      className="w-full h-9 text-xs font-semibold rounded-xl sm:col-span-2"
+                    >
+                      <Link href={nextHref}>Seguir en la tienda</Link>
+                    </Button>
                   </div>
                 )}
               </div>

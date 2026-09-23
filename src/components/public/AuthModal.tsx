@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { siteUrl } from '@/lib/site-url'
+import { toast } from 'sonner'
 
 type AuthTab = 'login' | 'register'
 
@@ -594,6 +595,14 @@ export function AuthModal({
     window.setTimeout(() => router.push(href), 120)
   }, [onClose, router])
 
+  /**
+   * Después de entrar, la persona se queda donde estaba.
+   *
+   * Antes, si la cuenta tenía una organización, el modal la mandaba derecho al
+   * panel: alguien que estaba mirando un producto en el marketplace terminaba
+   * en su tablero de ventas sin haberlo pedido. El panel queda ofrecido en el
+   * menú de la cuenta, que es donde se lo busca cuando se lo quiere.
+   */
   const handleLoginSuccess = useCallback(async () => {
     try {
       const response = await fetch('/api/organizations', { cache: 'no-store' })
@@ -604,18 +613,15 @@ export function AuthModal({
         }
         const hasOrganization = Boolean(body.activeOrganization) || (body.organizations?.length ?? 0) > 0
 
-        onClose()
         if (hasOrganization) {
-          router.push('/dashboard')
-          return
+          toast.success('Entraste con tu cuenta. Tenés el panel en el menú de tu perfil.')
         }
-      } else {
-        onClose()
       }
     } catch {
-      onClose()
+      // Saber si tiene panel es sólo para el aviso: no cambia a dónde va.
     }
 
+    onClose()
     router.refresh()
   }, [onClose, router])
 

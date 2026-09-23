@@ -214,7 +214,9 @@ describe('lo que ve el negocio al cargar un producto', () => {
   })
 
   it('editar uno existente respeta lo que ya tenía', () => {
-    expect(FORMULARIO).toContain('hide_price: (product as any).hide_price === true')
+    // Sin atarse al nombre de la variable: lo que importa es que el valor
+    // guardado sea el que vuelve al formulario.
+    expect(FORMULARIO).toMatch(/hide_price: \w+\.hide_price === true/)
   })
 
   it('se elige en el mismo selector de visibilidad, no en un interruptor aparte', () => {

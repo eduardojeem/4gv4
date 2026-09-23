@@ -177,18 +177,12 @@ export default function LoginPage() {
 
         toast.success('¡Bienvenido de nuevo!')
         await initializeActiveOrganization()
+        // Se vuelve a donde estaba la persona. Antes sólo se respetaba el
+        // marketplace y las tiendas: desde cualquier otra página pública, una
+        // cuenta con negocio terminaba en el panel sin haberlo pedido.
+        // `sanitizeRedirectPath` descarta lo que no sea una ruta interna.
         const rawRedirectParam = searchParams.get('redirect')
-        let redirectTo = '/dashboard'
-
-        if (rawRedirectParam) {
-          const cleanRedirect = sanitizeRedirectPath(rawRedirectParam)
-          const redirectSlug = getTenantSlugFromPathname(cleanRedirect)
-          const isCustomerOrOtherSection = cleanRedirect.startsWith('/marketplace') || redirectSlug !== ''
-
-          if (isCustomerOrOtherSection) {
-            redirectTo = cleanRedirect
-          }
-        }
+        const redirectTo = rawRedirectParam ? sanitizeRedirectPath(rawRedirectParam) : '/dashboard'
 
         router.push(redirectTo)
         router.refresh()

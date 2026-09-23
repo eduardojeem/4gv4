@@ -45,6 +45,7 @@ import { usePlatformBranding } from '@/hooks/use-platform-branding'
 import type { PlatformBranding } from '@/lib/platform/branding'
 import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { AuthModal } from '@/components/public/AuthModal'
+import { canOpenDashboard } from '@/lib/auth/dashboard-access'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 const navItems = [
@@ -92,12 +93,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
   // El negocio de la persona, si tiene uno. Con esto alcanza para ofrecerle su
   // panel: el rol global podía decir «cliente» aunque fuera dueña de una tienda.
   const business = user?.organization ?? null
-  const canAccessDashboard =
-    Boolean(business) ||
-    user?.role === 'super_admin' ||
-    user?.role === 'admin' ||
-    user?.role === 'tecnico' ||
-    user?.role === 'vendedor'
+  const canAccessDashboard = canOpenDashboard(user)
 
   const userInitials = user?.profile?.name
     ? user.profile.name

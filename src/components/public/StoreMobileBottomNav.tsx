@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { loginHrefWithReturn } from '@/lib/auth/dashboard-access'
 import {
   Home,
   Package,
@@ -54,7 +55,9 @@ export function StoreMobileBottomNav({ offersEnabled = true }: { offersEnabled?:
     }] : []),
   ]
 
-  const customerLoginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
+  const customerLoginHref = tenantPrefix
+    ? loginHrefWithReturn(`${tenantPrefix}/cliente/login`, pathname, 'next')
+    : loginHrefWithReturn('/login', pathname, 'redirect')
   const customerRegisterHref = tenantPrefix ? `${tenantPrefix}/cliente/registro` : '/register'
 
   return (

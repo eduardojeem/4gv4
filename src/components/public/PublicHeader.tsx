@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { LogOut } from 'lucide-react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { canOpenDashboard, loginHrefWithReturn } from '@/lib/auth/dashboard-access'
 import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
 import { AuthModal } from '@/components/public/AuthModal'
 import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/website/services'
@@ -92,7 +93,9 @@ export function PublicHeader({
   const tiktokUrl = companyInfo?.tiktok ? socialProfileUrl(companyInfo.tiktok, 'tiktok') : ''
   const hasSocials = Boolean(instagramUrl || facebookUrl || tiktokUrl)
 
-  const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
+  // Una sola definición de «tiene panel»: acá faltaba `owner`, así que la
+  // dueña de la tienda no veía ninguna forma de entrar al suyo.
+  const canAccessDashboard = canOpenDashboard(user)
   const pathTenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
   const withTenantPrefix = (href: string) => {
@@ -216,7 +219,10 @@ export function PublicHeader({
     ...(servicesEnabled ? [{ href: withTenantPrefix('/servicios'), label: 'Servicios', icon: Briefcase }] : []),
     ...(repairsEnabled ? [{ href: withTenantPrefix('/mis-reparaciones'), label: 'Reparaciones', icon: Shield }] : []),
   ]
-  const customerLoginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
+  // El enlace se lleva la página actual para volver a ella después de entrar.
+  const customerLoginHref = tenantPrefix
+    ? loginHrefWithReturn(`${tenantPrefix}/cliente/login`, pathname, 'next')
+    : loginHrefWithReturn('/login', pathname, 'redirect')
   const customerRegisterHref = tenantPrefix ? `${tenantPrefix}/cliente/registro` : '/register'
 
   const isActive = (href: string) => {
