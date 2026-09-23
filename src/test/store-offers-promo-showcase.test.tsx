@@ -131,7 +131,7 @@ describe('StoreOffersPromoShowcase', () => {
 
     // Banner de hasta descuento máximo: 33% off
     expect(screen.getByText('-33%')).toBeInTheDocument()
-    expect(screen.getByText(/HASTA/i)).toBeInTheDocument()
+    expect(screen.getByText('HASTA')).toBeInTheDocument()
 
     // Tarjeta izquierda bullets
     expect(screen.getByText('Precios directos sin intermediarios')).toBeInTheDocument()

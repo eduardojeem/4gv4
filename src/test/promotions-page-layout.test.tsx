@@ -91,6 +91,10 @@ beforeAll(() => {
 
 beforeEach(() => {
   permissions.all = true
+  // La pagina escribe la pestaña elegida en la URL (?tab=publica) y jsdom la
+  // conserva entre pruebas: sin esto, la siguiente abria en la pestaña de la
+  // anterior y no encontraba la lista de promociones.
+  window.history.replaceState({}, '', '/dashboard/promotions')
 })
 
 /** next/dynamic resuelve el modulo en una microtarea. */
@@ -127,8 +131,10 @@ describe('/dashboard/promotions — reparto en pestañas', () => {
     await renderPage()
     await userEvent.click(screen.getByRole('tab', { name: /Página pública/ }))
 
-    expect(screen.getByText(/Carrusel Automático de Productos Rebajados/)).toBeInTheDocument()
-    expect(screen.getByText('Carrusel de Banners y Campañas Gráficas')).toBeInTheDocument()
+    // Los titulos cambiaron de redaccion; lo que importa es que sigan siendo
+    // dos nombres distintos: el automatico por descuento y el de banners.
+    expect(screen.getByText('Carrusel de Productos Rebajados')).toBeInTheDocument()
+    expect(screen.getByText('Banners Publicitarios y Campañas')).toBeInTheDocument()
   })
 
   it('deja las alertas fuera de las pestañas, para que no se pierdan', async () => {

@@ -24,6 +24,13 @@ vi.mock('@/hooks/useWebsiteSettings', () => ({
   }),
 }))
 
+/**
+ * Hay dos botones «Nueva diapositiva» —uno en el encabezado y otro sobre la
+ * lista— y los dos abren el mismo formulario: alcanza con el primero.
+ */
+const abrirNuevaDiapositiva = () =>
+  fireEvent.click(screen.getAllByRole('button', { name: 'Nueva diapositiva' })[0])
+
 describe('PromotionalCarouselEditor', () => {
   beforeEach(() => {
     hookState.updateSetting.mockReset()
@@ -35,7 +42,7 @@ describe('PromotionalCarouselEditor', () => {
   it('shows field errors before adding an invalid slide', () => {
     render(<PromotionalCarouselEditor />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva diapositiva' }))
+    abrirNuevaDiapositiva()
     fireEvent.click(screen.getByRole('tab', { name: 'Plantillas' }))
     fireEvent.click(screen.getByRole('button', { name: /Accesorios/i }))
     fireEvent.click(screen.getByRole('tab', { name: 'Botón' }))
@@ -53,7 +60,7 @@ describe('PromotionalCarouselEditor', () => {
   it('exposes the selected alignment and preview mode accessibly', () => {
     render(<PromotionalCarouselEditor />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva diapositiva' }))
+    abrirNuevaDiapositiva()
 
     expect(screen.getAllByRole('tab')).toHaveLength(5)
     expect(screen.getByRole('tab', { name: 'Texto y mensaje' })).toHaveAttribute('aria-selected', 'true')
@@ -68,7 +75,7 @@ describe('PromotionalCarouselEditor', () => {
   it('overrides the base dialog width on desktop', () => {
     render(<PromotionalCarouselEditor />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva diapositiva' }))
+    abrirNuevaDiapositiva()
 
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveClass('sm:max-w-[1700px]')
@@ -78,7 +85,7 @@ describe('PromotionalCarouselEditor', () => {
   it('allows activating graphic banner mode without text overlays', () => {
     render(<PromotionalCarouselEditor />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva diapositiva' }))
+    abrirNuevaDiapositiva()
 
     const switchBtn = screen.getByRole('switch', { name: 'Modo banner gráfico sin textos' })
     expect(switchBtn).toHaveAttribute('aria-checked', 'false')
