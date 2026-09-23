@@ -398,7 +398,9 @@ export function StoreOffersPromoShowcase({
                     organization_logo_url: logoUrl,
                     organization_city: companyInfo.city ?? null,
                     organization_address: companyInfo.address ?? null,
-                    organization_contact: phoneClean ? { phone: phoneClean, whatsapp: phoneClean } : null,
+                    organization_contact: phoneClean
+                      ? { phone: phoneClean, whatsapp: phoneClean, instagram: null, facebook: null, tiktok: null }
+                      : null,
                   }
 
                   return (
