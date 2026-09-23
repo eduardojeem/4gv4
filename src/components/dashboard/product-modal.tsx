@@ -56,6 +56,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { Product, Category, Supplier, Brand, ProductFormData } from '@/types/products'
+import type { Database } from '@/lib/supabase/types'
+import type { ProductAttributeDefinition, ProductVariantInput } from '@/lib/products/variant-contract'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
@@ -76,7 +78,7 @@ import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm, useFieldArray, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
 import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
@@ -116,12 +118,19 @@ function FieldRequirement({ required = false, conditional }: { required?: boolea
   )
 }
 
-export function normalizeProductVariantsForForm(product: any): {
+type LegacyProduct = Partial<Product> & Record<string, unknown>
+type SupplierInsert = Database['public']['Tables']['suppliers']['Insert']
+type BrandInsert = Database['public']['Tables']['brands']['Insert']
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+export function normalizeProductVariantsForForm(product: unknown): {
   has_variants: boolean
-  variant_attribute_config: any[]
-  variants: any[]
+  variant_attribute_config: ProductAttributeDefinition[]
+  variants: ProductVariantInput[]
 } {
-  if (!product) {
+  if (!isRecord(product)) {
     return {
       has_variants: false,
       variant_attribute_config: [],
@@ -136,8 +145,9 @@ export function normalizeProductVariantsForForm(product: any): {
   const rawVariants = Array.isArray(product.variants) ? product.variants : []
 
   const normalizedConfig = rawConfig
-    .filter((attr: any) => attr && typeof attr === 'object' && (attr.key || attr.name || attr.label))
-    .map((attr: any) => {
+    .filter(isRecord)
+    .filter((attr) => Boolean(attr.key || attr.name || attr.label))
+    .map((attr) => {
       const key = String(attr.key || attr.id || attr.name || '').trim()
       const label = String(attr.label || attr.name || attr.key || '').trim()
       const rawOptions = Array.isArray(attr.options)
@@ -146,7 +156,7 @@ export function normalizeProductVariantsForForm(product: any): {
           ? attr.values
           : []
       const options = rawOptions
-        .map((opt: any) => (typeof opt === 'string' ? opt.trim() : typeof opt?.value === 'string' ? opt.value.trim() : typeof opt?.name === 'string' ? opt.name.trim() : ''))
+        .map((opt: unknown) => (typeof opt === 'string' ? opt.trim() : isRecord(opt) && typeof opt.value === 'string' ? opt.value.trim() : isRecord(opt) && typeof opt.name === 'string' ? opt.name.trim() : ''))
         .filter(Boolean)
 
       return {
@@ -158,8 +168,8 @@ export function normalizeProductVariantsForForm(product: any): {
     })
 
   const normalizedVariants = rawVariants
-    .filter((v: any) => v && typeof v === 'object')
-    .map((v: any, index: number) => {
+    .filter(isRecord)
+    .map((v, index): ProductVariantInput => {
     const attributes: Record<string, string> = {}
       if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
         for (const [k, val] of Object.entries(v.attributes)) {
@@ -169,7 +179,7 @@ export function normalizeProductVariantsForForm(product: any): {
         }
       } else if (Array.isArray(v.attributes)) {
         for (const item of v.attributes) {
-          if (item && typeof item === 'object') {
+          if (isRecord(item)) {
             const k = item.key || item.attribute_name || item.name || `attr_${index}`
             const val = item.value || item.display_value || ''
             if (k && val) attributes[String(k).trim()] = String(val).trim()
@@ -181,7 +191,7 @@ export function normalizeProductVariantsForForm(product: any): {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, val]) => `${k}=${val}`)
         .join('|')
-      const clientKey = v.clientKey || v.client_key || attrKey || v.id || `variant-${index + 1}`
+      const clientKey = String(v.clientKey || v.client_key || attrKey || v.id || `variant-${index + 1}`)
 
       const name = String(v.name || v.variant_name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`).trim()
       const sku = String(v.sku || (product.sku ? `${product.sku}-${index + 1}` : `VAR-${index + 1}`)).trim().toUpperCase()
@@ -306,11 +316,10 @@ export function ProductModal({
   const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers ?? [])
 
   // Form definition
-  // Nota: `as any` en zodResolver es necesario por incompatibilidad de tipos entre
-  // @hookform/resolvers@v5 y zod@v4 (input vs output types en z.coerce.*)
-  // No afecta el comportamiento en runtime.
+  // El resolver se adapta al tipo de salida del esquema porque Zod y
+  // react-hook-form modelan de forma distinta los campos con `z.coerce`.
   const form = useForm<ProductFormValues>({
-    resolver: zodResolver(productSchema) as any,
+    resolver: zodResolver(productSchema) as unknown as Resolver<ProductFormValues>,
     mode: 'onChange',
     defaultValues: {
       sku: '',
@@ -526,6 +535,7 @@ export function ProductModal({
     setDraftRestored(false)
 
     if (product) {
+      const productDetails = product as LegacyProduct
       const variantData = normalizeProductVariantsForForm(product)
       form.reset({
         sku: product.sku || '',
@@ -533,7 +543,7 @@ export function ProductModal({
         description: product.description || '',
         category_id: product.category_id || '',
         brand: product.brand || '',
-        brand_id: (product as any).brand_id || '',
+        brand_id: typeof productDetails.brand_id === 'string' ? productDetails.brand_id : '',
         device_brand: (product as { device_brand?: string | null }).device_brand || '',
         device_models: (product as { device_models?: string[] | null }).device_models ?? [],
         supplier_id: product.supplier_id || '',
@@ -542,28 +552,28 @@ export function ProductModal({
         wholesale_price: product.wholesale_price || 0,
         offer_price: product.offer_price || 0,
         has_offer: product.has_offer || false,
-        installments_enabled: (product as any).installments_enabled || false,
-        installments_public: (product as any).installments_public ?? true,
-        installments_plans: Array.isArray((product as any).installments_plans)
-          ? (product as any).installments_plans
+        installments_enabled: productDetails.installments_enabled === true,
+        installments_public: productDetails.installments_public !== false,
+        installments_plans: Array.isArray(productDetails.installments_plans)
+          ? productDetails.installments_plans
           : [],
-        warranty_months: (product as any).warranty_months ?? DEFAULT_POST_SALE_VALUES.warranty_months,
-        warranty_info: (product as any).warranty_info ?? DEFAULT_POST_SALE_VALUES.warranty_info,
-        return_window_days: (product as any).return_window_days ?? DEFAULT_POST_SALE_VALUES.return_window_days,
-        exchange_window_days: (product as any).exchange_window_days ?? DEFAULT_POST_SALE_VALUES.exchange_window_days,
-        return_policy: (product as any).return_policy ?? DEFAULT_POST_SALE_VALUES.return_policy,
-        exchange_policy: (product as any).exchange_policy ?? DEFAULT_POST_SALE_VALUES.exchange_policy,
+        warranty_months: Number(productDetails.warranty_months ?? DEFAULT_POST_SALE_VALUES.warranty_months),
+        warranty_info: typeof productDetails.warranty_info === 'string' ? productDetails.warranty_info : DEFAULT_POST_SALE_VALUES.warranty_info,
+        return_window_days: Number(productDetails.return_window_days ?? DEFAULT_POST_SALE_VALUES.return_window_days),
+        exchange_window_days: Number(productDetails.exchange_window_days ?? DEFAULT_POST_SALE_VALUES.exchange_window_days),
+        return_policy: typeof productDetails.return_policy === 'string' ? productDetails.return_policy : DEFAULT_POST_SALE_VALUES.return_policy,
+        exchange_policy: typeof productDetails.exchange_policy === 'string' ? productDetails.exchange_policy : DEFAULT_POST_SALE_VALUES.exchange_policy,
         stock_quantity: product.stock_quantity || 0,
         min_stock: product.min_stock || 0,
         max_stock: product.max_stock || 0,
         unit_measure: product.unit_measure || '',
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
-        visibility: (product as any).visibility || 'public',
+        visibility: productDetails.visibility === 'wholesale' || productDetails.visibility === 'hidden' ? productDetails.visibility : 'public',
         // Los productos que ya existian conservan su precio a la vista.
-        hide_price: (product as any).hide_price === true,
-        tags: Array.isArray((product as any).tags) ? (product as any).tags : [],
-        fashion_audience: getFashionAudienceFromTags((product as any).tags),
+        hide_price: productDetails.hide_price === true,
+        tags: Array.isArray(productDetails.tags) ? productDetails.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+        fashion_audience: getFashionAudienceFromTags(productDetails.tags),
         images: product.images || [],
         has_variants: variantData.has_variants,
         variant_attribute_config: variantData.variant_attribute_config,
@@ -683,7 +693,7 @@ export function ProductModal({
   }
 
   const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
-    const result = await createSupplier(supplierData as any)
+    const result = await createSupplier(supplierData as SupplierInsert)
     if (result.success && result.data) {
        toast.success('Proveedor creado')
        const newSupplier = result.data as unknown as Supplier
@@ -696,7 +706,7 @@ export function ProductModal({
     }
   }
 
-  const handleSaveBrand = async (brandData: any) => {
+  const handleSaveBrand = async (brandData: BrandInsert) => {
     const result = await createBrand(brandData)
     if (result.success && result.data) {
        toast.success('Marca creada')
@@ -721,7 +731,7 @@ export function ProductModal({
 
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
-    delete (rest as any).fashion_audience
+    delete rest.fashion_audience
     // Un negocio que no ve los campos del celular no los manda: así no se
     // escriben vacíos en cada guardado ni se pisa lo que haya quedado cargado.
     if (!muestraCelular) {
@@ -731,7 +741,6 @@ export function ProductModal({
 
     // Si no hay producto (creación), no enviamos ID
     if (!product) {
-       delete (rest as any).id
     }
 
     // Fix #5: derivar nombre de marca desde brand_id si brand está vacío
@@ -821,7 +830,7 @@ export function ProductModal({
 
       // Ensure we're not sending an ID for new products
       if (!product && 'id' in cleanedData) {
-        delete (cleanedData as any).id
+        delete (cleanedData as Record<string, unknown>).id
       }
 
       console.log('Sending product data:', cleanedData)
@@ -3460,7 +3469,7 @@ export function ProductModal({
       isOpen={isCategoryModalOpen}
       onClose={() => setIsCategoryModalOpen(false)}
       onSubmit={handleSaveCategory}
-      categories={localCategories as any}
+      categories={localCategories as unknown as React.ComponentProps<typeof CategoryModal>['categories']}
     />
 
     <SupplierModal

@@ -373,7 +373,7 @@ function OfferCard({
             {/* Badges superiores sobre imagen */}
             <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1 pointer-events-none">
               {discount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 px-2.5 py-0.5 text-xs font-extrabold text-white shadow-sm tabular-nums">
+                <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold shadow-sm tabular-nums', accent.badge)}>
                   <Flame className="h-3 w-3 fill-white animate-pulse" />
                   -{discount}%
                 </span>
