@@ -24,6 +24,8 @@ import {
 import { toast } from 'sonner'
 import { resolveProductImageUrl } from '@/lib/images'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
 import type { PublicProduct, PublicProductVariant, InstallmentPlanOption } from '@/types/public'
 import type { BranchStockInfo } from '@/lib/api/products-server'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -332,6 +334,8 @@ export function ProductDetailInteractive({
     process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''
   ).toString()
   const commerceMode = settings?.checkout?.commerceMode ?? 'cart'
+  // Publicado sin precio: no se muestra ni se puede comprar, se pregunta.
+  const precioOculto = hidesPublicPrice(product)
   const phoneDisplay = companyInfo?.whatsapp || companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
@@ -713,6 +717,17 @@ export function ProductDetailInteractive({
         </div>
 
         {/* Tarjeta de Precio */}
+        {precioOculto ? (
+          <div className="rounded-2xl border border-border p-5 bg-card/50">
+            <p className="text-2xl font-extrabold tracking-tight text-foreground">Precio a consultar</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Este producto se cotiza por WhatsApp. Escribinos y te pasamos el precio al instante.
+            </p>
+            <div className="mt-3">
+              <PriceAccessDialog productName={product.name} variant="button" />
+            </div>
+          </div>
+        ) : (
         <div className="rounded-2xl border border-border p-5 bg-card/50">
           <div className="flex items-baseline gap-3">
             <p className="text-4xl font-extrabold text-foreground tracking-tight">
@@ -733,6 +748,7 @@ export function ProductDetailInteractive({
             />
           )}
         </div>
+        )}
 
         {/* ── SELECTOR DE VARIANTES SINCRONIZADO ── */}
         {hasVariants && attributeConfigs.length > 0 && (
@@ -894,13 +910,15 @@ export function ProductDetailInteractive({
             {isInStock ? '¿Te interesa este producto?' : 'Combinación temporalmente agotada'}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isInStock
+            {precioOculto
+              ? 'Preguntanos el precio por WhatsApp: te respondemos con el producto y la variante que elegiste.'
+              : isInStock
               ? 'Agregalo a tu carrito o contactanos directamente por WhatsApp con el producto y variante listos.'
               : 'Contactanos para consultar fecha de reposición o modelos similares.'}
           </p>
 
           <div className="mt-4 flex flex-col gap-2.5">
-            {commerceMode === 'cart' && (
+            {!precioOculto && commerceMode === 'cart' && (
               <Button
                 size="lg"
                 className="w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
@@ -914,20 +932,24 @@ export function ProductDetailInteractive({
 
             <Button
               size="lg"
-              variant={commerceMode === 'whatsapp' ? 'default' : 'outline'}
+              variant={commerceMode === 'whatsapp' || precioOculto ? 'default' : 'outline'}
               className={cn(
                 'w-full gap-2 rounded-xl text-sm font-semibold transition-all',
-                commerceMode === 'whatsapp'
+                commerceMode === 'whatsapp' || precioOculto
                   ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
                   : 'border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
               )}
               onClick={() => handleContact('whatsapp')}
             >
               <MessageCircle className="h-4 w-4" />
-              {isInStock ? 'Consultar / Pedir por WhatsApp' : 'Consultar reposición por WhatsApp'}
+              {precioOculto
+                ? 'Preguntar el precio por WhatsApp'
+                : isInStock
+                ? 'Consultar / Pedir por WhatsApp'
+                : 'Consultar reposición por WhatsApp'}
             </Button>
 
-            {commerceMode === 'cart' && (
+            {!precioOculto && commerceMode === 'cart' && (
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
@@ -977,21 +999,21 @@ export function ProductDetailInteractive({
             storeName={companyInfo?.name || null}
             phone={phoneClean}
             productName={product.name}
-            price={displayPrice}
-            originalPrice={hasDiscount ? product.sale_price : null}
+            price={precioOculto ? 0 : displayPrice}
+            originalPrice={!precioOculto && hasDiscount ? product.sale_price : null}
             sku={currentSku}
             variantName={selectedVariant?.variant_name}
             attributes={selectedAttributes}
             inStock={isInStock}
             stockQuantity={currentStockQuantity}
             installmentText={
-              maxInstallmentPlan
+              !precioOculto && maxInstallmentPlan
                 ? `${maxInstallmentPlan.count} cuotas de ${formatPrice(maxInstallmentPlan.perInstallment)}`
                 : null
             }
             productUrl={typeof window !== 'undefined' ? window.location.href : null}
             imageUrl={galleryImages[selectedImage] || product.image}
-            initialIntent={isInStock ? 'order' : 'inquiry'}
+            initialIntent={precioOculto ? 'price' : isInStock ? 'order' : 'inquiry'}
           />
         )}
       </div>

@@ -502,6 +502,12 @@ export default function ProductDetailPage() {
     return Math.max(0, product.sale_price - product.purchase_price)
   }, [product])
 
+  const wholesaleDiscountPercent = useMemo(() => {
+    if (!product || !product.wholesale_price || product.wholesale_price <= 0 || product.sale_price <= 0) return null
+    if (product.wholesale_price >= product.sale_price) return null
+    return Math.round(((product.sale_price - product.wholesale_price) / product.sale_price) * 100)
+  }, [product])
+
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
   const handleEdit = () => setEditModalOpen(true)
@@ -973,7 +979,7 @@ export default function ProductDetailPage() {
 
         {/* ── Top Metrics Ribbon (4 Cards) ─────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* 1. Precio de Venta */}
+          {/* 1. Precio de Venta (Minorista) */}
           <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-blue-50/70 to-indigo-50/30 dark:from-slate-900 dark:to-blue-950/20 shadow-xs">
             <CardContent className="p-4 sm:p-5">
               <div className="flex items-center justify-between">
@@ -1000,61 +1006,52 @@ export default function ProductDetailPage() {
                   <Tag className="h-3 w-3" />
                   <span>Oferta: {formatCurrency(product.offer_price)}</span>
                 </div>
-              ) : product.wholesale_price ? (
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Mayorista: {formatCurrency(product.wholesale_price)}
-                </p>
               ) : (
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Precio unitario de lista
+                  Precio unitario de lista (Retail)
                 </p>
               )}
             </CardContent>
           </Card>
 
-          {/* 2. Nivel de Stock */}
-          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-emerald-50/70 to-teal-50/30 dark:from-slate-900 dark:to-emerald-950/20 shadow-xs">
+          {/* 2. Precio Mayorista */}
+          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-indigo-50/70 to-sky-50/30 dark:from-slate-900 dark:to-indigo-950/20 shadow-xs">
             <CardContent className="p-4 sm:p-5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                  Stock Disponible
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
+                  Precio Mayorista
                 </span>
-                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <Package className="h-4 w-4" />
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  <Tag className="h-4 w-4" />
                 </div>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
-                  {hasVariants && normalizedVariants.length > 0 ? variantStats.totalStock : product.stock_quantity}{' '}
-                  <span className="text-xs font-medium text-muted-foreground">{product.unit_measure || 'unidades'}</span>
+                  {product.wholesale_price && product.wholesale_price > 0
+                    ? formatCurrency(product.wholesale_price)
+                    : 'No definido'}
                 </span>
+                {wholesaleDiscountPercent !== null && (
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-white/60 dark:bg-slate-800 border-indigo-300 dark:border-indigo-700 text-indigo-800 dark:text-indigo-300">
+                    -{wholesaleDiscountPercent}%
+                  </Badge>
+                )}
               </div>
-              <div className="mt-2 space-y-1">
-                <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
-                  {hasVariants && normalizedVariants.length > 0 ? (
-                    <>
-                      <span>{normalizedVariants.length} variantes</span>
-                      <span>{variantStats.outOfStockCount > 0 ? `${variantStats.outOfStockCount} agotadas` : '100% en stock'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Mín: {product.min_stock ?? 0}</span>
-                      <span>Máx: {product.max_stock ?? '—'}</span>
-                    </>
-                  )}
-                </div>
-                <Progress value={stockProgressValue} className="h-1.5 bg-slate-200 dark:bg-slate-800" />
-              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {product.wholesale_price && product.wholesale_price > 0
+                  ? 'Tarifa para compras por mayor'
+                  : 'Sin precio mayorista configurado'}
+              </p>
             </CardContent>
           </Card>
 
-          {/* 3. Margen & Rentabilidad */}
+          {/* 3. Para ADMIN: Costo Base & Margen. Para VENDEDOR: Stock Disponible */}
           {canViewCost ? (
             <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-amber-50/70 to-yellow-50/30 dark:from-slate-900 dark:to-amber-950/20 shadow-xs">
               <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                    Margen / Rentabilidad
+                    Costo Base & Margen
                   </span>
                   <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
                     <Percent className="h-4 w-4" />
@@ -1062,16 +1059,80 @@ export default function ProductDetailPage() {
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
-                    {marginPercentage !== null ? `${marginPercentage.toFixed(1)}%` : '—'}
+                    {product.purchase_price && product.purchase_price > 0
+                      ? formatCurrency(product.purchase_price)
+                      : 'No registrado'}
                   </span>
-                  {marginAmount > 0 && (
+                  {marginPercentage !== null && (
                     <Badge variant="outline" className="text-[10px] font-semibold bg-white/60 dark:bg-slate-800 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300">
-                      +{formatCurrency(marginAmount)}
+                      {marginPercentage.toFixed(1)}% mg
                     </Badge>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Costo: {product.purchase_price ? formatCurrency(product.purchase_price) : 'No registrado'}
+                  {marginAmount > 0
+                    ? `Ganancia: +${formatCurrency(marginAmount)} por unidad`
+                    : 'Costo base de compra (solo admin)'}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-emerald-50/70 to-teal-50/30 dark:from-slate-900 dark:to-emerald-950/20 shadow-xs">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Stock Disponible
+                  </span>
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Package className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                    {hasVariants && normalizedVariants.length > 0 ? variantStats.totalStock : product.stock_quantity}{' '}
+                    <span className="text-xs font-medium text-muted-foreground">{product.unit_measure || 'unidades'}</span>
+                  </span>
+                </div>
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
+                    {hasVariants && normalizedVariants.length > 0 ? (
+                      <>
+                        <span>{normalizedVariants.length} variantes</span>
+                        <span>{variantStats.outOfStockCount > 0 ? `${variantStats.outOfStockCount} agotadas` : '100% en stock'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Mín: {product.min_stock ?? 0}</span>
+                        <span>Máx: {product.max_stock ?? '—'}</span>
+                      </>
+                    )}
+                  </div>
+                  <Progress value={stockProgressValue} className="h-1.5 bg-slate-200 dark:bg-slate-800" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 4. Para ADMIN: Stock Disponible & Valuación. Para VENDEDOR: Proveedor */}
+          {canViewCost ? (
+            <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-emerald-50/70 to-teal-50/30 dark:from-slate-900 dark:to-emerald-950/20 shadow-xs">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Stock Disponible
+                  </span>
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Package className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                    {hasVariants && normalizedVariants.length > 0 ? variantStats.totalStock : product.stock_quantity}{' '}
+                    <span className="text-xs font-medium text-muted-foreground">{product.unit_measure || 'unidades'}</span>
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Valuación: {formatCurrency(hasVariants && normalizedVariants.length > 0 ? variantStats.totalValuation : (product.stock_quantity * product.sale_price))}
                 </p>
               </CardContent>
             </Card>
@@ -1097,30 +1158,6 @@ export default function ProductDetailPage() {
               </CardContent>
             </Card>
           )}
-
-          {/* 4. Valorización en Inventario */}
-          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-purple-50/70 to-violet-50/30 dark:from-slate-900 dark:to-purple-950/20 shadow-xs">
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">
-                  Valorización en Stock
-                </span>
-                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                  <TrendingUp className="h-4 w-4" />
-                </div>
-              </div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
-                  {formatCurrency(hasVariants && normalizedVariants.length > 0 ? variantStats.totalValuation : (product.stock_quantity * product.sale_price))}
-                </span>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                {hasVariants && normalizedVariants.length > 0
-                  ? `Valuación calculada de las ${normalizedVariants.length} variantes`
-                  : 'Valuación a precio de venta actual'}
-              </p>
-            </CardContent>
-          </Card>
         </div>
 
         {/* ── Main Layout: 2 Columns ────────────────────────────────────── */}
@@ -1732,6 +1769,7 @@ export default function ProductDetailPage() {
                                 <th className="py-3 px-4">SKU</th>
                                 <th className="py-3 px-4">Código de Barras</th>
                                 <th className="py-3 px-4 text-right">Precio Venta</th>
+                                <th className="py-3 px-4 text-right">Precio Mayorista</th>
                                 {canViewCost && <th className="py-3 px-4 text-right">Costo Base</th>}
                                 <th className="py-3 px-4 text-center">Stock Actual</th>
                                 <th className="py-3 px-4 text-center">Estado</th>
@@ -1813,20 +1851,26 @@ export default function ProductDetailPage() {
                                       )}
                                     </td>
 
-                                    {/* Sale Price (+ wholesale) */}
+                                    {/* Sale Price */}
                                     <td className="py-3.5 px-4 text-right">
                                       <p className="font-black text-slate-900 dark:text-slate-100 text-sm">
                                         {formatCurrency(variant.salePrice)}
                                       </p>
-                                      {variant.wholesalePrice && (
-                                        <p className="text-[10px] text-muted-foreground">
-                                          Mayorista: {formatCurrency(variant.wholesalePrice)}
-                                        </p>
-                                      )}
                                       {variant.salePrice !== product.sale_price && (
                                         <Badge variant="outline" className="text-[9px] px-1 py-0 mt-0.5 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
                                           Personalizado
                                         </Badge>
+                                      )}
+                                    </td>
+
+                                    {/* Wholesale Price */}
+                                    <td className="py-3.5 px-4 text-right">
+                                      {variant.wholesalePrice ? (
+                                        <p className="font-bold text-blue-600 dark:text-blue-400 text-sm">
+                                          {formatCurrency(variant.wholesalePrice)}
+                                        </p>
+                                      ) : (
+                                        <span className="text-muted-foreground text-xs">—</span>
                                       )}
                                     </td>
 
@@ -1943,10 +1987,20 @@ export default function ProductDetailPage() {
 
                                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
                                   <div>
-                                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">Precio</span>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">Precio Venta</span>
                                     <span className="font-black text-slate-900 dark:text-slate-100 text-sm">
                                       {formatCurrency(variant.salePrice)}
                                     </span>
+                                    {variant.wholesalePrice && (
+                                      <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                                        May: {formatCurrency(variant.wholesalePrice)}
+                                      </p>
+                                    )}
+                                    {canViewCost && variant.purchasePrice != null && (
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                                        Costo: {formatCurrency(variant.purchasePrice)}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="text-right">
                                     <span className="text-muted-foreground block text-[10px] uppercase font-bold">Stock Actual</span>
@@ -2350,25 +2404,42 @@ export default function ProductDetailPage() {
                   </div>
                 )}
 
-                {product.wholesale_price && (
-                  <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50">
+                <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50">
+                  <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-blue-800 dark:text-blue-300 block">
                       Precio Mayorista
                     </span>
-                    <p className="text-lg font-black text-blue-700 dark:text-blue-400 mt-0.5">
-                      {formatCurrency(product.wholesale_price)}
-                    </p>
+                    {wholesaleDiscountPercent !== null && (
+                      <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0">
+                        -{wholesaleDiscountPercent}%
+                      </Badge>
+                    )}
                   </div>
-                )}
+                  <p className="text-lg font-black text-blue-700 dark:text-blue-400 mt-0.5">
+                    {product.wholesale_price && product.wholesale_price > 0
+                      ? formatCurrency(product.wholesale_price)
+                      : 'No configurado'}
+                  </p>
+                </div>
 
-                {canViewCost && product.purchase_price != null && (
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                      Precio de Costo Base
-                    </span>
+                {canViewCost && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                        Precio de Costo Base
+                      </span>
+                      {marginPercentage !== null && (
+                        <Badge variant="outline" className="text-[10px] font-semibold border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300">
+                          {marginPercentage.toFixed(1)}% mg
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                      {formatCurrency(product.purchase_price)}
+                      {product.purchase_price != null && product.purchase_price > 0
+                        ? formatCurrency(product.purchase_price)
+                        : 'No registrado'}
                     </p>
+                    <span className="text-[10px] text-muted-foreground">Visible únicamente para roles autorizados</span>
                   </div>
                 )}
               </CardContent>

@@ -50,6 +50,13 @@ interface AvatarSelectorProps {
 }
 
 export function AvatarSelector({
+  open,
+  ...props
+}: AvatarSelectorProps) {
+  return <AvatarSelectorContent key={`${props.userId}:${open}`} {...props} open={open} />
+}
+
+function AvatarSelectorContent({
   userId,
   email,
   name,
@@ -70,22 +77,6 @@ export function AvatarSelector({
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState('human')
   const [isLoading, setIsLoading] = useState(false)
-
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (open) {
-      setCustomSeed('')
-      setSelectedAvatar(null)
-      setPreviewAvatar(null)
-      setUseRoundedCorners(true)
-      setScale(100)
-      setFlip(false)
-      setRotate(0)
-      setBackgroundIndex(0)
-      setSelectedStyle('avataaars')
-      setActiveCategory('human')
-    }
-  }, [open])
 
   // Generar seed basado en usuario
   const userSeed = useMemo(() => 
@@ -154,13 +145,16 @@ export function AvatarSelector({
     retro: 'Retro'
   }
 
-  // Efecto para resetear selección cuando cambia el estilo
-  useEffect(() => {
+  const selectionConfig = `${selectedStyle}|${currentSeed}|${backgroundIndex}|${useRoundedCorners}|${scale}|${flip}|${rotate}`
+  const [previousSelectionConfig, setPreviousSelectionConfig] = useState(selectionConfig)
+  if (previousSelectionConfig !== selectionConfig) {
+    setPreviousSelectionConfig(selectionConfig)
     setSelectedAvatar(null)
     setPreviewAvatar(null)
     setIsLoading(true)
-    
-    // Simular carga de avatares
+  }
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false)
     }, 300)

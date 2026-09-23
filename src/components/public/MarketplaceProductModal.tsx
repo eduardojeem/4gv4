@@ -24,12 +24,16 @@ import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/varian
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { formatPrice, cn } from '@/lib/utils'
 import { buildProductWhatsAppMessage, getWhatsAppLink } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { PublicProductVariant } from '@/types/public'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { PublicVariantPicker } from './PublicVariantPicker'
 import { StoreSocialLinks } from './StoreSocialLinks'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 type Props = {
@@ -151,7 +155,9 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
 
   const selectedSalePrice = matchedVariant?.sale_price ?? product.sale_price
   const displayPrice = resolvePublicVariantPrice({ isWholesale: false, product, variant: matchedVariant })
-  const hasOffer = displayPrice < selectedSalePrice
+  const precioOculto = hidesPublicPrice(product)
+  const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
+  const hasOffer = !precioOculto && displayPrice < selectedSalePrice
   const discountPct = hasOffer
     ? Math.round((1 - displayPrice / selectedSalePrice) * 100)
     : 0
@@ -175,15 +181,15 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
   // El WhatsApp cargado, o el teléfono de la tienda: es el mismo respaldo que
   // usa la ficha de producto de cada tienda.
   const whatsappDigits = (contact?.whatsapp || contact?.phone || '').replace(/\D/g, '')
-  const productUrl = typeof window !== 'undefined' ? `${window.location.origin}${productHref}` : null
+  const productUrl = siteUrl(productHref)
   const whatsappHref = whatsappDigits.length >= 6
     ? getWhatsAppLink({
         phone: whatsappDigits,
         message: buildProductWhatsAppMessage({
           storeName: product.organization_name,
           productName: product.name,
-          price: displayPrice,
-          originalPrice: hasOffer ? selectedSalePrice : null,
+          price: precioOculto ? 0 : displayPrice,
+          originalPrice: !precioOculto && hasOffer ? selectedSalePrice : null,
           sku: matchedVariant?.sku || product.sku,
           variantName: matchedVariant?.variant_name,
           attributes: matchedVariant?.attributes,
@@ -191,7 +197,7 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
           stockQuantity: typeof stockQuantity === 'number' ? stockQuantity : null,
           productUrl,
           imageUrl: currentSrc,
-          intent: 'inquiry',
+          intent: precioOculto ? 'price' : 'inquiry',
         }),
       })
     : null
@@ -312,29 +318,50 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
                   {[product.brand, product.category?.name].filter(Boolean).join(' · ')}
                 </p>
               )}
+              {deviceCompatibility && (
+                <p className="text-xs font-semibold text-primary" title={deviceCompatibility}>
+                  Para {deviceCompatibility}
+                </p>
+              )}
               <h2 className="text-balance text-xl font-bold leading-snug text-foreground sm:text-2xl">
                 {product.name}
               </h2>
             </div>
 
             {/* Precio */}
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <p className={cn('text-3xl font-extrabold tracking-tight tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                  {formatPrice(displayPrice)}
+            {precioOculto ? (
+              <div className="space-y-1.5">
+                <p className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                  Precio a consultar
                 </p>
+                <div className="flex items-center gap-2">
+                  <PriceAccessDialog
+                    productName={product.name}
+                    whatsappHref={whatsappHref}
+                    organizationSlug={product.organization_slug}
+                    variant="link"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <p className={cn('text-3xl font-extrabold tracking-tight tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
+                    {formatPrice(displayPrice)}
+                  </p>
+                  {hasOffer && (
+                    <p className="text-base font-medium tabular-nums text-muted-foreground line-through">
+                      {formatPrice(selectedSalePrice)}
+                    </p>
+                  )}
+                </div>
                 {hasOffer && (
-                  <p className="text-base font-medium tabular-nums text-muted-foreground line-through">
-                    {formatPrice(selectedSalePrice)}
+                  <p className="inline-flex rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                    Ahorrás {formatPrice(savings)}
                   </p>
                 )}
               </div>
-              {hasOffer && (
-                <p className="inline-flex rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                  Ahorrás {formatPrice(savings)}
-                </p>
-              )}
-            </div>
+            )}
 
             {/* Disponibilidad + favorito */}
             <div className="flex flex-wrap items-center gap-2">
@@ -441,10 +468,11 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
                       href={whatsappHref}
                       target="_blank"
                       rel="noopener noreferrer"
+                      suppressHydrationWarning
                       className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366]/10 px-3 py-2 text-xs font-semibold text-[#128C7E] transition hover:bg-[#25D366] hover:text-white dark:text-[#4ADE80]"
                     >
                       <MessageCircle className="h-4 w-4" aria-hidden="true" />
-                      Consultar por WhatsApp
+                      {precioOculto ? 'Consultar precio por WhatsApp' : 'Consultar por WhatsApp'}
                     </a>
                   )}
                 </div>

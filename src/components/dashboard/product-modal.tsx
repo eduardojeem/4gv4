@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, ArrowRight, TrendingUp, Percent } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, ArrowRight, TrendingUp, Percent, RotateCcw } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice, cn } from '@/lib/utils'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -69,6 +69,7 @@ import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { BrandPicker } from '@/components/dashboard/brands/BrandPicker'
 import { DeviceCompatibilityFields } from '@/components/dashboard/products/DeviceCompatibilityFields'
+import { VisibilityHelpDialog } from '@/components/dashboard/products/VisibilityHelpDialog'
 import { usesDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
@@ -337,6 +338,9 @@ export function ProductModal({
       barcode: '',
       is_active: true,
       visibility: 'public',
+      // Los productos nuevos se publican sin precio: la tienda muestra
+      // «Preguntar» hasta que el negocio decida mostrarlo.
+      hide_price: true,
       tags: [],
       fashion_audience: '',
       images: [],
@@ -379,6 +383,8 @@ export function ProductModal({
   // Elección al activar cuotas: usar los predeterminados o cargar desde cero.
   // 'pending' muestra el panel; cualquier otro valor lo oculta.
   const [creditChoice, setCreditChoice] = useState<'pending' | 'defaults' | 'manual'>('pending')
+  // Backup de planes si el usuario decide volver a elegir la modalidad de cuotas
+  const [previousPlansBackup, setPreviousPlansBackup] = useState<Array<{ count: number; rate: number }> | null>(null)
   // Modo de cálculo de precio mayorista ('cost': sumar % sobre costo, 'sale': descuento % sobre precio público)
   const [wholesaleCalcMode, setWholesaleCalcMode] = useState<'cost' | 'sale'>('cost')
   const [customWholesaleCostPct, setCustomWholesaleCostPct] = useState<string>('')
@@ -411,6 +417,22 @@ export function ProductModal({
     form.setValue('installments_plans', toProductInstallmentPlans(creditDefaults), { shouldDirty: true })
     form.setValue('installments_public', creditDefaults.publicByDefault, { shouldDirty: true })
     setCreditChoice('defaults')
+    setPreviousPlansBackup(null)
+  }
+
+  const handleResetCreditChoice = () => {
+    const currentPlans = (form.getValues('installments_plans') || []) as Array<{ count: number; rate: number }>
+    setPreviousPlansBackup(currentPlans)
+    form.setValue('installments_plans', [], { shouldDirty: true })
+    setCreditChoice('pending')
+  }
+
+  const handleCancelCreditReset = () => {
+    if (previousPlansBackup && previousPlansBackup.length > 0) {
+      form.setValue('installments_plans', previousPlansBackup, { shouldDirty: true })
+    }
+    setCreditChoice('manual')
+    setPreviousPlansBackup(null)
   }
   const [bulkDraft, setBulkDraft] = useState<Record<number, { checked: boolean; rate: string }>>({})
   const warrantyMonths = watch('warranty_months')
@@ -491,6 +513,7 @@ export function ProductModal({
     // Cada producto vuelve a preguntar: sin esto, elegir "cargar nuevos" en un
     // producto se arrastraba al siguiente y la eleccion no volvia a aparecer.
     setCreditChoice('pending')
+    setPreviousPlansBackup(null)
 
     // Un borrador de esta pestaña gana sobre los datos guardados: es lo que la
     // persona estaba escribiendo y todavia no llego a guardar.
@@ -537,6 +560,8 @@ export function ProductModal({
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
         visibility: (product as any).visibility || 'public',
+        // Los productos que ya existian conservan su precio a la vista.
+        hide_price: (product as any).hide_price === true,
         tags: Array.isArray((product as any).tags) ? (product as any).tags : [],
         fashion_audience: getFashionAudienceFromTags((product as any).tags),
         images: product.images || [],
@@ -571,6 +596,7 @@ export function ProductModal({
         barcode: '',
         is_active: true,
         visibility: 'public',
+        hide_price: true,
         tags: [],
         fashion_audience: '',
         images: [],
@@ -746,6 +772,7 @@ export function ProductModal({
       min_stock: Number(data.min_stock),
       is_active: data.is_active ?? true,
       visibility: data.visibility || 'public',
+      hide_price: data.hide_price ?? false,
       tags: mergeFashionAudienceTag(data.tags, data.fashion_audience || ''),
       has_offer: data.has_offer ?? false,
       installments_enabled: data.installments_enabled ?? false,
@@ -1718,27 +1745,52 @@ export function ProductModal({
                           )}
                         />
 
+                        {/*
+                          Un solo selector para las cuatro formas de publicar. «Público sin
+                          precio» no es otra visibilidad: es `public` + `hide_price`, pero el
+                          negocio lo piensa como una opción más de esta lista, no como un
+                          interruptor aparte que hay que descubrir.
+                        */}
                         <FormField
                           control={form.control}
                           name="visibility"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Visibilidad en tienda <FieldRequirement /></FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || 'public'}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Seleccionar visibilidad" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="public">Público — visible para todos</SelectItem>
-                                  <SelectItem value="wholesale">Mayorista — solo clientes mayoristas</SelectItem>
-                                  <SelectItem value="hidden">Oculto — no se muestra en la tienda</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                          render={({ field }) => {
+                            const ocultaPrecio = form.watch('hide_price') === true
+                            const visibilidad = field.value || 'public'
+                            const modo =
+                              visibilidad === 'public' && ocultaPrecio ? 'public_no_price' : visibilidad
+
+                            return (
+                              <FormItem>
+                                <div className="flex items-center justify-between gap-2">
+                                  <FormLabel>Visibilidad en tienda <FieldRequirement /></FormLabel>
+                                  <VisibilityHelpDialog />
+                                </div>
+                                <Select
+                                  value={modo}
+                                  onValueChange={(valor) => {
+                                    // El precio sólo se esconde en el catálogo abierto: al
+                                    // mayorista y al POS no se les esconde nada.
+                                    field.onChange(valor === 'public_no_price' ? 'public' : valor)
+                                    setValue('hide_price', valor === 'public_no_price', { shouldDirty: true })
+                                  }}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar visibilidad" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="public">Público — todos ven el precio</SelectItem>
+                                    <SelectItem value="public_no_price">Público — precio solo para mayoristas</SelectItem>
+                                    <SelectItem value="wholesale">Mayorista — solo clientes mayoristas</SelectItem>
+                                    <SelectItem value="hidden">Oculto — no se muestra en la tienda</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )
+                          }}
                         />
                       </div>
 
@@ -2277,7 +2329,12 @@ export function ProductModal({
                                 </span>
                                 <Switch
                                   checked={field.value}
-                                  onCheckedChange={field.onChange}
+                                  onCheckedChange={(val) => {
+                                    field.onChange(val)
+                                    if (val && (installmentsPlans ?? []).length === 0) {
+                                      setCreditChoice('pending')
+                                    }
+                                  }}
                                   className="data-[state=checked]:bg-indigo-500"
                                   aria-label="Activar cuotas / financiación"
                                 />
@@ -2327,7 +2384,10 @@ export function ProductModal({
 
                               <button
                                 type="button"
-                                onClick={() => setCreditChoice('manual')}
+                                onClick={() => {
+                                  setCreditChoice('manual')
+                                  setPreviousPlansBackup(null)
+                                }}
                                 className="rounded-lg border-2 border-gray-200 bg-white p-3 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-slate-900 dark:hover:bg-slate-800"
                               >
                                 <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
@@ -2343,11 +2403,48 @@ export function ProductModal({
                               <p className="text-[11px] text-indigo-700/70 dark:text-indigo-300/70">
                                 Podés editar los planes después, elijas lo que elijas.
                               </p>
-                              <CreditDefaultsLink />
+                              <div className="flex items-center gap-3">
+                                {previousPlansBackup && previousPlansBackup.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelCreditReset}
+                                    className="text-[11px] font-medium text-indigo-700 underline hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-100"
+                                  >
+                                    Cancelar y mantener planes anteriores ({previousPlansBackup.length})
+                                  </button>
+                                )}
+                                <CreditDefaultsLink />
+                              </div>
                             </div>
                           </div>
                         ) : (
                           <>
+                            {/* Banner para volver a elegir o cambiar modo si los defaults están disponibles */}
+                            {creditDefaults.enabled && creditDefaults.plans.length > 0 && (
+                              <div className="flex items-center justify-between gap-2 rounded-lg border border-indigo-200/80 bg-indigo-50/50 px-3 py-2 text-xs dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                                  <span className="truncate text-indigo-900 dark:text-indigo-200">
+                                    {creditChoice === 'defaults'
+                                      ? 'Planes cargados desde predeterminados'
+                                      : (installmentsPlans ?? []).length > 0
+                                        ? 'Planes configurados para este producto'
+                                        : 'Modo: Carga desde cero'}
+                                  </span>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={handleResetCreditChoice}
+                                  className="h-7 px-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
+                                >
+                                  <RotateCcw className="mr-1.5 h-3 w-3" />
+                                  Volver a elegir
+                                </Button>
+                              </div>
+                            )}
+
                             {/* Toggle independiente: mostrar en la web pública */}
                             <FormField
                               control={form.control}

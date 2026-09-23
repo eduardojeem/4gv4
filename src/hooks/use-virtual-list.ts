@@ -132,29 +132,6 @@ export function useInfiniteScroll({
 }
 
 // Performance monitoring hook
-export function usePerformanceMonitor(componentName: string) {
-  const [renderCount, setRenderCount] = useState(0)
-  const [lastRenderTime, setLastRenderTime] = useState(0)
-
-  useEffect(() => {
-    const startTime = performance.now()
-    setRenderCount(prev => prev + 1)
-    
-    // Use setTimeout to avoid infinite re-renders
-    const timeoutId = setTimeout(() => {
-      const endTime = performance.now()
-      const renderTime = endTime - startTime
-      setLastRenderTime(renderTime)
-      
-      if (renderTime > 16) { // More than one frame (60fps)
-        console.warn(`${componentName} render took ${renderTime.toFixed(2)}ms`)
-      }
-    }, 0)
-
-    return () => {
-      clearTimeout(timeoutId)
-    }
-  }, [componentName]) // Add componentName as dependency
-
-  return { renderCount, lastRenderTime }
+export function usePerformanceMonitor(_componentName: string) {
+  return { renderCount: 0, lastRenderTime: 0 }
 }

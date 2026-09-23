@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   describeDeviceCompatibility,
+  deviceModelSortKey,
   deviceSortKey,
   normalizeDeviceBrand,
   normalizeDeviceModel,
@@ -133,6 +134,41 @@ describe('las sugerencias salen de productos y reparaciones', () => {
     expect(opciones.brands).toEqual(['Samsung', 'Apple'])
     expect(opciones.modelsByBrand.Samsung).toEqual(['A05', 'A15'])
     expect(opciones.modelsByBrand.Apple).toEqual(['iPhone 13'])
+  })
+
+  it('los modelos salen en orden de modelo, no por cuantos repuestos tiene cada uno', () => {
+    // Antes mandaba el uso: con tres pantallas de iPhone 15 y una de iPhone 8,
+    // la lista arrancaba en el 15 y el 8 quedaba perdido en el medio.
+    const opciones = buildDeviceOptions({
+      productos: [
+        { device_brand: 'Apple', device_models: ['iPhone 15'] },
+        { device_brand: 'Apple', device_models: ['iPhone 15'] },
+        { device_brand: 'Apple', device_models: ['iPhone 15'] },
+        { device_brand: 'Apple', device_models: ['iPhone 12 Pro Max'] },
+        { device_brand: 'Apple', device_models: ['iPhone 12 Pro'] },
+        { device_brand: 'Apple', device_models: ['iPhone 12'] },
+        { device_brand: 'Apple', device_models: ['iPhone 8'] },
+      ],
+      reparaciones: [],
+    })
+
+    // El modelo pelado antes que sus variantes, y el 8 antes que el 12 y el 15.
+    expect(opciones.modelsByBrand.Apple).toEqual([
+      'iPhone 8',
+      'iPhone 12',
+      'iPhone 12 Pro',
+      'iPhone 12 Pro Max',
+      'iPhone 15',
+    ])
+  })
+})
+
+describe('la clave de orden de un modelo', () => {
+  it('rellena los numeros para que 8 no quede despues de 11', () => {
+    const clave = deviceModelSortKey
+    expect([clave('iPhone 11'), clave('iPhone 8')].sort()).toEqual([clave('iPhone 8'), clave('iPhone 11')])
+    expect([clave('12 Pro'), clave('12')].sort()).toEqual([clave('12'), clave('12 Pro')])
+    expect(clave('A15')).toBe('a000015')
   })
 })
 

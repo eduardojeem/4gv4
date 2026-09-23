@@ -13,6 +13,10 @@ import { buildVisibleCategoryTree, resolveEffectiveProductStock } from '@/lib/pu
 import { getVariantFashionValue, type FashionAudience } from '@/lib/products/fashion-filters'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
+import { productsHaveDeviceColumns } from '@/lib/products/device-columns'
+import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
+import { buildDeviceOptions, type DeviceOptions } from '@/lib/products/device-options'
+import { normalizeDeviceBrand, normalizeDeviceModel } from '@/lib/products/device-compatibility'
 
 import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
 
@@ -66,6 +70,10 @@ export type ProductFilters = {
   audience?: FashionAudience
   size?: string
   color?: string
+  /** Marca del celular al que pertenece el repuesto. */
+  deviceBrand?: string
+  /** Modelo del celular; se busca dentro de la lista de compatibles. */
+  deviceModel?: string
   sort?: string
   page?: number
   perPage?: number
@@ -84,7 +92,11 @@ export type ProductsResponse = {
   isWholesale: boolean
   branchFilterUnavailable?: boolean
   fashionFacets: { sizes: string[]; colors: string[] }
+  /** Marcas y modelos de celular con productos publicados. Vacio si la tienda no los usa. */
+  deviceFacets: DeviceOptions
 }
+
+const SIN_CELULARES: DeviceOptions = { brands: [], modelsByBrand: {} }
 
 const MAX_PRICE = PRODUCTS_MAX_PRICE
 
@@ -130,6 +142,50 @@ async function getProductFacetsUncached(
   return { brands: Array.from(uniqueBrands).sort(), priceRange: { min, max } }
 }
 
+/**
+ * Marcas y modelos de celular con productos publicados en esta tienda.
+ *
+ * Un local de reparacion busca por el telefono, no por la marca del repuesto:
+ * quien entra a la tienda escribe «iPhone 13», no «AmpSentrix». Se listan solo
+ * los que tienen algun producto publicado, asi el filtro nunca ofrece una
+ * opcion que devuelve cero resultados.
+ */
+async function getDeviceFacetsUncached(
+  organizationId: string,
+  isWholesale: boolean
+): Promise<DeviceOptions> {
+  const supabase = createAdminSupabase() as SupabaseClient
+  // La migracion puede no estar aplicada en este deployment: sin columnas no
+  // hay filtro, y pedirlas igual romperia el catalogo entero.
+  if (!(await productsHaveDeviceColumns(supabase))) return SIN_CELULARES
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('device_brand, device_models')
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .in('visibility', isWholesale ? ['public', 'wholesale'] : ['public'])
+    .not('device_brand', 'is', null)
+
+  if (error) {
+    console.warn('[getDeviceFacets] Sin facetas de celular:', error.message)
+    return SIN_CELULARES
+  }
+
+  return buildDeviceOptions({
+    productos: (data ?? []) as Array<{ device_brand: string | null; device_models: string[] | null }>,
+    reparaciones: [],
+  })
+}
+
+function getDeviceFacets(organizationId: string, isWholesale: boolean) {
+  return unstable_cache(
+    () => getDeviceFacetsUncached(organizationId, isWholesale),
+    ['device-facets', organizationId, isWholesale ? 'wholesale' : 'retail'],
+    { revalidate: 300, tags: [`product-facets:${organizationId}`] }
+  )()
+}
+
 function getProductFacets(organizationId: string, isWholesale: boolean) {
   return unstable_cache(
     () => getProductFacetsUncached(organizationId, isWholesale),
@@ -153,6 +209,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     audience,
     size: rawSize = '',
     color: rawColor = '',
+    deviceBrand: rawDeviceBrand = '',
+    deviceModel: rawDeviceModel = '',
     sort: rawSort = 'name',
     page: rawPage = 1,
     perPage = PRODUCTS_PER_PAGE,
@@ -169,6 +227,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const size = sanitizeFilterTerm(rawSize ?? '', 50)
   const color = sanitizeFilterTerm(rawColor ?? '', 50)
 
+  // Se normalizan igual que al guardarlos: quien llega con «?celular=iphone»
+  // desde un enlace compartido tiene que ver lo mismo que quien toco el chip.
+  const deviceBrand = normalizeDeviceBrand(sanitizeFilterTerm(rawDeviceBrand ?? '', 60)) ?? ''
+  const deviceModel = normalizeDeviceModel(sanitizeFilterTerm(rawDeviceModel ?? '', 60)) ?? ''
+
   // #4 — max_price negativo o cero produce un rango [0,0] vacío sin aviso.
   // Se trata cualquier valor <= 0 o no-finito como "sin límite superior".
   const rawMaxPrice = maxPrice
@@ -176,7 +239,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     Number.isFinite(rawMaxPrice) && rawMaxPrice > 0 ? rawMaxPrice : MAX_PRICE
 
   // #8 — Validar sort contra lista permitida; valores desconocidos caen a 'name'.
-  const ALLOWED_SORTS = ['name', 'price_asc', 'price_desc', 'newest', 'discount_desc', 'featured', 'default'] as const
+  const ALLOWED_SORTS = ['name', 'price_asc', 'price_desc', 'newest', 'discount_desc', 'featured', 'default', 'device'] as const
   type AllowedSort = typeof ALLOWED_SORTS[number]
   const sort: AllowedSort = (ALLOWED_SORTS as readonly string[]).includes(rawSort)
     ? (rawSort as AllowedSort)
@@ -193,6 +256,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       priceRange: { min: 0, max: MAX_PRICE },
       isWholesale: false,
       fashionFacets: { sizes: [], colors: [] },
+      deviceFacets: SIN_CELULARES,
     }
   }
 
@@ -218,6 +282,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     images: string[] | null
     unit_measure: string
     barcode: string | null
+    device_brand?: string | null
+    device_models?: string[] | null
+    hide_price?: boolean | null
     category: { id: string; name: string } | { id: string; name: string }[] | null
     brand_details: { name: string } | null
     branch_stock?: Array<{ stock_quantity: number | null }> | { stock_quantity: number | null } | null
@@ -271,6 +338,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
         priceRange: { min: 0, max: MAX_PRICE },
         isWholesale,
         fashionFacets: { sizes: [], colors: [] },
+        deviceFacets: SIN_CELULARES,
       }
     } else {
       useBranchJoin = true
@@ -279,9 +347,17 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   // Build query - only active products, never select wholesale_price for non-wholesale
   // Typed as string to avoid TS2590 (union type too complex with long string literals)
+  // Sin la migracion aplicada estas columnas no existen: pedirlas devolveria
+  // un error de PostgREST y la tienda quedaria sin catalogo.
+  const [conCelular, conPrecioOculto] = await Promise.all([
+    productsHaveDeviceColumns(supabase),
+    productsHaveHidePriceColumn(supabase),
+  ])
+  const camposDeCelular = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
+
   const baseSelectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, tags, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, tags, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, tags, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)' + camposDeCelular
+    : 'id, name, sku, description, brand, tags, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)' + camposDeCelular
 
   // Sub-consultas que dependen de la BD se resuelven una sola vez, antes de
   // armar el query, para que el builder de abajo sea sincrónico y reutilizable.
@@ -376,6 +452,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       }
     }
 
+    if (conCelular && deviceBrand) q = q.eq('device_brand', deviceBrand)
+    // `device_models` es un text[]: contains busca el modelo dentro de la lista
+    // de compatibles, asi una pantalla «iPhone 12 / 12 Pro» aparece en ambos.
+    if (conCelular && deviceModel) q = q.contains('device_models', [deviceModel])
+
     if (audience) q = q.contains('tags', [`audience:${audience}`])
     if (fashionVariantProductIds) {
       q = fashionVariantProductIds.length > 0
@@ -402,6 +483,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
         return q.order('created_at', { ascending: false })
       case 'discount_desc':
         return q.order('has_offer', { ascending: false }).order('created_at', { ascending: false })
+      case 'device':
+        // Los que no tienen celular cargado van al final (la clave es '￿').
+        return conCelular
+          ? q.order('device_sort_key', { ascending: true, nullsFirst: false }).order('name', { ascending: true })
+          : q.order('name', { ascending: true })
       case 'featured':
       case 'default':
         return q.order('featured', { ascending: false }).order('has_offer', { ascending: false }).order('created_at', { ascending: false })
@@ -494,6 +580,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       sku: p.sku as string,
       description: p.description as string | null,
       brand: p.brand_details?.name || p.brand as string | null,
+      device_brand: p.device_brand ?? null,
+      device_models: Array.isArray(p.device_models) ? p.device_models : null,
+      // El mayorista registrado sí ve el precio: lo que se esconde es el precio
+      // de mostrador, y el mayorista entra con su lista propia.
+      hide_price: p.hide_price === true && !isWholesale,
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
@@ -535,7 +626,10 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   // Facetas del sidebar (marcas + rango de precio): un único scan cacheado por
   // organización/tipo de usuario, en vez de dos scans completos por request.
-  const { brands, priceRange } = await getProductFacets(organization.id, isWholesale)
+  const [{ brands, priceRange }, deviceFacets] = await Promise.all([
+    getProductFacets(organization.id, isWholesale),
+    conCelular ? getDeviceFacets(organization.id, isWholesale) : Promise.resolve(SIN_CELULARES),
+  ])
   const { min: metaMinPrice, max: metaMaxPrice } = priceRange
 
   return {
@@ -548,6 +642,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     priceRange: { min: metaMinPrice, max: metaMaxPrice },
     isWholesale,
     branchFilterUnavailable,
+    deviceFacets,
     fashionFacets: {
       sizes: Array.from(sizeOptions).sort((a, b) => a.localeCompare(b, 'es', { numeric: true })),
       colors: Array.from(colorOptions).sort((a, b) => a.localeCompare(b, 'es')),
@@ -615,10 +710,14 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     isWholesale = result.isWholesale
   }
 
+  // La columna puede no existir todavia: sin ella, el precio se muestra.
+  const conPrecioOculto = await productsHaveHidePriceColumn(supabase)
+  const campoPrecioOculto = conPrecioOculto ? ', hide_price' : ''
+
   // Typed as string to avoid TS2590 with long string literal unions
   const selectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)' + campoPrecioOculto
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)' + campoPrecioOculto
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let queryBuilder = (supabase as any)
@@ -668,6 +767,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     barcode: string | null
     category: { id: string; name: string } | { id: string; name: string }[] | null
     brand_details: { name: string }[] | null
+    hide_price?: boolean | null
   }
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
@@ -780,6 +880,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     sku: p.sku,
     description: p.description,
     brand: p.brand_details?.[0]?.name || p.brand,
+    hide_price: p.hide_price === true && !isWholesale,
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,

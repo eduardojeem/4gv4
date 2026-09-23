@@ -21,6 +21,10 @@ import { useStorefrontStyle } from '@/components/public/storefront-style-context
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
 import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
+import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { siteUrl } from '@/lib/site-url'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -58,6 +62,13 @@ export function ProductCard(props: ProductCardProps) {
   const [quantity, setQuantity] = useState(1)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const storefrontStyle = useStorefrontStyle()
+
+  // Publicado sin precio: donde iba el precio va un boton que abre WhatsApp.
+  // El precio real no se muestra en ningun lado, ni siquiera en el mensaje.
+  const precioOculto = hidesPublicPrice(product)
+
+  // Para que telefono sirve el repuesto: «Apple - iPhone 13, 13 Pro».
+  const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
 
   // La galeria incluye las fotos de las variantes: sin eso, elegir un color no
   // tenia ninguna foto que mostrar.
@@ -170,8 +181,7 @@ export function ProductCard(props: ProductCardProps) {
     ''
 
   const storeName = websiteSettings?.company_info.name || null
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-  const fullProductUrl = currentOrigin ? `${currentOrigin}${productHref}` : productHref
+  const fullProductUrl = siteUrl(productHref)
 
   const whatsappHref = contactPhone
     ? getWhatsAppLink({
@@ -179,15 +189,15 @@ export function ProductCard(props: ProductCardProps) {
         message: buildProductWhatsAppMessage({
           storeName,
           productName: product.name,
-          price: displayPrice,
-          originalPrice: originalPrice && originalPrice > displayPrice ? originalPrice : null,
+          price: precioOculto ? 0 : displayPrice,
+          originalPrice: !precioOculto && originalPrice && originalPrice > displayPrice ? originalPrice : null,
           sku: product.sku,
           inStock: isInStock,
           stockQuantity: product.stock_quantity,
-          installmentText: maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
+          installmentText: !precioOculto && maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
           productUrl: fullProductUrl,
           imageUrl: product.image ? resolveProductImageUrl(product.image) : null,
-          intent: 'inquiry',
+          intent: precioOculto ? 'price' : 'inquiry',
         }),
       })
     : null
@@ -203,18 +213,18 @@ export function ProductCard(props: ProductCardProps) {
         message: buildProductWhatsAppMessage({
           storeName,
           productName: product.name,
-          price: selectedPrice,
-          originalPrice: selectedOriginalPrice && selectedOriginalPrice > selectedPrice ? selectedOriginalPrice : null,
+          price: precioOculto ? 0 : selectedPrice,
+          originalPrice: !precioOculto && selectedOriginalPrice && selectedOriginalPrice > selectedPrice ? selectedOriginalPrice : null,
           sku: selectedVariant?.sku || product.sku,
           variantName: selectedVariant?.variant_name,
           attributes: selectedVariant?.attributes,
           quantity,
           inStock: selectedVariantInStock,
           stockQuantity: selectedStock,
-          installmentText: maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
+          installmentText: !precioOculto && maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
           productUrl: fullProductUrl,
           imageUrl: resolvedActive || (product.image ? resolveProductImageUrl(product.image) : null),
-          intent: selectedVariantInStock ? 'order' : 'inquiry',
+          intent: precioOculto ? 'price' : selectedVariantInStock ? 'order' : 'inquiry',
         }),
       })
     : null
@@ -352,6 +362,13 @@ export function ProductCard(props: ProductCardProps) {
             </p>
           )}
 
+          {/* Para que celular sirve: en un repuesto es el dato que decide la compra. */}
+          {deviceCompatibility && (
+            <p className="truncate text-[11px] font-semibold text-primary" title={deviceCompatibility}>
+              Para {deviceCompatibility}
+            </p>
+          )}
+
           {/* Product name */}
           <h3 className={cn(
             'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
@@ -363,6 +380,18 @@ export function ProductCard(props: ProductCardProps) {
           </h3>
 
           {/* Price row */}
+          {precioOculto ? (
+            <div
+              className="mt-2 min-w-0"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm font-bold leading-tight text-foreground">Precio a consultar</p>
+              <div className="relative z-20 mt-0.5">
+                <PriceAccessDialog productName={product.name} whatsappHref={whatsappHref} />
+              </div>
+            </div>
+          ) : (
           <div className="mt-2 min-w-0">
             <p
               className={cn(
@@ -386,6 +415,7 @@ export function ProductCard(props: ProductCardProps) {
               </p>
             )}
           </div>
+          )}
 
           {/* Action buttons */}
           <div
@@ -402,7 +432,22 @@ export function ProductCard(props: ProductCardProps) {
               <span>Ver detalle</span>
             </Link>
 
-            {commerceMode === 'cart' && (
+            {/* Sin precio publicado no se puede comprar: se pregunta. */}
+            {precioOculto && whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                suppressHydrationWarning
+                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-[0.98] shadow-emerald-600/20"
+                aria-label={`Preguntar el precio de ${product.name} por WhatsApp`}
+              >
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>Preguntar</span>
+              </a>
+            )}
+
+            {!precioOculto && commerceMode === 'cart' && (
               <button
                 type="button"
                 onClick={() => addToCart(false)}
@@ -424,7 +469,7 @@ export function ProductCard(props: ProductCardProps) {
               </button>
             )}
 
-            {commerceMode === 'whatsapp' && whatsappHref && (
+            {!precioOculto && commerceMode === 'whatsapp' && whatsappHref && (
               <a
                 href={whatsappHref}
                 target="_blank"
@@ -600,6 +645,14 @@ export function ProductCard(props: ProductCardProps) {
                 </div>
 
                 {/* ── Price block ── */}
+                {precioOculto ? (
+                  <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
+                    <p className="text-lg font-bold leading-none tracking-tight text-foreground">Precio a consultar</p>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Este producto se cotiza por WhatsApp. Escribinos y te pasamos el precio al instante.
+                    </p>
+                  </div>
+                ) : (
                 <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
                   <div className="flex items-end gap-3">
                     <p className={cn(
@@ -624,6 +677,7 @@ export function ProductCard(props: ProductCardProps) {
                     </p>
                   )}
                 </div>
+                )}
 
                 {hasVariants && (
                   <fieldset className="space-y-2.5 rounded-xl border border-border/80 bg-muted/20 p-3">
@@ -704,7 +758,7 @@ export function ProductCard(props: ProductCardProps) {
                 )}
 
                 {/* Installments */}
-                {installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
+                {!precioOculto && installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
                   <InstallmentSelector
                     price={selectedPrice * quantity}
                     plans={product.installments_plans ?? []}
@@ -723,8 +777,27 @@ export function ProductCard(props: ProductCardProps) {
           </div>
               {/* Actions stay outside the scrollable product information. */}
               <div className="shrink-0 flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
-                {commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || (hasVariants && !selectedVariant) || quantity >= selectedStock} onClick={() => setQuantity(q => Math.min(selectedStock, q + 1))}>+</button></div></div>}
-                {commerceMode === 'cart' && (
+                {precioOculto && (
+                  <PriceAccessDialog
+                    productName={product.name}
+                    whatsappHref={modalWhatsappHref || whatsappHref}
+                    variant="button"
+                  />
+                )}
+                {precioOculto && (modalWhatsappHref || whatsappHref) && (
+                  <a
+                    href={(modalWhatsappHref || whatsappHref)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setQuickViewOpen(false)}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Preguntar el precio por WhatsApp
+                  </a>
+                )}
+                {!precioOculto && commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || (hasVariants && !selectedVariant) || quantity >= selectedStock} onClick={() => setQuantity(q => Math.min(selectedStock, q + 1))}>+</button></div></div>}
+                {!precioOculto && commerceMode === 'cart' && (
                   <button
                     type="button"
                     onClick={() => addToCart(true)}
@@ -740,7 +813,7 @@ export function ProductCard(props: ProductCardProps) {
                     )}
                   </button>
                 )}
-                {commerceMode === 'whatsapp' && (modalWhatsappHref || whatsappHref) && (
+                {!precioOculto && commerceMode === 'whatsapp' && (modalWhatsappHref || whatsappHref) && (
                   <a
                     href={(modalWhatsappHref || whatsappHref)!}
                     target="_blank"

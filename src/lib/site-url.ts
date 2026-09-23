@@ -20,8 +20,7 @@ function isLocalhost(url: string): boolean {
 export function getSiteUrl(): string {
   const fromEnv =
     process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : '')
+    process.env.NEXT_PUBLIC_APP_URL
 
   let base = fromEnv || FALLBACK_SITE_URL
 

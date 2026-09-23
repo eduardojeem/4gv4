@@ -25,6 +25,7 @@ import {
   Sparkles,
   Store,
   Tag,
+  MessageCircle,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,11 @@ import { FavoriteButton } from './Favorites'
 import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
 import { getOfferPricing, isOnOffer } from '@/lib/public/marketplace-offers'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 
 type SortKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'name_asc'
 type ViewMode = 'grid' | 'compact'
@@ -682,10 +688,31 @@ export function ProductsClient({
           {paginated.map((product) => {
             const imageSrc = resolveProductImageUrl(product.image)
             const offer = getOfferPricing(product)
-            const hasOffer = offer.hasOffer
+            const precioOculto = hidesPublicPrice(product)
+            const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
+            const hasOffer = !precioOculto && offer.hasOffer
             const displayPrice = offer.price
             const discountPct = offer.percent
             const isCompact = view === 'compact'
+            const contact = product.organization_contact ?? null
+            const whatsappDigits = (contact?.whatsapp || contact?.phone || '').replace(/\D/g, '')
+            const productHref = `/${product.organization_slug}/productos/${product.id}`
+            const fullProductUrl = siteUrl(productHref)
+            const whatsappHref = whatsappDigits.length >= 6
+              ? getWhatsAppLink({
+                  phone: whatsappDigits,
+                  message: buildProductWhatsAppMessage({
+                    storeName: product.organization_name,
+                    productName: product.name,
+                    price: precioOculto ? 0 : displayPrice,
+                    originalPrice: !precioOculto && hasOffer ? offer.regularPrice : null,
+                    sku: product.sku,
+                    productUrl: fullProductUrl,
+                    imageUrl: imageSrc,
+                    intent: precioOculto ? 'price' : 'inquiry',
+                  }),
+                })
+              : null
 
             return (
               <div
@@ -717,7 +744,7 @@ export function ProductsClient({
 
                   {/* Badges superiores */}
                   <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 pointer-events-none">
-                    {hasOffer && discountPct > 0 && (
+                    {hasOffer && discountPct > 0 && !precioOculto && (
                       <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
                         <Tag className="h-2.5 w-2.5" />
                         -{discountPct}%
@@ -766,6 +793,13 @@ export function ProductsClient({
                       )}
                     </div>
 
+                    {/* Para que celular sirve: en un repuesto es el dato que decide la compra. */}
+                    {deviceCompatibility && (
+                      <p className="mt-1 truncate text-[11px] font-semibold text-primary" title={deviceCompatibility}>
+                        Para {deviceCompatibility}
+                      </p>
+                    )}
+
                     {/* Nombre del Producto */}
                     <h3
                       suppressHydrationWarning
@@ -784,30 +818,63 @@ export function ProductsClient({
 
                   {/* Precios y Botones */}
                   <div className="mt-3 space-y-2.5 border-t border-border/60 pt-2">
-                    <div>
-                      <p className={cn('text-base font-bold tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                        {formatPrice(displayPrice)}
-                      </p>
-                      {hasOffer && (
-                        <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] tabular-nums">
-                          <span className="text-muted-foreground line-through">{formatPrice(offer.regularPrice)}</span>
-                          <span className="font-semibold text-emerald-700 dark:text-emerald-400">Ahorrás {formatPrice(offer.savings)}</span>
+                    {precioOculto ? (
+                      <div
+                        className="min-w-0"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        <p className="text-sm font-bold leading-tight text-foreground">
+                          Precio a consultar
                         </p>
-                      )}
-                    </div>
+                        <div className="relative z-20 mt-0.5">
+                          <PriceAccessDialog
+                            productName={product.name}
+                            whatsappHref={whatsappHref}
+                            organizationSlug={product.organization_slug}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className={cn('text-base font-bold tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
+                          {formatPrice(displayPrice)}
+                        </p>
+                        {hasOffer && (
+                          <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] tabular-nums">
+                            <span className="text-muted-foreground line-through">{formatPrice(offer.regularPrice)}</span>
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Ahorrás {formatPrice(offer.savings)}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Acciones directas: Detalle + Ir a tienda */}
                     <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setSelected(product)}
-                        className="h-7 gap-1 rounded-lg px-1.5 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
-                      >
-                        <Eye className="h-3 w-3" />
-                        <span>Detalle</span>
-                      </Button>
+                      {precioOculto && whatsappHref ? (
+                        <a
+                          href={whatsappHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          suppressHydrationWarning
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-1.5 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs dark:text-[#4ADE80]"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          <span>Preguntar</span>
+                        </a>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setSelected(product)}
+                          className="h-7 gap-1 rounded-lg px-1.5 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>Detalle</span>
+                        </Button>
+                      )}
 
                       <Button
                         asChild

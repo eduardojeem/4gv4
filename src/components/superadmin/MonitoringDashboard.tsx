@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Activity,
@@ -204,7 +205,7 @@ export function MonitoringDashboard({ data }: { data: MonitoringData }) {
   const [refreshing, setRefreshing] = useState(false)
   const [eventSearch, setEventSearch] = useState('')
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all')
-  const [mounted, setMounted] = useState(false)
+  const mounted = useHydrated()
   const [now, setNow] = useState('')
 
   const handleRefresh = () => {
@@ -216,8 +217,6 @@ export function MonitoringDashboard({ data }: { data: MonitoringData }) {
   useAutoRefresh(autoRefresh, 15000, handleRefresh)
 
   useEffect(() => {
-    setMounted(true)
-    setNow(new Date().toLocaleTimeString('es-PY', { timeStyle: 'medium' }))
     const t = setInterval(() => setNow(new Date().toLocaleTimeString('es-PY', { timeStyle: 'medium' })), 1000)
     return () => clearInterval(t)
   }, [])

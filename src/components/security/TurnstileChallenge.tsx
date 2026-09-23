@@ -16,10 +16,10 @@ interface TurnstileChallengeProps {
 }
 
 const stateMessage: Record<ChallengeState, string> = {
-  pending: 'Completa la verificacion de seguridad para continuar.',
-  success: 'Verificacion completada.',
-  expired: 'La verificacion vencio. Completa el desafio nuevamente.',
-  error: 'No pudimos completar la verificacion. Reintenta o revisa tu conexion.',
+  pending: 'Marcá la casilla de seguridad para continuar.',
+  success: 'Verificación completada.',
+  expired: 'La verificación venció. Volvé a marcar la casilla.',
+  error: 'No pudimos completar la verificación. Reintentá o revisá tu conexión.',
 }
 
 export function TurnstileChallenge({
@@ -42,12 +42,18 @@ export function TurnstileChallenge({
   }, [onTokenChange, resetKey])
 
   if (!siteKey) {
+    // Al cliente de la tienda «agregá la Site Key de Turnstile» no le dice nada
+    // y no puede hacer nada al respecto: el detalle técnico va a la consola.
+    if (typeof window !== 'undefined') {
+      console.warn('[Turnstile] Falta NEXT_PUBLIC_TURNSTILE_SITE_KEY: el formulario queda bloqueado.')
+    }
     return (
       <div
         role="alert"
         className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
       >
-        La proteccion anti-bots no esta configurada. Agrega la Site Key de Turnstile para continuar.
+        En este momento no podemos hacer la verificación de seguridad, así que el formulario queda
+        bloqueado. Probá de nuevo más tarde o escribinos por WhatsApp y lo resolvemos.
       </div>
     )
   }
@@ -55,7 +61,7 @@ export function TurnstileChallenge({
   const hasError = state === 'expired' || state === 'error'
 
   return (
-    <div className="space-y-2" aria-label="Verificacion de seguridad">
+    <div className="space-y-2" aria-label="Verificación de seguridad">
       <Script
         id="cf-turnstile-script"
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"

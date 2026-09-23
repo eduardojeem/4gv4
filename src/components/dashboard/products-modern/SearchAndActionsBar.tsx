@@ -4,7 +4,7 @@
  */
 
 import React from 'react'
-import { Maximize2, Minimize2, BookmarkCheck, Save, RotateCcw } from 'lucide-react'
+import { BookmarkCheck, Save, RotateCcw, BarChart3 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,8 +37,8 @@ export interface SearchAndActionsBarProps {
   onSavePreferences?: () => void
   onResetPreferences?: () => void
   hasSavedPreferences?: boolean
-  isMaximizedSpace?: boolean
-  onToggleMaximizeSpace?: () => void
+  showSummary?: boolean
+  onToggleSummary?: () => void
   onRefresh: () => void
   onExport: () => void
   onExportExcel?: () => void
@@ -67,8 +67,8 @@ export function SearchAndActionsBar({
   onSavePreferences,
   onResetPreferences,
   hasSavedPreferences = false,
-  isMaximizedSpace = false,
-  onToggleMaximizeSpace,
+  showSummary = false,
+  onToggleSummary,
   onRefresh,
   onExport,
   onExportExcel,
@@ -186,32 +186,24 @@ export function SearchAndActionsBar({
               </DropdownMenu>
             )}
 
-            {/* Maximize space for products toggle */}
-            {onToggleMaximizeSpace && (
+            {/* Botón para expandir / activar Resumen de Inventario */}
+            {onToggleSummary && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onToggleMaximizeSpace}
+                onClick={onToggleSummary}
                 className={cn(
-                  'h-10 px-3 text-xs font-semibold rounded-xl gap-2 transition-all shadow-xs',
-                  isMaximizedSpace
-                    ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/20'
-                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/90 dark:border-slate-800'
+                  'h-10 px-3 text-xs font-semibold rounded-xl gap-2 transition-all shadow-xs cursor-pointer',
+                  showSummary
+                    ? 'bg-blue-50/90 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/20'
+                    : 'border-slate-200/90 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 )}
-                title={isMaximizedSpace ? 'Restaurar resumen superior' : 'Maximizar espacio vertical para productos'}
+                title={showSummary ? 'Ocultar resumen de inventario' : 'Ver y expandir resumen de inventario'}
+                aria-pressed={showSummary}
               >
-                {isMaximizedSpace ? (
-                  <>
-                    <Minimize2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                    <span>Ver resumen</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 className="h-3.5 w-3.5 text-slate-500" />
-                    <span>Más espacio</span>
-                  </>
-                )}
+                <BarChart3 className={cn('h-3.5 w-3.5', showSummary ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500')} />
+                <span>{showSummary ? 'Ocultar resumen' : 'Ver resumen'}</span>
               </Button>
             )}
           </div>

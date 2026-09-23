@@ -182,8 +182,16 @@ export default function PromotionsPage() {
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)
   const [duplicatingPromotion, setDuplicatingPromotion] = useState<Promotion | null>(null)
   const [deletingPromotion, setDeletingPromotion] = useState<Promotion | null>(null)
-  const [tab, setTab] = useState('promociones')
-  const [publicSectionTab, setPublicSectionTab] = useState<'all' | 'header' | 'carousel' | 'banners'>('all')
+  const [tab, setTab] = useState(() => {
+    if (typeof window === 'undefined') return 'promociones'
+    const value = new URLSearchParams(window.location.search).get('tab')
+    return value === 'publica' || value === 'puntos' ? value : 'promociones'
+  })
+  const [publicSectionTab, setPublicSectionTab] = useState<'all' | 'header' | 'carousel' | 'banners'>(() => {
+    if (typeof window === 'undefined') return 'all'
+    const value = new URLSearchParams(window.location.search).get('block')
+    return value === 'banners' || value === 'carousel' || value === 'header' ? value : 'all'
+  })
 
   useEffect(() => {
     fetch('/api/onboarding/status')
@@ -199,19 +207,6 @@ export default function PromotionsPage() {
     }
     window.addEventListener('website-slug-updated', handleSlugUpdate)
     return () => window.removeEventListener('website-slug-updated', handleSlugUpdate)
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const queryTab = params.get('tab')
-    if (queryTab === 'publica' || queryTab === 'puntos' || queryTab === 'promociones') {
-      setTab(queryTab)
-    }
-    const block = params.get('block')
-    if (block === 'banners' || block === 'carousel' || block === 'header' || block === 'all') {
-      setPublicSectionTab(block)
-    }
   }, [])
 
   const offersSectionEnabled = websiteSettings?.offers_section?.enabled ?? true

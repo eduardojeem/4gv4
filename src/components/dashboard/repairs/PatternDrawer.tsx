@@ -289,8 +289,12 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   }, [drawCanvas])
 
   // Parse existing value
-  useEffect(() => {
-    if (!value) return
+  const [parsedValue, setParsedValue] = useState(value)
+  if (parsedValue !== value) {
+    setParsedValue(value)
+    if (!value) {
+      setSelectedPoints([])
+    } else {
 
     const parsedPoints: Point[] = []
 
@@ -349,10 +353,9 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
         }
     }
 
-    if (parsedPoints.length > 0) {
-      setSelectedPoints(parsedPoints)
+    setSelectedPoints(parsedPoints)
     }
-  }, [value, points])
+  }
 
   // Secuencia numérica estilo teclado (1-9) del patrón dibujado
   const sequenceNumbers = selectedPoints.map(p => p.row * GRID_SIZE + p.col + 1)

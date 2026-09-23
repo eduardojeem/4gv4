@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
@@ -12,6 +12,11 @@ import { MarketplaceProductModal } from './MarketplaceProductModal'
 import { FavoriteButton } from './Favorites'
 import { cn } from '@/lib/utils'
 import { getOfferPricing } from '@/lib/public/marketplace-offers'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 
 type Props = {
   products: MarketplaceProduct[]
@@ -175,9 +180,30 @@ export function MarketplaceProductCarousel({
         >
           {normalizedProducts.map((product, idx) => {
             const offer = getOfferPricing(product)
-            const hasOffer = offer.hasOffer
+            const precioOculto = hidesPublicPrice(product)
+            const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
+            const hasOffer = !precioOculto && offer.hasOffer
             const displayPrice = offer.price
             const discountPct = offer.percent
+            const contact = product.organization_contact ?? null
+            const whatsappDigits = (contact?.whatsapp || contact?.phone || '').replace(/\D/g, '')
+            const productHref = `/${product.organization_slug}/productos/${product.id}`
+            const fullProductUrl = siteUrl(productHref)
+            const whatsappHref = whatsappDigits.length >= 6
+              ? getWhatsAppLink({
+                  phone: whatsappDigits,
+                  message: buildProductWhatsAppMessage({
+                    storeName: product.organization_name,
+                    productName: product.name,
+                    price: precioOculto ? 0 : displayPrice,
+                    originalPrice: !precioOculto && hasOffer ? offer.regularPrice : null,
+                    sku: product.sku,
+                    productUrl: fullProductUrl,
+                    imageUrl: resolveProductImageUrl(product.image),
+                    intent: precioOculto ? 'price' : 'inquiry',
+                  }),
+                })
+              : null
 
             return (
               <div
@@ -214,7 +240,7 @@ export function MarketplaceProductCarousel({
 
                   {/* Badges superiores */}
                   <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
-                    {hasOffer && discountPct > 0 && (
+                    {hasOffer && discountPct > 0 && !precioOculto && (
                       <span className={cn(
                         'flex items-center gap-1 rounded-full bg-rose-600 font-bold text-white shadow-sm',
                         isOffers ? 'px-3 py-1 text-xs' : 'px-2.5 py-0.5 text-[10px]'
@@ -266,6 +292,12 @@ export function MarketplaceProductCarousel({
                       </p>
                     )}
 
+                    {deviceCompatibility && (
+                      <p className="mt-0.5 truncate text-[11px] font-semibold text-primary" title={deviceCompatibility}>
+                        Para {deviceCompatibility}
+                      </p>
+                    )}
+
                     <h3
                       suppressHydrationWarning
                       onClick={() => setSelected(product)}
@@ -279,43 +311,78 @@ export function MarketplaceProductCarousel({
                   </div>
 
                   <div className="mt-2 space-y-2 border-t border-border/40 pt-2 sm:mt-3.5 sm:space-y-3 sm:pt-2.5">
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <p
-                        className={cn(
-                          'text-base sm:text-lg font-bold tabular-nums leading-none',
-                          hasOffer
-                            ? 'text-rose-700 dark:text-rose-400'
-                            : isFeatured
-                              ? 'text-amber-700 dark:text-amber-300 font-extrabold'
-                              : 'text-foreground'
-                        )}
+                    {precioOculto ? (
+                      <div
+                        className="min-w-0"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
                       >
-                        {formatPrice(displayPrice)}
-                      </p>
-                      {hasOffer && (
-                        <p className="text-xs text-muted-foreground line-through">
-                          {formatPrice(offer.regularPrice)}
+                        <p className="text-sm font-bold leading-tight text-foreground sm:text-base">
+                          Precio a consultar
                         </p>
-                      )}
-                    </div>
-                    {hasOffer && (
-                      <p className="-mt-1 text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:-mt-1.5 sm:text-xs">
-                        Ahorrás {formatPrice(offer.savings)}
-                      </p>
+                        <div className="relative z-20 mt-0.5">
+                          <PriceAccessDialog
+                            productName={product.name}
+                            whatsappHref={whatsappHref}
+                            organizationSlug={product.organization_slug}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <p
+                            className={cn(
+                              'text-base sm:text-lg font-bold tabular-nums leading-none',
+                              hasOffer
+                                ? 'text-rose-700 dark:text-rose-400'
+                                : isFeatured
+                                  ? 'text-amber-700 dark:text-amber-300 font-extrabold'
+                                  : 'text-foreground'
+                            )}
+                          >
+                            {formatPrice(displayPrice)}
+                          </p>
+                          {hasOffer && (
+                            <p className="text-xs text-muted-foreground line-through">
+                              {formatPrice(offer.regularPrice)}
+                            </p>
+                          )}
+                        </div>
+                        {hasOffer && (
+                          <p className="-mt-1 text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:-mt-1.5 sm:text-xs">
+                            Ahorrás {formatPrice(offer.savings)}
+                          </p>
+                        )}
+                      </>
                     )}
 
                     {/* Botones de acción: Ver detalle + Ir a tienda */}
                     <div className="grid grid-cols-2 gap-1 pt-0.5 sm:gap-1.5 sm:pt-1">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setSelected(product)}
-                        className="h-7 gap-1 rounded-lg px-2 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:text-xs"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>Detalle</span>
-                      </Button>
+                      {precioOculto && whatsappHref ? (
+                        <a
+                          href={whatsappHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          suppressHydrationWarning
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:h-8 sm:rounded-xl sm:text-xs dark:text-[#4ADE80]"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          <span>Preguntar</span>
+                        </a>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setSelected(product)}
+                          className="h-7 gap-1 rounded-lg px-2 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:text-xs"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Detalle</span>
+                        </Button>
+                      )}
 
                       <Button
                         asChild
@@ -323,7 +390,7 @@ export function MarketplaceProductCarousel({
                         size="sm"
                         className="h-7 gap-1 rounded-lg border-border/80 px-2 text-[11px] font-semibold transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:text-xs"
                       >
-                        <Link href={`/${product.organization_slug}/productos/${product.id}`}>
+                        <Link href={productHref}>
                           <span className="sm:hidden">Tienda</span>
                           <span className="hidden sm:inline">Ir a tienda</span>
                           <ArrowRight className="hidden h-3 w-3 sm:inline" />

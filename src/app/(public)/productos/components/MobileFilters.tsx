@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/sheet'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import type { Category } from '@/types/public'
+import type { DeviceOptions } from '@/lib/products/device-options'
 
 interface MobileFiltersProps {
   activeFiltersCount: number
@@ -22,6 +23,7 @@ interface MobileFiltersProps {
   brands: string[]
   branches?: Array<{ id: string; name: string; city: string | null }>
   fashionFacets?: { sizes: string[]; colors: string[] }
+  deviceFacets?: DeviceOptions
 }
 
 export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersProps) {

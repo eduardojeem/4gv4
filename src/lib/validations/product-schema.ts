@@ -33,6 +33,8 @@ export const productSchema = z
     device_brand: z.string().max(60, "La marca del celular puede tener hasta 60 caracteres").optional().nullable(),
     device_models: z.array(z.string().max(60, "Cada modelo puede tener hasta 60 caracteres")).max(20, "Se pueden cargar hasta 20 modelos").optional(),
     supplier_id: z.string().optional().nullable(),
+    // Publicar el producto sin mostrar el precio (la tienda ofrece «Preguntar»).
+    hide_price: z.boolean().optional(),
 
     // Pricing
     purchase_price: z

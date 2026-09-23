@@ -341,10 +341,13 @@ export function useAutomaticAlerts(products: any[] = []) {
   useEffect(() => {
     if (!isEnabled) return
 
-    runAlertChecks()
+    const initialCheck = window.setTimeout(runAlertChecks, 0)
     const interval = setInterval(runAlertChecks, 5 * 60 * 1000) // Cada 5 minutos
 
-    return () => clearInterval(interval)
+    return () => {
+      window.clearTimeout(initialCheck)
+      clearInterval(interval)
+    }
   }, [runAlertChecks, isEnabled])
 
   // Funciones de gestión de alertas

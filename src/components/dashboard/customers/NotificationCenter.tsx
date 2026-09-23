@@ -844,24 +844,23 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
 
   // Generar notificaciones inteligentes iniciales
   useEffect(() => {
-    const smartNotifications = generateSmartNotifications(customers)
-    setNotifications(smartNotifications)
+    const timer = window.setTimeout(() => setNotifications(generateSmartNotifications(customers)), 0)
+    return () => window.clearTimeout(timer)
   }, [customers])
 
-  // Auto-archivo de notificaciones antiguas
-  useEffect(() => {
-    if (notificationSettings.autoArchive) {
-      const cutoffDate = new Date(Date.now() - notificationSettings.autoArchiveDays * 24 * 60 * 60 * 1000)
-      setNotifications(prev => prev.map(n => ({
-        ...n,
-        isArchived: n.isArchived || (new Date(n.timestamp) < cutoffDate && n.isRead)
-      })))
-    }
-  }, [notificationSettings.autoArchive, notificationSettings.autoArchiveDays])
+  const [archiveReferenceTime] = useState(Date.now)
+  const visibleNotifications = useMemo(() => {
+    if (!notificationSettings.autoArchive) return notifications
+    const cutoff = archiveReferenceTime - notificationSettings.autoArchiveDays * 24 * 60 * 60 * 1000
+    return notifications.map(notification => ({
+      ...notification,
+      isArchived: notification.isArchived || (new Date(notification.timestamp).getTime() < cutoff && notification.isRead),
+    }))
+  }, [notifications, notificationSettings.autoArchive, notificationSettings.autoArchiveDays, archiveReferenceTime])
 
   // Filtrado avanzado de notificaciones
   const filteredNotifications = useMemo(() => {
-    const filtered = notifications.filter(notification => {
+    const filtered = visibleNotifications.filter(notification => {
       // Filtro por búsqueda avanzada
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase()
@@ -917,7 +916,7 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
 
     return filtered
   }, [
-    notifications, 
+    visibleNotifications,
     searchTerm, 
     selectedCategory, 
     selectedType, 

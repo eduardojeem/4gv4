@@ -33,8 +33,8 @@ function getPrefetchMarks(): PrefetchMark[] {
 }
 
 export function PrefetchMetricsPanel() {
-  const [patterns, setPatterns] = useState<NavPattern[]>([]);
-  const [marks, setMarks] = useState<PrefetchMark[]>([]);
+  const [patterns, setPatterns] = useState<NavPattern[]>(() => typeof window === 'undefined' ? [] : getNavigationPatterns());
+  const [marks, setMarks] = useState<PrefetchMark[]>(() => typeof window === 'undefined' ? [] : getPrefetchMarks());
   const [syncEvents, setSyncEvents] = useState<SyncEvent[]>([]);
   const { state } = useAppState();
 
@@ -52,26 +52,21 @@ export function PrefetchMetricsPanel() {
       setPatterns(getNavigationPatterns());
       setMarks(getPrefetchMarks());
     };
-    refresh();
     const id = setInterval(refresh, 2000);
     return () => clearInterval(id);
   }, []);
 
   // Registrar eventos locales cada vez que cambia el estado
-  useEffect(() => {
-    setSyncEvents((prev) => {
-      const next: SyncEvent[] = [
-        {
-          version: state.version,
-          lastUpdated: state.lastUpdated,
-          receivedAt: Date.now(),
-          source: "local" as const,
-        },
-        ...prev,
-      ].slice(0, 50);
-      return next;
-    });
-  }, [state.version, state.lastUpdated]);
+  const [observedVersion, setObservedVersion] = useState(state.version);
+  if (observedVersion !== state.version) {
+    setObservedVersion(state.version);
+    setSyncEvents((prev) => [{
+      version: state.version,
+      lastUpdated: state.lastUpdated,
+      receivedAt: state.lastUpdated,
+      source: "local" as const,
+    }, ...prev].slice(0, 50));
+  }
 
   // Escuchar BroadcastChannel para registrar eventos de sincronización cross-tab
   useEffect(() => {

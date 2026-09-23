@@ -7,6 +7,8 @@ import { unstable_cache } from 'next/cache'
 import { BLOCKED_STORE_SUBSCRIPTION_STATUSES } from '@/lib/saas/store-status'
 import type { PublicProductVariant } from '@/types/public'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { productsHaveDeviceColumns } from '@/lib/products/device-columns'
+import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
 
 // Precio, stock y promociones cambian con frecuencia. El directorio y sus
 // facetas cambian mucho menos, por eso pueden vivir mas tiempo sin volver a
@@ -36,11 +38,13 @@ function isUuid(value: string) {
  * punto y el guion bajo, que son parte de nombres y codigos reales: un SKU como
  * `ABC-1.5L` tiene que seguir encontrandose.
  */
-function buildProductSearchExpression(rawQuery: string) {
+function buildProductSearchExpression(rawQuery: string, conCelular = false) {
   const term = sanitizeFilterTerm(rawQuery)
   if (!term) return null
 
-  return ['name', 'sku', 'brand', 'description']
+  const cols = ['name', 'sku', 'brand', 'description']
+  if (conCelular) cols.push('device_brand')
+  return cols
     .map((column) => `${column}.ilike.%${term}%`)
     .join(',')
 }
@@ -213,6 +217,9 @@ type ProductRow = {
   sku: string | null
   description: string | null
   brand: string | null
+  device_brand?: string | null
+  device_models?: string[] | null
+  hide_price?: boolean | null
   sale_price: number | null
   stock_quantity: number | null
   is_active: boolean | null
@@ -239,6 +246,9 @@ function toPublicProduct(product: ProductRow): PublicProduct {
     sku: product.sku ?? '',
     description: product.description,
     brand: product.brand,
+    device_brand: product.device_brand ?? null,
+    device_models: Array.isArray(product.device_models) ? product.device_models : null,
+    hide_price: product.hide_price === true,
     category: category ? { id: category.id, name: category.name } : undefined,
     sale_price: Number(product.sale_price ?? 0),
     wholesale_price: null,
@@ -334,11 +344,17 @@ async function getMarketplaceOrganizationsUncached(
    * celulares mostraba 1 de sus 5 productos publicados. Es el mismo error que
    * ya se había corregido para `products_count`, más abajo.
    */
+  const [conCelular, conPrecioOculto] = await Promise.all([
+    productsHaveDeviceColumns(supabase),
+    productsHaveHidePriceColumn(supabase),
+  ])
+  const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
+
   const productsPorTienda = Promise.all(
     organizationIds.map((organizationId) =>
       supabase
         .from('products')
-        .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
+        .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)${camposExtras}`)
         .eq('organization_id', organizationId)
         .eq('is_active', true)
         .eq('visibility', 'public')
@@ -602,9 +618,15 @@ async function getMarketplaceProductsPageUncached(
   const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
   if (showcaseOrganizationIds.length === 0) return { products: [], total: 0 }
 
+  const [conCelular, conPrecioOculto] = await Promise.all([
+    productsHaveDeviceColumns(supabase),
+    productsHaveHidePriceColumn(supabase),
+  ])
+  const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
+
   let query = supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)', { count: 'exact' })
+    .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)${camposExtras}`, { count: 'exact' })
     .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
@@ -631,7 +653,7 @@ async function getMarketplaceProductsPageUncached(
   }
 
   if (options?.q) {
-    const searchExpression = buildProductSearchExpression(options.q)
+    const searchExpression = buildProductSearchExpression(options.q, conCelular)
     if (searchExpression) {
       query = query.or(searchExpression)
     }
@@ -1153,10 +1175,16 @@ async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplacePro
 
   const offerCandidateFilter = buildPublicOfferCandidateFilter(automaticPromotions)
 
+  const [conCelular, conPrecioOculto] = await Promise.all([
+    productsHaveDeviceColumns(supabase),
+    productsHaveHidePriceColumn(supabase),
+  ])
+  const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
+
   // 3. Consultar todos los productos con oferta directa o promociones automáticas
   const { data, error } = await supabase
     .from('products')
-    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)')
+    .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)${camposExtras}`)
     .in('organization_id', organizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')

@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { TurnstileChallenge } from '@/components/security/TurnstileChallenge'
 import { isValidEmail } from '@/lib/auth/password-validation'
+import { describeAuthError } from '@/lib/auth/auth-error-messages'
 
 export default function TenantCustomerLoginPage() {
   const params = useParams<{ organizationSlug: string }>()
@@ -190,18 +191,7 @@ export default function TenantCustomerLoginPage() {
       })
 
       if (loginError) {
-        const msg = loginError.message || ''
-        if (/invalid login credentials|invalid_grant/i.test(msg)) {
-          setError('El correo o la contraseña no son correctos. Verificá los datos e intentá de nuevo.')
-        } else if (/email not confirmed/i.test(msg)) {
-          setError('Tu cuenta aún no fue confirmada. Revisá tu casilla de correo o spam.')
-        } else if (/rate limit|too many requests/i.test(msg)) {
-          setError('Demasiados intentos fallidos. Esperá unos instantes antes de volver a intentar.')
-        } else if (/Failed to fetch|Network/i.test(msg)) {
-          setError('No se pudo conectar con el servidor. Comprobá tu conexión a internet.')
-        } else {
-          setError('El correo o la contraseña no coinciden con una cuenta activa.')
-        }
+        setError(describeAuthError(loginError.message, 'login'))
         return
       }
 

@@ -166,6 +166,18 @@ export function describeDeviceCompatibility(
 }
 
 /**
+ * Clave para ordenar una lista de modelos como los lee un técnico: 8 antes que
+ * 11 —el orden alfabético los da vuelta— y el modelo pelado antes que sus
+ * variantes, «12», «12 Pro», «12 Pro Max».
+ *
+ * El relleno de los números es el que hace las dos cosas: «000008» < «000011»,
+ * y «000012» es prefijo de «000012 pro», así que queda primero.
+ */
+export function deviceModelSortKey(modelo: string | null | undefined): string {
+  return (modelo ?? '').toLowerCase().replace(/\d+/g, (numero) => numero.padStart(6, '0'))
+}
+
+/**
  * Clave para ordenar por celular: marca y primer modelo, con los números
  * rellenados para que «iPhone 8» vaya antes que «iPhone 11» y no después.
  * Los productos sin celular cargado van al final.
@@ -173,8 +185,7 @@ export function describeDeviceCompatibility(
 export function deviceSortKey(marca: string | null | undefined, modelos: ReadonlyArray<string> | null | undefined): string {
   const primero = (modelos ?? [])[0]
   if (!marca && !primero) return '￿'
-  const texto = `${marca ?? ''} ${primero ?? ''}`.toLowerCase().trim()
-  return texto.replace(/\d+/g, (numero) => numero.padStart(6, '0'))
+  return deviceModelSortKey(`${marca ?? ''} ${primero ?? ''}`.trim())
 }
 
 /**

@@ -33,7 +33,6 @@ import {
   type ImportProductRow,
 } from "@/lib/products/import-export-utils";
 import {
-  MetricsGrid,
   SearchAndActionsBar,
   QuickFiltersBar,
   FilterPanel,
@@ -41,7 +40,6 @@ import {
   ProductTable,
   ProductSectionGroup,
   BulkActionsToolbar,
-  AlertsBanner,
   ProductQuickViewModal,
   ImportProductsModal,
   ProductSummaryOverview,
@@ -100,8 +98,9 @@ export default function ProductsPage() {
   // «0 servicios» eran ruido en un catalogo que no los usa.
   const { effectiveModules } = useSubscriptionStatus();
   const hasServicesModule = effectiveModules.includes("services");
-  // Resumen de la sección: contraído por defecto para mayor espacio e inmediatez
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+  // Resumen del Catálogo: activable / expandible a demanda desde la barra
+  const [showSummary, setShowSummary] = useState(false);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
 
   // Permissions check
   const canViewCost = hasPermission('cost_prices.read')
@@ -215,7 +214,7 @@ export default function ProductsPage() {
         setItemsPerPage(prefs.itemsPerPage);
       }
       if (typeof prefs.isMaximizedSpace === "boolean") {
-        setIsSummaryExpanded(!prefs.isMaximizedSpace);
+        setShowSummary(!prefs.isMaximizedSpace);
       }
 
       // Aplicar filtro de alcance guardado si no viene parámetro explícito en la URL
@@ -249,7 +248,7 @@ export default function ProductsPage() {
       groupBy,
       viewMode,
       itemsPerPage,
-      isMaximizedSpace: !isSummaryExpanded,
+      isMaximizedSpace: !showSummary,
     };
 
     saveProductViewPreferences(currentPrefs);
@@ -260,7 +259,7 @@ export default function ProductsPage() {
       description: `Se aplicará automáticamente: ${desc}`,
       duration: 5000,
     });
-  }, [filters.catalog_kind, groupBy, viewMode, itemsPerPage, isSummaryExpanded]);
+  }, [filters.catalog_kind, groupBy, viewMode, itemsPerPage, showSummary]);
 
   const handleResetPreferences = useCallback(() => {
     clearProductViewPreferences();
@@ -268,7 +267,8 @@ export default function ProductsPage() {
     setGroupBy("none");
     setViewMode("table");
     setItemsPerPage(20);
-    setIsSummaryExpanded(false);
+    setShowSummary(false);
+    setIsSummaryExpanded(true);
     handleQuickFilter("all");
 
     toast.info("Configuración restablecida", {
@@ -1124,18 +1124,22 @@ export default function ProductsPage() {
           <PlanLimitBanner resource="products" reloadSignal={totalProducts} variant="compact" />
         </div>
 
-        {/* Resumen del Catálogo e Inventario (Contraído por defecto) */}
-        <ProductSummaryOverview
-          metrics={globalMetrics}
-          alerts={normalizedAlerts as any}
-          canViewCost={canViewCost}
-          showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
-          isExpanded={isSummaryExpanded}
-          onToggleExpanded={() => setIsSummaryExpanded((prev) => !prev)}
-          onMetricClick={handleMetricClick}
-          onAlertClick={handleAlertClick}
-          onDismissAlert={handleDismissAlert}
-        />
+        {/* Resumen del Catálogo e Inventario (Activable / Desactivable desde la barra) */}
+        {showSummary && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+            <ProductSummaryOverview
+              metrics={globalMetrics}
+              alerts={normalizedAlerts as any}
+              canViewCost={canViewCost}
+              showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
+              isExpanded={isSummaryExpanded}
+              onToggleExpanded={() => setIsSummaryExpanded((prev) => !prev)}
+              onMetricClick={handleMetricClick}
+              onAlertClick={handleAlertClick}
+              onDismissAlert={handleDismissAlert}
+            />
+          </div>
+        )}
 
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
@@ -1153,8 +1157,8 @@ export default function ProductsPage() {
           onSavePreferences={handleSavePreferences}
           onResetPreferences={handleResetPreferences}
           hasSavedPreferences={hasCustomPreferences}
-          isMaximizedSpace={!isSummaryExpanded}
-          onToggleMaximizeSpace={() => setIsSummaryExpanded((prev) => !prev)}
+          showSummary={showSummary}
+          onToggleSummary={() => setShowSummary((prev) => !prev)}
           onRefresh={handleRefresh}
           onExport={handleExportExcel}
           onExportExcel={handleExportExcel}

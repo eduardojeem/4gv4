@@ -363,7 +363,7 @@ export const useAccessibilityValidation = (containerRef: React.RefObject<HTMLEle
   }, [containerRef])
 
   useEffect(() => {
-    validateAccessibility()
+    const initialValidation = window.requestAnimationFrame(validateAccessibility)
     
     // Re-validar cuando cambie el contenido
     const observer = new MutationObserver(validateAccessibility)
@@ -375,7 +375,10 @@ export const useAccessibilityValidation = (containerRef: React.RefObject<HTMLEle
       })
     }
 
-    return () => observer.disconnect()
+    return () => {
+      window.cancelAnimationFrame(initialValidation)
+      observer.disconnect()
+    }
   }, [validateAccessibility, containerRef])
 
   return {

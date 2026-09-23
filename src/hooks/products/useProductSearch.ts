@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 import type { Product, SearchConfig } from './types'
 
@@ -68,21 +68,13 @@ export function useProductSearch(
 
   const debouncedQuery = useDebounce(query, config.debounceMs || 300)
 
-  // Inicializar rangos de filtros
-  useEffect(() => {
-    if (products.length > 0) {
-      const prices = products.map(p => p.sale_price || 0).filter(p => p > 0)
-      if (prices.length === 0) return
-
-      setSearchFilters(prev => ({
-        ...prev,
-        priceRange: {
-          min: Math.min(...prices),
-          max: Math.max(...prices)
-        }
-      }))
-    }
+  const availablePriceRange = useMemo(() => {
+    const prices = products.map(p => p.sale_price || 0).filter(p => p > 0)
+    return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : { min: 0, max: 0 }
   }, [products])
+  const effectiveSearchFilters = useMemo(() => searchFilters.priceRange.max === 0
+    ? { ...searchFilters, priceRange: availablePriceRange }
+    : searchFilters, [searchFilters, availablePriceRange])
 
   // Algoritmo de busqueda simple
   const simpleSearch = useCallback((items: Product[], searchQuery: string): SearchResult[] => {
@@ -270,12 +262,12 @@ export function useProductSearch(
         break
     }
 
-    return applySearchFilters(results, searchFilters)
+    return applySearchFilters(results, effectiveSearchFilters)
   }, [
     products,
     debouncedQuery,
     searchMode,
-    searchFilters,
+    effectiveSearchFilters,
     config.minLength,
     simpleSearch,
     fuzzySearch,
@@ -364,7 +356,7 @@ export function useProductSearch(
     suggestions,
     searchHistory,
     searchMode,
-    searchFilters,
+    searchFilters: effectiveSearchFilters,
     search,
     setQuery,
     clearSearch,

@@ -128,6 +128,32 @@ interface KpiDelta {
   aov: number | null
 }
 
+type SaleItemRow = {
+  id: string
+  sale_id: string
+  product_id?: string | null
+  quantity?: number | null
+  unit_price?: number | null
+  subtotal?: number | null
+  historical_total_cost?: number | null
+  sale?: { created_at?: string | null; status?: string | null } | null
+  product?: { id?: string; name?: string | null; category?: { name?: string | null } | null } | null
+}
+
+type CustomerRow = {
+  id: string
+  name?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  phone?: string | null
+  customer_type?: string | null
+  created_at?: string | null
+}
+
+const firstRelation = <T,>(value: T | T[] | null | undefined): T | undefined =>
+  Array.isArray(value) ? value[0] : value ?? undefined
+
 type CostSnapshotRow = { sale_item_id: string; total_cost: number | null }
 type CostSnapshotQueryResult = {
   data: CostSnapshotRow[] | null
@@ -254,7 +280,7 @@ export default function OperationalReports() {
     to: new Date()
   })
   const [categoryMinSales, setCategoryMinSales] = useState<number>(0)
-  const [saleItemsAll, setSaleItemsAll] = useState<any[]>([])
+  const [saleItemsAll, setSaleItemsAll] = useState<SaleItemRow[]>([])
   const [totalProfit, setTotalProfit] = useState(0)
   const [profitCoverage, setProfitCoverage] = useState({ coveredItems: 0, totalItems: 0, coveredRevenue: 0 })
   const [kpiDelta, setKpiDelta] = useState<KpiDelta>({ sales: null, orders: null, customers: null, buyers: null, aov: null })
@@ -290,7 +316,7 @@ export default function OperationalReports() {
       setSelectedProductTrend([])
       return
     }
-    (saleItemsAll as any[]).forEach((item: any) => {
+    saleItemsAll.forEach((item) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
       if (!isCompletedSaleStatus(status) || !created) return
@@ -312,8 +338,8 @@ export default function OperationalReports() {
 
   const categoryComputed = useMemo(() => {
     const aggMap: Record<string, { sales: number; quantity: number; color: string; name: string }> = {}
-    const palette = chartColors.getColorPalette((saleItemsAll as any[]).length || 1)
-    ;(saleItemsAll as any[]).forEach((item: any, idx: number) => {
+    const palette = chartColors.getColorPalette(saleItemsAll.length || 1)
+    saleItemsAll.forEach((item, idx) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
       if (!isCompletedSaleStatus(status) || !created) return
@@ -428,7 +454,7 @@ export default function OperationalReports() {
 
         if (salesError) throw salesError
         const safeSales = sales ?? []
-        const completedSales = safeSales.filter(sale => isCompletedSaleStatus((sale as any).status))
+        const completedSales = safeSales.filter((sale) => isCompletedSaleStatus(sale.status))
 
         // Datos de clientes actual + periodo anterior y ventas periodo anterior
         const [{ data: previousSales, error: previousSalesError }, { data: newCustomers, error: customersError }, { data: previousCustomers, error: previousCustomersError }] = await Promise.all([
@@ -463,11 +489,11 @@ export default function OperationalReports() {
         const safeCustomers = newCustomers ?? []
         const safePreviousCustomers = previousCustomers ?? []
         const safePreviousSales = previousSales ?? []
-        const previousCompletedSales = safePreviousSales.filter((sale: any) => isCompletedSaleStatus(sale.status))
+        const previousCompletedSales = safePreviousSales.filter((sale) => isCompletedSaleStatus(sale.status))
 
-        const sumSales = (rows: any[]) => rows.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0)
-        const currentSalesTotal = sumSales(completedSales as any[])
-        const previousSalesTotal = sumSales(previousCompletedSales as any[])
+        const sumSales = (rows: Array<{ total_amount?: number | null }>) => rows.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0)
+        const currentSalesTotal = sumSales(completedSales)
+        const previousSalesTotal = sumSales(previousCompletedSales)
         const currentOrdersCount = completedSales.length
         const previousOrdersCount = previousCompletedSales.length
         const currentAov = currentOrdersCount > 0 ? currentSalesTotal / currentOrdersCount : 0
@@ -520,12 +546,12 @@ export default function OperationalReports() {
         }
         if (itemSalesError) throw itemSalesError
         const safeItemSales = itemSales
-        const completedSalesForItems = safeItemSales.filter((sale: any) => isCompletedSaleStatus(sale.status))
-        const completedSalesForItemsById = new Map(completedSalesForItems.map((sale: any) => [sale.id, sale]))
+        const completedSalesForItems = safeItemSales.filter((sale) => isCompletedSaleStatus(sale.status))
+        const completedSalesForItemsById = new Map(completedSalesForItems.map((sale) => [sale.id, sale]))
 
-        let safeSaleItems: any[] = []
+        let safeSaleItems: SaleItemRow[] = []
         if (completedSalesForItems.length > 0) {
-          const saleIds = completedSalesForItems.map((sale: any) => sale.id)
+          const saleIds = completedSalesForItems.map((sale) => sale.id)
           const saleItemResults = await Promise.all(
             chunkQueryValues(saleIds).map((saleIdBatch) =>
               supabase
@@ -576,10 +602,22 @@ export default function OperationalReports() {
               })
             }
           }
-          safeSaleItems = safeSaleItemsRaw.map((item: any) => {
+          safeSaleItems = safeSaleItemsRaw.map((item) => {
             const sale = completedSalesForItemsById.get(item.sale_id)
+            const product = firstRelation(item.product)
+            const category = firstRelation(product?.category)
             return {
-              ...item,
+              id: String(item.id),
+              sale_id: String(item.sale_id),
+              product_id: item.product_id ? String(item.product_id) : null,
+              quantity: Number(item.quantity) || 0,
+              unit_price: Number(item.unit_price) || 0,
+              subtotal: Number(item.subtotal) || 0,
+              product: product ? {
+                id: product.id ? String(product.id) : undefined,
+                name: product.name == null ? null : String(product.name),
+                category: category ? { name: category.name == null ? null : String(category.name) } : null,
+              } : null,
               sale: sale ? { created_at: sale.created_at, status: sale.status } : null,
               historical_total_cost: historicalCostByItem.has(String(item.id))
                 ? historicalCostByItem.get(String(item.id))
@@ -587,7 +625,7 @@ export default function OperationalReports() {
             }
           })
         }
-        setSaleItemsAll(safeSaleItems as any[])
+        setSaleItemsAll(safeSaleItems)
         // Procesar datos para el gráfico de ventas
         const salesByDate: Record<string, { sales: number; orders: number; customers: number }> = {}
         const ordersByCustomer: Record<string, number> = {}
@@ -600,7 +638,7 @@ export default function OperationalReports() {
           if (!salesByDate[date]) {
             salesByDate[date] = { sales: 0, orders: 0, customers: 0 }
           }
-          const totalValue = Number((sale as any).total_amount) || 0
+          const totalValue = Number(sale.total_amount) || 0
           salesByDate[date].sales += totalValue
           salesByDate[date].orders += 1
           const cid = sale.customer_id
@@ -673,7 +711,7 @@ export default function OperationalReports() {
         const trendMap: Record<string, number> = {}
         const statusMap: Record<string, number> = {}
 
-        safeRepairs.forEach((r: any) => {
+        safeRepairs.forEach((r) => {
           // Se agrupa por created_at, el mismo campo que filtra la consulta
           // de arriba (gte/lte dateRange). Antes se agrupaba por
           // received_at cuando existía, y como esa fecha puede caer fuera
@@ -713,7 +751,7 @@ export default function OperationalReports() {
         // Cada promedio divide por cuantas reparaciones tienen ESE monto: ver
         // `lib/reports/repair-costs`.
         const costAverages = calculateRepairCostAverages(
-          safeRepairs.filter((repair: any) => String(repair.status || '').trim().toLowerCase() !== 'cancelado')
+          safeRepairs.filter((repair) => String(repair.status || '').trim().toLowerCase() !== 'cancelado')
         )
         const avgCost = costAverages.avgFinal
         const avgLabor = costAverages.avgLabor
@@ -739,7 +777,7 @@ export default function OperationalReports() {
         const categoryQty: Record<string, number> = {}
         const profitItems: Array<{ subtotal: number; historicalTotalCost: number | null }> = []
 
-        safeSaleItems.forEach((item: any) => {
+        safeSaleItems.forEach((item) => {
           // safeSaleItems se trae con el rango ampliado (unión con
           // categoryDateRange, que tiene su propio selector de fecha
           // independiente) para que el gráfico de categorías pueda cubrir
@@ -942,8 +980,8 @@ export default function OperationalReports() {
         }
         if (controller.signal.aborted) return
 
-        const completedSales = (salesData ?? []).filter((s: any) => isCompletedSaleStatus(s.status))
-        const validOrders = (ordersData ?? []).filter((o: any) => isCountableOrder(o.status))
+        const completedSales = (salesData ?? []).filter((s) => isCompletedSaleStatus(s.status))
+        const validOrders = (ordersData ?? []).filter((o) => isCountableOrder(o.status))
 
         const customerSpendMap: Record<string, {
           totalSpent: number
@@ -959,7 +997,7 @@ export default function OperationalReports() {
         }> = {}
 
         // Acumular ventas POS (local físico)
-        completedSales.forEach((s: any) => {
+        completedSales.forEach((s) => {
           const cid = s.customer_id
           if (!cid) return
           const amt = Number(s.total_amount) || 0
@@ -991,7 +1029,7 @@ export default function OperationalReports() {
         })
 
         // Acumular pedidos de tienda Web (online)
-        validOrders.forEach((o: any) => {
+        validOrders.forEach((o) => {
           const cid = o.customer_id
           if (!cid) return
           const amt = Number(o.total) || 0
@@ -1037,8 +1075,8 @@ export default function OperationalReports() {
             logger.warn('No se pudieron consultar repairs para el reporte de clientes', { error: repairsCustomerErr })
           }
           if (!controller.signal.aborted) {
-            const countableRepairs = (repairsCustomerData ?? []).filter((r: any) => isCountableRepair(r.status))
-            countableRepairs.forEach((r: any) => {
+            const countableRepairs = (repairsCustomerData ?? []).filter((r) => isCountableRepair(r.status))
+            countableRepairs.forEach((r) => {
               const cid = r.customer_id
               if (!cid) return
               const amt = Number(r.final_cost ?? r.estimated_cost) || 0
@@ -1083,8 +1121,8 @@ export default function OperationalReports() {
           .lte('created_at', dateRange.to.toISOString())
 
         if (controller.signal.aborted) return
-        const customerMap = new Map<string, any>()
-        ;(newCusts ?? []).forEach((c: any) => customerMap.set(String(c.id), c))
+        const customerMap = new Map<string, CustomerRow>()
+        ;(newCusts ?? []).forEach((c) => customerMap.set(String(c.id), c))
 
         // Traer detalles de todos los que compraron en el periodo
         if (customerIds.length > 0) {
@@ -1094,7 +1132,7 @@ export default function OperationalReports() {
               .select('id, name, first_name, last_name, email, phone, customer_type, created_at')
               .in('id', batch)
             if (bData) {
-              bData.forEach((c: any) => customerMap.set(String(c.id), c))
+              bData.forEach((c) => customerMap.set(String(c.id), c))
             }
           }
         }
@@ -1102,7 +1140,7 @@ export default function OperationalReports() {
         if (controller.signal.aborted) return
 
         const reportList: CustomerReportItem[] = Array.from(customerMap.values())
-          .map((c: any) => {
+          .map((c) => {
             const idStr = String(c.id)
             const spend = customerSpendMap[idStr]
             const totalSpent = spend?.totalSpent ?? 0
@@ -1168,7 +1206,7 @@ export default function OperationalReports() {
     void fetchCustomerAccessReport()
     void fetchCustomerDetailReport()
     return () => controller.abort()
-  }, [activeTab, dateRange, organization?.id, refreshTrigger, selectedBranchId])
+  }, [activeTab, dateRange, hasRepairs, organization?.id, refreshTrigger, selectedBranchId])
 
   useEffect(() => {
     const now = new Date()
@@ -1224,7 +1262,7 @@ export default function OperationalReports() {
       if (type === 'ventas') {
         const totalSalesSum = salesData.reduce((acc, d) => acc + (Number(d.sales) || 0), 0)
         const totalOrdersSum = salesData.reduce((acc, d) => acc + (Number(d.orders) || 0), 0)
-        const totalProfitSum = salesData.reduce((acc, d) => acc + (Number((d as any).profit) || 0), 0)
+        const totalProfitSum = salesData.reduce((acc, d) => acc + (Number((d as SalesData & { profit?: number }).profit) || 0), 0)
         const avgTicket = totalOrdersSum > 0 ? Math.round(totalSalesSum / totalOrdersSum) : 0
         const totalMargin = totalSalesSum > 0 ? ((totalProfitSum / totalSalesSum) * 100).toFixed(1) : '0'
 
@@ -1252,7 +1290,7 @@ export default function OperationalReports() {
         const rows = salesData.map((d) => {
           const s = Number(d.sales) || 0
           const o = Number(d.orders) || 0
-          const p = Number((d as any).profit) || 0
+          const p = Number((d as SalesData & { profit?: number }).profit) || 0
           const t = o > 0 ? Math.round(s / o) : s
           const m = s > 0 ? ((p / s) * 100).toFixed(1) : '0'
           const share = totalSalesSum > 0 ? ((s / totalSalesSum) * 100).toFixed(1) : '0'
@@ -2128,7 +2166,7 @@ export default function OperationalReports() {
                               cx="50%"
                               cy="50%"
                               labelLine={false}
-                              label={(p: any) => `${p.name} ${((categoryMetricBy === 'sales' ? (p.sales / (totalSales || 1)) : (p.quantity / (totalQty || 1))) * 100).toFixed(0)}%`}
+                              label={(p) => `${String(p.name ?? '')} ${((categoryMetricBy === 'sales' ? (Number(p.sales) / (totalSales || 1)) : (Number(p.quantity) / (totalQty || 1))) * 100).toFixed(0)}%`}
                               outerRadius={105}
                               innerRadius={55}
                               dataKey={categoryMetricBy === 'sales' ? 'sales' : 'quantity'}
@@ -2145,9 +2183,9 @@ export default function OperationalReports() {
                           <BarChart data={visible}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.6} />
                             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                            <YAxis tickFormatter={categoryMetricBy === 'sales' ? formatPrice : (v: any) => String(v)} />
+                            <YAxis tickFormatter={categoryMetricBy === 'sales' ? formatPrice : (v: unknown) => String(v)} />
                             <Tooltip
-                              formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Cantidad']}
+                              formatter={(v: number, n: unknown) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Cantidad']}
                               contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderRadius: '12px', color: '#fff' }}
                             />
                             <Bar

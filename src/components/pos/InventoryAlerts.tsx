@@ -19,18 +19,15 @@ export const InventoryAlerts: React.FC<InventoryAlertsProps> = ({
   showInline = false,
   maxAlertsToShow = 5
 }) => {
-  const [alerts, setAlerts] = useState<InventoryAlert[]>([])
-  const [showModal, setShowModal] = useState(false)
   const inventoryManager = getInventoryManager()
+  const [alerts, setAlerts] = useState<InventoryAlert[]>(() => inventoryManager.getActiveAlerts())
+  const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     // Suscribirse a alertas
     const unsubscribe = inventoryManager.subscribeToAlerts((newAlerts) => {
       setAlerts(newAlerts.filter(alert => !alert.acknowledged))
     })
-
-    // Cargar alertas iniciales
-    setAlerts(inventoryManager.getActiveAlerts())
 
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()

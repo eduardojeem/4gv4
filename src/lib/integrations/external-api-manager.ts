@@ -477,7 +477,7 @@ class ExternalAPIManager {
     // Verificar firma (si está configurada)
     if (webhook.secret) {
       const signature = headers['x-signature'] || headers['x-hub-signature']
-      if (!this.verifyWebhookSignature(payload, webhook.secret, signature)) {
+      if (!await this.verifyWebhookSignature(payload, webhook.secret, signature)) {
         throw new Error('Invalid webhook signature')
       }
     }
@@ -733,18 +733,15 @@ class ExternalAPIManager {
     }
   }
 
-  private verifyWebhookSignature(payload: Record<string, unknown>, secret: string, signature?: string): boolean {
+  private async verifyWebhookSignature(payload: Record<string, unknown>, secret: string, signature?: string): Promise<boolean> {
     if (!signature) return false
-    
-    // Implementar verificación de firma según el proveedor
-    // Ejemplo para GitHub/GitLab style webhooks
-    const crypto = require('crypto')
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(JSON.stringify(payload))
-      .digest('hex')
-    
-    return signature === `sha256=${expectedSignature}`
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'])
+    const hex = signature.replace(/^sha256=/, '')
+    if (!/^[0-9a-f]{64}$/i.test(hex)) return false
+    const bytes = Uint8Array.from(hex.match(/.{2}/g) ?? [], value => Number.parseInt(value, 16))
+    return crypto.subtle.verify('HMAC', key, bytes, encoder.encode(JSON.stringify(payload)))
   }
 
   private passesWebhookFilters(payload: Record<string, unknown>, filters: WebhookFilter[]): boolean {

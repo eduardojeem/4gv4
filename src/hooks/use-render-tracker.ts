@@ -51,19 +51,7 @@ export function useRenderTracker(
  * ```
  */
 export function useRenderTime(componentName: string): void {
-  const startTime = useRef<number>(0)
-
-  // Antes del render
-  startTime.current = performance.now()
-
   useEffect(() => {
-    // Después del render
-    const duration = performance.now() - startTime.current
-
-    if (duration > 16 && process.env.NODE_ENV === 'development') {
-      console.warn(
-        `⚠️ ${componentName} tardó ${duration.toFixed(2)}ms en renderizar (>16ms puede causar lag)`
-      )
-    }
-  })
+    if (process.env.NODE_ENV === 'development') trackRender(`${componentName}:committed`)
+  }, [componentName])
 }

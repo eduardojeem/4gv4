@@ -159,14 +159,55 @@ export interface NormalizedVariant {
   attributes: Record<string, string>
 }
 
+type VariantAttributeItem = {
+  key?: unknown
+  attribute_name?: unknown
+  name?: unknown
+  value?: unknown
+  display_value?: unknown
+}
+
+type RawProductVariant = {
+  id?: string
+  variant_name?: string
+  name?: string
+  sku?: string | null
+  barcode?: string | null
+  sale_price?: number | null
+  salePrice?: number | null
+  purchase_price?: number | null
+  purchasePrice?: number | null
+  wholesale_price?: number | null
+  wholesalePrice?: number | null
+  stock_quantity?: number | null
+  stockQuantity?: number | null
+  min_stock?: number | null
+  minStock?: number | null
+  is_active?: boolean | null
+  isActive?: boolean | null
+  attributes?: Record<string, unknown> | VariantAttributeItem[] | null
+}
+
+type ProductDetails = Product & {
+  has_variants?: boolean | null
+  variants?: RawProductVariant[] | null
+  product_variants?: RawProductVariant[] | null
+  image_url?: string | null
+  compare_at_price?: number | null
+  original_price?: number | null
+  visibility?: 'public' | 'hidden' | 'wholesale' | string | null
+  supplier_name?: string | null
+}
+
 function getNormalizedVariants(product: Product): NormalizedVariant[] {
-  const rawVariants = Array.isArray((product as any).variants)
-    ? (product as any).variants
-    : Array.isArray((product as any).product_variants)
-      ? (product as any).product_variants
+  const details = product as ProductDetails
+  const rawVariants = Array.isArray(details.variants)
+    ? details.variants
+    : Array.isArray(details.product_variants)
+      ? details.product_variants
       : []
 
-  return rawVariants.map((v: any, index: number) => {
+  return rawVariants.map((v, index) => {
     const attributes: Record<string, string> = {}
     if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
       for (const [k, val] of Object.entries(v.attributes)) {
@@ -271,10 +312,11 @@ export function ProductQuickViewModal({
   }
 
   // Determine if initialProduct specifies variants
+  const initialDetails = initialProduct as ProductDetails | null
   const initialHasVariants = Boolean(
-    (initialProduct as any)?.has_variants ||
-    (Array.isArray((initialProduct as any)?.variants) && (initialProduct as any).variants.length > 0) ||
-    (Array.isArray((initialProduct as any)?.product_variants) && (initialProduct as any).product_variants.length > 0)
+    initialDetails?.has_variants ||
+    (Array.isArray(initialDetails?.variants) && initialDetails.variants.length > 0) ||
+    (Array.isArray(initialDetails?.product_variants) && initialDetails.product_variants.length > 0)
   )
 
   // Reset state on open/product change
@@ -288,17 +330,18 @@ export function ProductQuickViewModal({
       setCopiedKey(null)
 
       // Ensure activeTab defaults to variants if product has variants
+      const details = initialProduct as ProductDetails
       const hasVars = Boolean(
-        (initialProduct as any).has_variants ||
-        (Array.isArray((initialProduct as any).variants) && (initialProduct as any).variants.length > 0) ||
-        (Array.isArray((initialProduct as any).product_variants) && (initialProduct as any).product_variants.length > 0)
+        details.has_variants ||
+        (Array.isArray(details.variants) && details.variants.length > 0) ||
+        (Array.isArray(details.product_variants) && details.product_variants.length > 0)
       )
       setActiveTab(hasVars ? 'variants' : 'info')
 
       const needsHydration =
-        Boolean((initialProduct as any).has_variants) &&
-        (!Array.isArray((initialProduct as any).variants) || (initialProduct as any).variants.length === 0) &&
-        (!Array.isArray((initialProduct as any).product_variants) || (initialProduct as any).product_variants.length === 0)
+        Boolean(details.has_variants) &&
+        (!Array.isArray(details.variants) || details.variants.length === 0) &&
+        (!Array.isArray(details.product_variants) || details.product_variants.length === 0)
 
       if (needsHydration) {
         setIsLoadingHydration(true)
@@ -317,14 +360,15 @@ export function ProductQuickViewModal({
           })
       }
     }
-  }, [isOpen, initialProduct?.id])
+  }, [isOpen, initialProduct])
 
   const product = hydratedProduct || initialProduct
+  const productDetails = product as ProductDetails | null
 
   const variants = useMemo(() => (product ? getNormalizedVariants(product) : []), [product])
 
   const hasVariants = Boolean(
-    (product as any)?.has_variants ||
+    productDetails?.has_variants ||
     variants.length > 0 ||
     initialHasVariants
   )
@@ -339,6 +383,7 @@ export function ProductQuickViewModal({
   // Images list
   const imagesList = useMemo(() => {
     if (!product) return ['/placeholder-product.svg']
+    const details = product as ProductDetails
     const list: string[] = []
     if (Array.isArray(product.images)) {
       list.push(...product.images.filter(Boolean))
@@ -346,8 +391,8 @@ export function ProductQuickViewModal({
     if (product.image && !list.includes(product.image)) {
       list.unshift(product.image)
     }
-    if ((product as any).image_url && !list.includes((product as any).image_url)) {
-      list.unshift((product as any).image_url)
+    if (details.image_url && !list.includes(details.image_url)) {
+      list.unshift(details.image_url)
     }
     return list.length > 0 ? list : ['/placeholder-product.svg']
   }, [product])
@@ -375,10 +420,10 @@ export function ProductQuickViewModal({
 
   const compareAtPrice: number | null =
     product
-      ? ((product as any).compare_at_price ??
+      ? (productDetails?.compare_at_price ??
         (product.has_offer && product.offer_price && product.offer_price < product.sale_price
           ? product.sale_price
-          : (product as any).original_price ?? null))
+          : productDetails?.original_price ?? null))
       : null
 
   const effectiveSalePrice: number =
@@ -391,6 +436,11 @@ export function ProductQuickViewModal({
   const discountPercent =
     compareAtPrice && compareAtPrice > effectiveSalePrice
       ? Math.round(((compareAtPrice - effectiveSalePrice) / compareAtPrice) * 100)
+      : null
+
+  const wholesaleDiscountPercent =
+    product && product.wholesale_price && product.wholesale_price > 0 && product.sale_price > 0 && product.wholesale_price < product.sale_price
+      ? Math.round(((product.sale_price - product.wholesale_price) / product.sale_price) * 100)
       : null
 
   // Extract color attribute values for filter chips
@@ -676,16 +726,16 @@ export function ProductQuickViewModal({
                   variant="outline"
                   className={cn(
                     'text-xs font-semibold px-2.5 py-1',
-                    (product as any).visibility === 'hidden'
+                    productDetails?.visibility === 'hidden'
                       ? 'text-slate-500 border-slate-200 dark:border-slate-800'
-                      : (product as any).visibility === 'wholesale'
+                      : productDetails?.visibility === 'wholesale'
                         ? 'text-indigo-600 border-indigo-200 bg-indigo-50/50 dark:text-indigo-400 dark:border-indigo-900/50 dark:bg-indigo-950/30'
                         : 'text-emerald-600 border-emerald-200 bg-emerald-50/50 dark:text-emerald-400 dark:border-emerald-900/50 dark:bg-emerald-950/30',
                   )}
                 >
-                  {(product as any).visibility === 'hidden' ? (
+                  {productDetails?.visibility === 'hidden' ? (
                     <><EyeOff className="h-3 w-3 mr-1" /> Catálogo Oculto</>
-                  ) : (product as any).visibility === 'wholesale' ? (
+                  ) : productDetails?.visibility === 'wholesale' ? (
                     <><Globe className="h-3 w-3 mr-1 text-indigo-500" /> Mayorista</>
                   ) : (
                     <><Globe className="h-3 w-3 mr-1 text-emerald-500" /> Tienda Online</>
@@ -738,102 +788,147 @@ export function ProductQuickViewModal({
             </div>
           )}
 
-          {/* KPI METRICS CARDS */}
-          <div className={cn(
-            'grid gap-3',
-            canViewCost ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'
-          )}>
-            {/* Sale Price */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/40 dark:from-emerald-950/30 dark:to-teal-950/10 border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">
-                  Precio de Venta
-                </p>
-                {discountPercent !== null && (
-                  <Badge className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0">
-                    -{discountPercent}%
-                  </Badge>
-                )}
-              </div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <p className="text-xl sm:text-2xl font-black text-emerald-950 dark:text-emerald-100 tracking-tight">
-                  {formatCurrency(effectiveSalePrice)}
-                </p>
-                {compareAtPrice && compareAtPrice > effectiveSalePrice && (
-                  <span className="text-xs line-through text-slate-400 dark:text-slate-500 font-semibold">
-                    {formatCurrency(compareAtPrice)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Total Stock */}
-            <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                Stock Total {hasVariants ? '(Variantes)' : ''}
-              </p>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                <p className={cn('text-xl sm:text-2xl font-black tabular-nums', statusConfig.text)}>
-                  {totalVariantStock}
-                </p>
-                <span className="text-xs font-semibold text-slate-400">unidades</span>
-                {product.min_stock !== undefined && product.min_stock > 0 && (
-                  <span className="text-[10px] ml-auto text-slate-400 font-medium">
-                    Mín: {product.min_stock}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Cost Base (if permitted) */}
-            {canViewCost && (
-              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Costo Base
-                </p>
-                <p className="mt-1 text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-200">
-                  {product.purchase_price ? formatCurrency(product.purchase_price) : '—'}
-                </p>
-              </div>
-            )}
-
-            {/* Margin (if permitted) or Barcode/Supplier */}
-            {canViewCost ? (
-              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Margen Bruto
-                </p>
-                <div className="mt-1 flex items-center gap-2">
-                  {margin !== null ? (
-                    <Badge
-                      className={cn(
-                        'text-white border-0 text-xs font-black px-2 py-0.5',
-                        margin >= 30
-                          ? 'bg-emerald-600'
-                          : margin >= 15
-                            ? 'bg-amber-500'
-                            : 'bg-rose-500',
-                      )}
-                    >
-                      {margin.toFixed(1)}%
+          {/* KPI METRICS / PRICING CARDS */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Precio de Venta (Minorista) */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/40 dark:from-emerald-950/30 dark:to-teal-950/10 border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">
+                    Precio Venta
+                  </p>
+                  {discountPercent !== null && (
+                    <Badge className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0">
+                      -{discountPercent}%
                     </Badge>
-                  ) : (
-                    <span className="text-sm font-semibold text-slate-400">—</span>
                   )}
-                  {product.purchase_price && product.sale_price > product.purchase_price && (
-                    <span className="text-[11px] font-semibold text-slate-500">
-                      +{formatCurrency(product.sale_price - product.purchase_price)}
+                </div>
+                <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+                  <p className="text-xl sm:text-2xl font-black text-emerald-950 dark:text-emerald-100 tracking-tight">
+                    {formatCurrency(effectiveSalePrice)}
+                  </p>
+                  {compareAtPrice && compareAtPrice > effectiveSalePrice && (
+                    <span className="text-xs line-through text-slate-400 dark:text-slate-500 font-semibold">
+                      {formatCurrency(compareAtPrice)}
                     </span>
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Código / EAN
+              <p className="text-[10px] font-medium text-emerald-700/80 dark:text-emerald-400/80 mt-1">
+                {product.has_offer && product.offer_price ? 'En oferta promocional' : 'Venta al público (Retail)'}
+              </p>
+            </div>
+
+            {/* 2. Precio Mayorista */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/40 dark:from-blue-950/30 dark:to-indigo-950/10 border border-blue-200/80 dark:border-blue-800/60 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wide">
+                    Precio Mayorista
+                  </p>
+                  {wholesaleDiscountPercent !== null && (
+                    <Badge className="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0">
+                      -{wholesaleDiscountPercent}%
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-xl sm:text-2xl font-black text-blue-950 dark:text-blue-100 tracking-tight">
+                  {product.wholesale_price && product.wholesale_price > 0
+                    ? formatCurrency(product.wholesale_price)
+                    : 'No definido'}
                 </p>
-                <p className="mt-1 text-base font-mono font-bold text-slate-800 dark:text-slate-200 truncate">
-                  {product.barcode || product.sku}
+              </div>
+              <p className="text-[10px] font-medium text-blue-700/80 dark:text-blue-400/80 mt-1">
+                {product.wholesale_price && product.wholesale_price > 0
+                  ? 'Tarifa para compras por mayor'
+                  : 'Sin precio mayorista configurado'}
+              </p>
+            </div>
+
+            {/* 3. Para ADMIN: Costo Base + Margen. Para VENDEDOR: Stock Total */}
+            {canViewCost ? (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-50/70 to-orange-50/30 dark:from-slate-800/80 dark:to-amber-950/20 border border-amber-200/80 dark:border-slate-700/70 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wide">
+                      Costo Base
+                    </p>
+                    {margin !== null && (
+                      <Badge
+                        className={cn(
+                          'text-white border-0 text-[10px] font-black px-1.5 py-0',
+                          margin >= 30
+                            ? 'bg-emerald-600'
+                            : margin >= 15
+                              ? 'bg-amber-500'
+                              : 'bg-rose-500',
+                        )}
+                      >
+                        {margin.toFixed(1)}% mg
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                    {product.purchase_price && product.purchase_price > 0
+                      ? formatCurrency(product.purchase_price)
+                      : '—'}
+                  </p>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-1">
+                  {product.purchase_price && product.sale_price > product.purchase_price
+                    ? `Ganancia: +${formatCurrency(product.sale_price - product.purchase_price)}`
+                    : 'Costo base de compra (solo admin)'}
+                </p>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex flex-col justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Stock Total {hasVariants ? '(Variantes)' : ''}
+                  </p>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <p className={cn('text-xl sm:text-2xl font-black tabular-nums', statusConfig.text)}>
+                      {totalVariantStock}
+                    </p>
+                    <span className="text-xs font-semibold text-slate-400">unidades</span>
+                  </div>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-1">
+                  {statusConfig.label} {product.min_stock !== undefined && product.min_stock > 0 ? `· Mín: ${product.min_stock}` : ''}
+                </p>
+              </div>
+            )}
+
+            {/* 4. Para ADMIN: Stock Total. Para VENDEDOR: Código / EAN */}
+            {canViewCost ? (
+              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex flex-col justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Stock Total {hasVariants ? '(Variantes)' : ''}
+                  </p>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <p className={cn('text-xl sm:text-2xl font-black tabular-nums', statusConfig.text)}>
+                      {totalVariantStock}
+                    </p>
+                    <span className="text-xs font-semibold text-slate-400">unidades</span>
+                  </div>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-1">
+                  {statusConfig.label} {product.min_stock !== undefined && product.min_stock > 0 ? `· Mín: ${product.min_stock}` : ''}
+                </p>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 shadow-xs flex flex-col justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    Código / SKU
+                  </p>
+                  <p className="mt-1 text-base sm:text-lg font-mono font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {product.barcode || product.sku}
+                  </p>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-1">
+                  Identificador para ventas
                 </p>
               </div>
             )}
@@ -1173,22 +1268,42 @@ export function ProductQuickViewModal({
                                     </p>
                                   </div>
 
-                                  <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-                                    <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                                      {formatCurrency(v.salePrice)}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        'px-1.5 py-0.2 rounded-md text-[10px] font-black tabular-nums',
-                                        isOut
-                                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                                          : isLow
-                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                      )}
-                                    >
-                                      {isOut ? 'Agotado' : `${v.stockQuantity} u`}
-                                    </span>
+                                   <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-1">
+                                    <div className="flex items-start justify-between gap-1">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-[11px] font-black text-slate-900 dark:text-slate-100">
+                                          {formatCurrency(v.salePrice)}
+                                        </div>
+                                        {(() => {
+                                          const w = v.wholesalePrice ?? product.wholesale_price
+                                          return w && w > 0 ? (
+                                            <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                                              May: {formatCurrency(w)}
+                                            </div>
+                                          ) : null
+                                        })()}
+                                        {canViewCost && (() => {
+                                          const c = v.purchasePrice ?? product.purchase_price
+                                          return c && c > 0 ? (
+                                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                              Costo: {formatCurrency(c)}
+                                            </div>
+                                          ) : null
+                                        })()}
+                                      </div>
+                                      <span
+                                        className={cn(
+                                          'px-1.5 py-0.2 rounded-md text-[10px] font-black tabular-nums shrink-0',
+                                          isOut
+                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                            : isLow
+                                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                        )}
+                                      >
+                                        {isOut ? 'Agotado' : `${v.stockQuantity} u`}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               )
@@ -1208,9 +1323,10 @@ export function ProductQuickViewModal({
                         <tr>
                           <th className="px-3 py-2.5 text-left font-bold text-slate-700 dark:text-slate-300">Variante</th>
                           <th className="px-3 py-2.5 text-left font-bold text-slate-700 dark:text-slate-300">SKU</th>
-                          <th className="px-3 py-2.5 text-right font-bold text-slate-700 dark:text-slate-300">Precio</th>
+                          <th className="px-3 py-2.5 text-right font-bold text-slate-700 dark:text-slate-300">Precio Venta</th>
+                          <th className="px-3 py-2.5 text-right font-bold text-blue-700 dark:text-blue-400">Mayorista</th>
                           {canViewCost && (
-                            <th className="px-3 py-2.5 text-right font-bold text-slate-700 dark:text-slate-300">Costo</th>
+                            <th className="px-3 py-2.5 text-right font-bold text-amber-700 dark:text-amber-400">Costo Base</th>
                           )}
                           <th className="px-3 py-2.5 text-right font-bold text-slate-700 dark:text-slate-300">Stock</th>
                           <th className="px-3 py-2.5 text-center font-bold text-slate-700 dark:text-slate-300">Estado</th>
@@ -1272,9 +1388,18 @@ export function ProductQuickViewModal({
                               <td className="px-3 py-2.5 text-right font-black text-slate-900 dark:text-slate-100">
                                 {formatCurrency(v.salePrice)}
                               </td>
+                              <td className="px-3 py-2.5 text-right font-bold text-blue-600 dark:text-blue-400">
+                                {(() => {
+                                  const w = v.wholesalePrice ?? product.wholesale_price
+                                  return w && w > 0 ? formatCurrency(w) : '—'
+                                })()}
+                              </td>
                               {canViewCost && (
                                 <td className="px-3 py-2.5 text-right text-slate-500 dark:text-slate-400 font-medium">
-                                  {v.purchasePrice ? formatCurrency(v.purchasePrice) : '—'}
+                                  {(() => {
+                                    const c = v.purchasePrice ?? product.purchase_price
+                                    return c && c > 0 ? formatCurrency(c) : '—'
+                                  })()}
                                 </td>
                               )}
                               <td className="px-3 py-2.5 text-right">
@@ -1342,7 +1467,7 @@ export function ProductQuickViewModal({
                       <Building2 className="h-3.5 w-3.5 text-slate-400" /> Proveedor
                     </span>
                     <span className="font-bold text-slate-800 dark:text-slate-200">
-                      {product.supplier?.name || (product as any).supplier_name || 'No asignado'}
+                      {product.supplier?.name || productDetails?.supplier_name || 'No asignado'}
                     </span>
                   </div>
 
@@ -1408,7 +1533,7 @@ export function ProductQuickViewModal({
                       <Globe className="h-3.5 w-3.5 text-slate-400" /> Canal de Visibilidad
                     </span>
                     <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
-                      {(product as any).visibility || 'Público'}
+                      {productDetails?.visibility || 'Público'}
                     </span>
                   </div>
 

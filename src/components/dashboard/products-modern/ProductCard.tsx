@@ -396,8 +396,8 @@ export const ProductCard = React.memo(function ProductCard({
           </div>
 
           <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800/70">
-            {/* Fila 3: Precios (Venta + Costo) */}
-            <div className="flex items-baseline justify-between gap-2">
+            {/* Fila 3: Precios (Venta + Mayorista + Costo) */}
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <div>
                 <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
                   {hasPriceRange
@@ -405,6 +405,11 @@ export const ProductCard = React.memo(function ProductCard({
                     : formatCurrency(product.sale_price)
                   }
                 </span>
+                {product.wholesale_price && product.wholesale_price > 0 && (
+                  <span className="block text-[11px] font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
+                    May: {formatCurrency(product.wholesale_price)}
+                  </span>
+                )}
               </div>
               {canViewCost && product.purchase_price && product.purchase_price > 0 && (
                 <div className="text-right text-[11px] text-slate-400 dark:text-slate-500 font-medium tabular-nums">

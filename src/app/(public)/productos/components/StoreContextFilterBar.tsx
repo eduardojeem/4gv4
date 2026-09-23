@@ -82,7 +82,7 @@ export function StoreContextFilterBar({
 
   return (
     <div className="w-full max-w-full space-y-1.5">
-      
+
       {/* ── 1. Subcategorías (si la categoría seleccionada tiene hijas) ── */}
       {subcategories.length > 0 && (
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs max-w-full">

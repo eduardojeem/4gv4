@@ -10,11 +10,12 @@ import {
   ChevronDown,
   Clock,
   Flame,
+  Smartphone,
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type SortOptionKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'name'
+type SortOptionKey = 'default' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'name' | 'device'
 
 const SORT_OPTIONS: { id: SortOptionKey; label: string; shortLabel: string; icon: React.ElementType }[] = [
   { id: 'default', label: 'Relevancia y destacados', shortLabel: 'Relevancia', icon: Sparkles },
@@ -25,7 +26,20 @@ const SORT_OPTIONS: { id: SortOptionKey; label: string; shortLabel: string; icon
   { id: 'name', label: 'Nombre (A – Z)', shortLabel: 'Nombre A–Z', icon: ArrowDownAZ },
 ]
 
-export function ProductSort() {
+/**
+ * Ordenar por celular agrupa los repuestos del mismo telefono y respeta el
+ * orden natural del numero: iPhone 8 antes que iPhone 11, no al reves. Solo
+ * aparece si la tienda carga a que celular pertenece cada repuesto.
+ */
+const DEVICE_SORT_OPTION = {
+  id: 'device' as const,
+  label: 'Modelo de celular',
+  shortLabel: 'Por celular',
+  icon: Smartphone,
+}
+
+export function ProductSort({ showDeviceSort = false }: { showDeviceSort?: boolean } = {}) {
+  const options = showDeviceSort ? [...SORT_OPTIONS, DEVICE_SORT_OPTION] : SORT_OPTIONS
   const router = useRouter()
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
@@ -33,7 +47,7 @@ export function ProductSort() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const currentSort = (searchParams.get('sort') as SortOptionKey) || 'default'
-  const activeOption = SORT_OPTIONS.find((o) => o.id === currentSort) ?? SORT_OPTIONS[0]
+  const activeOption = options.find((o) => o.id === currentSort) ?? options[0]
   const ActiveIcon = activeOption.icon
 
   useEffect(() => {
@@ -100,7 +114,7 @@ export function ProductSort() {
           <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Ordenar productos por:
           </div>
-          {SORT_OPTIONS.map((option) => {
+          {options.map((option) => {
             const OptionIcon = option.icon
             const isSelected = (currentSort === 'default' && option.id === 'default') || currentSort === option.id
 

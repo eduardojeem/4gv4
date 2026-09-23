@@ -18,6 +18,7 @@ import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
 import { recordStockAdjustment } from '@/lib/products/stock-movements'
 import { persistDeviceFields } from '@/lib/products/device-persist'
 import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
+import { HIDE_PRICE_COLUMN_MISSING_MESSAGE, persistPriceVisibility } from '@/lib/products/price-visibility'
 
 function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
   try {
@@ -604,15 +605,22 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         validated,
       })
 
+      const precio = await persistPriceVisibility(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
       revalidateProductStorefront(organization.slug, organization.id, savedProductId)
 
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}) }, user.role),
+          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
           variants: visibleVariants,
         },
         ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
       }, { status: 201 })
     }
 
@@ -735,12 +743,19 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       validated,
     })
 
+    const precio = await persistPriceVisibility(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
     revalidateProductStorefront(organization.slug, organization.id, String(product.id))
 
     return NextResponse.json({
       success: true,
-      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}) },
+      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
       ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     }, { status: 201 })
   } catch (error) {
     logger.error('Product creation error', { error })
@@ -1006,16 +1021,23 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         validated,
       })
 
+      const precio = await persistPriceVisibility(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
       revalidateProductStorefront(organization.slug, organization.id, savedProductId)
 
       return NextResponse.json({
         success: true,
         data: {
-          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}) }, user.role),
+          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
           variants: visibleVariants,
         },
         warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
         ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
       })
     }
 
@@ -1183,12 +1205,19 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       validated,
     })
 
+    const precio = await persistPriceVisibility(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
     revalidateProductStorefront(organization.slug, organization.id, String(product.id))
 
     return NextResponse.json({
       success: true,
-      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}) },
+      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
       ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     })
   } catch (error) {
     logger.error('Product update error', { error })

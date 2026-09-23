@@ -5,6 +5,7 @@ import { pickOrganizationContact, type MarketplaceProduct } from '@/lib/public/m
 
 vi.mock('next/image', () => ({ default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} /> }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/marketplace/productos' }))
+vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: null }) }))
 
 const base = {
   id: 'p1',
@@ -78,6 +79,52 @@ describe('detalle de producto del marketplace: contacto de la tienda', () => {
   it('muestra cuánto se ahorra con la oferta', () => {
     render(<MarketplaceProductModal open onClose={vi.fn()} product={base} />)
     expect(screen.getByText(/Ahorrás/)).toHaveTextContent('40.000')
+  })
+
+  it('oculta el precio si hide_price es true y muestra Precio a consultar con botón de acceso y WhatsApp con intent price', () => {
+    render(
+      <MarketplaceProductModal
+        open
+        onClose={vi.fn()}
+        product={{
+          ...base,
+          hide_price: true,
+          organization_contact: {
+            instagram: null,
+            facebook: null,
+            tiktok: null,
+            whatsapp: '0981 123 456',
+            phone: null,
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Precio a consultar')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Ver el precio de Perfume 9 PM/ })).toBeInTheDocument()
+    expect(screen.queryByText(/283\.000/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/243\.000/)).not.toBeInTheDocument()
+
+    const whatsapp = screen.getByRole('link', { name: /Consultar precio por WhatsApp/ })
+    const url = decodeURIComponent(whatsapp.getAttribute('href')!)
+    expect(url).toContain('Quiero consultar el precio de este producto:')
+    expect(url).toContain('*Perfume 9 PM*')
+  })
+
+  it('muestra la compatibilidad del dispositivo si está cargada', () => {
+    render(
+      <MarketplaceProductModal
+        open
+        onClose={vi.fn()}
+        product={{
+          ...base,
+          device_brand: 'Apple',
+          device_models: ['iPhone 13', 'iPhone 13 Pro'],
+        }}
+      />
+    )
+
+    expect(screen.getByText('Para Apple · iPhone 13, iPhone 13 Pro')).toBeInTheDocument()
   })
 
   it('toma de «Sitio Web» solo los datos cargados', () => {

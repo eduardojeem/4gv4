@@ -287,4 +287,83 @@ describe('ProductModal — elección de datos de cuotas', () => {
     await waitFor(() => expect(screen.getByText(/Agregar plan rápido/i)).toBeInTheDocument())
     expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument()
   })
+
+  it('permite volver a elegir después de elegir cargar desde cero', async () => {
+    renderModal()
+    await openPricingTab()
+    await enableInstallments()
+
+    // Elige cargar desde cero
+    fireEvent.click(await screen.findByText(START_BLANK))
+    await waitFor(() => expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument())
+
+    // En la vista de armado manual aparece el botón de volver a elegir
+    const volverBtn = await screen.findByRole('button', { name: /Volver a elegir/i })
+    expect(volverBtn).toBeInTheDocument()
+
+    // Clic en Volver a elegir
+    fireEvent.click(volverBtn)
+
+    // Vuelve a aparecer la tarjeta de elección
+    expect(await screen.findByText(CHOICE_HEADING)).toBeInTheDocument()
+    expect(screen.getByText(USE_DEFAULTS)).toBeInTheDocument()
+
+    // Ahora elige usar predeterminados
+    fireEvent.click(screen.getByText(USE_DEFAULTS))
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ 3c')).toBeInTheDocument()
+      expect(screen.getByText('✓ 6c')).toBeInTheDocument()
+      expect(screen.getByText('✓ 12c')).toBeInTheDocument()
+    })
+  })
+
+  it('permite volver a elegir después de usar predeterminados', async () => {
+    renderModal()
+    await openPricingTab()
+    await enableInstallments()
+
+    // Elige usar predeterminados
+    fireEvent.click(await screen.findByText(USE_DEFAULTS))
+    await waitFor(() => expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument())
+    expect(screen.getByText('✓ 3c')).toBeInTheDocument()
+
+    // Clic en Volver a elegir
+    const volverBtn = await screen.findByRole('button', { name: /Volver a elegir/i })
+    fireEvent.click(volverBtn)
+
+    // Vuelve a aparecer la tarjeta de elección
+    expect(await screen.findByText(CHOICE_HEADING)).toBeInTheDocument()
+
+    // Ahora elige cargar desde cero
+    fireEvent.click(screen.getByText(START_BLANK))
+    await waitFor(() => expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument())
+    expect(screen.queryByText('✓ 3c')).not.toBeInTheDocument()
+  })
+
+  it('permite cancelar el reseteo y mantener los planes anteriores', async () => {
+    renderModal()
+    await openPricingTab()
+    await enableInstallments()
+
+    // Elige usar predeterminados
+    fireEvent.click(await screen.findByText(USE_DEFAULTS))
+    await waitFor(() => expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument())
+
+    // Clic en Volver a elegir
+    const volverBtn = await screen.findByRole('button', { name: /Volver a elegir/i })
+    fireEvent.click(volverBtn)
+
+    // En la tarjeta de elección aparece el botón para cancelar y mantener los planes anteriores
+    const cancelarBtn = await screen.findByRole('button', { name: /Cancelar y mantener planes anteriores/i })
+    expect(cancelarBtn).toBeInTheDocument()
+
+    // Clic en Cancelar
+    fireEvent.click(cancelarBtn)
+
+    // Se restauran los planes que se tenían
+    await waitFor(() => {
+      expect(screen.getByText('✓ 3c')).toBeInTheDocument()
+    })
+  })
 })

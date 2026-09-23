@@ -22,6 +22,7 @@ import {
   BranchSelect,
   ProductPagination,
   MobileFilters,
+  DeviceSelect,
   FilterBadges,
   ClearAllFiltersButton,
   PaginationLinks,
@@ -70,6 +71,11 @@ export default async function ProductsPage(props: {
   const audience = FASHION_AUDIENCES.some((option) => option.value === rawAudience)
     ? rawAudience as FashionAudience
     : undefined
+  // Celular al que pertenece el repuesto: `celular` es la marca del telefono
+  // (Apple) y `modelo` el modelo (iPhone 13). Distinto de `marca`, que es la
+  // marca del repuesto.
+  const deviceBrand = typeof searchParams.celular === 'string' ? searchParams.celular : ''
+  const deviceModel = typeof searchParams.modelo === 'string' ? searchParams.modelo : ''
   const size = typeof searchParams.size === 'string' ? searchParams.size : ''
   const color = typeof searchParams.color === 'string' ? searchParams.color : ''
   const sort = (searchParams.sort as string) || 'default'
@@ -95,6 +101,8 @@ export default async function ProductsPage(props: {
       audience,
       size,
       color,
+      deviceBrand,
+      deviceModel,
       sort,
       page,
       perPage,
@@ -105,7 +113,7 @@ export default async function ProductsPage(props: {
     fetchWebsiteSettings(),
   ])
 
-  const { products, total, totalPages, brands, priceRange, branchFilterUnavailable, fashionFacets } = productsData
+  const { products, total, totalPages, brands, priceRange, branchFilterUnavailable, fashionFacets, deviceFacets } = productsData
   const selectedBranchName = branchId ? branches.find((b) => b.id === branchId)?.name : undefined
 
   const productBranchMap =
@@ -125,6 +133,8 @@ export default async function ProductsPage(props: {
     Boolean(audience) ||
     size !== '' ||
     color !== '' ||
+    deviceBrand !== '' ||
+    deviceModel !== '' ||
     minPrice > 0 ||
     maxPrice < MAX_PRICE
 
@@ -137,6 +147,8 @@ export default async function ProductsPage(props: {
     Boolean(audience),
     size !== '',
     color !== '',
+    deviceBrand !== '',
+    deviceModel !== '',
     minPrice > 0 || maxPrice < MAX_PRICE,
   ].filter(Boolean).length
 
@@ -185,6 +197,7 @@ export default async function ProductsPage(props: {
                     brands={brands}
                     branches={branches}
                     fashionFacets={fashionFacets}
+                    deviceFacets={deviceFacets}
                   />
                 </Suspense>
               </div>
@@ -206,14 +219,19 @@ export default async function ProductsPage(props: {
                   brands={brands}
                   branches={branches}
                   fashionFacets={fashionFacets}
+                  deviceFacets={deviceFacets}
                 />
 
                 <div className="flex items-center gap-2">
+                  {/* El celular, junto al orden: es por donde busca quien entra a un taller. */}
+                  <Suspense fallback={<div className="h-9 w-[140px] bg-muted animate-pulse rounded-xl" />}>
+                    <DeviceSelect facets={deviceFacets} />
+                  </Suspense>
                   <Suspense fallback={<div className="h-9 w-[180px] bg-muted animate-pulse rounded-xl" />}>
                     <BranchSelect branches={branches} />
                   </Suspense>
                   <Suspense fallback={<div className="h-9 w-[160px] bg-muted animate-pulse rounded-xl" />}>
-                    <ProductSort />
+                    <ProductSort showDeviceSort={deviceFacets.brands.length > 0} />
                   </Suspense>
                 </div>
               </div>

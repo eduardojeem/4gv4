@@ -80,7 +80,7 @@ export const WhatsAppTemplates = {
   priceInquiry: (productOrService: string) => `Hola! Quisiera consultar el precio de ${productOrService}`,
 }
 
-export type WhatsAppInquiryIntent = 'order' | 'inquiry' | 'installments' | 'shipping'
+export type WhatsAppInquiryIntent = 'order' | 'inquiry' | 'price' | 'installments' | 'shipping'
 
 export interface ProductWhatsAppPayload {
   storeName?: string | null
@@ -113,7 +113,10 @@ export function buildProductWhatsAppMessage(payload: ProductWhatsAppPayload): st
     : '¡Hola! 👋'
 
   let intentHeader = 'Me interesa este producto de su tienda:'
-  if (payload.intent === 'order') {
+  if (payload.intent === 'price') {
+    // Producto publicado sin precio: es justamente lo que viene a preguntar.
+    intentHeader = 'Quiero consultar el precio de este producto:'
+  } else if (payload.intent === 'order') {
     intentHeader = '¡Quiero pedir este producto de su tienda online! 🛍️'
   } else if (payload.intent === 'installments') {
     intentHeader = 'Quiero consultar las opciones de financiación y cuotas para este producto:'

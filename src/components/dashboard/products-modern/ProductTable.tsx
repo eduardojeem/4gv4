@@ -614,6 +614,17 @@ export function ProductTable({
                                   May: {formatCurrency(product.wholesale_price)}
                                 </span>
                               ) : null}
+
+                              {/* El precio existe, pero la tienda no lo publica: sin este aviso
+                                  nadie entiende por que el catalogo dice «Preguntar». */}
+                              {(product as { hide_price?: boolean }).hide_price && (
+                                <span
+                                  className="mt-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                                  title="En la tienda sólo ven el precio tus clientes mayoristas habilitados; el resto ve «Preguntar» y «Ver precio»"
+                                >
+                                  Precio solo mayoristas
+                                </span>
+                              )}
                             </div>
                           </TableCell>
 

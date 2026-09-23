@@ -24,7 +24,11 @@ import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { getSocialLinks } from '@/lib/public/social-links'
 import { SOCIAL_ICONS } from '@/components/public/SocialIcons'
 import { cn } from '@/lib/utils'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
+import { siteUrl } from '@/lib/site-url'
 
 type Org = {
   id: string
@@ -87,7 +91,28 @@ function OrgProductCard({
       : null,
   }
 
-  const hasDiscount = Boolean(product.has_offer && product.offer_price && product.offer_price < product.sale_price)
+  const precioOculto = hidesPublicPrice(product)
+  const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
+  const hasDiscount = !precioOculto && Boolean(product.has_offer && product.offer_price && product.offer_price < product.sale_price)
+  const displayPrice = hasDiscount && product.offer_price ? product.offer_price : product.sale_price
+  const whatsappDigits = (org.whatsapp || org.phone || '').replace(/\D/g, '')
+  const productHref = `/${org.slug}/productos/${product.id}`
+  const fullProductUrl = siteUrl(productHref)
+  const whatsappHref = whatsappDigits.length >= 6
+    ? getWhatsAppLink({
+        phone: whatsappDigits,
+        message: buildProductWhatsAppMessage({
+          storeName: org.name,
+          productName: product.name,
+          price: precioOculto ? 0 : displayPrice,
+          originalPrice: !precioOculto && hasDiscount ? product.sale_price : null,
+          sku: product.sku,
+          productUrl: fullProductUrl,
+          imageUrl: imageSrc,
+          intent: precioOculto ? 'price' : 'inquiry',
+        }),
+      })
+    : null
 
   return (
     <div className="group relative flex w-52 sm:w-60 shrink-0 flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card p-3 text-left shadow-2xs transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 dark:bg-card/90">
@@ -100,7 +125,7 @@ function OrgProductCard({
             name: product.name,
             store: org.name,
             image: product.image,
-            price: hasDiscount && product.offer_price ? product.offer_price : product.sale_price,
+            price: displayPrice,
           }}
         />
       </div>
@@ -144,6 +169,11 @@ function OrgProductCard({
       {/* Título y Precios */}
       <div className="mt-2.5 flex flex-1 flex-col justify-between">
         <div>
+          {deviceCompatibility && (
+            <p className="mb-0.5 truncate text-[11px] font-semibold text-primary" title={deviceCompatibility}>
+              Para {deviceCompatibility}
+            </p>
+          )}
           <h4
             suppressHydrationWarning
             onClick={() => onSelectProduct(asMarketplace)}
@@ -159,29 +189,63 @@ function OrgProductCard({
         </div>
 
         <div className="mt-2.5 space-y-2 border-t border-border/50 pt-2">
-          <div className="flex items-baseline gap-1.5">
-            <p className="text-sm sm:text-base font-bold tabular-nums text-foreground">
-              {formatPrice(hasDiscount && product.offer_price ? product.offer_price : product.sale_price)}
-            </p>
-            {hasDiscount && (
-              <p className="text-[11px] text-muted-foreground line-through tabular-nums">
-                {formatPrice(product.sale_price)}
+          {precioOculto ? (
+            <div
+              className="min-w-0"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm font-bold leading-tight text-foreground">
+                Precio a consultar
               </p>
-            )}
-          </div>
+              <div className="relative z-20 mt-0.5">
+                <PriceAccessDialog
+                  productName={product.name}
+                  whatsappHref={whatsappHref}
+                  organizationSlug={org.slug}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-sm sm:text-base font-bold tabular-nums text-foreground">
+                {formatPrice(displayPrice)}
+              </p>
+              {hasDiscount && (
+                <p className="text-[11px] text-muted-foreground line-through tabular-nums">
+                  {formatPrice(product.sale_price)}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-1.5">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              tabIndex={tabIndex}
-              onClick={() => onSelectProduct(asMarketplace)}
-              className="h-7.5 rounded-lg px-2 text-[11px] font-semibold gap-1 hover:bg-primary/10 hover:text-primary transition-colors"
-            >
-              <Eye className="h-3 w-3" />
-              <span>Detalle</span>
-            </Button>
+            {precioOculto && whatsappHref ? (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                tabIndex={tabIndex}
+                suppressHydrationWarning
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-7.5 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white dark:text-[#4ADE80]"
+              >
+                <MessageCircle className="h-3 w-3" />
+                <span>Preguntar</span>
+              </a>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                tabIndex={tabIndex}
+                onClick={() => onSelectProduct(asMarketplace)}
+                className="h-7.5 rounded-lg px-2 text-[11px] font-semibold gap-1 hover:bg-primary/10 hover:text-primary transition-colors"
+              >
+                <Eye className="h-3 w-3" />
+                <span>Detalle</span>
+              </Button>
+            )}
 
             <Button
               asChild

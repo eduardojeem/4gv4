@@ -4,7 +4,12 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
 import { logger } from '@/lib/logger'
-import type { AppRole } from '@/lib/auth/role-utils'
+import {
+  type AppRole,
+  stripProductCost,
+  canViewProductCost,
+  PRODUCT_COST_PERMISSION,
+} from '@/lib/auth/role-utils'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import {
   applyBranchInventoryToProducts,
@@ -65,9 +70,24 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       branchScoped
     )[0]
 
+    // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
+    // tenga el permiso específico products.read_cost.
+    let costPermissions: string[] | undefined
+    if (!canViewProductCost(user.role)) {
+      const { data: perms } = await supabase
+        .from('user_permissions')
+        .select('permission')
+        .eq('user_id', user.id)
+        .eq('permission', PRODUCT_COST_PERMISSION)
+        .eq('is_active', true)
+        .limit(1)
+      costPermissions = perms && perms.length > 0 ? [PRODUCT_COST_PERMISSION] : []
+    }
+    const safeProduct = stripProductCost(responseProduct as Record<string, unknown>, user.role, costPermissions)
+
     return NextResponse.json({
       success: true,
-      data: responseProduct,
+      data: safeProduct,
     })
   } catch (error) {
     logger.error('Product detail API error', { error })

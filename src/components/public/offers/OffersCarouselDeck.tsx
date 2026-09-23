@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 import { resolveProductImageUrl } from '@/lib/images'
 import { toast } from 'sonner'
 import type { PublicProduct } from '@/types/public'
@@ -557,13 +558,14 @@ export function OffersCarouselDeck({
                         price: offer.offerPrice ?? 0,
                         originalPrice: offer.salePrice ?? null,
                         inStock: offer.inStock,
-                        productUrl: typeof window !== 'undefined' ? `${window.location.origin}${offer.ctaHref}` : offer.ctaHref,
+                        productUrl: siteUrl(offer.ctaHref),
                         imageUrl: offer.image ? resolveProductImageUrl(offer.image) : null,
                         intent: 'order',
                       }),
                     })}
                     target="_blank"
                     rel="noopener noreferrer"
+                    suppressHydrationWarning
                     className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
                     aria-label={`Pedir oferta de ${offer.title} en WhatsApp`}
                     title={`Pedir oferta de ${offer.title} en WhatsApp`}

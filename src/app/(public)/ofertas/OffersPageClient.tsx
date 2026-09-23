@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { usesPortraitMedia } from '@/lib/website/storefront-style'
 import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 import { resolveProductImageUrl } from '@/lib/images'
 import { OfferDetailModal, type OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
 import type { PublicProduct } from '@/types/public'
@@ -292,7 +293,7 @@ function OfferCard({
             originalPrice: offer.sale_price > offer.offer_price ? offer.sale_price : null,
             inStock: offer.in_stock,
             stockQuantity: offer.stock_quantity,
-            productUrl: typeof window !== 'undefined' ? `${window.location.origin}${href}` : href,
+            productUrl: siteUrl(href),
             imageUrl: offer.image ? resolveProductImageUrl(offer.image) : null,
             intent: 'order',
           }),
@@ -460,6 +461,7 @@ function OfferCard({
                   href={whatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
+                  suppressHydrationWarning
                   aria-label={`Consultar por ${offer.name} en WhatsApp`}
                 >
                   <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />

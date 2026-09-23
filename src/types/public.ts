@@ -49,6 +49,12 @@ export interface PublicProduct {
   sku: string
   description: string | null
   brand: string | null
+  /** Marca del celular al que pertenece el repuesto (Apple, Samsung). */
+  device_brand?: string | null
+  /** Modelos de celular compatibles: una pantalla puede servir para varios. */
+  device_models?: string[] | null
+  /** Publicado sin precio: en su lugar va un botón que abre el WhatsApp de la tienda. */
+  hide_price?: boolean | null
   category?: {
     id: string
     name: string

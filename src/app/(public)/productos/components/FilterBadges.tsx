@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Flame, Package, X } from 'lucide-react'
+import { Flame, Package, Smartphone, X } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { readActiveProductFilters, clearAllProductFilters } from '@/lib/utils/product-filters'
@@ -26,7 +26,7 @@ export function FilterBadges({
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const { query, categoryId, brand, branchId, audience, size, color, inStock, minPrice, maxPrice } = readActiveProductFilters(
+  const { query, categoryId, brand, branchId, audience, size, color, deviceBrand, deviceModel, inStock, minPrice, maxPrice } = readActiveProductFilters(
     new URLSearchParams(searchParams.toString())
   )
   const isOnlyOffers = searchParams.get('offers') === 'true'
@@ -37,6 +37,8 @@ export function FilterBadges({
     if (key === 'brand') params.delete('marca')
     if (key === 'category_id') params.delete('categoria')
     if (key === 'query') params.delete('q')
+    // Sin marca de celular, el modelo suelto no filtra nada util.
+    if (key === 'celular') params.delete('modelo')
     params.set('page', '1')
     startTransition(() => {
       router.push(`?${params.toString()}`, { scroll: false })
@@ -59,6 +61,8 @@ export function FilterBadges({
     !!audience ||
     !!size ||
     !!color ||
+    !!deviceBrand ||
+    !!deviceModel ||
     inStock ||
     isOnlyOffers ||
     minPrice > 0 ||
@@ -100,6 +104,19 @@ export function FilterBadges({
               return 'Seleccionada'
             })()}
           </span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Celular al que pertenece el repuesto */}
+      {(deviceBrand || deviceModel) && (
+        <button
+          type="button"
+          onClick={() => removeFilter(deviceModel ? 'modelo' : 'celular')}
+          className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+        >
+          <Smartphone className="h-3 w-3" />
+          <span>{[deviceBrand, deviceModel].filter(Boolean).join(' ')}</span>
           <X className="h-3 w-3" />
         </button>
       )}

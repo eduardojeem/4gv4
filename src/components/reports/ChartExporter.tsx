@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { 
-  Download, 
   FileText, 
   RefreshCw,
   Layout,
@@ -22,6 +21,20 @@ import {
   renderDonutChartCanvas
 } from '@/lib/reports/canvas-chart-renderer'
 import { chartPointLabel, chartPointValue } from '@/lib/reports/chart-points'
+
+type ReportRow = Record<string, unknown>
+type ReportCell = unknown
+
+const toReportRows = (rows: object[] | undefined): ReportRow[] =>
+  (rows ?? []).map((row) => row as ReportRow)
+
+const asText = (value: unknown): string =>
+  typeof value === 'string' ? value : value == null ? '' : String(value)
+
+const asNumber = (value: unknown): number => Number(value) || 0
+
+const asColor = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined
 
 // ── Helpers de formato monetario y fechas ─────────────────────────────────────
 const formatGs = (amount: number | null | undefined): string => {
@@ -72,11 +85,6 @@ const getDayOfWeekStr = (dateStr: string): string => {
 // cuatro viajaban en la primera carga de esas dos rutas —el chunk de 883 KB que
 // marcaba post-build-checks— aunque solo se usan al tocar «Exportar». Ahora se
 // piden recien en ese momento, y el navegador las cachea para el siguiente.
-async function loadHtml2Canvas() {
-  const mod = await import('html2canvas')
-  return mod.default
-}
-
 async function loadPdfLibraries() {
   const [pdf, table] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   return { jsPDF: pdf.default, autoTable: table.default }
@@ -183,7 +191,7 @@ export type ChartSectionId =
 
 export interface ChartSection {
   id: ChartSectionId
-  rows: any[]
+  rows: object[]
   /** Solo para `generic`. Por defecto, barras. */
   kind?: 'area' | 'bar' | 'donut'
   /** Como se escribe el valor en el grafico y en la tabla. Por defecto, guaranies. */
@@ -192,8 +200,8 @@ export interface ChartSection {
 
 interface ChartExporterProps {
   title: string
-  data: any[]
-  metrics?: Record<string, any>
+  data: object[]
+  metrics?: Record<string, unknown>
   chartRefs: React.RefObject<HTMLDivElement | null>[]
   chartTitles: string[]
   chartData?: ChartSection[]
@@ -236,110 +244,6 @@ export function ChartExporter({
       .slice(0, 120) || 'reporte'
   }, [])
 
-  const sanitizeUnsupportedColorFunctions = useCallback((raw: string) => {
-    return raw
-      .replace(/\b(?:oklch|oklab|lch|lab)\([^)]+\)/gi, 'rgb(120, 120, 120)')
-      .replace(/\bcolor-mix\([^)]*\)/gi, 'rgb(120, 120, 120)')
-  }, [])
-
-  const buildSafeCaptureNode = useCallback((sourceRoot: HTMLElement) => {
-    const cloneRoot = sourceRoot.cloneNode(true) as HTMLElement
-    const sourceNodes = [sourceRoot, ...Array.from(sourceRoot.querySelectorAll('*'))]
-    const cloneNodes = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))]
-    const total = Math.min(sourceNodes.length, cloneNodes.length)
-
-    for (let i = 0; i < total; i++) {
-      const sourceNode = sourceNodes[i]
-      const cloneNode = cloneNodes[i]
-
-      cloneNode.removeAttribute('class')
-
-      if (cloneNode instanceof HTMLElement) {
-        const computed = window.getComputedStyle(sourceNode)
-        for (let j = 0; j < computed.length; j++) {
-          const property = computed.item(j)
-          const value = sanitizeUnsupportedColorFunctions(computed.getPropertyValue(property))
-          if (value) cloneNode.style.setProperty(property, value)
-        }
-      }
-
-      if (sourceNode instanceof HTMLCanvasElement && cloneNode instanceof HTMLCanvasElement) {
-        const ctx = cloneNode.getContext('2d')
-        if (ctx) {
-          ctx.clearRect(0, 0, cloneNode.width, cloneNode.height)
-          ctx.drawImage(sourceNode, 0, 0)
-        }
-      }
-    }
-
-    cloneRoot.style.width = `${sourceRoot.offsetWidth}px`
-    cloneRoot.style.height = `${sourceRoot.offsetHeight}px`
-
-    const wrapper = document.createElement('div')
-    wrapper.style.position = 'fixed'
-    wrapper.style.left = '-10000px'
-    wrapper.style.top = '0'
-    wrapper.style.background = '#ffffff'
-    wrapper.style.zIndex = '-1'
-    wrapper.style.pointerEvents = 'none'
-    wrapper.appendChild(cloneRoot)
-    document.body.appendChild(wrapper)
-
-    return {
-      target: cloneRoot,
-      cleanup: () => wrapper.remove()
-    }
-  }, [sanitizeUnsupportedColorFunctions])
-
-  // Función para capturar un gráfico como imagen limpia
-  const captureChart = useCallback(async (chartRef: React.RefObject<HTMLDivElement | null>, chartTitle: string) => {
-    if (!chartRef.current) return null
-
-    const safeCapture = buildSafeCaptureNode(chartRef.current)
-
-    try {
-      const exportId = `chart-export-${Date.now()}-${Math.floor(Math.random() * 10000)}`
-      safeCapture.target.setAttribute('data-export-id', exportId)
-
-      const html2canvas = await loadHtml2Canvas()
-      const canvas = await html2canvas(safeCapture.target, {
-        backgroundColor: '#ffffff',
-        scale: options.chartQuality === 'high' ? 2.5 : options.chartQuality === 'medium' ? 2 : 1.5,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        onclone: (clonedDoc) => {
-          clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach((node) => node.remove())
-          clonedDoc.body.style.background = '#ffffff'
-
-          const clonedTarget = clonedDoc.querySelector<HTMLElement>(`[data-export-id="${exportId}"]`)
-          if (clonedTarget) {
-            clonedTarget.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
-              const inline = el.getAttribute('style') || ''
-              const sanitized = sanitizeUnsupportedColorFunctions(inline)
-              if (sanitized !== inline) el.setAttribute('style', sanitized)
-            })
-          }
-        },
-        width: chartRef.current.offsetWidth,
-        height: chartRef.current.offsetHeight
-      })
-
-      return {
-        canvas,
-        title: chartTitle,
-        dataURL: canvas.toDataURL(`image/${options.chartFormat}`, 0.95),
-        width: canvas.width,
-        height: canvas.height
-      }
-    } catch (error) {
-      console.error(`Error capturando gráfico ${chartTitle}:`, error)
-      return null
-    } finally {
-      safeCapture.cleanup()
-    }
-  }, [options.chartQuality, options.chartFormat, buildSafeCaptureNode, sanitizeUnsupportedColorFunctions])
-
   // ── EXPORTACIÓN DE PDF CON DISEÑO EJECUTIVO Y DETALLE COMPLETO ──────────────
   const exportPDFWithCharts = useCallback(async () => {
     setIsExporting(true)
@@ -371,10 +275,12 @@ export function ChartExporter({
       const pointValue = chartPointValue
 
       const sections: ChartSection[] = chartData ?? []
-      const rowsOf = (id: ChartSectionId) => sections.find((section) => section.id === id)?.rows ?? []
+      const rowsOf = (id: ChartSectionId) =>
+        toReportRows(sections.find((section) => section.id === id)?.rows)
 
       // `data` sigue siendo el respaldo de ventas para quien no manda secciones.
-      const salesDataset = rowsOf('sales').length > 0 ? rowsOf('sales') : (data ?? [])
+      const salesRows = rowsOf('sales')
+      const salesDataset = salesRows.length > 0 ? salesRows : toReportRows(data)
       const repairsTrendDataset = rowsOf('repairs-trend')
       const repairsStatusDataset = rowsOf('repairs-status')
       const productsDataset = rowsOf('products')
@@ -382,21 +288,20 @@ export function ChartExporter({
       const categoriesDataset = rowsOf('categories')
 
       // Cálculos globales de resumen del período
-      const totalSalesSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.sales) || 0), 0)
-      const totalOrdersSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.orders) || 0), 0)
-      const totalProfitSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.profit) || 0), 0)
-      const totalCustomersSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.customers) || 0), 0)
+      const totalSalesSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.sales) || 0), 0)
+      const totalOrdersSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.orders) || 0), 0)
+      const totalProfitSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.profit) || 0), 0)
       const avgTicketGlobal = totalOrdersSum > 0 ? totalSalesSum / totalOrdersSum : 0
       const profitMarginPct = totalSalesSum > 0 ? ((totalProfitSum / totalSalesSum) * 100).toFixed(1) : '0'
 
       // Día pico de ventas
       let peakDay = { date: '', sales: 0, orders: 0 }
       let activeDaysCount = 0
-      salesDataset.forEach((r: any) => {
+      salesDataset.forEach((r: ReportRow) => {
         const s = Number(r.sales) || 0
         if (s > 0) activeDaysCount++
         if (s > peakDay.sales) {
-          peakDay = { date: r.date, sales: s, orders: Number(r.orders) || 0 }
+          peakDay = { date: asText(r.date), sales: s, orders: asNumber(r.orders) }
         }
       })
       const avgDailySales = salesDataset.length > 0 ? totalSalesSum / salesDataset.length : 0
@@ -533,15 +438,15 @@ export function ChartExporter({
         ],
         ...(topProduct ? [[
           'Producto Estrella (#1)',
-          topProduct.name,
-          formatGs(topProduct.sales),
-          `${topProduct.quantity || 0} unid. (${topProduct.share ? topProduct.share.toFixed(1) : '—'}% part.)`,
+          asText(topProduct.name),
+          formatGs(asNumber(topProduct.sales)),
+          `${asNumber(topProduct.quantity)} unid. (${topProduct.share ? asNumber(topProduct.share).toFixed(1) : '—'}% part.)`,
         ]] : []),
         ...(topCategory ? [[
           'Categoría Predominante',
-          topCategory.name,
-          formatGs(topCategory.sales),
-          `${topCategory.quantity || 0} unidades vendidas`,
+          asText(topCategory.name),
+          formatGs(asNumber(topCategory.sales)),
+          `${asNumber(topCategory.quantity)} unidades vendidas`,
         ]] : []),
         ...(totalProfitSum > 0 ? [[
           'Rentabilidad Bruta Estimada',
@@ -567,7 +472,7 @@ export function ChartExporter({
         }
       })
 
-      currentY = (doc as any).lastAutoTable.finalY + 14
+      currentY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14
 
       // Tabla de Contenido del Informe
       if (currentY + 80 < pageHeight) {
@@ -613,11 +518,11 @@ export function ChartExporter({
         // ordenes que no coinciden.
         const section = sections[i]
         const sectionId: ChartSectionId = section?.id ?? 'generic'
-        const sectionRows = section?.rows ?? (i === 0 ? (data ?? []) : [])
+        const sectionRows = toReportRows(section?.rows ?? (i === 0 ? data : []))
         const sectionFormat = section?.formatValue ?? formatGs
 
-        const asDatePoint = (d: any, idx: number) => ({
-          label: d?.date ? formatDateStr(d.date) : pointLabel(d, String(idx + 1)),
+        const asDatePoint = (d: ReportRow, idx: number) => ({
+          label: d?.date ? formatDateStr(asText(d.date)) : pointLabel(d, String(idx + 1)),
           value: pointValue(d),
         })
 
@@ -627,20 +532,20 @@ export function ChartExporter({
         } else if (sectionId === 'repairs-trend' && repairsTrendDataset.length > 0) {
           chartDataUrl = renderAreaChartCanvas(chartTitle, repairsTrendDataset.map(asDatePoint), { lineColor: '#dc2626', fillColor: '#ef4444', formatValue: (v) => `${v} orden${v === 1 ? '' : 'es'}` })
         } else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0) {
-          chartDataUrl = renderDonutChartCanvas(chartTitle, repairsStatusDataset.map((d: any) => ({ label: pointLabel(d, 'Sin dato'), value: pointValue(d), color: d?.color })), { formatValue: (v) => `${v} equipos` })
+          chartDataUrl = renderDonutChartCanvas(chartTitle, repairsStatusDataset.map((d: ReportRow) => ({ label: pointLabel(d, 'Sin dato'), value: pointValue(d), color: asColor(d?.color) })), { formatValue: (v) => `${v} equipos` })
         } else if (sectionId === 'products' && productsDataset.length > 0) {
-          chartDataUrl = renderBarChartCanvas(chartTitle, productsDataset.slice(0, 10).map((d: any) => ({ label: pointLabel(d, 'Sin nombre'), value: pointValue(d) })), { barColor: '#059669', formatValue: formatGs })
+          chartDataUrl = renderBarChartCanvas(chartTitle, productsDataset.slice(0, 10).map((d: ReportRow) => ({ label: pointLabel(d, 'Sin nombre'), value: pointValue(d) })), { barColor: '#059669', formatValue: formatGs })
         } else if (sectionId === 'selected-product' && selectedProductDataset.length > 0) {
           chartDataUrl = renderAreaChartCanvas(chartTitle, selectedProductDataset.map(asDatePoint), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
         } else if (sectionId === 'categories' && categoriesDataset.length > 0) {
-          chartDataUrl = renderDonutChartCanvas(chartTitle, categoriesDataset.slice(0, 8).map((d: any) => ({ label: pointLabel(d, 'Sin categoría'), value: pointValue(d) })), { formatValue: formatGs })
+          chartDataUrl = renderDonutChartCanvas(chartTitle, categoriesDataset.slice(0, 8).map((d: ReportRow) => ({ label: pointLabel(d, 'Sin categoría'), value: pointValue(d) })), { formatValue: formatGs })
         } else if (sectionId === 'generic' && sectionRows.length > 0) {
           // Serie cualquiera de etiqueta y valor: la dibuja como pida quien la
           // manda, y si no pide nada, en barras.
-          const points = sectionRows.map((d: any, idx: number) => ({
+          const points = sectionRows.map((d: ReportRow, idx: number) => ({
             label: pointLabel(d, String(idx + 1)),
             value: pointValue(d),
-            color: d?.color,
+            color: asColor(d?.color),
           }))
           const kind = section?.kind ?? 'bar'
           chartDataUrl = kind === 'donut'
@@ -686,7 +591,7 @@ export function ChartExporter({
             // Sección 1: Ventas Diarias Detalladas
             const headers = ['Fecha', 'Día', 'Facturación (Gs.)', 'Órdenes', 'Ticket Prom. (Gs.)', 'Ganancia (Gs.)', 'Margen %', 'Part. %']
 
-            const rows = salesDataset.slice(0, 31).map((row: any) => {
+            const rows = salesDataset.slice(0, 31).map((row: ReportRow) => {
               const rowSales = Number(row.sales) || 0
               const rowOrders = Number(row.orders) || 0
               const rowTicket = rowOrders > 0 ? rowSales / rowOrders : rowSales
@@ -695,8 +600,8 @@ export function ChartExporter({
               const rowShare = totalSalesSum > 0 ? ((rowSales / totalSalesSum) * 100).toFixed(1) : '0'
 
               return [
-                formatDateStr(row.date),
-                getDayOfWeekStr(row.date),
+                formatDateStr(asText(row.date)),
+                getDayOfWeekStr(asText(row.date)),
                 formatGs(rowSales),
                 formatNumber(rowOrders),
                 formatGs(rowTicket),
@@ -741,14 +646,14 @@ export function ChartExporter({
           } else if (sectionId === 'repairs-trend' && repairsTrendDataset.length > 0) {
             // Sección: Tendencia de Reparaciones
             const headers = ['Fecha', 'Día', 'Reparaciones Ingresadas', 'Participación sobre Ingresos %']
-            const totalRepairsCount = repairsTrendDataset.reduce((sum: number, r: any) => sum + (Number(r.count) || 0), 0)
+            const totalRepairsCount = repairsTrendDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.count) || 0), 0)
 
-            const rows = repairsTrendDataset.slice(0, 31).map((row: any) => {
+            const rows = repairsTrendDataset.slice(0, 31).map((row: ReportRow) => {
               const count = Number(row.count) || 0
               const pct = totalRepairsCount > 0 ? ((count / totalRepairsCount) * 100).toFixed(1) : '0'
               return [
-                formatDateStr(row.date),
-                getDayOfWeekStr(row.date),
+                formatDateStr(asText(row.date)),
+                getDayOfWeekStr(asText(row.date)),
                 formatNumber(count),
                 `${pct}%`
               ]
@@ -781,9 +686,9 @@ export function ChartExporter({
           } else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0) {
             // Sección: Estados de Reparación
             const headers = ['Estado Operativo de la Orden', 'Equipos Registrados', 'Distribución %']
-            const totalRepairs = repairsStatusDataset.reduce((sum: number, r: any) => sum + (Number(r.value) || 0), 0)
+            const totalRepairs = repairsStatusDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.value) || 0), 0)
 
-            const rows = repairsStatusDataset.map((row: any) => {
+            const rows = repairsStatusDataset.map((row: ReportRow) => {
               const val = Number(row.value) || 0
               const pct = totalRepairs > 0 ? ((val / totalRepairs) * 100).toFixed(1) : '0'
               return [row.name, formatNumber(val), `${pct}%`]
@@ -810,17 +715,17 @@ export function ChartExporter({
           } else if (sectionId === 'products' && productsDataset.length > 0) {
             // Sección: Ranking de Productos Detallado
             const headers = ['#', 'Producto', 'Categoría', 'Unid.', 'Precio Unit. Prom.', 'Facturación Total (Gs.)', 'Part. %', 'Ganancia (Gs.)', 'Margen %']
-            const totalProductsSales = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.sales) || 0), 0)
-            const totalProductsQty = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.quantity) || 0), 0)
-            const totalProductsProfit = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.profit) || 0), 0)
+            const totalProductsSales = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+            const totalProductsQty = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.quantity) || 0), 0)
+            const totalProductsProfit = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.profit) || 0), 0)
             const overallProdMargin = totalProductsSales > 0 ? ((totalProductsProfit / totalProductsSales) * 100).toFixed(1) : '0'
 
-            const rows = productsDataset.slice(0, 20).map((prod: any, idx: number) => {
+            const rows = productsDataset.slice(0, 20).map((prod: ReportRow, idx: number) => {
               const pSales = Number(prod.sales) || 0
               const pQty = Number(prod.quantity) || 0
               const pProfit = Number(prod.profit) || 0
               const avgUnit = pQty > 0 ? pSales / pQty : pSales
-              const share = totalProductsSales > 0 ? ((pSales / totalProductsSales) * 100).toFixed(1) : (prod.share?.toFixed(1) || '0')
+              const share = totalProductsSales > 0 ? ((pSales / totalProductsSales) * 100).toFixed(1) : (prod.share ? asNumber(prod.share).toFixed(1) : '0')
               const pMargin = pSales > 0 ? ((pProfit / pSales) * 100).toFixed(1) : '0'
 
               return [
@@ -873,16 +778,16 @@ export function ChartExporter({
           } else if (sectionId === 'selected-product' && selectedProductDataset.length > 0) {
             // Sección: Tendencia Individual de Producto
             const headers = ['Fecha', 'Día', 'Facturación (Gs.)', 'Unidades Vendidas', 'Ticket Promedio (Gs.)']
-            const totalSales = selectedProductDataset.reduce((sum: number, p: any) => sum + (Number(p.sales) || 0), 0)
-            const totalQty = selectedProductDataset.reduce((sum: number, p: any) => sum + (Number(p.qty) || 0), 0)
+            const totalSales = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+            const totalQty = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.qty) || 0), 0)
             const avgTicket = totalQty > 0 ? totalSales / totalQty : totalSales
 
-            const rows = selectedProductDataset.slice(0, 25).map((p: any) => [
-              formatDateStr(p.date),
-              getDayOfWeekStr(p.date),
-              formatGs(p.sales),
-              formatNumber(p.qty),
-              formatGs(p.qty > 0 ? (p.sales || 0) / p.qty : p.sales)
+            const rows = selectedProductDataset.slice(0, 25).map((p: ReportRow) => [
+              formatDateStr(asText(p.date)),
+              getDayOfWeekStr(asText(p.date)),
+              formatGs(asNumber(p.sales)),
+              formatNumber(asNumber(p.qty)),
+              formatGs(asNumber(p.qty) > 0 ? asNumber(p.sales) / asNumber(p.qty) : asNumber(p.sales))
             ])
             const footRows = [['TOTALES DEL ARTÍCULO', '', formatGs(totalSales), formatNumber(totalQty), formatGs(avgTicket)]]
 
@@ -907,10 +812,10 @@ export function ChartExporter({
           } else if (sectionId === 'categories' && categoriesDataset.length > 0) {
             // Sección: Categorías Detalladas
             const headers = ['Categoría Comercial', 'Unidades Vendidas', 'Ventas Totales (Gs.)', 'Ticket Prom. / Unid.', 'Participación %']
-            const totalCatSales = categoriesDataset.reduce((sum: number, c: any) => sum + (Number(c.sales) || 0), 0)
-            const totalCatQty = categoriesDataset.reduce((sum: number, c: any) => sum + (Number(c.quantity) || 0), 0)
+            const totalCatSales = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.sales) || 0), 0)
+            const totalCatQty = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.quantity) || 0), 0)
 
-            const rows = categoriesDataset.map((cat: any) => {
+            const rows = categoriesDataset.map((cat: ReportRow) => {
               const cSales = Number(cat.sales) || 0
               const cQty = Number(cat.quantity) || 0
               const avgPerUnit = cQty > 0 ? cSales / cQty : cSales
@@ -942,12 +847,12 @@ export function ChartExporter({
             // Serie de etiqueta y valor: dos columnas y el total. Antes estas
             // paginas caian en la tabla de otra seccion, que leia `row.date` y
             // `row.sales`, y salian vacias.
-            const totalGeneric = sectionRows.reduce((sum: number, row: any) => sum + pointValue(row), 0)
+            const totalGeneric = sectionRows.reduce((sum: number, row: ReportRow) => sum + pointValue(row), 0)
 
             autoTable(doc, {
               startY: yPos,
               head: [['Concepto', 'Valor', 'Part. %']],
-              body: sectionRows.slice(0, 40).map((row: any, idx: number) => [
+              body: sectionRows.slice(0, 40).map((row: ReportRow, idx: number) => [
                 pointLabel(row, String(idx + 1)),
                 sectionFormat(pointValue(row)),
                 totalGeneric > 0 ? `${((pointValue(row) / totalGeneric) * 100).toFixed(1)}%` : '0%',
@@ -983,7 +888,7 @@ export function ChartExporter({
 
         let credY = 68
 
-        const credKpis: Record<string, any> = {
+        const credKpis: Record<string, unknown> = {
           'Créditos Otorgados': formatNumber(creditReport.period.grantedCount),
           'Capital Financiado': formatGs(creditReport.period.principalGranted),
           'Cobranzas Recibidas': formatGs(creditReport.period.paymentsReceived),
@@ -1050,7 +955,7 @@ export function ChartExporter({
           }
         })
 
-        credY = (doc as any).lastAutoTable.finalY + 14
+        credY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14
 
         // Gráfico Canvas de Cobranzas
         if (creditReport.paymentTrend.length > 0) {
@@ -1091,7 +996,7 @@ export function ChartExporter({
       }
 
       // ── ENCABEZADOS Y PIE DE PÁGINA EN TODAS LAS HOJAS ─────────────────────
-      const totalPages = (doc.internal as any).getNumberOfPages()
+      const totalPages = (doc.internal as typeof doc.internal & { getNumberOfPages: () => number }).getNumberOfPages()
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         doc.setPage(pageNum)
 
@@ -1141,7 +1046,7 @@ export function ChartExporter({
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
     }
-  }, [options, title, chartRefs, chartTitles, metrics, data, chartData, captureChart, onExport, sanitizeFileName])
+  }, [options, title, chartRefs, chartTitles, metrics, data, chartData, creditReport, onExport, sanitizeFileName])
 
   // ── EXPORTACIÓN DE EXCEL CON FORMATO CORPORATIVO Y DATOS REALES ─────────────
   const exportExcelOnly = useCallback(async () => {
@@ -1160,9 +1065,10 @@ export function ChartExporter({
       })
 
       // Datasets reales recibidos de la vista
-      const salesRows = chartData?.find((section) => section.id === 'sales')?.rows
-      const salesDataset = salesRows && salesRows.length > 0 ? salesRows : (data ?? [])
-      const rowsById = (id: ChartSectionId) => chartData?.find((section) => section.id === id)?.rows ?? []
+      const salesRows = toReportRows(chartData?.find((section) => section.id === 'sales')?.rows)
+      const salesDataset = salesRows.length > 0 ? salesRows : toReportRows(data)
+      const rowsById = (id: ChartSectionId) =>
+        toReportRows(chartData?.find((section) => section.id === id)?.rows)
       const repairsTrendDataset = rowsById('repairs-trend')
       const repairsStatusDataset = rowsById('repairs-status')
       const productsDataset = rowsById('products')
@@ -1182,12 +1088,12 @@ export function ChartExporter({
         const metricEntries = Object.entries(metrics)
 
         // Diagnóstico ejecutivo
-        const totalSalesSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.sales) || 0), 0)
-        const peakDay = salesDataset.length > 0 ? [...salesDataset].sort((a: any, b: any) => (Number(b.sales) || 0) - (Number(a.sales) || 0))[0] : null
+        const totalSalesSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.sales) || 0), 0)
+        const peakDay = salesDataset.length > 0 ? [...salesDataset].sort((a: ReportRow, b: ReportRow) => (Number(b.sales) || 0) - (Number(a.sales) || 0))[0] : null
         const dailyAvg = salesDataset.length > 0 ? Math.round(totalSalesSum / salesDataset.length) : 0
-        const activeDays = salesDataset.filter((r: any) => (Number(r.sales) || 0) > 0).length
+        const activeDays = salesDataset.filter((r: ReportRow) => (Number(r.sales) || 0) > 0).length
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [xlCell(`📊  ${title.toUpperCase()}`, titleS), xlCell('', titleS), xlCell('', titleS)],
           [xlCell(`Sistema 4G • Informe Ejecutivo de Gestión y Ventas`, subtitleS), xlCell('', subtitleS), xlCell('', subtitleS)],
           [xlCell(`Fecha de Emisión: ${dateLabel} | Moneda Base: Guaraníes (PYG)`, subtitleS), xlCell('', subtitleS), xlCell('', subtitleS)],
@@ -1204,7 +1110,7 @@ export function ChartExporter({
 
           [xlCell('DIAGNÓSTICO Y RENDIMIENTO COMERCIAL', diagHdr), xlCell('', diagHdr), xlCell('', diagHdr)],
           [xlCell('Concepto Clave', labelS), xlCell('Resultado', { ...labelS, alignment: { horizontal: 'right' } }), xlCell('Observación', labelS)],
-          [xlCell('Día Pico de Ventas', xlData(0, 'left', true)), xlCell(peakDay ? formatDateStr(peakDay.date) : '—', xlData(0, 'right', true)), xlCell(peakDay ? `${formatGs(peakDay.sales)} facturados` : '—', xlData(0))],
+          [xlCell('Día Pico de Ventas', xlData(0, 'left', true)), xlCell(peakDay ? formatDateStr(asText(peakDay.date)) : '—', xlData(0, 'right', true)), xlCell(peakDay ? `${formatGs(asNumber(peakDay.sales))} facturados` : '—', xlData(0))],
           [xlCell('Promedio Diario de Facturación', xlData(1, 'left', true)), xlCell(formatGs(dailyAvg), xlData(1, 'right', true)), xlCell('Por cada día del período', xlData(1))],
           [xlCell('Días con Venta Activa', xlData(2, 'left', true)), xlCell(`${activeDays} de ${salesDataset.length}`, xlData(2, 'right', true)), xlCell(salesDataset.length > 0 ? `${((activeDays / salesDataset.length) * 100).toFixed(0)}% de operatividad` : '—', xlData(2))],
           [xlCell('', {}), xlCell('', {}), xlCell('', {})],
@@ -1231,13 +1137,13 @@ export function ChartExporter({
       // ── Hoja 2: Ventas Diarias ─────────────────────────────────────────────
       if (salesDataset && salesDataset.length > 0) {
         const hdr = xlHdr(XL_C.blue)
-        const totalSalesSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.sales) || 0), 0)
-        const totalOrdersSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.orders) || 0), 0)
-        const totalProfitSum = salesDataset.reduce((sum: number, r: any) => sum + (Number(r.profit) || 0), 0)
+        const totalSalesSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.sales) || 0), 0)
+        const totalOrdersSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.orders) || 0), 0)
+        const totalProfitSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.profit) || 0), 0)
         const avgTicket = totalOrdersSum > 0 ? totalSalesSum / totalOrdersSum : 0
         const totalMargin = totalSalesSum > 0 ? ((totalProfitSum / totalSalesSum) * 100).toFixed(1) : '0'
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [
             xlCell('Fecha', hdr),
             xlCell('Día', hdr),
@@ -1249,7 +1155,7 @@ export function ChartExporter({
             xlCell('Participación %', hdr),
             xlCell('Barra Visual', hdr),
           ],
-          ...salesDataset.map((row: any, i: number) => {
+          ...salesDataset.map((row: ReportRow, i: number) => {
             const s = Number(row.sales) || 0
             const o = Number(row.orders) || 0
             const p = Number(row.profit) || 0
@@ -1259,8 +1165,8 @@ export function ChartExporter({
             const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(share / 4))))
 
             return [
-              xlCell(formatDateStr(row.date), xlData(i, 'center')),
-              xlCell(getDayOfWeekStr(row.date), xlData(i, 'center')),
+              xlCell(formatDateStr(asText(row.date)), xlData(i, 'center')),
+              xlCell(getDayOfWeekStr(asText(row.date)), xlData(i, 'center')),
               xlCell(s, xlNum(i, true)),
               xlCell(o, xlNum(i)),
               xlCell(t, xlNum(i)),
@@ -1294,11 +1200,11 @@ export function ChartExporter({
       // ── Hoja 3: Ranking de Productos ───────────────────────────────────────
       if (productsDataset && productsDataset.length > 0) {
         const hdr = xlHdr(XL_C.green)
-        const totalSalesSum = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.sales) || 0), 0)
-        const totalQtySum = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.quantity) || 0), 0)
-        const totalProfitSum = productsDataset.reduce((sum: number, p: any) => sum + (Number(p.profit) || 0), 0)
+        const totalSalesSum = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+        const totalQtySum = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.quantity) || 0), 0)
+        const totalProfitSum = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.profit) || 0), 0)
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [
             xlCell('Posición', hdr),
             xlCell('Producto', hdr),
@@ -1311,7 +1217,7 @@ export function ChartExporter({
             xlCell('Margen %', hdr),
             xlCell('Barra Visual', hdr),
           ],
-          ...productsDataset.map((prod: any, i: number) => {
+          ...productsDataset.map((prod: ReportRow, i: number) => {
             const s = Number(prod.sales) || 0
             const q = Number(prod.quantity) || 0
             const p = Number(prod.profit) || 0
@@ -1323,8 +1229,8 @@ export function ChartExporter({
 
             return [
               xlCell(medal, xlData(i, 'center', true)),
-              xlCell(prod.name || 'Sin nombre', xlData(i, 'left', true)),
-              xlCell(prod.category || 'General', xlData(i, 'left')),
+              xlCell(asText(prod.name) || 'Sin nombre', xlData(i, 'left', true)),
+              xlCell(asText(prod.category) || 'General', xlData(i, 'left')),
               xlCell(q, xlNum(i)),
               xlCell(avgPrice, xlNum(i)),
               xlCell(s, xlNum(i, true)),
@@ -1359,10 +1265,10 @@ export function ChartExporter({
       // ── Hoja 4: Categorías y Rubros ────────────────────────────────────────
       if (categoriesDataset && categoriesDataset.length > 0) {
         const hdr = xlHdr(XL_C.violet)
-        const totalSalesSum = categoriesDataset.reduce((sum: number, c: any) => sum + (Number(c.sales) || 0), 0)
-        const totalQtySum = categoriesDataset.reduce((sum: number, c: any) => sum + (Number(c.quantity) || 0), 0)
+        const totalSalesSum = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.sales) || 0), 0)
+        const totalQtySum = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.quantity) || 0), 0)
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [
             xlCell('Categoría Comercial', hdr),
             xlCell('Unidades Vendidas', hdr),
@@ -1371,7 +1277,7 @@ export function ChartExporter({
             xlCell('Participación %', hdr),
             xlCell('Barra Visual', hdr),
           ],
-          ...categoriesDataset.map((cat: any, i: number) => {
+          ...categoriesDataset.map((cat: ReportRow, i: number) => {
             const s = Number(cat.sales) || 0
             const q = Number(cat.quantity) || 0
             const avgU = q > 0 ? Math.round(s / q) : s
@@ -1379,7 +1285,7 @@ export function ChartExporter({
             const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(share / 4))))
 
             return [
-              xlCell(cat.name || 'Sin Categoría', xlData(i, 'left', true)),
+              xlCell(asText(cat.name) || 'Sin Categoría', xlData(i, 'left', true)),
               xlCell(q, xlNum(i)),
               xlCell(s, xlNum(i, true)),
               xlCell(avgU, xlNum(i)),
@@ -1408,18 +1314,18 @@ export function ChartExporter({
       // ── Hoja 5: Taller y Reparaciones (si existen datos) ────────────────────
       if (repairsStatusDataset.length > 0 || repairsTrendDataset.length > 0) {
         const hdr = xlHdr(XL_C.amber)
-        const totalRepairs = repairsStatusDataset.reduce((sum: number, r: any) => sum + (Number(r.value) || 0), 0)
-        const totalTrendCount = repairsTrendDataset.reduce((sum: number, t: any) => sum + (Number(t.count) || 0), 0)
+        const totalRepairs = repairsStatusDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.value) || 0), 0)
+        const totalTrendCount = repairsTrendDataset.reduce((sum: number, t: ReportRow) => sum + (Number(t.count) || 0), 0)
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [xlCell('DESGLOSE DE REPARACIONES POR ESTADO', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
           [xlCell('Estado Operativo', hdr), xlCell('Equipos Registrados', hdr), xlCell('Participación %', hdr), xlCell('Barra Visual', hdr)],
-          ...repairsStatusDataset.map((st: any, i: number) => {
+          ...repairsStatusDataset.map((st: ReportRow, i: number) => {
             const v = Number(st.value) || 0
             const pct = totalRepairs > 0 ? +((v / totalRepairs) * 100).toFixed(1) : 0
             const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(pct / 4))))
             return [
-              xlCell(st.name, xlData(i, 'left', true)),
+              xlCell(asText(st.name), xlData(i, 'left', true)),
               xlCell(v, xlNum(i)),
               xlCell(`${pct}%`, xlData(i, 'right')),
               xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.amber }, name: 'Calibri' } }),
@@ -1434,12 +1340,12 @@ export function ChartExporter({
           [xlCell('', {}), xlCell('', {}), xlCell('', {}), xlCell('', {})],
           [xlCell('INGRESOS DIARIOS AL TALLER', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
           [xlCell('Fecha', hdr), xlCell('Día', hdr), xlCell('Órdenes Ingresadas', hdr), xlCell('Participación %', hdr)],
-          ...repairsTrendDataset.map((t: any, i: number) => {
+          ...repairsTrendDataset.map((t: ReportRow, i: number) => {
             const cnt = Number(t.count) || 0
             const pct = totalTrendCount > 0 ? +((cnt / totalTrendCount) * 100).toFixed(1) : 0
             return [
-              xlCell(formatDateStr(t.date), xlData(i, 'center')),
-              xlCell(getDayOfWeekStr(t.date), xlData(i, 'center')),
+              xlCell(formatDateStr(asText(t.date)), xlData(i, 'center')),
+              xlCell(getDayOfWeekStr(asText(t.date)), xlData(i, 'center')),
               xlCell(cnt, xlNum(i, true)),
               xlCell(`${pct}%`, xlData(i, 'right')),
             ]
@@ -1460,19 +1366,19 @@ export function ChartExporter({
       // ── Hoja 6: Tendencia de Producto (si existe selección) ─────────────────
       if (selectedProductDataset.length > 0) {
         const hdr = xlHdr(XL_C.blue)
-        const totalSales = selectedProductDataset.reduce((sum: number, p: any) => sum + (Number(p.sales) || 0), 0)
-        const totalQty = selectedProductDataset.reduce((sum: number, p: any) => sum + (Number(p.qty) || 0), 0)
+        const totalSales = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+        const totalQty = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.qty) || 0), 0)
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [
             xlCell('Fecha', hdr),
             xlCell('Día', hdr),
             xlCell('Facturación (Gs.)', hdr),
             xlCell('Unidades Vendidas', hdr),
           ],
-          ...selectedProductDataset.map((p: any, i: number) => [
-            xlCell(formatDateStr(p.date), xlData(i, 'center')),
-            xlCell(getDayOfWeekStr(p.date), xlData(i, 'center')),
+          ...selectedProductDataset.map((p: ReportRow, i: number) => [
+            xlCell(formatDateStr(asText(p.date)), xlData(i, 'center')),
+            xlCell(getDayOfWeekStr(asText(p.date)), xlData(i, 'center')),
             xlCell(Number(p.sales) || 0, xlNum(i, true)),
             xlCell(Number(p.qty) || 0, xlNum(i)),
           ]),
@@ -1497,7 +1403,7 @@ export function ChartExporter({
         const totalStatus = creditReport.statusDistribution.reduce((acc, s) => acc + s.count, 0)
         const totalPayments = creditReport.paymentTrend.reduce((acc, p) => acc + p.amount, 0)
 
-        const rows: any[][] = [
+        const rows: ReportCell[][] = [
           [xlCell('RESUMEN FINANCIERO DE CARTERA Y CRÉDITOS', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
           [xlCell('Indicador de Créditos', hdr), xlCell('Monto / Valor', hdr), xlCell('Unidad', hdr), xlCell('Observación', hdr)],
           [xlCell('Créditos Otorgados en Período', xlData(0, 'left', true)), xlCell(creditReport.period.grantedCount, xlNum(0)), xlCell('Operaciones', xlData(0)), xlCell('Nuevas financiaciones', xlData(0))],
@@ -1574,7 +1480,7 @@ export function ChartExporter({
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
     }
-  }, [title, data, metrics, chartData, onExport, sanitizeFileName])
+  }, [title, data, metrics, chartData, creditReport, onExport, sanitizeFileName])
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>

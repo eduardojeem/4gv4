@@ -23,6 +23,7 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { formatPrice, cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
 import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 import type { PublicProduct } from '@/types/public'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
 
@@ -154,7 +155,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
         sku: currentProduct.sku,
         inStock: currentProduct.in_stock,
         stockQuantity: currentProduct.stock_quantity,
-        productUrl: typeof window !== 'undefined' ? `${window.location.origin}${productHref}` : productHref,
+        productUrl: siteUrl(productHref),
         imageUrl: currentProduct.image ? resolveProductImageUrl(currentProduct.image) : null,
         intent: 'inquiry',
       })
@@ -299,7 +300,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
                     variant="outline"
                     className="rounded-full font-semibold px-6 border-white/30 text-white hover:bg-white/15 hover:border-white/50 backdrop-blur-xs transition-all"
                   >
-                    <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+                    <a href={whatsappHref} target="_blank" rel="noopener noreferrer" suppressHydrationWarning>
                       <MessageCircle className="h-4 w-4 mr-2 text-emerald-400" />
                       <span>Consultar WhatsApp</span>
                     </a>

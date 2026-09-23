@@ -12,11 +12,14 @@ export function readActiveProductFilters(searchParams: URLSearchParams) {
   const audience = searchParams.get('audience')
   const size = searchParams.get('size')
   const color = searchParams.get('color')
+  // Marca y modelo del celular al que pertenece el repuesto.
+  const deviceBrand = searchParams.get('celular')
+  const deviceModel = searchParams.get('modelo')
   const minPrice = Number(searchParams.get('min_price')) || 0
   const maxPrice = Number(searchParams.get('max_price')) || PRODUCTS_MAX_PRICE
   const hasActiveFilters =
-    !!query || !!categoryId || !!brand || !!branchId || !!audience || !!size || !!color || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
-  return { query, categoryId, brand, branchId, audience, size, color, inStock, minPrice, maxPrice, hasActiveFilters }
+    !!query || !!categoryId || !!brand || !!branchId || !!audience || !!size || !!color || !!deviceBrand || !!deviceModel || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
+  return { query, categoryId, brand, branchId, audience, size, color, deviceBrand, deviceModel, inStock, minPrice, maxPrice, hasActiveFilters }
 }
 
 /**
@@ -38,6 +41,8 @@ export function clearAllProductFilters(searchParams: URLSearchParams): URLSearch
   params.delete('audience')
   params.delete('size')
   params.delete('color')
+  params.delete('celular')
+  params.delete('modelo')
   params.set('page', '1')
   return params
 }

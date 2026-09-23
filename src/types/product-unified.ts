@@ -68,6 +68,8 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   // Para qué celular es el repuesto. `brand` es la marca del repuesto.
   device_brand?: string | null
   device_models?: string[] | null
+  /** Publicado sin precio: la tienda muestra «Preguntar» y abre WhatsApp. */
+  hide_price?: boolean | null
 
   // Legacy compatibility - ensure these exist
   stock_quantity: number

@@ -7,18 +7,38 @@ import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { linkPublicCustomerAccount } from '@/lib/customers/link-public-customer-account'
 import { captchaTokenSchema } from '@/lib/auth/captcha'
+import { describeAuthError, EMAIL_YA_REGISTRADO, signUpFoundExistingAccount } from '@/lib/auth/auth-error-messages'
 
 const customerRegisterSchema = z.object({
   // Optional: when omitted the account is a marketplace-wide customer identity
   // (auth + profile + role only). When present, the customer is also linked to
   // that specific store.
   organizationSlug: z.string().trim().min(1).max(64).optional().nullable(),
-  fullName: z.string().trim().min(2).max(160),
-  email: z.string().trim().email().max(254),
-  phone: z.string().trim().max(50).optional().nullable(),
-  password: z.string().min(1).refine((value) => !validatePassword(value), {
-    message: 'La contrasena no cumple los requisitos de seguridad',
-  }),
+  fullName: z
+    .string({ error: 'Escribí tu nombre y apellido.' })
+    .trim()
+    .min(2, 'Escribí tu nombre y apellido (al menos 2 letras).')
+    .max(160, 'El nombre es demasiado largo: hasta 160 caracteres.'),
+  email: z
+    .string({ error: 'Escribí tu correo electrónico.' })
+    .trim()
+    .max(254, 'El correo es demasiado largo.')
+    .email('Revisá el correo: tiene que ser como nombre@correo.com.'),
+  phone: z
+    .string()
+    .trim()
+    .max(50, 'El teléfono es demasiado largo.')
+    .optional()
+    .nullable(),
+  password: z
+    .string({ error: 'Elegí una contraseña.' })
+    .min(1, 'Elegí una contraseña.')
+    // El mensaje sale de la misma función que usa el formulario, así la
+    // persona lee exactamente lo que le falta y no un texto genérico.
+    .superRefine((value, ctx) => {
+      const problema = validatePassword(value)
+      if (problema) ctx.addIssue({ code: 'custom', message: problema })
+    }),
   captchaToken: captchaTokenSchema,
 })
 
@@ -45,7 +65,7 @@ export async function POST(request: Request) {
     if (!allowed) {
       const retryAfter = rateLimiter.getResetTime(`customer-register:${clientIp}`)
       return NextResponse.json(
-        { success: false, error: 'Demasiados intentos de registro. Intenta nuevamente en unos minutos.' },
+        { success: false, error: 'Hiciste varios intentos de registro seguidos. Esperá unos minutos y volvé a probar.' },
         { status: 429, headers: { 'Retry-After': String(retryAfter) } }
       )
     }
@@ -53,8 +73,16 @@ export async function POST(request: Request) {
     const validation = customerRegisterSchema.safeParse(await request.json())
 
     if (!validation.success) {
+      // El primer problema, en castellano y con el campo que lo causó: el
+      // formulario lo muestra al lado del dato equivocado.
+      const primero = validation.error.issues[0]
       return NextResponse.json(
-        { success: false, error: 'Error de validación', details: validation.error.issues },
+        {
+          success: false,
+          error: primero?.message || 'Revisá los datos del formulario.',
+          field: primero?.path?.[0] ?? null,
+          details: validation.error.issues,
+        },
         { status: 400 }
       )
     }
@@ -72,7 +100,7 @@ export async function POST(request: Request) {
 
       if (organizationError || !data) {
         return NextResponse.json(
-          { success: false, error: 'Empresa no encontrada.' },
+          { success: false, error: 'No encontramos esta tienda. Volvé a entrar desde su página.' },
           { status: 404 }
         )
       }
@@ -83,8 +111,9 @@ export async function POST(request: Request) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseAnonKey) {
+      logger.error('Customer register sin credenciales de Supabase')
       return NextResponse.json(
-        { success: false, error: 'Supabase no esta configurado.' },
+        { success: false, error: 'La tienda no puede crear cuentas en este momento. Probá más tarde.' },
         { status: 500 }
       )
     }
@@ -112,9 +141,22 @@ export async function POST(request: Request) {
     })
 
     if (authError || !authData.user) {
+      // El texto original de Supabase viene en inglés: queda en el log.
+      logger.warn('Customer register rechazado por Supabase', { error: authError?.message })
       return NextResponse.json(
-        { success: false, error: authError?.message || 'No se pudo crear el usuario.' },
+        { success: false, error: describeAuthError(authError?.message, 'register') },
         { status: 400 }
+      )
+    }
+
+    // Correo ya registrado. Supabase no lo dice para que nadie pueda averiguar
+    // quién tiene cuenta, pero devuelve el usuario sin identidades. Si no se
+    // mira, se responde «cuenta creada» por un mail que nunca llega, y el
+    // upsert de abajo pisaría el nombre y el estado de una cuenta ajena.
+    if (signUpFoundExistingAccount(authData.user)) {
+      return NextResponse.json(
+        { success: false, code: 'email_already_registered', error: EMAIL_YA_REGISTRADO },
+        { status: 409 }
       )
     }
 
@@ -161,7 +203,7 @@ export async function POST(request: Request) {
         {
           success: false,
           code: 'customer_register_link_failed',
-          error: 'La cuenta fue creada, pero no se pudo completar tu perfil. Contacta soporte.',
+          error: 'Creamos tu cuenta, pero no pudimos terminar tu perfil. Escribinos y lo resolvemos.',
         },
         { status: 500 }
       )
@@ -187,7 +229,7 @@ export async function POST(request: Request) {
           {
             success: false,
             code: 'customer_register_link_failed',
-            error: 'La cuenta fue creada, pero no se pudo vincular como cliente de esta empresa. Contacta soporte.',
+            error: 'Creamos tu cuenta, pero no pudimos vincularla con esta tienda. Iniciá sesión y desde ahí la vinculás.',
           },
           { status: 500 }
         )
@@ -207,7 +249,7 @@ export async function POST(request: Request) {
   } catch (error) {
     logger.error('Public customer register API error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error inesperado al crear el cliente.' },
+      { success: false, error: 'Tuvimos un problema al crear tu cuenta. Intentá de nuevo en un momento.' },
       { status: 500 }
     )
   }

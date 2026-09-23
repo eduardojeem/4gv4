@@ -29,6 +29,7 @@ import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/varian
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { cn } from '@/lib/utils'
 import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import type { PublicProduct } from '@/types/public'
 import type { PublicCommerceMode } from '@/types/website-settings'
@@ -183,8 +184,7 @@ export function OfferDetailModal({
   const resolvedActive = resolveProductImageUrl(currentImage)
 
   const storeName = websiteSettings?.company_info?.name || null
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-  const fullProductUrl = currentOrigin ? `${currentOrigin}${productHref}` : productHref
+  const fullProductUrl = siteUrl(productHref)
 
   const whatsappHref =
     contactPhone
@@ -531,6 +531,7 @@ export function OfferDetailModal({
                   href={whatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
+                  suppressHydrationWarning
                   onClick={onClose}
                 >
                   <MessageCircle className="h-4 w-4" />

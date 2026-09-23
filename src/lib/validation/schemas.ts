@@ -187,6 +187,11 @@ const productBaseSchema = z.object({
     .optional()
     .transform((valor) => (valor === undefined ? undefined : normalizeDeviceModels(valor))),
 
+  // Publicar sin precio. Sin `default`: el valor por defecto lo pone la
+  // columna (los nuevos nacen ocultos) y una edicion que no lo manda no lo
+  // cambia, igual que con los datos del celular.
+  hide_price: z.boolean().optional(),
+
   ...productVariantsFields,
 })
 

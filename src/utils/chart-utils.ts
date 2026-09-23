@@ -101,32 +101,10 @@ export const useChartData = <T extends ChartDataPoint>(
 
   useEffect(() => { loadDataRef.current = loadData }, [loadData])
 
-  // Load cached data on mount
+  // La carga inicial se inicia al montar; las respuestas se almacenan para
+  // reutilizarlas en futuras mejoras sin bloquear este render.
   useEffect(() => {
-    if (cacheKey && typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem(`chart_cache_${cacheKey}`)
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached)
-          const isStale = Date.now() - timestamp > (refreshInterval || 300000) // 5 minutes default
-
-          if (!isStale) {
-            setState({
-              isLoading: false,
-              error: null,
-              data,
-              isEmpty: !data || data.length === 0,
-              lastUpdated: new Date(timestamp)
-            })
-            return
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load cached chart data:', e)
-      }
-    }
-
-    loadData()
+    void Promise.resolve().then(loadData)
   }, [cacheKey, loadData, refreshInterval, dependencies])
 
   // Set up refresh interval
