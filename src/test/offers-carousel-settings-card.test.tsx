@@ -112,7 +112,7 @@ describe('OffersCarouselSettingsCard', () => {
     expect(updateSetting).not.toHaveBeenCalled()
 
     // Al guardar viajan las dos cosas juntas.
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Guardar carrusel/i }))
 
     await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(1))
     const value = updateSetting.mock.calls[0][1]

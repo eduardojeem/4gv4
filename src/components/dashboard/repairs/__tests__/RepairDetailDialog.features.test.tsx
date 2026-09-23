@@ -35,6 +35,13 @@ vi.mock('@/components/dashboard/after-sales/CreateAfterSalesCaseDialog', () => (
 
 vi.mock('../RepairWarrantyCase', () => ({ RepairWarrantyCase: () => null }))
 
+// Cargar imagenes quedo detras del plan: sin esto el boton no se dibuja y la
+// prueba de la pestaña de imagenes no tiene que ver con las imagenes.
+vi.mock('@/contexts/SubscriptionStatusContext', async (original) => ({
+  ...(await original<typeof import('@/contexts/SubscriptionStatusContext')>()),
+  useSubscriptionStatus: () => ({ planCode: 'ENTERPRISE', planName: 'Enterprise' }),
+}))
+
 const sampleRepair: Repair = {
   id: 'rep-test-1',
   ticketNumber: 'TICK-999',

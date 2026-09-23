@@ -107,7 +107,7 @@ describe('StoreOffersPromoShowcase', () => {
     mockSwrLoading = false
   })
 
-  it('renderiza la vitrina con datos del comercio, badge oficial y cálculo de descuento máximo', () => {
+  it('renderiza la vitrina con datos del comercio, badge oficial e información real de la empresa', () => {
     render(
       <StoreOffersPromoShowcase
         companyInfo={{
@@ -115,6 +115,10 @@ describe('StoreOffersPromoShowcase', () => {
           logo_url: '/logo-4g.png',
           phone: '0983123456',
           city: 'Asunción',
+          address: 'Av. Eusebio Ayala 1234',
+          hours: {
+            weekdays: '08:00 - 18:00',
+          },
         }}
         tenantPrefix="/4g-celulares"
         tenantSlug="4g-celulares"
@@ -127,12 +131,13 @@ describe('StoreOffersPromoShowcase', () => {
 
     // Insignia oficial y ciudad
     expect(screen.getByText('Tienda Oficial')).toBeInTheDocument()
-    expect(screen.getByText('Asunción')).toBeInTheDocument()
+    expect(screen.getAllByText(/Asunción/).length).toBeGreaterThan(0)
 
-    // Banner de hasta descuento máximo con formato limpio y válido: HASTA -33% OFF
-    expect(screen.getByText('-33%')).toBeInTheDocument()
-    expect(screen.getByText('HASTA')).toBeInTheDocument()
-    expect(screen.getByText(/Descuento máximo en productos seleccionados/)).toBeInTheDocument()
+    // Información real de la empresa en la tarjeta promocional
+    expect(screen.getByText('Promociones del Comercio')).toBeInTheDocument()
+    expect(screen.getByText(/Av\. Eusebio Ayala 1234 · Asunción/)).toBeInTheDocument()
+    expect(screen.getByText(/Lun a Vie: 08:00 - 18:00/)).toBeInTheDocument()
+    expect(screen.getByText(/Atención: 0983123456/)).toBeInTheDocument()
 
     // Segundo carrusel presente para aprovechar el espacio vertical en pantallas grandes
     expect(screen.getByText('Destacado 2')).toBeInTheDocument()
