@@ -59,15 +59,13 @@ describe('LoginPage Redesign', () => {
     mockSearchParams = new URLSearchParams()
   })
 
-  it('renders modern login page with headlines and feature cards in SaaS context', () => {
+  // El panel de marketing («Control total de tu taller» y las cuatro tarjetas)
+  // se quito en un rediseño posterior: la pantalla es el formulario y las dos
+  // salidas de registro. Lo que se comprueba es eso.
+  it('renders the login form and the company sign-up path in SaaS context', () => {
     render(<LoginPage />)
 
-    // Check main headings and brand presence
-    expect(screen.getByText(/Control total de tu taller/i)).toBeInTheDocument()
-    expect(screen.getByText(/Gestión de Reparaciones/i)).toBeInTheDocument()
-    expect(screen.getByText(/Inventario y POS Rápido/i)).toBeInTheDocument()
-    expect(screen.getByText(/Métricas y Rentabilidad/i)).toBeInTheDocument()
-    expect(screen.getByText(/Tienda Online & Catálogo/i)).toBeInTheDocument()
+    expect(screen.getByText(/¿No tenés una cuenta para tu empresa\?/i)).toBeInTheDocument()
 
     // Check inputs
     expect(screen.getByPlaceholderText('nombre@empresa.com')).toBeInTheDocument()
@@ -85,11 +83,11 @@ describe('LoginPage Redesign', () => {
     mockSearchParams = new URLSearchParams('redirect=/marketplace')
     render(<LoginPage />)
 
-    expect(screen.getByText(/Portal de Compras y Seguimiento/i)).toBeInTheDocument()
-    expect(screen.getByText(/Seguimiento de Taller/i)).toBeInTheDocument()
-    expect(screen.getByText(/Compras & Favoritos/i)).toBeInTheDocument()
+    // Llegando del marketplace, la salida principal es la cuenta de cliente,
+    // y la de empresa queda como segunda opcion.
+    expect(screen.getByText(/¿Querés comprar o seguir tus pedidos\?/i)).toBeInTheDocument()
     expect(screen.getByText(/Crear cuenta de cliente gratis/i)).toBeInTheDocument()
-    expect(screen.getByText(/Volver a la tienda/i)).toBeInTheDocument()
+    expect(screen.getByText(/¿Tenés un negocio o taller\?/i)).toBeInTheDocument()
   })
 
   it('toggles password visibility', () => {

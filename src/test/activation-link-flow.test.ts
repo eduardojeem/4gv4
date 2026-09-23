@@ -45,6 +45,10 @@ describe('el enlace para activar la cuenta', () => {
   /** Con la confirmación pendiente, el ingreso rechaza igual: hay que decirlo. */
   it('después de registrarse se avisa que primero hay que abrir el correo', () => {
     expect(leer('src/app/register/page.tsx')).toContain("'&confirmar=1'")
-    expect(leer('src/app/login/page.tsx')).toContain('Te mandamos un correo para activar la cuenta')
+    // El texto cambio de persona («te mandamos» → «revisá tu correo»), pero
+    // sigue saliendo solo cuando el registro dejo la confirmacion pendiente.
+    const login = leer('src/app/login/page.tsx')
+    expect(login).toContain("searchParams.get('confirmar') === '1'")
+    expect(login).toContain('Revisá tu correo para activar la cuenta de ${registeredCompany}')
   })
 })

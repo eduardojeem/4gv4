@@ -20,7 +20,7 @@ const BARRA = leer('src/components/dashboard/customers/ImprovedSearchBar.tsx')
 describe('los dos buscadores son el mismo', () => {
   it('el panel le pasa el termino y el manejador', () => {
     expect(PANEL).toContain('searchTerm={filters.search}')
-    expect(PANEL).toContain("onSearchChange={(term) => updateFilters({ search: term })}")
+    expect(PANEL).toContain("onSearchChange={(term) => handleFiltersChange({ search: term })}")
   })
 
   it('la lista acepta que se lo manejen desde afuera', () => {
@@ -65,7 +65,10 @@ describe('la busqueda se aplica al confirmar, no mientras se escribe', () => {
   })
 
   it('el de abajo separa lo que se escribe de lo que se busca', () => {
-    expect(VISTA).toContain("const [draft, setDraft] = useState(controlledSearchTerm ?? '')")
+    // El borrador ya no se guarda suelto: se deriva durante el render para no
+    // pisar lo que se esta escribiendo (el mismo patron que pide el compilador).
+    expect(VISTA).toContain('const [draftState, setDraftState] = useState({')
+    expect(VISTA).toContain("const draft = draftState.base === (controlledSearchTerm ?? '')")
     expect(VISTA).toContain('value={draft}')
     expect(VISTA).toContain("if (e.key === 'Enter') {")
     expect(VISTA).toContain('submitSearch(draft)')
@@ -84,7 +87,9 @@ describe('la busqueda se aplica al confirmar, no mientras se escribe', () => {
   })
 
   it('el campo se pone al dia si el termino cambia desde afuera', () => {
-    expect(VISTA).toContain("if (isControlled) setDraft(controlledSearchTerm ?? '')")
+    // Si el termino de afuera cambio, `base` deja de coincidir y el borrador
+    // vuelve a salir de el: es lo que antes hacia `setDraft` a mano.
+    expect(VISTA).toContain("draftState.base === (controlledSearchTerm ?? '')")
     expect(FILTROS).toContain('setSearchValue(filters.search)')
   })
 })
