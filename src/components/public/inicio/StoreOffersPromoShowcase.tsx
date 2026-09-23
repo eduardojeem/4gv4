@@ -10,11 +10,9 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Eye,
   MessageCircle,
   Package,
-  ShieldCheck,
   Sparkles,
   Store,
   Tag,
@@ -194,6 +192,26 @@ export function StoreOffersPromoShowcase({
   const activeOfferImage = activeOffer ? resolveProductImageUrl(activeOffer.image) : null
   const activeOfferPrecioOculto = activeOffer ? hidesPublicPrice(activeOffer) : false
 
+  // Oferta secundaria para el segundo carrusel de escritorio (llena el espacio vertical, oculto en móvil)
+  const secondaryOfferIndex = carouselOffers.length > 1 ? (carouselIndex + 1) % carouselOffers.length : -1
+  const secondaryOffer = secondaryOfferIndex >= 0 ? carouselOffers[secondaryOfferIndex] : null
+  const secondaryOfferHasDisc = Boolean(
+    secondaryOffer?.has_offer &&
+    secondaryOffer?.offer_price &&
+    secondaryOffer?.offer_price < secondaryOffer?.sale_price
+  )
+  const secondaryOfferDiscount = secondaryOfferHasDisc && secondaryOffer?.offer_price
+    ? Math.round(((secondaryOffer.sale_price - secondaryOffer.offer_price) / secondaryOffer.sale_price) * 100)
+    : 0
+  const secondaryOfferSavings = secondaryOfferHasDisc && secondaryOffer?.offer_price
+    ? secondaryOffer.sale_price - secondaryOffer.offer_price
+    : 0
+  const secondaryOfferCompatibility = secondaryOffer
+    ? describeDeviceCompatibility(secondaryOffer.device_brand, secondaryOffer.device_models)
+    : null
+  const secondaryOfferImage = secondaryOffer ? resolveProductImageUrl(secondaryOffer.image) : null
+  const secondaryOfferPrecioOculto = secondaryOffer ? hidesPublicPrice(secondaryOffer) : false
+
   // Si no está cargando y no hay ninguna oferta disponible, no mostramos un bloque vacío
   if (!isLoading && validOffers.length === 0) {
     return null
@@ -349,30 +367,31 @@ export function StoreOffersPromoShowcase({
                   onMouseEnter={() => setIsCarouselPaused(true)}
                   onMouseLeave={() => setIsCarouselPaused(false)}
                 >
-                  {/* Encabezado del bloque: HASTA -XX% Descuento Máximo + Contador */}
+                  {/* Encabezado del bloque: HASTA -XX% OFF Descuento Máximo + Contador */}
                   <div className="flex items-center justify-between gap-2 border-b border-rose-400/20 pb-2.5">
                     <div>
-                      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-300">
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/20 border border-rose-400/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-300">
                         <Sparkles className="h-3 w-3 text-rose-400 animate-pulse" />
-                        <span>DESCUENTOS POR TIEMPO LIMITADO</span>
+                        <span>Descuentos por tiempo limitado</span>
                       </div>
-                      <div className="mt-1 flex items-baseline gap-2">
+                      <div className="mt-1.5 flex items-baseline gap-2">
+                        <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-200">
+                          HASTA
+                        </span>
                         <span className="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-sm">
                           {maxDiscountPct > 0 ? `-${maxDiscountPct}%` : 'OFERTAS'}
                         </span>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-rose-300 leading-none">
-                            HASTA
-                          </span>
-                          <span className="text-xs font-extrabold uppercase leading-tight text-rose-100">
-                            {maxDiscountPct > 0 ? 'Descuento Máximo' : 'Rebajas Activas'}
-                          </span>
-                        </div>
+                        <span className="text-xs font-black uppercase tracking-wide text-rose-300">
+                          OFF
+                        </span>
                       </div>
+                      <p className="text-[11px] font-medium text-rose-100/80 mt-0.5">
+                        {maxDiscountPct > 0 ? 'Descuento máximo en productos seleccionados' : 'Precios especiales activos'}
+                      </p>
                     </div>
 
                     {carouselOffers.length > 1 && (
-                      <div className="flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-bold text-rose-200 border border-white/10 shrink-0">
+                      <div className="flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-bold text-rose-200 border border-white/10 shrink-0 self-start mt-1">
                         <span>{(carouselIndex % carouselOffers.length) + 1}</span>
                         <span className="text-white/40">/</span>
                         <span>{carouselOffers.length}</span>
@@ -380,7 +399,7 @@ export function StoreOffersPromoShowcase({
                     )}
                   </div>
 
-                  {/* Carrusel de Producto en Oferta */}
+                  {/* Carrusel de Producto en Oferta (Principal - Visible en Móvil y Escritorio) */}
                   {activeOffer && (
                     <div className="flex flex-col gap-2.5">
                       {/* Contenedor de la Imagen con Flechas de Navegación */}
@@ -450,7 +469,7 @@ export function StoreOffersPromoShowcase({
                         )}
                       </div>
 
-                      {/* Detalles del Producto */}
+                      {/* Detalles del Producto Principal */}
                       <div className="space-y-1">
                         {activeOfferCompatibility ? (
                           <p className="line-clamp-1 text-[10px] font-semibold text-rose-300/90 tracking-wide">
@@ -528,31 +547,114 @@ export function StoreOffersPromoShowcase({
                     </div>
                   )}
 
+                  {/* ── Segundo Carrusel de Ofertas (Solo visible en escritorio/tablet para llenar el espacio vertical, oculto en modo móvil) ── */}
+                  {secondaryOffer && (
+                    <div className="hidden md:flex flex-col gap-2 pt-3 border-t border-rose-400/20">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-rose-200">
+                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-rose-300">
+                          <Sparkles className="h-3 w-3 text-rose-400" />
+                          Destacado 2
+                        </span>
+                        <span className="text-white/60 text-[10px]">
+                          {secondaryOfferIndex + 1} de {carouselOffers.length}
+                        </span>
+                      </div>
+
+                      {/* Contenedor de la Imagen */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedProduct(createModalProduct(secondaryOffer))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            setSelectedProduct(createModalProduct(secondaryOffer))
+                          }
+                        }}
+                        className="group/slide relative aspect-4/3 w-full overflow-hidden rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-2 cursor-pointer transition-all hover:border-rose-400/50 hover:bg-white/10"
+                      >
+                        {secondaryOfferDiscount > 0 && !secondaryOfferPrecioOculto && (
+                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-gradient-to-r from-rose-600 to-rose-500 px-2 py-0.5 text-[10px] font-black text-white shadow-md shadow-rose-950/40">
+                            <span>-{secondaryOfferDiscount}% OFF</span>
+                          </div>
+                        )}
+
+                        {secondaryOfferImage ? (
+                          <div className="relative h-full w-full">
+                            <Image
+                              src={secondaryOfferImage}
+                              alt={secondaryOffer.name}
+                              fill
+                              sizes="(max-width: 768px) 100vw, 320px"
+                              className="object-contain p-1 transition-transform duration-500 group-hover/slide:scale-105"
+                              unoptimized={shouldBypassImageOptimization(secondaryOfferImage)}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-rose-300/60 py-6">
+                            <Package className="h-10 w-10 stroke-1" />
+                            <span className="text-[10px] mt-1">Sin imagen</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Detalles del Producto 2 */}
+                      <div className="space-y-1">
+                        {secondaryOfferCompatibility ? (
+                          <p className="line-clamp-1 text-[10px] font-semibold text-rose-300/90 tracking-wide">
+                            {secondaryOfferCompatibility}
+                          </p>
+                        ) : (
+                          <p className="line-clamp-1 text-[10px] font-bold text-rose-300/70 uppercase tracking-wider">
+                            {secondaryOffer.brand || storeName}
+                          </p>
+                        )}
+
+                        <h4
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedProduct(createModalProduct(secondaryOffer))}
+                          className="line-clamp-1 cursor-pointer text-xs sm:text-sm font-bold text-white transition-colors hover:text-rose-200"
+                          title={secondaryOffer.name}
+                        >
+                          {secondaryOffer.name}
+                        </h4>
+
+                        {/* Precios o Precio a Consultar */}
+                        {secondaryOfferPrecioOculto ? (
+                          <div className="flex items-center justify-between pt-0.5">
+                            <span className="text-xs font-bold text-amber-300">Precio a consultar</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProduct(createModalProduct(secondaryOffer))}
+                              className="text-[10px] font-bold text-rose-300 underline hover:text-white"
+                            >
+                              Ver detalle
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-baseline gap-2 pt-0.5">
+                            <span className="text-base font-black text-white">
+                              {formatPrice(secondaryOffer.offer_price ?? secondaryOffer.sale_price)}
+                            </span>
+                            {secondaryOffer.offer_price && secondaryOffer.offer_price < secondaryOffer.sale_price && (
+                              <span className="text-xs text-white/50 line-through">
+                                {formatPrice(secondaryOffer.sale_price)}
+                              </span>
+                            )}
+                            {secondaryOfferSavings > 0 && (
+                              <span className="rounded-md bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-bold text-emerald-300 border border-emerald-500/30">
+                                Ahorrás {formatPrice(secondaryOfferSavings)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-[11px] text-rose-100/80 leading-snug border-t border-rose-400/20 pt-2">
                     {carouselOffers.length} {carouselOffers.length === 1 ? 'producto rebajado' : 'productos rebajados'} con disponibilidad inmediata.
                   </p>
-                </div>
-
-                {/* Lista de Ventajas del Negocio */}
-                <div className="space-y-2 pt-1 text-xs text-rose-100">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-400/20 text-rose-300">
-                      <ShieldCheck className="h-3 w-3" />
-                    </div>
-                    <span className="font-semibold text-white/95">Garantía oficial de {storeName}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-400/20 text-rose-300">
-                      <Tag className="h-3 w-3" />
-                    </div>
-                    <span className="font-semibold text-white/95">Precios directos sin intermediarios</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-400/20 text-rose-300">
-                      <Clock className="h-3 w-3" />
-                    </div>
-                    <span className="font-semibold text-white/95">Stock listo para retiro o entrega express</span>
-                  </div>
                 </div>
               </div>
 

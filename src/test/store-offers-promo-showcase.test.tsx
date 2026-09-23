@@ -129,14 +129,13 @@ describe('StoreOffersPromoShowcase', () => {
     expect(screen.getByText('Tienda Oficial')).toBeInTheDocument()
     expect(screen.getByText('Asunción')).toBeInTheDocument()
 
-    // Banner de hasta descuento máximo: 33% off
+    // Banner de hasta descuento máximo con formato limpio y válido: HASTA -33% OFF
     expect(screen.getByText('-33%')).toBeInTheDocument()
     expect(screen.getByText('HASTA')).toBeInTheDocument()
+    expect(screen.getByText(/Descuento máximo en productos seleccionados/)).toBeInTheDocument()
 
-    // Tarjeta izquierda bullets
-    expect(screen.getByText('Precios directos sin intermediarios')).toBeInTheDocument()
-    expect(screen.getByText('Stock listo para retiro o entrega express')).toBeInTheDocument()
-    expect(screen.getByText(/Garantía oficial de 4G Celulares Store/)).toBeInTheDocument()
+    // Segundo carrusel presente para aprovechar el espacio vertical en pantallas grandes
+    expect(screen.getByText('Destacado 2')).toBeInTheDocument()
   })
 
   it('muestra productos en oferta con porcentajes de ahorro y compatibilidad de modelo', () => {

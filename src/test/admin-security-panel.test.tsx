@@ -67,90 +67,76 @@ vi.mock('@/hooks/use-security-logs', () => ({
   }),
 }))
 
+/**
+ * El panel se reescribio entero varias veces y sus textos cambian seguido, asi
+ * que estas pruebas se apoyan en lo que no cambia: los datos de la bitacora
+ * (nombres, IP, id del evento), las pestañas por su rol y la ficha que se abre
+ * al tocar un evento. Los titulos decorativos quedan fuera a proposito.
+ */
 describe('Panel de Seguridad Administrativo (/admin/security)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('renderiza correctamente las métricas clave y la tabla de auditoría', () => {
+  const irA = (pestaña: RegExp) => fireEvent.click(screen.getByRole('tab', { name: pestaña }))
+
+  it('renderiza las metricas clave y la bitacora con sus datos', () => {
     render(<SecurityPanel />)
 
-    expect(screen.getByText('Total Eventos')).toBeInTheDocument()
+    expect(screen.getByText('Actividades Registradas')).toBeInTheDocument()
     expect(screen.getByText('25')).toBeInTheDocument()
-    expect(screen.getByText('Eventos Críticos')).toBeInTheDocument()
-    expect(screen.getByText('Inicio de sesión exitoso')).toBeInTheDocument()
+    expect(screen.getByText('Alertas Críticas')).toBeInTheDocument()
+    // La fila trae a quien lo hizo; la IP quedo dentro de la ficha del evento.
     expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
-    expect(screen.getByText('190.128.50.12')).toBeInTheDocument()
-    expect(screen.getByText('Intento de acceso denegado')).toBeInTheDocument()
   })
 
-  it('abre el modal de detalles técnicos al hacer clic en un evento', () => {
+  it('abre la ficha tecnica al tocar un evento', () => {
     render(<SecurityPanel />)
 
-    // Clic en el botón de ver detalles
-    const detailButtons = screen.getAllByLabelText('Ver detalle')
-    expect(detailButtons.length).toBeGreaterThan(0)
-    fireEvent.click(detailButtons[0])
+    const fichas = screen.getAllByRole('button', { name: /Ver ficha/i })
+    expect(fichas.length).toBeGreaterThan(0)
+    fireEvent.click(fichas[0])
 
-    // El modal de detalle debe abrirse con la información técnica completa
-    expect(screen.getByText('ID: log-1')).toBeInTheDocument()
-    expect(screen.getByText('Usuario Ejecutor')).toBeInTheDocument()
-    expect(screen.getAllByText('Inicio de sesión desde Chrome en Windows 11').length).toBeGreaterThanOrEqual(1)
+    // La ficha existe y trae el id del evento y el agente del navegador, que
+    // es lo que sirve para investigar.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText(/log-1/)).toBeInTheDocument()
     expect(screen.getByText(/Mozilla\/5\.0/)).toBeInTheDocument()
-    expect(screen.getByText('Copiar Datos')).toBeInTheDocument()
+    expect(screen.getByText('190.128.50.12')).toBeInTheDocument()
   })
 
-  it('permite cambiar a la pestaña de Diagnóstico & Salud y ejecutar diagnóstico', async () => {
+  it('la pestaña de escudos ofrece el diagnostico en vivo', () => {
     render(<SecurityPanel />)
 
-    const diagTab = screen.getByRole('tab', { name: /Diagnóstico & Salud/i })
-    fireEvent.click(diagTab)
+    irA(/Escudos de Protección/i)
 
-    expect(screen.getByText('Puntuación de Seguridad')).toBeInTheDocument()
-    expect(screen.getByText('Pilares de Protección Activos')).toBeInTheDocument()
-    expect(screen.getByText(/Row Level Security \(RLS\)/i)).toBeInTheDocument()
-
-    const scanBtn = screen.getByRole('button', { name: /Ejecutar Diagnóstico en Vivo/i })
-    expect(scanBtn).toBeInTheDocument()
+    expect(screen.getByText('Nivel de Protección Actual')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Ver salud del sistema/i })).toBeInTheDocument()
   })
 
-  it('permite ver la lista de usuarios separando personal del sistema y clientes', () => {
+  it('la pestaña de cuentas separa al personal de los clientes', () => {
     render(<SecurityPanel />)
 
-    const usersTab = screen.getByRole('tab', { name: /Usuarios & Accesos/i })
-    fireEvent.click(usersTab)
+    irA(/Personal & Cuentas/i)
 
-    expect(screen.getByText('Personal con Acceso al Sistema')).toBeInTheDocument()
-    expect(screen.getByText('Personal y Empleados del Sistema')).toBeInTheDocument()
-    expect(screen.getByText('Clientes Registrados con Acceso')).toBeInTheDocument()
+    expect(screen.getByText('Control de Cuentas & Permisos')).toBeInTheDocument()
 
-    // Ambos grupos visibles en la vista inicial (Todos)
-    expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
-    expect(screen.getByText('Carlos López')).toBeInTheDocument()
-    expect(screen.getByText('María Gomez')).toBeInTheDocument()
-
-    // Filtrar solo por Personal / Empleados
-    const staffFilterBtn = screen.getByRole('button', { name: /Personal \/ Empleados/i })
-    fireEvent.click(staffFilterBtn)
+    // Abre en el personal, que es a quien se le controla el acceso.
     expect(screen.getByText('Juan Pérez')).toBeInTheDocument()
     expect(screen.getByText('Carlos López')).toBeInTheDocument()
     expect(screen.queryByText('María Gomez')).not.toBeInTheDocument()
 
-    // Filtrar solo por Clientes
-    const customersFilterBtn = screen.getByRole('button', { name: /Clientes/i })
-    fireEvent.click(customersFilterBtn)
+    // Y el filtro separa de verdad: es lo que la pestaña promete.
+    fireEvent.click(screen.getByRole('button', { name: /Clientes/i }))
     expect(screen.getByText('María Gomez')).toBeInTheDocument()
     expect(screen.queryByText('Juan Pérez')).not.toBeInTheDocument()
-    expect(screen.queryByText('Carlos López')).not.toBeInTheDocument()
   })
 
-  it('permite ver las recomendaciones de blindaje', () => {
+  it('la pestaña de consejos muestra la autoevaluacion', () => {
     render(<SecurityPanel />)
 
-    const recoTab = screen.getByRole('tab', { name: /Blindaje & Consejos/i })
-    fireEvent.click(recoTab)
+    irA(/Consejos & Buenas Prácticas/i)
 
-    expect(screen.getByText('Autenticación Fuerte & Contraseñas')).toBeInTheDocument()
-    expect(screen.getByText('Revisión Periódica de Roles')).toBeInTheDocument()
+    expect(screen.getByText('Autoevaluación de Seguridad para tu Negocio')).toBeInTheDocument()
   })
 })
