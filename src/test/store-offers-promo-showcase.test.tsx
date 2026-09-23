@@ -150,19 +150,41 @@ describe('StoreOffersPromoShowcase', () => {
     )
 
     // Nombres de los productos
-    expect(screen.getByText('Batería iPhone 13 Original')).toBeInTheDocument()
-    expect(screen.getByText('Funda Silicona MagSafe')).toBeInTheDocument()
+    expect(screen.getAllByText('Batería iPhone 13 Original').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Funda Silicona MagSafe').length).toBeGreaterThan(0)
 
     // Compatibilidad de dispositivo
-    expect(screen.getByText('Para Apple · iPhone 13, iPhone 13 Pro')).toBeInTheDocument()
+    expect(screen.getAllByText('Para Apple · iPhone 13, iPhone 13 Pro').length).toBeGreaterThan(0)
 
     // Descuentos en productos
-    expect(screen.getByText('-33% OFF')).toBeInTheDocument()
-    expect(screen.getByText('-20% OFF')).toBeInTheDocument()
+    expect(screen.getAllByText('-33% OFF').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('-20% OFF').length).toBeGreaterThan(0)
 
     // Ahorro monetario en guaraníes
-    expect(screen.getByText(/Ahorrás Gs\. 100\.000/)).toBeInTheDocument()
-    expect(screen.getByText(/Ahorrás Gs\. 20\.000/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Ahorrás Gs\. 100\.000/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Ahorrás Gs\. 20\.000/).length).toBeGreaterThan(0)
+  })
+
+  it('permite navegar las ofertas en el carrusel de la tarjeta promocional con flechas y dots', () => {
+    render(
+      <StoreOffersPromoShowcase
+        companyInfo={{ name: '4G Celulares' }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    // El carrusel muestra inicialmente la primera oferta y tiene botón siguiente
+    const nextBtn = screen.getByRole('button', { name: 'Siguiente oferta' })
+    expect(nextBtn).toBeInTheDocument()
+
+    // Avanza a la siguiente oferta en el carrusel
+    fireEvent.click(nextBtn)
+
+    // Botones de navegación y selector de oferta
+    expect(screen.getByRole('button', { name: 'Oferta anterior' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ir a oferta 1' })).toBeInTheDocument()
   })
 
   it('oculta el precio y muestra "Precio a consultar" en productos con hide_price', () => {
@@ -201,8 +223,8 @@ describe('StoreOffersPromoShowcase', () => {
     // Clic en Accesorios
     fireEvent.click(catAccesoriosBtn)
 
-    // Solo se debe mostrar Funda Silicona MagSafe
-    expect(screen.getByText('Funda Silicona MagSafe')).toBeInTheDocument()
+    // Solo se debe mostrar Funda Silicona MagSafe y desaparecer Batería iPhone 13 Original
+    expect(screen.getAllByText('Funda Silicona MagSafe').length).toBeGreaterThan(0)
     expect(screen.queryByText('Batería iPhone 13 Original')).not.toBeInTheDocument()
   })
 

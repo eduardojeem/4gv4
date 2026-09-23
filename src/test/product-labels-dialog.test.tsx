@@ -140,8 +140,11 @@ describe('desde dónde se imprime', () => {
   /** Estaba solo al lado del código, abajo de la ficha: había que buscarlo. */
   it('la ficha del producto lo tiene en las acciones de arriba', () => {
     const ficha = leer('src/app/dashboard/products/[id]/page.tsx')
-    const encabezado = ficha.slice(ficha.indexOf('{/* Action Buttons */}'))
-    expect(encabezado.slice(0, 1200)).toContain('setLabelsDialogOpen(true)')
+    // Hasta el cierre del bloque de acciones, no una ventana fija de caracteres:
+    // al sumarse otro boton, el de etiquetas quedaba fuera del recorte.
+    const desde = ficha.indexOf('{/* Action Buttons */}')
+    const hasta = ficha.indexOf('</div>', ficha.indexOf('Eliminar', desde))
+    expect(ficha.slice(desde, hasta)).toContain('setLabelsDialogOpen(true)')
   })
 
   /** Sin código de barras se imprime el SKU: el producto no queda sin etiqueta. */

@@ -16,6 +16,14 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+/**
+ * El formulario carga su biblioteca de imagenes al montarse, asi que `fetch`
+ * se usa para mas cosas: lo que no puede pasar antes de confirmar es el pedido
+ * de publicacion.
+ */
+const pedidosDePublicacion = () =>
+  vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('sync-company'))
+
 describe('company publication confirmation', () => {
   it('requires review and explicit confirmation before sending a publication request', async () => {
     render(<CompanyInfoForm />)
@@ -23,13 +31,13 @@ describe('company publication confirmation', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Alternar visualización de Publicar tienda' }))
     fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
     expect(await screen.findByRole('dialog')).toHaveAccessibleName('Revisar y publicar tienda')
-    expect(fetch).not.toHaveBeenCalled()
+    expect(pedidosDePublicacion()).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar publicación' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.objectContaining({
       method: 'PUT',
       body: expect.stringContaining('"publicationConfirmed":true'),
     })))
-    const request = vi.mocked(fetch).mock.calls[0][1]
+    const request = pedidosDePublicacion()[0][1]
     expect(JSON.parse(String(request?.body))).toMatchObject({ storefrontPublic: true, marketplacePublic: false })
   })
 
@@ -38,6 +46,6 @@ describe('company publication confirmation', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Alternar visualización de Publicar tienda' }))
     fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Volver a revisar' }))
-    expect(fetch).not.toHaveBeenCalled()
+    expect(pedidosDePublicacion()).toHaveLength(0)
   })
 })

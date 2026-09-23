@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
@@ -8,6 +8,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Check,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Eye,
@@ -130,6 +131,69 @@ export function StoreOffersPromoShowcase({
       })
     : null
 
+  // Mini carrusel interactivo en la tarjeta publicitaria
+  const [carouselIndex, setCarouselIndex] = useState(0)
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false)
+
+  // Ofertas que alimentan el carrusel (si se filtra por categoría, se enfoca en esa categoría)
+  const carouselOffers = useMemo(() => {
+    if (selectedCategory !== 'all') {
+      const filtered = validOffers.filter((p) => p.category?.id === selectedCategory)
+      if (filtered.length > 0) return filtered
+    }
+    return validOffers
+  }, [validOffers, selectedCategory])
+
+  // Resetear índice al cambiar categoría
+  useEffect(() => {
+    setCarouselIndex(0)
+  }, [selectedCategory])
+
+  // Auto-play cada 4 segundos si hay más de 1 oferta y el usuario no está pausando con el mouse
+  useEffect(() => {
+    if (carouselOffers.length <= 1 || isCarouselPaused) return
+    const timer = setInterval(() => {
+      setCarouselIndex((prev) => (prev + 1) % carouselOffers.length)
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [carouselOffers.length, isCarouselPaused])
+
+  // Adaptador para el modal de detalle rápido
+  const createModalProduct = useCallback(
+    (product: PublicProduct): MarketplaceProduct => ({
+      ...product,
+      organization_id: tenantSlug,
+      organization_name: storeName,
+      organization_slug: tenantSlug,
+      organization_logo_url: logoUrl,
+      organization_city: companyInfo.city ?? null,
+      organization_address: companyInfo.address ?? null,
+      organization_contact: phoneClean
+        ? { phone: phoneClean, whatsapp: phoneClean, instagram: null, facebook: null, tiktok: null }
+        : null,
+    }),
+    [tenantSlug, storeName, logoUrl, companyInfo.city, companyInfo.address, phoneClean]
+  )
+
+  // Oferta activa en el carrusel de la tarjeta destacada
+  const activeOffer = carouselOffers.length > 0 ? carouselOffers[carouselIndex % carouselOffers.length] : null
+  const activeOfferHasDisc = Boolean(
+    activeOffer?.has_offer &&
+    activeOffer?.offer_price &&
+    activeOffer?.offer_price < activeOffer?.sale_price
+  )
+  const activeOfferDiscount = activeOfferHasDisc && activeOffer?.offer_price
+    ? Math.round(((activeOffer.sale_price - activeOffer.offer_price) / activeOffer.sale_price) * 100)
+    : maxDiscountPct
+  const activeOfferSavings = activeOfferHasDisc && activeOffer?.offer_price
+    ? activeOffer.sale_price - activeOffer.offer_price
+    : 0
+  const activeOfferCompatibility = activeOffer
+    ? describeDeviceCompatibility(activeOffer.device_brand, activeOffer.device_models)
+    : null
+  const activeOfferImage = activeOffer ? resolveProductImageUrl(activeOffer.image) : null
+  const activeOfferPrecioOculto = activeOffer ? hidesPublicPrice(activeOffer) : false
+
   // Si no está cargando y no hay ninguna oferta disponible, no mostramos un bloque vacío
   if (!isLoading && validOffers.length === 0) {
     return null
@@ -230,30 +294,30 @@ export function StoreOffersPromoShowcase({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           
           {/* ══ TARJETA VERTICAL PUBLICITARIA (Inspirada en MarketplaceBusinessPromoShowcase) ══ */}
-          <div className="lg:col-span-4 xl:col-span-3 flex flex-col">
-            <div className="relative h-full flex flex-col justify-between overflow-hidden rounded-3xl border border-rose-500/30 bg-gradient-to-b from-[#2a0818] via-[#3a0d22] to-[#1a040e] p-6 sm:p-7 text-white shadow-2xl shadow-rose-950/20">
+          <div className="lg:col-span-5 xl:col-span-4 flex flex-col">
+            <div className="relative h-full flex flex-col justify-between overflow-hidden rounded-3xl border border-rose-500/30 bg-gradient-to-b from-[#2a0818] via-[#3a0d22] to-[#1a040e] p-5 sm:p-6 text-white shadow-2xl shadow-rose-950/20">
               
               {/* Luces y resplandor decorativo de fondo */}
               <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-rose-500/25 blur-3xl" />
               <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-orange-500/15 blur-3xl" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(244,63,94,0.18),transparent_70%)]" />
 
-              <div className="relative z-10 space-y-5">
+              <div className="relative z-10 space-y-4">
                 {/* Header del Negocio: Logo + Insignia Oficial */}
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-2 shadow-lg shadow-black/20 border border-white/20">
+                    <div className="relative flex h-13 w-13 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-2 shadow-lg shadow-black/20 border border-white/20">
                       {logoUrl ? (
                         <Image
                           src={logoUrl}
                           alt={storeName}
-                          width={48}
-                          height={48}
+                          width={44}
+                          height={44}
                           className="h-full w-full object-contain"
                           unoptimized={shouldBypassImageOptimization(logoUrl)}
                         />
                       ) : (
-                        <Store className="h-7 w-7 text-rose-800" />
+                        <Store className="h-6 w-6 text-rose-800" />
                       )}
                     </div>
 
@@ -270,7 +334,7 @@ export function StoreOffersPromoShowcase({
                 </div>
 
                 {/* Titular Promocional (Centro de Atención) */}
-                <div className="space-y-1 pt-1">
+                <div className="space-y-0.5 pt-0.5">
                   <p className="text-[11px] font-extrabold uppercase tracking-widest text-rose-300/90">
                     OFERTAS EXCLUSIVAS
                   </p>
@@ -279,21 +343,193 @@ export function StoreOffersPromoShowcase({
                   </h3>
                 </div>
 
-                {/* Bloque Gigante de Beneficio */}
-                <div className="rounded-2xl border border-rose-400/30 bg-rose-500/15 p-4 backdrop-blur-md shadow-inner">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-rose-300">
-                    DESCUENTOS POR TIEMPO LIMITADO
-                  </p>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-4xl sm:text-5xl font-black tracking-tight text-white drop-shadow-sm">
-                      {maxDiscountPct > 0 ? `-${maxDiscountPct}%` : 'OFERTAS'}
-                    </span>
-                    <span className="text-xs sm:text-sm font-extrabold uppercase leading-tight text-rose-200">
-                      {maxDiscountPct > 0 ? 'Descuento Máximo' : 'Rebajas Activas'}
-                    </span>
+                {/* ══ Bloque Destacado de Descuentos con Carrusel de Productos ══ */}
+                <div
+                  className="relative overflow-hidden rounded-2xl border border-rose-400/30 bg-black/35 p-3.5 sm:p-4 backdrop-blur-md shadow-inner flex flex-col gap-3 group/carousel"
+                  onMouseEnter={() => setIsCarouselPaused(true)}
+                  onMouseLeave={() => setIsCarouselPaused(false)}
+                >
+                  {/* Encabezado del bloque: HASTA -XX% Descuento Máximo + Contador */}
+                  <div className="flex items-center justify-between gap-2 border-b border-rose-400/20 pb-2.5">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-300">
+                        <Sparkles className="h-3 w-3 text-rose-400 animate-pulse" />
+                        <span>DESCUENTOS POR TIEMPO LIMITADO</span>
+                      </div>
+                      <div className="mt-1 flex items-baseline gap-2">
+                        <span className="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-sm">
+                          {maxDiscountPct > 0 ? `-${maxDiscountPct}%` : 'OFERTAS'}
+                        </span>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-rose-300 leading-none">
+                            HASTA
+                          </span>
+                          <span className="text-xs font-extrabold uppercase leading-tight text-rose-100">
+                            {maxDiscountPct > 0 ? 'Descuento Máximo' : 'Rebajas Activas'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {carouselOffers.length > 1 && (
+                      <div className="flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-bold text-rose-200 border border-white/10 shrink-0">
+                        <span>{(carouselIndex % carouselOffers.length) + 1}</span>
+                        <span className="text-white/40">/</span>
+                        <span>{carouselOffers.length}</span>
+                      </div>
+                    )}
                   </div>
-                  <p className="mt-2 text-xs text-rose-100/85 leading-snug">
-                    {validOffers.length} {validOffers.length === 1 ? 'producto rebajado' : 'productos rebajados'} con precio especial y disponibilidad inmediata.
+
+                  {/* Carrusel de Producto en Oferta */}
+                  {activeOffer && (
+                    <div className="flex flex-col gap-2.5">
+                      {/* Contenedor de la Imagen con Flechas de Navegación */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedProduct(createModalProduct(activeOffer))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            setSelectedProduct(createModalProduct(activeOffer))
+                          }
+                        }}
+                        className="group/slide relative aspect-4/3 w-full overflow-hidden rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-2 cursor-pointer transition-all hover:border-rose-400/50 hover:bg-white/10"
+                      >
+                        {/* Badge de Descuento del Producto */}
+                        {activeOfferDiscount > 0 && !activeOfferPrecioOculto && (
+                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-gradient-to-r from-rose-600 to-rose-500 px-2 py-0.5 text-[10px] font-black text-white shadow-md shadow-rose-950/40">
+                            <span>-{activeOfferDiscount}% OFF</span>
+                          </div>
+                        )}
+
+                        {/* Imagen */}
+                        {activeOfferImage ? (
+                          <div className="relative h-full w-full">
+                            <Image
+                              src={activeOfferImage}
+                              alt={activeOffer.name}
+                              fill
+                              sizes="(max-width: 768px) 100vw, 320px"
+                              className="object-contain p-1 transition-transform duration-500 group-hover/slide:scale-105"
+                              unoptimized={shouldBypassImageOptimization(activeOfferImage)}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-rose-300/60 py-6">
+                            <Package className="h-10 w-10 stroke-1" />
+                            <span className="text-[10px] mt-1">Sin imagen</span>
+                          </div>
+                        )}
+
+                        {/* Flechas de Navegación del Carrusel */}
+                        {carouselOffers.length > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCarouselIndex((prev) => (prev - 1 + carouselOffers.length) % carouselOffers.length)
+                              }}
+                              aria-label="Oferta anterior"
+                              className="absolute left-1.5 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white/90 backdrop-blur-md transition-all hover:bg-rose-600 hover:scale-110 active:scale-95 border border-white/20 shadow-md"
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCarouselIndex((prev) => (prev + 1) % carouselOffers.length)
+                              }}
+                              aria-label="Siguiente oferta"
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white/90 backdrop-blur-md transition-all hover:bg-rose-600 hover:scale-110 active:scale-95 border border-white/20 shadow-md"
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Detalles del Producto */}
+                      <div className="space-y-1">
+                        {activeOfferCompatibility ? (
+                          <p className="line-clamp-1 text-[10px] font-semibold text-rose-300/90 tracking-wide">
+                            {activeOfferCompatibility}
+                          </p>
+                        ) : (
+                          <p className="line-clamp-1 text-[10px] font-bold text-rose-300/70 uppercase tracking-wider">
+                            {activeOffer.brand || storeName}
+                          </p>
+                        )}
+
+                        <h4
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedProduct(createModalProduct(activeOffer))}
+                          className="line-clamp-1 cursor-pointer text-xs sm:text-sm font-bold text-white transition-colors hover:text-rose-200"
+                          title={activeOffer.name}
+                        >
+                          {activeOffer.name}
+                        </h4>
+
+                        {/* Precios o Precio a Consultar */}
+                        {activeOfferPrecioOculto ? (
+                          <div className="flex items-center justify-between pt-0.5">
+                            <span className="text-xs font-bold text-amber-300">Precio a consultar</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProduct(createModalProduct(activeOffer))}
+                              className="text-[10px] font-bold text-rose-300 underline hover:text-white"
+                            >
+                              Ver detalle
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-baseline gap-2 pt-0.5">
+                            <span className="text-base font-black text-white">
+                              {formatPrice(activeOffer.offer_price ?? activeOffer.sale_price)}
+                            </span>
+                            {activeOffer.offer_price && activeOffer.offer_price < activeOffer.sale_price && (
+                              <span className="text-xs text-white/50 line-through">
+                                {formatPrice(activeOffer.sale_price)}
+                              </span>
+                            )}
+                            {activeOfferSavings > 0 && (
+                              <span className="rounded-md bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-bold text-emerald-300 border border-emerald-500/30">
+                                Ahorrás {formatPrice(activeOfferSavings)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Dots Indicadores de posición */}
+                      {carouselOffers.length > 1 && (
+                        <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                          {carouselOffers.slice(0, 7).map((_, idx) => {
+                            const isActive = idx === (carouselIndex % carouselOffers.length)
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setCarouselIndex(idx)}
+                                aria-label={`Ir a oferta ${idx + 1}`}
+                                className={cn(
+                                  'h-1.5 rounded-full transition-all duration-300',
+                                  isActive
+                                    ? 'w-4 bg-rose-400'
+                                    : 'w-1.5 bg-white/30 hover:bg-white/60'
+                                )}
+                              />
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-rose-100/80 leading-snug border-t border-rose-400/20 pt-2">
+                    {carouselOffers.length} {carouselOffers.length === 1 ? 'producto rebajado' : 'productos rebajados'} con disponibilidad inmediata.
                   </p>
                 </div>
 
@@ -321,10 +557,10 @@ export function StoreOffersPromoShowcase({
               </div>
 
               {/* Acciones y Enlaces */}
-              <div className="relative z-10 pt-6 space-y-3">
+              <div className="relative z-10 pt-5 space-y-3">
                 <Button
                   asChild
-                  className="w-full h-12 rounded-xl bg-white hover:bg-rose-50 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-black/20 active:scale-[0.98] transition-all border border-white/40"
+                  className="w-full h-11 rounded-xl bg-white hover:bg-rose-50 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-black/20 active:scale-[0.98] transition-all border border-white/40"
                 >
                   <Link href={`${tenantPrefix}/ofertas`} className="flex items-center justify-center gap-2">
                     <Tag className="h-4 w-4 text-rose-700" />
@@ -355,9 +591,9 @@ export function StoreOffersPromoShowcase({
           </div>
 
           {/* ══ GRILLA DE PRODUCTOS EN OFERTA (Lado derecho) ══ */}
-          <div className="lg:col-span-8 xl:col-span-9 flex flex-col justify-between">
+          <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
             {displayedOffers.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 h-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 h-full">
                 {displayedOffers.map((product) => {
                   const precioOculto = hidesPublicPrice(product)
                   const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
@@ -390,18 +626,7 @@ export function StoreOffersPromoShowcase({
                     : null
 
                   // Objeto mapeado para el modal
-                  const asModalProduct: MarketplaceProduct = {
-                    ...product,
-                    organization_id: tenantSlug,
-                    organization_name: storeName,
-                    organization_slug: tenantSlug,
-                    organization_logo_url: logoUrl,
-                    organization_city: companyInfo.city ?? null,
-                    organization_address: companyInfo.address ?? null,
-                    organization_contact: phoneClean
-                      ? { phone: phoneClean, whatsapp: phoneClean, instagram: null, facebook: null, tiktok: null }
-                      : null,
-                  }
+                  const asModalProduct = createModalProduct(product)
 
                   return (
                     <div
