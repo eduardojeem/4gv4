@@ -98,8 +98,14 @@ describe('no se publica el plan que paga cada comercio', () => {
  */
 describe('una tienda suspendida sale de la vitrina', () => {
   it('se filtra por el estado de la suscripción', () => {
-    expect(MARKETPLACE).toContain("const ESTADOS_FUERA_DE_VITRINA = new Set(['past_due', 'canceled', 'suspended'])")
-    expect(MARKETPLACE).toContain('organizationRows.filter((organization) => !excluidas.has(organization.id))')
+    // La lista de estados y el filtro viven en `blockedShowcaseOrganizationIds`,
+    // que ahora usan tambien el catalogo, las marcas y las ofertas: antes la
+    // tienda suspendida salia del directorio y sus productos seguian a la vista.
+    // Una sola lista de estados, la misma que abre o cierra la tienda propia.
+    expect(MARKETPLACE).toContain(
+      'export const SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES = BLOCKED_STORE_SUBSCRIPTION_STATUSES'
+    )
+    expect(MARKETPLACE).toContain('.filter((id) => !blocked.has(id))')
   })
 
   it('tampoco le queda el perfil accesible por URL', () => {

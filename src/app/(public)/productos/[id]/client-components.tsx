@@ -26,7 +26,7 @@ import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/ima
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
-import type { PublicProduct, PublicProductVariant, InstallmentPlanOption } from '@/types/public'
+import type { PublicProduct, InstallmentPlanOption } from '@/types/public'
 import type { BranchStockInfo } from '@/lib/api/products-server'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
@@ -89,7 +89,7 @@ export function ProductDetailInteractive({
   installmentPlans,
   branchStock,
 }: ProductDetailInteractiveProps) {
-  const { settings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
+  const { settings } = useWebsiteSettings()
   const pathname = usePathname()
   const { addProduct } = usePublicCart()
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -1039,11 +1039,5 @@ export function ProductGallery({ product, hasDiscount, discountPercent }: Produc
   )
 }
 
-interface ProductActionsProps {
-  product: PublicProduct
-  isInStock: boolean
-}
-
-export function ProductActions({ product, isInStock }: ProductActionsProps) {
-  return null
-}
+// `ProductActions` vivía acá como puente de una refactorización: devolvía null
+// y nadie la importaba. Los botones reales están en ProductDetailInteractive.

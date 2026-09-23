@@ -8,6 +8,16 @@ type QueryCall = { method: string; args: unknown[] }
 
 let calls: Record<string, QueryCall[]> = {}
 
+/**
+ * Filas mínimas para que el catálogo llegue a armar la búsqueda: sin ninguna
+ * tienda en vitrina, `getMarketplaceProductsPage` devuelve vacío antes de
+ * consultar productos y el `.or(...)` nunca se arma.
+ */
+const FILAS_POR_TABLA: Record<string, unknown[]> = {
+  organizations: [{ id: 'org-1', name: 'Tienda', slug: 'tienda' }],
+  subscriptions: [],
+}
+
 function createFakeClient() {
   return {
     from(table: string) {
@@ -16,8 +26,15 @@ function createFakeClient() {
       const builder: Record<string | symbol, unknown> = new Proxy({}, {
         get(_target, prop) {
           if (prop === 'then') {
+            // Las columnas del celular y del precio oculto se preguntan con un
+            // `select(...).limit(0)`: se responde que no existen para que la
+            // expresión de búsqueda sea siempre la misma en el test.
+            const probe = recorded.find((c) => c.method === 'select' && /device_brand|hide_price/.test(String(c.args[0])))
+            const value = probe
+              ? { data: null, count: 0, error: { message: 'column does not exist' } }
+              : { data: FILAS_POR_TABLA[table] ?? [], count: 0, error: null }
             return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
-              Promise.resolve({ data: [], count: 0, error: null }).then(onFulfilled, onRejected)
+              Promise.resolve(value).then(onFulfilled, onRejected)
           }
           return (...args: unknown[]) => {
             recorded.push({ method: String(prop), args })
@@ -37,6 +54,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const { getMarketplaceBrands, getMarketplaceOrganizations, getMarketplaceProductsPage } =
   await import('@/lib/public/marketplace')
+const { forgetDeviceColumnsCheck } = await import('@/lib/products/device-columns')
+const { forgetHidePriceColumnCheck } = await import('@/lib/products/price-visibility')
 
 /** El unico `.or(...)` que se le mando a esa tabla. */
 function orArg(table: string) {
@@ -46,7 +65,11 @@ function orArg(table: string) {
 
 const UUID = '3f1c9a52-8b7e-4c1d-9a0f-2e5d7b6c4a13'
 
-beforeEach(() => { calls = {} })
+beforeEach(() => {
+  calls = {}
+  forgetDeviceColumnsCheck()
+  forgetHidePriceColumnCheck()
+})
 
 /**
  * El termino de busqueda se interpolaba crudo dentro de un `.or(...)` de

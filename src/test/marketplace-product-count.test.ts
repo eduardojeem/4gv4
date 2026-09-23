@@ -9,11 +9,27 @@ function createFakeClient() {
   return {
     from(table: string) {
       const calls: QueryCall[] = []
+      // La sonda de columnas tambien usa `products`: el query real es el que
+      // pide el conteo, y es el que interesa mirar.
       if (table === 'products') productCalls = calls
 
       const builder: Record<string | symbol, unknown> = new Proxy({}, {
         get(_target, prop) {
           if (prop === 'then') {
+            // Sin ninguna tienda en vitrina el catalogo corta antes de
+            // consultar productos, asi que la lista tiene que traer una.
+            if (table === 'organizations') {
+              return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+                Promise.resolve({ data: [{ id: 'org-1' }], count: 1, error: null }).then(onFulfilled, onRejected)
+            }
+            // Las columnas opcionales (celular, precio oculto) se preguntan con
+            // un select vacio: se responde que no existen.
+            const probe = calls.find((call) => call.method === 'select' && /device_brand|hide_price/.test(String(call.args[0])))
+            if (probe) {
+              return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
+                Promise.resolve({ data: null, count: 0, error: { message: 'column does not exist' } }).then(onFulfilled, onRejected)
+            }
+
             const limitCall = calls.find((call) => call.method === 'limit')
             const limit = Number(limitCall?.args[0] ?? productRows.length)
             const data = table === 'products' ? productRows.slice(0, limit) : []

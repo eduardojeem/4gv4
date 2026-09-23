@@ -2,18 +2,15 @@
 import React from 'react'
 import { Metadata, ResolvingMetadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeft, Check, XCircle, Package, Tag } from 'lucide-react'
+import { ArrowLeft, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
 import { ProductCard } from '@/components/public/ProductCard'
 import { getPublicProduct, getPublicProducts, resolveWholesaleStatus, getProductBranchStock } from '@/lib/api/products-server'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { generateProductSchema, serializeJsonLd } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
-import { formatPrice } from '@/lib/utils'
 import { ProductDetailInteractive } from './client-components'
-import { BranchAvailability } from '@/components/public/BranchAvailability'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
 // Allow ISR with 2-minute revalidation
@@ -29,7 +26,6 @@ export async function generateMetadata(
   parent: ResolvingMetadata
 ): Promise<Metadata> {
   const params = await props.params
-  const tenantPrefix = await getPublicTenantPathPrefix()
   const result = await getPublicProduct(params.id)
 
   if (!result) {

@@ -159,15 +159,17 @@ export async function fetchCustomerActivity(organizationId: string | null) {
       }
     }
 
-    const enrichedHistory = (history || []).map((r: any) => ({
-      ...r,
-      organization: r.organization_id ? orgMap.get(r.organization_id) || null : null,
-    }))
+    // Lo unico que se usa de cada fila es el id de la tienda: el resto pasa de
+    // largo, asi que no hace falta un `any` para describirla entera.
+    type ConOrganizacion = { organization_id?: string | null }
 
-    const enrichedOrders = (recentOrders || []).map((o: any) => ({
-      ...o,
-      organization: o.organization_id ? orgMap.get(o.organization_id) || null : null,
-    }))
+    const conTienda = <T extends ConOrganizacion>(fila: T) => ({
+      ...fila,
+      organization: fila.organization_id ? orgMap.get(fila.organization_id) || null : null,
+    })
+
+    const enrichedHistory = (history || []).map(conTienda)
+    const enrichedOrders = (recentOrders || []).map(conTienda)
 
     // El saldo a favor no se puede sumar entre tiendas: lo que sobra en una no
     // se gasta en otra. Se devuelve abierto por organizacion para que el perfil
