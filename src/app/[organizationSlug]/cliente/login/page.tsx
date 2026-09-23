@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   CreditCard,
@@ -12,7 +11,6 @@ import {
   EyeOff,
   Info,
   LayoutDashboard,
-  Link2,
   Loader2,
   LockKeyhole,
   ReceiptText,

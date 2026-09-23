@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Flame, FolderTree, Package, Tag } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Flame, FolderTree, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Category } from '@/types/public'
 
@@ -19,7 +19,7 @@ export function StoreContextFilterBar({
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const scrollRef = useMemoRef()
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
@@ -31,17 +31,13 @@ export function StoreContextFilterBar({
   const activeCategory = categories.find((c) => c.id === currentCategoryId)
   const subcategories = activeCategory?.subcategories ?? []
 
-  function useMemoRef() {
-    return useRef<HTMLDivElement>(null)
-  }
-
-  const checkScroll = () => {
+  const checkScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const { scrollLeft, scrollWidth, clientWidth } = el
     setCanScrollLeft(scrollLeft > 4)
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 4)
-  }
+  }, [])
 
   useEffect(() => {
     checkScroll()
@@ -53,7 +49,9 @@ export function StoreContextFilterBar({
       el.removeEventListener('scroll', checkScroll)
       window.removeEventListener('resize', checkScroll)
     }
-  }, [brands, subcategories])
+    // Por cantidad y no por el array: `subcategories` se deriva en cada render,
+    // asi que como dependencia volvia a colgar y descolgar los listeners cada vez.
+  }, [checkScroll, brands.length, subcategories.length])
 
   const scroll = (direction: 'left' | 'right') => {
     const el = scrollRef.current

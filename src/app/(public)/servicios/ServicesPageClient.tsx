@@ -11,7 +11,6 @@ import {
   Search,
   Tag,
   ExternalLink,
-  PhoneCall,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,7 +19,7 @@ import { iconMap } from '@/lib/constants/brand-theme'
 import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 import { prefixPublicTenantPath } from '@/lib/public/tenant-path-shared'
 import { cn } from '@/lib/utils'
-import { formatWhatsAppPhone, openWhatsApp, getWhatsAppLink, getBusinessWhatsApp } from '@/lib/whatsapp'
+import { formatWhatsAppPhone, openWhatsApp, getBusinessWhatsApp } from '@/lib/whatsapp'
 import type { Service, ServicesSectionSettings } from '@/types/website-settings'
 
 interface ServicesPageClientProps {
@@ -92,8 +91,6 @@ export function ServicesPageClient({ services, companyName, whatsapp, sectionTex
       return matchOrigin && matchCategory && matchSearch
     })
   }, [activeServices, originFilter, selectedCategory, searchQuery])
-
-  const canContact = whatsapp.replace(/\D/g, '').length >= 6
 
   const handleContactService = (serviceName: string) => {
     const phoneToUse = whatsapp || getBusinessWhatsApp()

@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import {
   getActivePublicServices,
-  isPublicServicesPageAvailable,
 } from '@/lib/website/services'
 import { ServicesPageClient } from './ServicesPageClient'
 import { createAdminSupabase } from '@/lib/supabase/admin'
