@@ -11,6 +11,7 @@ import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarou
 import { CategoryShowcase } from '@/components/public/inicio/CategoryShowcase'
 import { FeaturedProducts } from '@/components/public/inicio/FeaturedProducts'
 import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
+import { StoreOffersPromoShowcase } from '@/components/public/inicio/StoreOffersPromoShowcase'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
 import { getPublicProcessFlows } from '@/lib/website/process-steps'
@@ -246,14 +247,14 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
       {/* Productos antes de campañas secundarias: el usuario llega antes al catálogo. */}
       <FeaturedProducts />
 
-      {/* Ofertas y campaña secundaria aparecen después del primer bloque comprable. */}
+      {/* Ofertas y campaña promocional con diseño estilo Tienda Oficial / Marketplace */}
       {settings.offers_section?.enabled && (
-        <div id="ofertas">
-          <OffersCarousel
-            companyName={company_info.name || 'Tienda'}
-            settings={settings.offers_section}
-          />
-        </div>
+        <StoreOffersPromoShowcase
+          companyInfo={company_info}
+          tenantPrefix={tenantPrefix}
+          tenantSlug={pathTenantSlug || ''}
+          phoneClean={phoneClean}
+        />
       )}
 
       {storefrontStyle !== 'classic' && (

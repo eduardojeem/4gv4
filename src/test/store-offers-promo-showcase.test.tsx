@@ -1,0 +1,224 @@
+import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { StoreOffersPromoShowcase } from '@/components/public/inicio/StoreOffersPromoShowcase'
+import type { PublicProduct } from '@/types/public'
+
+let mockSwrData: PublicProduct[] | null = null
+let mockSwrLoading = false
+
+vi.mock('swr', () => ({
+  __esModule: true,
+  default: () => ({
+    data: mockSwrData,
+    error: undefined,
+    isLoading: mockSwrLoading,
+  }),
+}))
+
+vi.mock('next/image', () => ({
+  __esModule: true,
+  default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+}))
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/4g-celulares/inicio',
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: null }),
+}))
+
+vi.mock('@/components/public/Favorites', () => ({
+  FavoriteButton: () => <button aria-label="Favorito">Fav</button>,
+}))
+
+const sampleProducts: PublicProduct[] = [
+  {
+    id: 'prod-1',
+    name: 'Batería iPhone 13 Original',
+    slug: 'bateria-iphone-13-original',
+    sku: 'BAT-IP13',
+    description: 'Batería 100% de salud original',
+    sale_price: 300000,
+    offer_price: 200000, // 33% off
+    has_offer: true,
+    image: '/img/battery.jpg',
+    in_stock: true,
+    stock_quantity: 10,
+    featured: true,
+    hide_price: false,
+    device_brand: 'Apple',
+    device_models: ['iPhone 13', 'iPhone 13 Pro'],
+    category_id: 'cat-repuestos',
+    category: {
+      id: 'cat-repuestos',
+      name: 'Repuestos & Baterías',
+    },
+  },
+  {
+    id: 'prod-2',
+    name: 'Funda Silicona MagSafe',
+    slug: 'funda-silicona-magsafe',
+    sku: 'ACC-MAG-01',
+    description: 'Funda protectora',
+    sale_price: 100000,
+    offer_price: 80000, // 20% off
+    has_offer: true,
+    image: '/img/case.jpg',
+    in_stock: true,
+    stock_quantity: 5,
+    featured: false,
+    hide_price: false,
+    category_id: 'cat-accesorios',
+    category: {
+      id: 'cat-accesorios',
+      name: 'Accesorios',
+    },
+  },
+  {
+    id: 'prod-3',
+    name: 'Módulo Premium Mayorista',
+    slug: 'modulo-premium-mayorista',
+    sku: 'MOD-MAY-01',
+    description: 'Precio exclusivo talleres',
+    sale_price: 500000,
+    offer_price: 400000,
+    has_offer: true,
+    image: '/img/modulo.jpg',
+    in_stock: true,
+    stock_quantity: 8,
+    featured: false,
+    hide_price: true, // precio oculto para público
+    device_brand: 'Samsung',
+    device_models: ['Galaxy S23'],
+    category_id: 'cat-repuestos',
+    category: {
+      id: 'cat-repuestos',
+      name: 'Repuestos & Baterías',
+    },
+  },
+]
+
+describe('StoreOffersPromoShowcase', () => {
+  beforeEach(() => {
+    mockSwrData = sampleProducts
+    mockSwrLoading = false
+  })
+
+  it('renderiza la vitrina con datos del comercio, badge oficial y cálculo de descuento máximo', () => {
+    render(
+      <StoreOffersPromoShowcase
+        companyInfo={{
+          name: '4G Celulares Store',
+          logo_url: '/logo-4g.png',
+          phone: '0983123456',
+          city: 'Asunción',
+        }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    // Nombre de la tienda
+    expect(screen.getAllByText('4G Celulares Store').length).toBeGreaterThan(0)
+
+    // Insignia oficial y ciudad
+    expect(screen.getByText('Tienda Oficial')).toBeInTheDocument()
+    expect(screen.getByText('Asunción')).toBeInTheDocument()
+
+    // Banner de hasta descuento máximo: 33% off
+    expect(screen.getByText('-33%')).toBeInTheDocument()
+    expect(screen.getByText(/HASTA/i)).toBeInTheDocument()
+
+    // Tarjeta izquierda bullets
+    expect(screen.getByText('Precios directos sin intermediarios')).toBeInTheDocument()
+    expect(screen.getByText('Stock listo para retiro o entrega express')).toBeInTheDocument()
+    expect(screen.getByText(/Garantía oficial de 4G Celulares Store/)).toBeInTheDocument()
+  })
+
+  it('muestra productos en oferta con porcentajes de ahorro y compatibilidad de modelo', () => {
+    render(
+      <StoreOffersPromoShowcase
+        companyInfo={{ name: '4G Celulares' }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    // Nombres de los productos
+    expect(screen.getByText('Batería iPhone 13 Original')).toBeInTheDocument()
+    expect(screen.getByText('Funda Silicona MagSafe')).toBeInTheDocument()
+
+    // Compatibilidad de dispositivo
+    expect(screen.getByText('Para Apple · iPhone 13, iPhone 13 Pro')).toBeInTheDocument()
+
+    // Descuentos en productos
+    expect(screen.getByText('-33% OFF')).toBeInTheDocument()
+    expect(screen.getByText('-20% OFF')).toBeInTheDocument()
+
+    // Ahorro monetario en guaraníes
+    expect(screen.getByText(/Ahorrás Gs\. 100\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/Ahorrás Gs\. 20\.000/)).toBeInTheDocument()
+  })
+
+  it('oculta el precio y muestra "Precio a consultar" en productos con hide_price', () => {
+    render(
+      <StoreOffersPromoShowcase
+        companyInfo={{ name: '4G Celulares' }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    // Producto con hide_price
+    expect(screen.getByText('Módulo Premium Mayorista')).toBeInTheDocument()
+    expect(screen.getByText('Precio a consultar')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Ver el precio de Módulo Premium Mayorista/ })).toBeInTheDocument()
+
+    // El precio de 400.000 no debe estar en la vista
+    expect(screen.queryByText(/400\.000/)).not.toBeInTheDocument()
+  })
+
+  it('permite filtrar por categorías que tengan ofertas activas', () => {
+    render(
+      <StoreOffersPromoShowcase
+        companyInfo={{ name: '4G Celulares' }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    // Chips de categorías
+    const catAccesoriosBtn = screen.getByRole('button', { name: /Accesorios/ })
+    expect(catAccesoriosBtn).toBeInTheDocument()
+
+    // Clic en Accesorios
+    fireEvent.click(catAccesoriosBtn)
+
+    // Solo se debe mostrar Funda Silicona MagSafe
+    expect(screen.getByText('Funda Silicona MagSafe')).toBeInTheDocument()
+    expect(screen.queryByText('Batería iPhone 13 Original')).not.toBeInTheDocument()
+  })
+
+  it('retorna null sin romper la página cuando no hay productos en oferta', () => {
+    mockSwrData = []
+    mockSwrLoading = false
+
+    const { container } = render(
+      <StoreOffersPromoShowcase
+        companyInfo={{ name: '4G Celulares' }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    expect(container.firstChild).toBeNull()
+  })
+})

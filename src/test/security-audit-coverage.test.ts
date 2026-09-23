@@ -105,7 +105,11 @@ describe('la exportación entrega el rango, no la página', () => {
     // evidencia cree que está completo.
     expect(api).toContain('truncated: isExport && totalCount > logs.length')
     expect(panel).toContain('recortado')
-    expect(panel).toMatch(/Se exportaron \$\{exportables\.length\} de \$\{totalCount\}/)
+    // El aviso cambio de texto («Se exportaron X de Y» → un toast de warning
+    // con el motivo); lo que importa es que el recorte no pase en silencio.
+    expect(panel).toContain('if (recortado) {')
+    expect(panel).toContain('toast.warning(`Se descargaron ${exportables.length} actividades`')
+    expect(panel).toContain('El reporte alcanzó el límite máximo')
   })
 
   it('no exporta una página cuando falla traer el rango', () => {

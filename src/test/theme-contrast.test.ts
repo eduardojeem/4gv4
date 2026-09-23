@@ -159,9 +159,19 @@ describe('marketplace y saas', () => {
   const barra = readFileSync(resolve(process.cwd(), 'src/components/public/CompactCategoryBar.tsx'), 'utf8')
   const buscador = readFileSync(resolve(process.cwd(), 'src/components/public/MarketplaceSearchBox.tsx'), 'utf8')
 
-  /** Era un boton `outline`: pintaba su fondo claro y el texto blanco encima. */
+  /**
+   * Era un boton `outline` sobre fondo claro: pintaba su fondo blanco y el
+   * texto blanco encima. Desde 16b7d482 vive en el modal de acceso, asi que
+   * lo que se comprueba es ahi: texto oscuro sobre claro, y su propio par
+   * para el modo oscuro.
+   */
   it('«Ver planes» no queda blanco sobre blanco', () => {
-    expect(marketplace).toContain('bg-transparent text-white')
+    const modal = readFileSync(resolve(process.cwd(), 'src/components/public/AuthModal.tsx'), 'utf8')
+    const boton = modal.slice(modal.indexOf("onNavigate('/saas')"), modal.indexOf('Ver planes'))
+    expect(boton).toContain('text-slate-600')
+    expect(boton).toContain('dark:text-slate-300')
+    expect(boton).not.toContain('text-white')
+    // Y no quedo una copia olvidada en la portada del marketplace.
     expect(marketplace).not.toContain('border-white/40 text-white hover:bg-white/10')
   })
 

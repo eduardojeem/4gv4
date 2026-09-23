@@ -130,7 +130,8 @@ describe('el exportador usa los normalizadores en todos los graficos', () => {
     // Las tres series por fecha comparten `asDatePoint`; las otras tres —donut de
     // estados, barras de productos, donut de categorias— y la generica llaman
     // directo. Ninguna lee `d.name` ni `d.sales` por su cuenta.
-    expect(EXPORTADOR).toContain('const asDatePoint = (d: any, idx: number) => ({')
+    // Sin fijar el tipo del parametro: paso de `any` a `ReportRow`.
+    expect(EXPORTADOR).toMatch(/const asDatePoint = \(d: \w+, idx: number\) => \(\{/)
     expect(EXPORTADOR.match(/asDatePoint/g)!.length).toBeGreaterThanOrEqual(4)
     expect(EXPORTADOR.match(/pointLabel\(d, /g)!.length).toBeGreaterThanOrEqual(3)
     expect(EXPORTADOR.match(/value: pointValue\(d\)/g)!.length).toBeGreaterThanOrEqual(3)
