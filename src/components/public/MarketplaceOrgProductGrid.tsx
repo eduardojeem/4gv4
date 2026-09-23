@@ -15,7 +15,7 @@ import {
   Pause,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { PublicProduct } from '@/types/public'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
@@ -158,6 +158,7 @@ function OrgProductCard({
             fill
             className="object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 640px) 208px, 240px"
+            unoptimized={shouldBypassImageOptimization(imageSrc)}
           />
         ) : (
           <div className="flex h-full items-center justify-center">

@@ -10,7 +10,7 @@ import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
@@ -280,7 +280,7 @@ export function ProductCard(props: ProductCardProps) {
               src={imageSrc}
               alt={product.name}
               fill
-              sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, (max-width: 1536px) 33vw, 25vw"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={
                 coverImage
                   ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
@@ -289,9 +289,7 @@ export function ProductCard(props: ProductCardProps) {
               priority={priority}
               quality={75}
               onError={() => setImageError(true)}
-              unoptimized={
-                imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg'
-              }
+              unoptimized={shouldBypassImageOptimization(imageSrc)}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
@@ -508,9 +506,9 @@ export function ProductCard(props: ProductCardProps) {
                     fill
                     sizes="(max-width: 640px) 100vw, 320px"
                     className="object-contain p-6 transition-opacity duration-200"
-                    quality={80}
+                    quality={75}
                     onError={() => setImageError(true)}
-                    unoptimized={resolvedActive.startsWith('data:') || resolvedActive === '/placeholder-product.svg'}
+                    unoptimized={shouldBypassImageOptimization(resolvedActive)}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">

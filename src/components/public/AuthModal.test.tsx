@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { toast } from 'sonner'
+
 import { AuthModal } from './AuthModal'
 
 const resetPasswordForEmail = vi.fn()
@@ -12,6 +14,8 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/marketplace',
   useRouter: () => ({ push: routerPush, refresh: routerRefresh }),
 }))
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
@@ -44,12 +48,15 @@ describe('AuthModal password recovery', () => {
     vi.stubGlobal('fetch', vi.fn())
   })
 
-  it('redirects organization members to the dashboard after login', async () => {
+  // La dueña de una tienda entra desde el marketplace mientras mira un
+  // producto: antes la sacaba de ahí y la dejaba en su tablero de ventas.
+  it('keeps organization members on the page and points them to the menu', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
       organizations: [{ id: 'org-1', role: 'owner' }],
       activeOrganization: { id: 'org-1', role: 'owner' },
     }), { status: 200 }))
-    render(<AuthModal open onClose={vi.fn()} />)
+    const onClose = vi.fn()
+    render(<AuthModal open onClose={onClose} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Correo electrónico' }), {
       target: { value: 'owner@ejemplo.com' },
@@ -58,7 +65,10 @@ describe('AuthModal password recovery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verificar marketplace_login' }))
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
 
-    await waitFor(() => expect(routerPush).toHaveBeenCalledWith('/dashboard'))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(routerPush).not.toHaveBeenCalledWith('/dashboard')
+    expect(routerRefresh).toHaveBeenCalled()
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('el panel en el menú'))
     expect(fetch).toHaveBeenCalledWith('/api/organizations', { cache: 'no-store' })
   })
 

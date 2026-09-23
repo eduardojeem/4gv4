@@ -22,7 +22,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
@@ -456,10 +456,7 @@ export function ProductDetailInteractive({
                 className="object-contain p-4 pointer-events-none"
                 priority
                 onError={() => setImageErrors((prev) => ({ ...prev, [selectedImage]: true }))}
-                unoptimized={
-                  galleryImages[selectedImage]!.startsWith('data:') ||
-                  galleryImages[selectedImage]! === '/placeholder-product.svg'
-                }
+                unoptimized={shouldBypassImageOptimization(galleryImages[selectedImage]!)}
               />
             </div>
           ) : (
@@ -650,9 +647,7 @@ export function ProductDetailInteractive({
                     className="object-cover"
                     sizes="80px"
                     onError={() => setImageErrors((prev) => ({ ...prev, [i]: true }))}
-                    unoptimized={
-                      img.startsWith('data:') || img === '/placeholder-product.svg'
-                    }
+                    unoptimized={shouldBypassImageOptimization(img)}
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-muted/20">

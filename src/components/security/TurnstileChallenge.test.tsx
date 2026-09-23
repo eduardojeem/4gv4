@@ -54,12 +54,12 @@ describe('TurnstileChallenge', () => {
 
     act(() => widgetProps?.onSuccess('private-captcha-token'))
     expect(onTokenChange).toHaveBeenLastCalledWith('private-captcha-token')
-    expect(screen.getByRole('status')).toHaveTextContent('Verificacion completada')
+    expect(screen.getByRole('status')).toHaveTextContent('Verificación completada')
     expect(screen.queryByText('private-captcha-token')).not.toBeInTheDocument()
 
     act(() => widgetProps?.onExpire())
     expect(onTokenChange).toHaveBeenLastCalledWith(null)
-    expect(screen.getByRole('alert')).toHaveTextContent('vencio')
+    expect(screen.getByRole('alert')).toHaveTextContent('venció')
 
     act(() => widgetProps?.onError())
     expect(onTokenChange).toHaveBeenLastCalledWith(null)
@@ -75,7 +75,7 @@ describe('TurnstileChallenge', () => {
 
     rerender(<TurnstileChallenge action="login" onTokenChange={onTokenChange} resetKey={1} />)
 
-    expect(screen.getByRole('status')).toHaveTextContent('Completa la verificacion')
+    expect(screen.getByRole('status')).toHaveTextContent('Marcá la casilla de seguridad')
   })
 
   it('shows a safe configuration error when the public site key is missing', () => {
@@ -84,6 +84,7 @@ describe('TurnstileChallenge', () => {
     render(<TurnstileChallenge action="login" onTokenChange={vi.fn()} resetKey={0} />)
 
     expect(screen.queryByTestId('turnstile-widget')).not.toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('proteccion anti-bots no esta configurada')
+    // Al cliente de la tienda se le dice qué hacer; el detalle técnico va a la consola.
+    expect(screen.getByRole('alert')).toHaveTextContent('no podemos hacer la verificación de seguridad')
   })
 })

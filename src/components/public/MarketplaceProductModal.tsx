@@ -19,7 +19,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { formatPrice, cn } from '@/lib/utils'
@@ -73,7 +73,7 @@ function Thumb({
         className="object-contain p-1.5"
         sizes="56px"
         onError={() => setErr(true)}
-        unoptimized={src.startsWith('data:') || src === '/placeholder-product.svg'}
+        unoptimized={shouldBypassImageOptimization(src)}
       />
     </button>
   )
@@ -229,9 +229,9 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
                   fill
                   sizes="(max-width: 768px) 100vw, 460px"
                   className="object-contain p-6 transition-opacity duration-300"
-                  quality={90}
+                  quality={75}
                   onError={() => setMainError(true)}
-                  unoptimized={currentSrc.startsWith('data:') || currentSrc === '/placeholder-product.svg'}
+                  unoptimized={shouldBypassImageOptimization(currentSrc)}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center">

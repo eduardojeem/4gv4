@@ -18,7 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getPublicOrganizationPage } from '@/lib/public/marketplace'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 
 type PageProps = {
@@ -120,7 +120,7 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
               {/* Logo */}
               <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 {org.logo_url ? (
-                  <Image src={org.logo_url} alt={org.name} width={80} height={80} className="h-full w-full object-cover" />
+                  <Image src={org.logo_url} alt={org.name} width={80} height={80} className="h-full w-full object-cover" unoptimized={shouldBypassImageOptimization(org.logo_url)} />
                 ) : (
                   <Building2 className="h-9 w-9 text-slate-400" />
                 )}
@@ -318,6 +318,7 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
                         fill
                         className="object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                         sizes="(max-width: 1280px) 50vw, 25vw"
+                        unoptimized={shouldBypassImageOptimization(imageSrc)}
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center">

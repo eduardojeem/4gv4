@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { getImageSourceValidationMessage, isSupportedImageSource } from './image-url-policy'
-import { resolveProductImageUrl } from './images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from './images'
 
 const vtexImage = 'https://pyunicentroprod.vtexassets.com/arquivos/ids/2894614-800-auto?v=1&width=800'
 const napaliImage = 'https://images.napali.app/global/element-products/all/default/xlarge/elykt00170_element,f_tec0_frt1.jpg'
@@ -28,5 +28,12 @@ describe('image URL policy', () => {
   it('continues to accept local and uploaded storage paths', () => {
     expect(isSupportedImageSource('/products/item.webp')).toBe(true)
     expect(isSupportedImageSource('product-images/item.webp')).toBe(true)
+  })
+
+  it('bypasses Vercel transformations for sources that are already optimized', () => {
+    expect(shouldBypassImageOptimization(vtexImage)).toBe(true)
+    expect(shouldBypassImageOptimization('/placeholder-product.svg')).toBe(true)
+    expect(shouldBypassImageOptimization('data:image/webp;base64,AAAA')).toBe(true)
+    expect(shouldBypassImageOptimization('https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg')).toBe(false)
   })
 })

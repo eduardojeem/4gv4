@@ -107,10 +107,13 @@ const nextConfig: NextConfig = {
 
   // Configuración de imágenes optimizada
   images: {
-    formats: ['image/webp', 'image/avif'],
+    // Un único formato evita crear una transformación AVIF y otra WebP para
+    // cada combinación de imagen y ancho. WebP conserva compatibilidad amplia.
+    formats: ['image/webp'],
+    qualities: [75],
     minimumCacheTTL: 31536000, // 1 año
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    deviceSizes: [640, 768, 1024, 1280, 1536, 1920],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
     remotePatterns: REMOTE_IMAGE_HOSTS.map((hostname) => ({
       protocol: 'https' as const,
       hostname,

@@ -2,6 +2,26 @@ import { config } from './config'
 import { getPublicUrl } from './supabase-storage'
 import { isSupportedImageSource } from './image-url-policy'
 
+const ALREADY_OPTIMIZED_IMAGE_HOSTS = new Set([
+  'pyunicentroprod.vtexassets.com',
+  'images.napali.app',
+])
+
+/** Evita pagar una segunda transformación para recursos que no la necesitan. */
+export const shouldBypassImageOptimization = (source?: string | null): boolean => {
+  if (!source) return true
+  const value = source.trim()
+  if (!value) return true
+  if (value.startsWith('data:') || value.startsWith('blob:')) return true
+  if (value === '/placeholder-product.svg' || /\.svg(?:$|[?#])/i.test(value)) return true
+
+  try {
+    return ALREADY_OPTIMIZED_IMAGE_HOSTS.has(new URL(value).hostname)
+  } catch {
+    return false
+  }
+}
+
 export const resolveProductImageUrl = (url?: string | null): string => {
   // Si no hay URL o está vacía, retornar placeholder
   if (!url || typeof url !== 'string' || !url.trim()) return '/placeholder-product.svg'

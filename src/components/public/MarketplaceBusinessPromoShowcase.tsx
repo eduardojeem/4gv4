@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { formatPrice, cn } from '@/lib/utils'
 import { getOfferPricing } from '@/lib/public/marketplace-offers'
 import { getWhatsAppLink } from '@/lib/whatsapp'
@@ -141,6 +141,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                         width={24}
                         height={24}
                         className="h-full w-full object-contain"
+                        unoptimized={shouldBypassImageOptimization(org.logo_url)}
                       />
                     ) : (
                       <Building2 className="h-3.5 w-3.5 text-emerald-600" />
@@ -189,6 +190,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                           width={48}
                           height={48}
                           className="h-full w-full object-contain"
+                          unoptimized={shouldBypassImageOptimization(currentOrg.logo_url)}
                         />
                       ) : (
                         <Store className="h-7 w-7 text-emerald-800" />
@@ -360,6 +362,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                             fill
                             className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
                             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                            unoptimized={shouldBypassImageOptimization(imageSrc)}
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center">
