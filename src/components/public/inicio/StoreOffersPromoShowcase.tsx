@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
+import { useHydrated } from '@/hooks/use-hydrated'
 import {
   ArrowRight,
   BadgeCheck,
@@ -31,6 +32,8 @@ import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
 import { FavoriteButton } from '@/components/public/Favorites'
 import { MarketplaceProductModal } from '@/components/public/MarketplaceProductModal'
 import { withOrgQuery } from '@/lib/saas/tenant'
+import { getSocialLinks } from '@/lib/public/social-links'
+import { SOCIAL_ICONS } from '@/components/public/SocialIcons'
 import { fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS } from './newest-products'
 import type { PublicProduct } from '@/types/public'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
@@ -52,12 +55,41 @@ interface StoreOffersPromoShowcaseProps {
       saturday?: string
       sunday?: string
     }
+    instagram?: string | null
+    facebook?: string | null
+    tiktok?: string | null
   }
   tenantPrefix: string
   tenantSlug: string
   phoneClean?: string
   className?: string
   id?: string
+}
+
+function cleanScheduleValue(raw?: string | null): string {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  // Limpia prefijos como "Lun - Vie:", "Lun a Vie:", "Lunes a Viernes:", "Sábados:", "Sábado:", "Domingos:", "Domingo:"
+  const cleaned = trimmed.replace(/^(?:lun(?:es)?\s*(?:-|a)\s*vie(?:rnes)?|lunes a viernes|lun a vie|s[aá]b(?:ado)?s?|dom(?:ingo)?s?)[:\s]*/i, '').trim()
+  return cleaned || trimmed
+}
+
+function formatPhoneDisplay(raw?: string | null): string {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  const cleanDigits = trimmed.replace(/\D/g, '')
+  if (cleanDigits.startsWith('595')) {
+    let local = cleanDigits.slice(3)
+    if (local.startsWith('0')) local = local.slice(1)
+    if (local.length === 9) {
+      return `(0${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`
+    }
+  } else if (cleanDigits.startsWith('09') && cleanDigits.length === 10) {
+    return `(${cleanDigits.slice(0, 4)}) ${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}`
+  } else if (cleanDigits.startsWith('9') && cleanDigits.length === 9) {
+    return `(0${cleanDigits.slice(0, 3)}) ${cleanDigits.slice(3, 6)}-${cleanDigits.slice(6)}`
+  }
+  return trimmed
 }
 
 export function StoreOffersPromoShowcase({
@@ -176,11 +208,79 @@ export function StoreOffersPromoShowcase({
       organization_city: companyInfo.city ?? null,
       organization_address: companyInfo.address ?? null,
       organization_contact: phoneClean
-        ? { phone: phoneClean, whatsapp: phoneClean, instagram: null, facebook: null, tiktok: null }
+        ? {
+            phone: phoneClean,
+            whatsapp: phoneClean,
+            instagram: companyInfo.instagram ?? null,
+            facebook: companyInfo.facebook ?? null,
+            tiktok: companyInfo.tiktok ?? null,
+          }
         : null,
     }),
-    [tenantSlug, storeName, logoUrl, companyInfo.city, companyInfo.address, phoneClean]
+    [tenantSlug, storeName, logoUrl, companyInfo.city, companyInfo.address, companyInfo.instagram, companyInfo.facebook, companyInfo.tiktok, phoneClean]
   )
+
+  const hourRows = useMemo(() => {
+    const rows: Array<{ label: string; value: string }> = []
+    const weekdays = cleanScheduleValue(companyInfo.hours?.weekdays)
+    if (weekdays) {
+      rows.push({ label: 'Lun a Vie', value: weekdays })
+    }
+    const saturday = cleanScheduleValue(companyInfo.hours?.saturday)
+    if (saturday) {
+      rows.push({ label: 'Sábados', value: saturday })
+    }
+    const sunday = cleanScheduleValue(companyInfo.hours?.sunday)
+    if (sunday) {
+      rows.push({ label: 'Domingos', value: sunday })
+    }
+    return rows
+  }, [companyInfo.hours])
+
+  const displayPhone = useMemo(
+    () => formatPhoneDisplay(companyInfo.phone),
+    [companyInfo.phone]
+  )
+
+  const whatsappChatHref = useMemo(() => {
+    if (phoneClean && phoneClean.length >= 6) {
+      return getWhatsAppLink({
+        phone: phoneClean,
+        message: `¡Hola ${storeName}! 👋 Vi las promociones en su tienda online y quería consultar sobre los productos.`,
+      })
+    }
+    if (companyInfo.phone) {
+      const clean = companyInfo.phone.replace(/\D/g, '')
+      if (clean.length >= 6) {
+        return `https://wa.me/${clean}`
+      }
+    }
+    return null
+  }, [phoneClean, companyInfo.phone, storeName])
+
+  const configuredSocialLinks = useMemo(() => {
+    const fromCompany = getSocialLinks(companyInfo)
+    if (fromCompany.length > 0) return fromCompany
+
+    const cleanSlug = tenantSlug ? tenantSlug.replace(/[^a-zA-Z0-9._]/g, '') : ''
+    if (cleanSlug) {
+      return [
+        {
+          platform: 'instagram' as const,
+          label: 'Instagram',
+          handle: `@${cleanSlug}`,
+          href: `https://instagram.com/${cleanSlug}`,
+        },
+        {
+          platform: 'facebook' as const,
+          label: 'Facebook',
+          handle: storeName,
+          href: `https://facebook.com/${cleanSlug}`,
+        },
+      ]
+    }
+    return []
+  }, [companyInfo, tenantSlug, storeName])
 
   // Oferta activa en el carrusel de la tarjeta destacada
   const activeOffer = carouselOffers.length > 0 ? carouselOffers[carouselIndex % carouselOffers.length] : null
@@ -221,8 +321,11 @@ export function StoreOffersPromoShowcase({
   const secondaryOfferImage = secondaryOffer ? resolveProductImageUrl(secondaryOffer.image) : null
   const secondaryOfferPrecioOculto = secondaryOffer ? hidesPublicPrice(secondaryOffer) : false
 
-  // Si no está cargando y no hay ninguna oferta disponible, no mostramos un bloque vacío
-  if (!isLoading && validOffers.length === 0) {
+  const isMounted = useHydrated()
+
+  // Evita desajustes de hidratación entre SSR y cliente:
+  // Antes del montaje en el navegador o si no hay ofertas válidas cargadas, no se renderiza nada en el DOM
+  if (!isMounted || validOffers.length === 0) {
     return null
   }
 
@@ -376,9 +479,9 @@ export function StoreOffersPromoShowcase({
                   onMouseEnter={() => setIsCarouselPaused(true)}
                   onMouseLeave={() => setIsCarouselPaused(false)}
                 >
-                  {/* Encabezado del bloque: Información real de la empresa + Contador */}
+                  {/* Encabezado del bloque: Información real de la empresa + Redes + Contador */}
                   <div className="flex items-start justify-between gap-3 border-b border-rose-400/20 pb-3">
-                    <div className="space-y-1.5 min-w-0">
+                    <div className="space-y-2 min-w-0 flex-1">
                       <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/20 border border-rose-400/30 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-300">
                         <Sparkles className="h-3 w-3 text-rose-400 animate-pulse shrink-0" />
                         <span>Promociones del Comercio</span>
@@ -391,31 +494,72 @@ export function StoreOffersPromoShowcase({
                         </p>
                       )}
 
-                      {/* Datos reales de la empresa: Dirección, Ciudad, Horario y Teléfono */}
-                      <div className="flex flex-col gap-1 text-[11px] text-rose-100/85 pt-0.5">
-                        {Boolean(companyInfo.address || companyInfo.city) && (
-                          <div className="flex items-center gap-1.5 text-white/90">
-                            <MapPin className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                      {/* Datos reales de la empresa: Todos los Horarios y WhatsApp */}
+                      <div className="flex flex-col gap-1.5 text-xs text-rose-100/90 pt-0.5">
+                        {hourRows.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {hourRows.map((row, idx) => (
+                              <div key={row.label} className="flex items-center gap-2">
+                                <Clock className={cn('h-3.5 w-3.5 shrink-0', idx === 0 ? 'text-rose-400' : 'text-rose-400/70')} />
+                                <span className="truncate">
+                                  <span className="text-rose-300/80 font-normal">{row.label}:</span>{' '}
+                                  <strong className="font-semibold text-white">{row.value}</strong>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {displayPhone && (
+                          <div className="flex items-center gap-2">
+                            <MessageCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                             <span className="truncate">
-                              {companyInfo.address ? `${companyInfo.address}${companyInfo.city ? ` · ${companyInfo.city}` : ''}` : companyInfo.city}
+                              <span className="text-rose-300/80 font-normal">WhatsApp:</span>{' '}
+                              {whatsappChatHref ? (
+                                <a
+                                  href={whatsappChatHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  suppressHydrationWarning
+                                  className="font-semibold text-white hover:text-emerald-300 transition-colors underline decoration-emerald-500/40 underline-offset-2"
+                                  title={`Escribir por WhatsApp a ${storeName}`}
+                                >
+                                  {displayPhone}
+                                </a>
+                              ) : (
+                                <strong className="font-semibold text-white">{displayPhone}</strong>
+                              )}
                             </span>
                           </div>
                         )}
-
-                        {Boolean(companyInfo.hours?.weekdays) && (
-                          <div className="flex items-center gap-1.5 text-rose-200/90">
-                            <Clock className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                            <span className="truncate">Lun a Vie: {companyInfo.hours?.weekdays}</span>
-                          </div>
-                        )}
-
-                        {Boolean(companyInfo.phone) && (
-                          <div className="flex items-center gap-1.5 text-rose-200/90">
-                            <Phone className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                            <span className="truncate">Atención: {companyInfo.phone}</span>
-                          </div>
-                        )}
                       </div>
+
+                      {/* Sección de Redes Sociales */}
+                      {configuredSocialLinks.length > 0 && (
+                        <div className="pt-2 border-t border-rose-400/20">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-300/90 mb-1.5">
+                            Redes Sociales
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {configuredSocialLinks.map((social) => {
+                              const Icon = SOCIAL_ICONS[social.platform]
+                              return (
+                                <a
+                                  key={social.platform}
+                                  href={social.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 px-2.5 py-1 text-xs font-semibold text-white transition-all hover:scale-105 active:scale-95 shadow-sm"
+                                  title={`${social.label}: ${social.handle}`}
+                                >
+                                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="text-[10px] font-bold tracking-tight">{social.handle}</span>
+                                </a>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {carouselOffers.length > 1 && (
@@ -710,6 +854,30 @@ export function StoreOffersPromoShowcase({
                     <MessageCircle className="h-4 w-4 text-emerald-400" />
                     <span>Consultar ofertas por WhatsApp</span>
                   </a>
+                )}
+
+                {configuredSocialLinks.length > 0 && (
+                  <div className="flex items-center justify-center gap-2 pt-1 border-t border-rose-400/20">
+                    <span className="text-[10px] font-bold text-rose-300/70 uppercase tracking-wider mr-1">
+                      Seguinos:
+                    </span>
+                    {configuredSocialLinks.map((social) => {
+                      const Icon = SOCIAL_ICONS[social.platform]
+                      return (
+                        <a
+                          key={`bottom-${social.platform}`}
+                          href={social.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white border border-white/20 transition-all hover:scale-110 shadow-sm"
+                          title={`${social.label}: ${social.handle}`}
+                          aria-label={`${social.label} de ${storeName}`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                        </a>
+                      )
+                    })}
+                  </div>
                 )}
 
                 <p className="text-[10px] text-rose-300/50 text-center tracking-wide">

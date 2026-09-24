@@ -270,7 +270,12 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
 
       {/* ── 8. Pasos del Proceso (SÓLO si la empresa los tiene habilitados y configurados) ── */}
       {hasProcessSteps && (
-        <ProcessSteps brand={brand} flows={processFlows} />
+        <ProcessSteps
+          brand={brand}
+          flows={processFlows}
+          tenantPrefix={tenantPrefix}
+          phoneClean={phoneClean}
+        />
       )}
 
       {/* ── 9. Sucursales de la Tienda ── */}

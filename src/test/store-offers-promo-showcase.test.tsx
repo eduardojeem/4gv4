@@ -113,12 +113,14 @@ describe('StoreOffersPromoShowcase', () => {
         companyInfo={{
           name: '4G Celulares Store',
           logo_url: '/logo-4g.png',
-          phone: '0983123456',
+          phone: '+5950983123456',
           city: 'Asunción',
           address: 'Av. Eusebio Ayala 1234',
           hours: {
-            weekdays: '08:00 - 18:00',
+            weekdays: 'Lun - Vie: 08:00 - 18:00',
+            saturday: 'Sáb: 08:00 - 13:00',
           },
+          instagram: '4gstore',
         }}
         tenantPrefix="/4g-celulares"
         tenantSlug="4g-celulares"
@@ -129,15 +131,22 @@ describe('StoreOffersPromoShowcase', () => {
     // Nombre de la tienda
     expect(screen.getAllByText('4G Celulares Store').length).toBeGreaterThan(0)
 
-    // Insignia oficial y ciudad
+    // Insignia oficial y ciudad en el header de la tarjeta
     expect(screen.getByText('Tienda Oficial')).toBeInTheDocument()
     expect(screen.getAllByText(/Asunción/).length).toBeGreaterThan(0)
 
     // Información real de la empresa en la tarjeta promocional
     expect(screen.getByText('Promociones del Comercio')).toBeInTheDocument()
-    expect(screen.getByText(/Av\. Eusebio Ayala 1234 · Asunción/)).toBeInTheDocument()
-    expect(screen.getByText(/Lun a Vie: 08:00 - 18:00/)).toBeInTheDocument()
-    expect(screen.getByText(/Atención: 0983123456/)).toBeInTheDocument()
+    // La dirección no ensucia el bloque promocional
+    expect(screen.queryByText(/Av\. Eusebio Ayala 1234/)).not.toBeInTheDocument()
+    // Todos los horarios limpios sin duplicar prefijo
+    expect(screen.getByText('08:00 - 18:00')).toBeInTheDocument()
+    expect(screen.getByText('08:00 - 13:00')).toBeInTheDocument()
+    // WhatsApp formateado limpiamente
+    expect(screen.getByText('WhatsApp:')).toBeInTheDocument()
+    expect(screen.getByText('(0983) 123-456')).toBeInTheDocument()
+    // Redes sociales
+    expect(screen.getAllByText('@4gstore').length).toBeGreaterThan(0)
 
     // Segundo carrusel presente para aprovechar el espacio vertical en pantallas grandes
     expect(screen.getByText('Destacado 2')).toBeInTheDocument()
