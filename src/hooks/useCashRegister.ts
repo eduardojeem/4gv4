@@ -162,12 +162,12 @@ export function useCashRegister() {
             try {
                 const { data: profiles } = await supabase
                     .from('profiles')
-                    .select('id, name, full_name, email')
+                    .select('id, full_name, email')
                     .in('id', sessionUserIds)
 
                 if (profiles && profiles.length > 0) {
                     sessionUserMap = profiles.reduce((acc, p: any) => {
-                        const displayName = p.name || p.full_name || (p.email ? p.email.split('@')[0] : '')
+                        const displayName = p.full_name || (p.email ? p.email.split('@')[0] : '')
                         if (displayName) {
                             acc[p.id] = displayName
                         }
@@ -248,12 +248,12 @@ export function useCashRegister() {
             try {
                 const { data: profilesWithEmail } = await supabase
                     .from('profiles')
-                    .select('id, name, full_name, email')
+                    .select('id, full_name, email')
                     .in('id', userIds)
 
                 if (profilesWithEmail) {
                     userMap = profilesWithEmail.reduce((acc, p: any) => {
-                        acc[p.id] = p.name || p.full_name || ''
+                        acc[p.id] = p.full_name || ''
                         return acc
                     }, {} as Record<string, string>)
 

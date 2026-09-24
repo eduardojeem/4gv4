@@ -137,3 +137,27 @@ describe('el estado «late» queda documentado', () => {
     expect(MIGRACION).toContain('la mora se calcula por fecha al leer')
   })
 })
+
+describe('el POS pudo dejar de vender sin decir por qué', () => {
+  const MIGRACION_PERMISOS = leer('supabase/migrations/20260924120000_grant_pos_sale_to_service_role.sql')
+  const API_VENTA = leer('src/app/api/pos/process-sale/route.ts')
+
+  it('la función de venta se ejecuta con la clave de servicio, y ahora tiene permiso', () => {
+    // v4 y v5 se publicaron con `grant execute ... to authenticated` y sin
+    // `service_role`, que es con lo que llama la API: cada cobro terminaba en
+    // «permission denied for function process_pos_sale_atomic_v5».
+    expect(MIGRACION_PERMISOS).toContain('process_pos_sale_atomic_v4')
+    expect(MIGRACION_PERMISOS).toContain('process_pos_sale_atomic_v5')
+    expect(MIGRACION_PERMISOS.match(/to service_role/g)).toHaveLength(2)
+  })
+
+  it('y si vuelve a faltar, el mostrador lee qué hacer en vez de un 500', () => {
+    expect(API_VENTA).toContain("fullText.includes('permission denied for function')")
+    expect(API_VENTA).toContain('aplicá la migración de permisos del POS')
+  })
+
+  it('el error crudo queda en el log, no un objeto vacío', () => {
+    // El fallo real se registró como «Atomic sale failed: {}».
+    expect(API_VENTA).toContain('raw: error,')
+  })
+})

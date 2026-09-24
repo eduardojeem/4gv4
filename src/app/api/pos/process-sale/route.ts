@@ -221,6 +221,16 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
     return NextResponse.json({ success: false, error: errorMsg }, { status: 409 })
   }
 
+  // Sin permiso de ejecucion sobre la funcion de venta, el POS no vende y el
+  // mensaje de Postgres no le dice nada a quien esta en el mostrador.
+  if (fullText.includes('permission denied for function')) {
+    const funcion = fullText.match(/function ([a-z0-9_]+)/i)?.[1] ?? 'la venta'
+    return NextResponse.json({
+      success: false,
+      error: `Falta el permiso de ejecución sobre ${funcion} para el servidor. No se cobró nada: aplicá la migración de permisos del POS.`,
+    }, { status: 503 })
+  }
+
   const mappings: Array<[string, string, number]> = [
     ['FIRST_INSTALLMENT_CASH_INSUFFICIENT', 'El efectivo recibido no cubre la primera cuota. Revisá el importe antes de confirmar.', 400],
     ['FIRST_INSTALLMENT_TRANSFER_REQUIRED', 'Ingresá banco o cuenta receptora y referencia de la primera cuota.', 400],
@@ -261,14 +271,21 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
   const match = mappings.find(([code]) => fullText.includes(code))
   if (match) return NextResponse.json({ success: false, error: match[1] }, { status: match[2] })
 
-  console.error('[pos/process-sale] Atomic sale failed:', { rawMessage, details, hint, code: error?.code })
+  // Se registra tambien el error crudo: cuando `message`/`details`/`hint`
+  // vienen vacios, el objeto impreso quedaba en `{}` y no habia por donde
+  // empezar a mirar.
+  console.error('[pos/process-sale] Atomic sale failed:', JSON.stringify({
+    rawMessage, details, hint, code: error?.code, raw: error,
+  }))
 
   // Un codigo sin traducir no le dice nada a quien esta en el mostrador. Se
   // separa el codigo tecnico del mensaje: la persona entiende que hacer y el
   // codigo queda disponible para reportarlo.
   const bareCode = rawMessage?.trim().match(/^[A-Z][A-Z0-9_]{4,}$/)?.[0] ?? null
   const correlationId = crypto.randomUUID()
-  console.error('[pos/process-sale] Unexpected atomic sale error:', { correlationId, code: error?.code })
+  console.error('[pos/process-sale] Unexpected atomic sale error:', JSON.stringify({
+    correlationId, code: error?.code, rawMessage, details, hint,
+  }))
   const fallbackError = bareCode
     ? `La venta no se pudo registrar por una validación del sistema (${bareCode}). No se cobró nada. Revisá el estado de las reparaciones y del cliente, o pasá este código a soporte.`
     : `No se pudo completar la venta. No se cobró nada. Código: ${correlationId}`
