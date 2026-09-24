@@ -18,10 +18,15 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const body = await request.json().catch(() => ({})) as {
       urls?: unknown
       imageType?: unknown
+      images?: unknown
     }
 
-    const rawImages = Array.isArray((body as any).images)
-      ? (body as any).images.filter((img: any): img is { url: string; description?: string; imageType?: string } => typeof img?.url === 'string' && img.url.length > 0)
+    type RawImagePayload = { url: string; description?: string; imageType?: string }
+    const rawImages = Array.isArray(body.images)
+      ? (body.images as unknown[]).filter((img): img is RawImagePayload => {
+          const item = img as RawImagePayload | null
+          return typeof item?.url === 'string' && item.url.length > 0
+        })
       : []
     const urls = Array.isArray(body.urls)
       ? body.urls.filter((url): url is string => typeof url === 'string' && url.length > 0)
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     }
 
     const rowsToInsert = rawImages.length > 0
-      ? rawImages.map((img: any) => ({
+      ? rawImages.map((img) => ({
           repair_id: id,
           image_url: img.url,
           image_type: img.imageType || imageType,

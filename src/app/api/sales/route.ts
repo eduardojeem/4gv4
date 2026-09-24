@@ -333,7 +333,7 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
     const validated = validationResult.data
     
     // Only allow updating status for now (to prevent complex scenarios)
-    const updates: any = {}
+    const updates: { status?: 'completed' | 'cancelled' | 'pending' | 'draft' } = {}
     if (validated.status) updates.status = validated.status
     
     const { data: sale, error } = await supabase

@@ -41,7 +41,7 @@ export interface APIMetrics {
   ip?: string
 }
 
-export interface CacheEntry<T = any> {
+export interface CacheEntry<T = unknown> {
   key: string
   value: T
   timestamp: Date
@@ -156,7 +156,7 @@ export class CacheManager {
     }
   }
 
-  private calculateSize(value: any): number {
+  private calculateSize(value: unknown): number {
     return JSON.stringify(value).length * 2 // Aproximación en bytes
   }
 
@@ -253,22 +253,33 @@ export class RateLimiter {
   }
 }
 
+type GenericSupabaseQueryClient = {
+  from: (table: string) => {
+    insert: (data: unknown) => PromiseLike<unknown>
+  }
+}
+
+type OptimizableQuery<T = unknown> = PromiseLike<{ data: T | null; error: unknown }> & {
+  range?: (from: number, to: number) => OptimizableQuery<T>
+}
+
 // Query Optimizer
 export class QueryOptimizer {
   private config: QueryOptimization
-  private supabase: any
+  private supabase: GenericSupabaseQueryClient | null
 
-  constructor(config: QueryOptimization, supabaseClient: any) {
+  constructor(config: QueryOptimization, supabaseClient?: unknown) {
     this.config = config
-    this.supabase = supabaseClient
+    this.supabase = (supabaseClient as GenericSupabaseQueryClient) || null
   }
 
-  optimizeQuery(query: any): any {
+  optimizeQuery<Q extends Record<string, unknown>>(query: Q): Q {
     let optimizedQuery = { ...query }
 
     // Aplicar paginación automática
-    if (this.config.enablePagination && !query.range) {
-      optimizedQuery = optimizedQuery.range(0, this.config.batchSize - 1)
+    const qWithRange = optimizedQuery as { range?: (from: number, to: number) => unknown }
+    if (this.config.enablePagination && typeof qWithRange.range === 'function') {
+      optimizedQuery = qWithRange.range(0, this.config.batchSize - 1) as unknown as Q
     }
 
     // Limitar profundidad de joins
@@ -285,10 +296,10 @@ export class QueryOptimizer {
   }
 
   async executeWithOptimization<T>(
-    queryBuilder: any,
+    queryBuilder: OptimizableQuery<T>,
     cacheKey?: string,
     cacheTtl?: number
-  ): Promise<{ data: T | null; error: any; fromCache: boolean; queryTime: number }> {
+  ): Promise<{ data: T | null; error: unknown; fromCache: boolean; queryTime: number }> {
     const startTime = Date.now()
 
     // Verificar cache si está habilitado
@@ -305,7 +316,7 @@ export class QueryOptimizer {
     }
 
     // Optimizar query
-    const optimizedQuery = this.optimizeQuery(queryBuilder)
+    const optimizedQuery = this.optimizeQuery(queryBuilder as unknown as Record<string, unknown>) as unknown as OptimizableQuery<T>
 
     // Ejecutar query
     const { data, error } = await optimizedQuery
@@ -325,12 +336,12 @@ export class QueryOptimizer {
     }
   }
 
-  private limitJoinDepth(query: any, _maxDepth: number): any {
+  private limitJoinDepth<Q>(query: Q, _maxDepth: number): Q {
     // Implementación simplificada para limitar joins
     return query
   }
 
-  private addIndexHints(query: any): any {
+  private addIndexHints<Q>(query: Q): Q {
     // Implementación simplificada para hints de índices
     return query
   }
@@ -348,10 +359,10 @@ export class QueryOptimizer {
 // Metrics Collector
 export class MetricsCollector {
   private metrics: APIMetrics[] = []
-  private supabase: any
+  private supabase: GenericSupabaseQueryClient | null
 
-  constructor(supabaseClient: any) {
-    this.supabase = supabaseClient
+  constructor(supabaseClient?: unknown) {
+    this.supabase = (supabaseClient as GenericSupabaseQueryClient) || null
   }
 
   recordMetric(metric: APIMetrics): void {

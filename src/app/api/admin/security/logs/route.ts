@@ -254,12 +254,15 @@ function mapLog(row: AuditLogRow, profilesById: Map<string, ProfileData>): Secur
   }
 }
 
-function applyBaseFilters(query: any, params: {
+type AdminSupabaseClient = ReturnType<typeof createAdminSupabase>
+type AuditLogFilterQuery = ReturnType<ReturnType<AdminSupabaseClient['from']>['select']>
+
+function applyBaseFilters(query: AuditLogFilterQuery, params: {
   startDate: string
   severity: string | null
   search: string
   userId: string | null
-}) {
+}): AuditLogFilterQuery {
   const severityExpression = severityFilterExpression(params.severity)
   let nextQuery = query.gte('created_at', params.startDate)
 

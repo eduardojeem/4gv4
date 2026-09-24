@@ -44,7 +44,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
     let skipped = 0
 
     for (const credit of credits) {
-      const customer = credit.customers as any
+      const customer = credit.customers as { name?: string | null; email?: string | null } | null
       const email = customer?.email
 
       if (!email) {

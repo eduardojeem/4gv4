@@ -119,9 +119,9 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 
     if (error) throw error
     return NextResponse.json({ success: true, data }, { status: 201 })
-  } catch (error: any) {
-    const code = error?.code || ''
-    const message = error?.message || ''
+  } catch (error: unknown) {
+    const code = (error as { code?: string })?.code || ''
+    const message = error instanceof Error ? error.message : String(error)
     if (code === '23505' || message.includes('duplicate') || message.includes('unique')) {
       return NextResponse.json({ success: false, error: 'Ya existe una marca con este nombre.' }, { status: 409 })
     }

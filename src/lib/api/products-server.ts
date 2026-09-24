@@ -274,7 +274,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     installments_public: boolean | null
     installments_plans: { count: number; rate: number }[] | null
     has_variants?: boolean | null
-    variant_attribute_config?: any
+    variant_attribute_config?: unknown
     stock_quantity: number
     is_active: boolean
     featured: boolean
@@ -392,7 +392,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   let fashionVariantProductIds: string[] | null = null
   if (size || color) {
-    const { data: candidateVariants, error: candidateError } = await (supabase as any)
+    const { data: candidateVariants, error: candidateError } = await supabase
       .from('product_variants')
       .select('product_id, attributes')
       .eq('organization_id', organization.id)
@@ -524,7 +524,19 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const variantsByProductId = new Map<string, PublicProduct['variants']>()
 
   if (variantProductIds.length > 0) {
-    const { data: variantRows, error: variantError } = await (supabase as any)
+    type RawVariantRow = {
+      id: string
+      product_id: string
+      variant_name: string
+      attributes: unknown
+      sku?: string | null
+      sale_price?: number | null
+      wholesale_price?: number | null
+      stock_quantity?: number | null
+      is_active?: boolean | null
+    }
+
+    const { data: variantRows, error: variantError } = await supabase
       .from('product_variants')
       .select(
         isWholesale
@@ -539,20 +551,21 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     if (variantError) {
       console.warn('[getPublicProducts] Error fetching variants:', variantError.message)
     } else {
-      for (const v of (variantRows ?? []) as any[]) {
+      for (const v of ((variantRows ?? []) as unknown as RawVariantRow[])) {
         const list = variantsByProductId.get(v.product_id) || []
+        const attrs = (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : null) as Record<string, unknown> | null
         list.push({
-          id: v.id,
-          product_id: v.product_id,
-          variant_name: v.variant_name,
-          attributes: (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {}) as Record<string, string>,
-          sku: v.sku || null,
-          sale_price: Number(v.sale_price ?? 0),
-          wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
-          stock_quantity: Number(v.stock_quantity ?? 0),
-          is_active: Boolean(v.is_active ?? true),
-          image_url: (v.attributes && typeof v.attributes === 'object' && v.attributes.image_url) ? String(v.attributes.image_url) : null,
-        })
+            id: v.id,
+            product_id: v.product_id,
+            variant_name: v.variant_name,
+            attributes: (attrs ?? {}) as Record<string, string>,
+            sku: v.sku || null,
+            sale_price: Number(v.sale_price ?? 0),
+            wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
+            stock_quantity: Number(v.stock_quantity ?? 0),
+            is_active: Boolean(v.is_active ?? true),
+            image_url: attrs?.image_url ? String(attrs.image_url) : null,
+          })
         variantsByProductId.set(v.product_id, list)
       }
     }
@@ -757,7 +770,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     installments_public?: boolean
     installments_plans?: { count: number; rate: number }[] | null
     has_variants?: boolean
-    variant_attribute_config?: any
+    variant_attribute_config?: unknown
     stock_quantity: number
     is_active: boolean
     featured: boolean
@@ -794,18 +807,33 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     .eq('is_active', true)
     .order('created_at', { ascending: true })
 
-  const productVariants: PublicProduct['variants'] = (variantRows ?? []).map((v: any) => ({
-    id: v.id,
-    product_id: v.product_id,
-    variant_name: v.variant_name,
-    attributes: (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : {}) as Record<string, string>,
-    sku: v.sku || null,
-    sale_price: Number(v.sale_price ?? p.sale_price),
-    wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
-    stock_quantity: Number(v.stock_quantity ?? 0),
-    is_active: Boolean(v.is_active ?? true),
-    image_url: (v.attributes && typeof v.attributes === 'object' && v.attributes.image_url) ? String(v.attributes.image_url) : null,
-  }))
+  type ProductDetailVariant = {
+    id: string
+    product_id: string
+    variant_name: string
+    attributes: unknown
+    sku?: string | null
+    sale_price?: number | null
+    wholesale_price?: number | null
+    stock_quantity?: number | null
+    is_active?: boolean | null
+  }
+
+  const productVariants: PublicProduct['variants'] = ((variantRows ?? []) as unknown as ProductDetailVariant[]).map((v) => {
+    const attrs = (typeof v.attributes === 'object' && v.attributes !== null ? v.attributes : null) as Record<string, unknown> | null
+    return {
+      id: v.id,
+      product_id: v.product_id,
+      variant_name: v.variant_name,
+      attributes: (attrs ?? {}) as Record<string, string>,
+      sku: v.sku || null,
+      sale_price: Number(v.sale_price ?? p.sale_price),
+      wholesale_price: isWholesale && v.wholesale_price ? Number(v.wholesale_price) : null,
+      stock_quantity: Number(v.stock_quantity ?? 0),
+      is_active: Boolean(v.is_active ?? true),
+      image_url: attrs?.image_url ? String(attrs.image_url) : null,
+    }
+  })
 
   const hasVariants = Boolean(p.has_variants || productVariants.length > 0)
 

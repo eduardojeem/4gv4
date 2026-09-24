@@ -347,7 +347,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
           const rawVariants = Array.isArray(product.variants) ? product.variants : []
           const hasVariants = Boolean(product.has_variants || rawVariants.length > 0)
           const variantStock = hasVariants && rawVariants.length > 0
-            ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+            ? rawVariants.reduce((sum: number, v: { is_active?: boolean | null; stock_quantity?: number | null }) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
             : null
 
           // Misma regla que `applyBranchInventoryToProducts`: sin fila en la
@@ -1183,14 +1183,21 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         )[0]
       : product
 
-    const rawVariants = Array.isArray((responseProduct as any).variants) ? (responseProduct as any).variants : []
-    const hasVariants = Boolean((responseProduct as any).has_variants || rawVariants.length > 0)
+    type ProductVariantSummary = { is_active?: boolean | null; stock_quantity?: number | null }
+    type ProductResponseRecord = {
+      variants?: ProductVariantSummary[]
+      has_variants?: boolean
+      stock_quantity?: number | null
+    }
+    const responseRecord = responseProduct as ProductResponseRecord
+    const rawVariants = Array.isArray(responseRecord.variants) ? responseRecord.variants : []
+    const hasVariants = Boolean(responseRecord.has_variants || rawVariants.length > 0)
     if (hasVariants && rawVariants.length > 0) {
       const variantStock = rawVariants.reduce(
-        (sum: number, v: any) => (v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum),
+        (sum: number, v: ProductVariantSummary) => (v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum),
         0
       )
-      const currentStock = Number((responseProduct as any).stock_quantity || 0)
+      const currentStock = Number(responseRecord.stock_quantity || 0)
       if (currentStock === 0 && variantStock > 0) {
         responseProduct = {
           ...responseProduct,

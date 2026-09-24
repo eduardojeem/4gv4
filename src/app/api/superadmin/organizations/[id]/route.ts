@@ -88,17 +88,22 @@ export async function GET(
     )
   }
 
-  const memberList = memberRows ?? []
+  type MemberRow = { user_id?: string | null; role?: string; [key: string]: unknown }
+  type MemberProfile = { id: string; email?: string | null; full_name?: string | null; avatar_url?: string | null }
+
+  const memberList = (memberRows ?? []) as MemberRow[]
   const memberUserIds = Array.from(
-    new Set(memberList.map((m: any) => String(m.user_id ?? '')).filter(Boolean))
+    new Set(memberList.map((m) => String(m.user_id ?? '')).filter(Boolean))
   )
   const { data: memberProfiles } = memberUserIds.length
     ? await admin
         .from('profiles')
         .select('id, email, full_name, avatar_url')
         .in('id', memberUserIds)
-    : { data: [] as Array<{ id: string }> }
-  const profileById = new Map<string, any>((memberProfiles ?? []).map((p: any) => [String(p.id), p] as [string, any]))
+    : { data: [] as MemberProfile[] }
+  const profileById = new Map<string, MemberProfile>(
+    (memberProfiles ?? []).map((p): [string, MemberProfile] => [String(p.id), p as MemberProfile])
+  )
 
   // Get plan details if subscription or org.plan exists
   let planDetails = null
@@ -127,7 +132,7 @@ export async function GET(
     organization: org,
     owner: ownerProfile,
     settings,
-    members: memberList.map((m: any) => ({ ...m, profiles: profileById.get(String(m.user_id)) ?? null })),
+    members: memberList.map((m) => ({ ...m, profiles: profileById.get(String(m.user_id)) ?? null })),
     subscription,
     plan_details: planDetails,
     branches: branches ?? [],
