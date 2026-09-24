@@ -350,12 +350,12 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
             ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
             : null
 
-          const branchStock = stockMap.has(product.id)
-            ? Number(stockMap.get(product.id) || 0)
-            : (product.stock_quantity !== null && product.stock_quantity !== undefined && Number(product.stock_quantity) > 0
-                ? Number(product.stock_quantity)
-                : 0)
-          const effectiveStock = hasVariants && variantStock !== null && (branchStock === 0 || !stockMap.has(product.id))
+          // Misma regla que `applyBranchInventoryToProducts`: sin fila en la
+          // sucursal, el stock de la sucursal es cero. El de las variantes no
+          // sirve de reemplazo porque `product_variants` es global.
+          const tieneFilaEnSucursal = stockMap.has(product.id)
+          const branchStock = tieneFilaEnSucursal ? Number(stockMap.get(product.id) || 0) : 0
+          const effectiveStock = tieneFilaEnSucursal && hasVariants && variantStock !== null && branchStock === 0
             ? variantStock
             : branchStock
 

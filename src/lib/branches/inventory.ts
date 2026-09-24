@@ -170,14 +170,17 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
     }
 
     if (branchScoped) {
-      const fallbackStock = product.stock_quantity !== null && product.stock_quantity !== undefined && Number(product.stock_quantity) > 0
-        ? Number(product.stock_quantity)
-        : 0
-      const effectiveStock = hasVariants && variantStock !== null ? variantStock : fallbackStock
+      // Sin fila en esta sucursal, el stock de la sucursal es cero.
+      //
+      // Se caia al stock global —y al de las variantes, que tambien es global
+      // porque `product_variants` no distingue sucursal—: mirando Centro se
+      // veian las unidades que estaban en Sur, y el mostrador prometia algo
+      // que ahi no habia. Cero es incomodo pero es lo que hay; cargar el
+      // inventario de la sucursal es lo que lo cambia.
       return {
         ...product,
-        stock_quantity: effectiveStock,
-        branch_stock_quantity: effectiveStock,
+        stock_quantity: 0,
+        branch_stock_quantity: 0,
       }
     }
 
