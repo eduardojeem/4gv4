@@ -345,9 +345,9 @@ export function ProductModal({
       barcode: '',
       is_active: true,
       visibility: 'public',
-      // Los productos nuevos se publican sin precio: la tienda muestra
-      // «Preguntar» hasta que el negocio decida mostrarlo.
-      hide_price: true,
+      // Los productos nuevos se publican con precio visible por defecto
+      // («Público — todos ven el precio»).
+      hide_price: false,
       tags: [],
       fashion_audience: '',
       images: [],
@@ -604,7 +604,7 @@ export function ProductModal({
         barcode: '',
         is_active: true,
         visibility: 'public',
-        hide_price: true,
+        hide_price: false,
         tags: [],
         fashion_audience: '',
         images: [],

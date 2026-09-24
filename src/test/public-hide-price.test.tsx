@@ -230,9 +230,8 @@ describe('el mayorista registrado sí ve el precio', () => {
 })
 
 describe('lo que ve el negocio al cargar un producto', () => {
-  it('los productos nuevos nacen sin precio publicado', () => {
-    expect(MIGRACION).toContain('alter column hide_price set default true')
-    expect(FORMULARIO).toContain('hide_price: true')
+  it('los productos nuevos nacen con precio visible por defecto', () => {
+    expect(FORMULARIO).toContain('hide_price: false')
   })
 
   it('editar uno existente respeta lo que ya tenía', () => {

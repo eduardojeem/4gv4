@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { customerIdsWithOutstandingDebt } from '@/lib/credits/customers-with-debt'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
@@ -212,6 +213,18 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const to = from + limit - 1
     const supabase = await createClient()
 
+    // «Con deuda» se resuelve contra las cuotas, no contra columnas que nadie
+    // mantiene: con `pending_amount` el filtro no devolvia a ningun deudor.
+    let deudores: string[] = []
+    if (hasDebt) {
+      try {
+        deudores = await customerIdsWithOutstandingDebt(supabase as never, organization.id)
+      } catch (error) {
+        logger.error('No se pudo calcular la deuda de los clientes', { error })
+        return NextResponse.json({ success: false, error: 'No se pudo filtrar por deuda. Intentá de nuevo.' }, { status: 503 })
+      }
+    }
+
     const buildQuery = () => {
       let query = supabase.from('customers').select('*', { count: 'exact' }).eq('organization_id', organization.id)
 
@@ -228,7 +241,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       if (Number.isFinite(maxCreditScore) && maxCreditScore < 10) query = query.lte('credit_score', maxCreditScore)
       if (Number.isFinite(minLoyaltyPoints) && minLoyaltyPoints > 0) query = query.gte('loyalty_points', minLoyaltyPoints)
       if (Number.isFinite(minCreditLimit) && minCreditLimit > 0) query = query.gt('credit_limit', 0)
-      if (hasDebt) query = query.or('pending_amount.gt.0,current_balance.gt.0')
+      if (hasDebt) query = query.in('id', deudores.length > 0 ? deudores : ['00000000-0000-0000-0000-000000000000'])
       if (tags.length > 0) query = query.overlaps('tags', tags)
       if (registeredFrom) query = query.gte('created_at', registeredFrom)
       if (registeredTo) query = query.lte('created_at', registeredTo)

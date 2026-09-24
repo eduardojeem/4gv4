@@ -64,6 +64,7 @@ import { OpenCashRegisterDialog } from './components/OpenCashRegisterDialog'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
+import { useCreditSystem } from '@/hooks/use-credit-system'
 import { useBranch } from '@/contexts/branch-context'
 import { useAuth } from '@/contexts/auth-context'
 import { CartItem } from './types'
@@ -175,6 +176,24 @@ function POSPageContent() {
     customers, 
     setNewCustomerOpen: _setNewCustomerOpen
   } = usePOSCustomer()
+
+  const { getCreditSummary } = useCreditSystem()
+
+  /**
+   * Cuánto puede financiar este cliente.
+   *
+   * Salía de `customers.current_balance`, una columna que no actualiza nadie:
+   * con dos clientes debiendo 76.800 y 60.000 mostraba el límite entero. El
+   * panel del checkout ya usaba la deuda real (las cuotas pendientes menos lo
+   * pagado) y el servidor decide con esa misma cuenta, así que el mostrador
+   * veía un número y la caja otro. Ahora es uno solo.
+   */
+  const creditoDisponible = useMemo(() => {
+    if (!activeCustomer?.id) return 0
+    const resumen = getCreditSummary(activeCustomer as unknown as Parameters<typeof getCreditSummary>[0])
+    return Math.max(0, resumen.availableCredit)
+  }, [activeCustomer, getCreditSummary])
+
 
   // Use centralized checkout state
   const {
@@ -3055,10 +3074,7 @@ function POSPageContent() {
         creditContext={{
           hasCustomer: Boolean(activeCustomer),
           hasCreditLine: Number(activeCustomer?.credit_limit || 0) > 0,
-          availableCredit: Math.max(
-            0,
-            Number(activeCustomer?.credit_limit || 0) - Number(activeCustomer?.current_balance || 0),
-          ),
+          availableCredit: creditoDisponible,
           isRegisterOpen: getCurrentRegister.isOpen,
         }}
         onUseCreditPlan={(product, qty, plan) => {

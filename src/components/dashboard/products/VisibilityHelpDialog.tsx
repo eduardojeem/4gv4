@@ -78,8 +78,8 @@ export function VisibilityHelpDialog() {
               </p>
               <p>
                 Los productos nuevos se cargan con el{' '}
-                <span className="font-semibold text-foreground">precio solo para mayoristas</span>.
-                Cambiá la opción de arriba para mostrarlo a todos.
+                <span className="font-semibold text-foreground">precio visible para todos</span> por defecto.
+                Podés cambiar la opción de arriba según lo que necesites.
               </p>
             </div>
           </DialogDescription>

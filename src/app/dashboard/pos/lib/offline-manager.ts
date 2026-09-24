@@ -405,23 +405,22 @@ export class OfflineManager {
   }
 
   /**
-   * Sync single sale to server (placeholder)
+   * Todavía no existe.
+   *
+   * Era un cuerpo vacío: `syncPendingSales` lo llamaba, no pasaba nada, y
+   * marcaba la venta como «synced». Con el modo sin conexión activado eso
+   * significa que la venta se pierde y el cajero ve que se sincronizó.
+   *
+   * Falla a propósito hasta que se implemente de verdad. Cuando se haga, tiene
+   * que ir contra `/api/pos/process-sale` —la única vía que descuenta stock,
+   * arma el crédito y registra la caja— y con una clave de idempotencia
+   * guardada junto a la venta, para que reintentar no cobre dos veces.
    */
-  private async syncSaleToServer(_sale: PendingSale): Promise<void> {
-    // TODO: Implement actual API call to Supabase
-    // This is a placeholder that simulates the API call
-
-    // In production, this would be:
-    // const { error } = await supabase.from('sales').insert({
-    //   items: sale.items,
-    //   total: sale.total,
-    //   subtotal: sale.subtotal,
-    //   tax: sale.tax,
-    //   payment_method: sale.payment_method,
-    //   customer_id: sale.customer_id,
-    //   created_at: sale.created_at,
-    // })
-    // if (error) throw error
+  private async syncSaleToServer(sale: PendingSale): Promise<void> {
+    throw new Error(
+      `La sincronización de ventas sin conexión no está implementada (venta ${sale.id}). ` +
+      'La venta sigue guardada en este equipo: no se envió nada al servidor.'
+    )
   }
 
   /**
