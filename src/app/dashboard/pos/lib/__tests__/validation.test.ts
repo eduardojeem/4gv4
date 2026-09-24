@@ -6,11 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   validateSale,
   validateCartItem,
-  validateCustomer,
-  validateCashMovement,
-  validateRegisterOpening,
-  validateRegisterClosing,
-  validateSaleBusinessRules,
+  validateCustomer, validateSaleBusinessRules,
   cartItemSchema,
   saleSchema,
   customerSchema

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { formatCurrency } from '@/lib/currency'
 import { createCreditHistoryTicket, findNextDueInstallment } from './credit-history-ticket'
-import { createCreditHistoryPdf, type CreditHistoryItem } from './credit-history-pdf'
+import { createCreditHistoryPdf } from './credit-history-pdf'
 import { createCreditPaymentReceiptPdf, buildAccountStatusRows, getCreditPaymentReceiptTarget } from './payment-receipt'
 import { getCreditPaperMetrics, CREDIT_PAPER_WIDTH_MM } from './paper'
 

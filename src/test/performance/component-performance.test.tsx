@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { createMockProduct, createMockCustomer } from '@/test/setup'
+import { createMockProduct } from '@/test/setup'
 import React from 'react'
 
 // Mock de componente con muchos elementos para testing de performance

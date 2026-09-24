@@ -2,10 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  DEVICE_ACCENTS,
-  describeDeviceName,
-  describeDeviceSummary,
-  deviceAccent,
+  DEVICE_ACCENTS, describeDeviceSummary,
+  deviceAccent
 } from './device-label'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')

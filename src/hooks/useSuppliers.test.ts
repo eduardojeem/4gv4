@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { computeSupplierStats } from './suppliers-stats'
 import type { UISupplier } from '../lib/types/supplier-ui'
 

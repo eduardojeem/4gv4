@@ -1,12 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
-import { action } from '@storybook/addon-actions'
-import { useState } from 'react'
-import { 
+import {
   useProductManagement,
   useProductFiltering,
-  useProductAnalytics,
-  useProductOperations,
-  useProductSearch
+  useProductAnalytics
 } from './index'
 
 // Componente de demostración para useProductManagement

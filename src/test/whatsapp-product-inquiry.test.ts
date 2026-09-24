@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildProductWhatsAppMessage,
-  formatWhatsAppPhone,
-  getWhatsAppLink,
+  formatWhatsAppPhone
 } from '@/lib/whatsapp'
 
 describe('WhatsApp Product Inquiry & Order Message Builder', () => {
