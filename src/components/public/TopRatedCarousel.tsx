@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import Image from 'next/image'
 import Link from 'next/link'
 import { Building2, Star } from 'lucide-react'
@@ -24,7 +26,7 @@ function OrgLogo({ org }: { org: MarketplaceOrganization }) {
         style={accentColor ? { borderTop: `2px solid ${accentColor}` } : undefined}
       >
         {org.logo_url ? (
-          <img
+          <AppImage
             src={org.logo_url}
             alt={org.name}
             className="h-full w-full object-contain"

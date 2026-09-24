@@ -5,7 +5,9 @@ import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProdu
 import type { PublicProduct } from '@/types/public'
 import type { MarketplaceProduct } from '@/lib/public/marketplace'
 
+/* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({ default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} /> }))
+/* eslint-enable @next/next/no-img-element */
 vi.mock('next/navigation', () => ({ usePathname: () => '/marketplace' }))
 vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: null }) }))
 

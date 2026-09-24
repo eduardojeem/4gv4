@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   Activity,
@@ -1482,7 +1484,7 @@ export function SecurityPanel() {
                             )}
                           >
                             {u.avatarUrl ? (
-                              <img src={u.avatarUrl} alt={u.name} className="h-full w-full object-cover rounded-xl" />
+                              <AppImage src={u.avatarUrl} alt={u.name} className="h-full w-full object-cover rounded-xl" />
                             ) : (
                               u.name.slice(0, 2).toUpperCase()
                             )}
@@ -2097,7 +2099,7 @@ export function SecurityPanel() {
                   <div className="flex items-center gap-3">
                     <div className="h-12 w-12 rounded-2xl bg-sky-500/15 text-sky-700 dark:text-sky-300 flex items-center justify-center font-bold text-base ring-1 ring-sky-500/30 shrink-0 shadow-xs">
                       {c.avatarUrl ? (
-                        <img src={c.avatarUrl} alt={c.name} className="h-full w-full object-cover rounded-2xl" />
+                        <AppImage src={c.avatarUrl} alt={c.name} className="h-full w-full object-cover rounded-2xl" />
                       ) : (
                         c.name.slice(0, 2).toUpperCase()
                       )}

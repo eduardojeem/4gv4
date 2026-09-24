@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -559,7 +561,7 @@ export function ProductDetailInteractive({
               onClick={(e) => e.stopPropagation()}
               onDoubleClick={() => setIsFullscreen(false)}
             >
-              <img
+              <AppImage
                 src={galleryImages[selectedImage]!}
                 alt={product.name}
                 className="max-w-[95vw] max-h-[82vh] w-auto h-auto object-contain drop-shadow-2xl rounded-lg cursor-zoom-out"
@@ -615,7 +617,7 @@ export function ProductDetailInteractive({
                         : 'border-white/20 opacity-60 hover:opacity-100'
                     )}
                   >
-                    <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                    <AppImage src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>

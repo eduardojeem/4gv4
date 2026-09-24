@@ -25,12 +25,14 @@ vi.mock('next/link', () => ({
   ),
 }))
 
+/* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({
   __esModule: true,
   default: ({ alt, src }: { alt?: string; src?: string }) => (
     <img alt={alt} src={typeof src === 'string' ? src : ''} />
   ),
 }))
+/* eslint-enable @next/next/no-img-element */
 
 import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
 

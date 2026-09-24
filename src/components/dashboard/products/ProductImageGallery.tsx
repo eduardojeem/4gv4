@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
@@ -185,7 +187,7 @@ export function ProductImageGallery({
                         : "border-gray-200 hover:border-gray-300"
                     )}
                   >
-                    <img
+                    <AppImage
                       src={image}
                       alt={`Miniatura ${index + 1}`}
                       className="w-full h-full object-cover"

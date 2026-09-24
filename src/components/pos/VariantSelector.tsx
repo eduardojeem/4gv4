@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { useState, useMemo, useCallback } from 'react'
 import {
   ProductWithVariants,
@@ -363,7 +365,7 @@ function VariantSelectorContent({
           <div className="rounded-xl border border-border/70 bg-muted/30 p-3 flex gap-3 items-center">
             <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-lg bg-background border border-border/60 flex items-center justify-center shrink-0 overflow-hidden relative">
               {activeImageSrc ? (
-                <img
+                <AppImage
                   src={activeImageSrc}
                   alt={product.name}
                   className="h-full w-full object-contain p-1 transition-all duration-200"

@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -266,7 +268,7 @@ function BrandAssetUploader({
               className={`flex h-20 w-full items-center justify-center rounded-lg border p-2 overflow-hidden transition-colors ${bgClasses[bgPreview]}`}
             >
               {value ? (
-                <img
+                <AppImage
                   src={value}
                   alt={label}
                   className="max-h-full max-w-full object-contain"
@@ -1068,7 +1070,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                       <div className="flex items-center gap-3 min-w-0">
                         {activeNavbarLogo ? (
                           <div className="flex items-center shrink-0">
-                            <img
+                            <AppImage
                               src={activeNavbarLogo}
                               alt={draft.platformName}
                               className={`${previewLogoHeight} w-auto object-contain ${previewGlow}`}
@@ -1136,7 +1138,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                     <div className="flex items-center gap-3">
                       {draft.logoDarkUrl || draft.logoUrl ? (
                         <div className="flex h-10 items-center">
-                          <img
+                          <AppImage
                             src={draft.logoDarkUrl || draft.logoUrl}
                             alt={draft.platformName}
                             className="h-9 w-auto max-w-[150px] object-contain"
@@ -1173,13 +1175,13 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                   <div className="rounded-xl border border-slate-300 bg-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800">
                     <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 shadow-xs dark:bg-slate-900">
                       {draft.faviconUrl ? (
-                        <img
+                        <AppImage
                           src={draft.faviconUrl}
                           alt="Favicon"
                           className="h-4 w-4 shrink-0 object-contain rounded-sm"
                         />
                       ) : draft.logoUrl ? (
-                        <img
+                        <AppImage
                           src={draft.logoUrl}
                           alt="Favicon"
                           className="h-4 w-4 shrink-0 object-contain"

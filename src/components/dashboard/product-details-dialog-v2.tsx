@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -239,7 +241,7 @@ export function ProductDetailsDialogV2({
                   <Card className="shadow-sm">
                     <CardContent className="p-6">
                       <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                        <img
+                        <AppImage
                           src={resolveProductImageUrl(images[currentImageIndex])}
                           alt={`${product.name} - imagen ${currentImageIndex + 1}`}
                           className="w-full h-full object-contain"
@@ -283,7 +285,7 @@ export function ProductDetailsDialogV2({
                                   : "border-transparent hover:border-muted-foreground/30"
                               )}
                             >
-                              <img
+                              <AppImage
                                 src={resolveProductImageUrl(img)}
                                 alt={`Thumbnail ${idx + 1}`}
                                 className="w-full h-full object-cover"

@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -127,7 +129,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         {/* Initials placeholder */}
         <div className="flex justify-center mb-2">
           {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
+            <AppImage src={logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
           ) : (
             <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl print:border print:border-black print:bg-transparent print:text-black">
               {companyInfo.name ? companyInfo.name.substring(0, 2).toUpperCase() : 'Mi'}

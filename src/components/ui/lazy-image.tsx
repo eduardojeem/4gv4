@@ -1,5 +1,7 @@
 "use client"
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence  } from './motion'
 import { User, ImageIcon, Loader2 } from 'lucide-react'
@@ -125,7 +127,7 @@ export function LazyImage({
             
             {/* Actual image */}
             {src && (
-              <img
+              <AppImage
                 ref={imgRef}
                 src={src}
                 alt={alt}

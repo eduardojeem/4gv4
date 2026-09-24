@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -277,7 +279,7 @@ export default function LoginPage() {
             <Link href={backHref} className="flex items-center gap-3.5 group transition-transform active:scale-95">
               {branding.logoUrl ? (
                 <div className="relative flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/80 px-2.5 py-1.5 shadow-sm backdrop-blur-md group-hover:border-blue-400/60 dark:group-hover:border-cyan-500/40 transition-colors">
-                  <img src={branding.logoUrl} alt={branding.marketplaceName} className="h-8 w-auto max-w-[170px] object-contain" />
+                  <AppImage src={branding.logoUrl} alt={branding.marketplaceName} className="h-8 w-auto max-w-[170px] object-contain" />
                 </div>
               ) : (
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-cyan-950/50 border border-blue-100 dark:border-white/10 transition-all">
@@ -307,7 +309,7 @@ export default function LoginPage() {
 
       {/* Background Image Wallpaper with light/dark overlay */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <img
+        <AppImage
           src="/images/login-cover.png"
           alt="Fondo de pantalla"
           className="w-full h-full object-cover object-center dark:brightness-[0.35] dark:saturate-60 transition-all duration-300"
@@ -334,13 +336,13 @@ export default function LoginPage() {
                 <div className="mb-4 flex justify-center">
                   {branding.logoUrl && branding.logoDarkUrl ? (
                     <>
-                      <img
+                      <AppImage
                         src={branding.logoUrl}
                         alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
                         className={`${currentHeight} w-auto max-w-[200px] object-contain drop-shadow-xs dark:hidden`}
                         style={logoSize.style}
                       />
-                      <img
+                      <AppImage
                         src={branding.logoDarkUrl}
                         alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
                         className={`${currentHeight} w-auto max-w-[200px] object-contain ${darkGlowClass} hidden dark:block`}
@@ -348,7 +350,7 @@ export default function LoginPage() {
                       />
                     </>
                   ) : (
-                    <img
+                    <AppImage
                       src={branding.logoUrl || branding.logoDarkUrl}
                       alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
                       className={`${currentHeight} w-auto max-w-[200px] object-contain drop-shadow-xs`}

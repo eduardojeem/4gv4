@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -74,7 +76,7 @@ export const TechnicianCard = memo(function TechnicianCard({
           <div className="relative shrink-0">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white shadow-md shadow-indigo-500/25 transition-transform duration-300 group-hover:scale-105">
               {avatar ? (
-                <img src={avatar} alt={name} className="h-12 w-12 rounded-full object-cover" />
+                <AppImage src={avatar} alt={name} className="h-12 w-12 rounded-full object-cover" />
               ) : (
                 <span>{initials || <User className="h-5 w-5" />}</span>
               )}

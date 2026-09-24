@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { Printer, Download, Mail, Share2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -131,7 +133,7 @@ export function ReceiptViewer({
                     <div className="text-center border-b pb-4">
                         {companyInfo.logoUrl && (
                             <div className="flex justify-center mb-2">
-                                <img src={companyInfo.logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
+                                <AppImage src={companyInfo.logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
                             </div>
                         )}
                         <h3 className="text-xl font-bold uppercase">{companyInfo.name}</h3>

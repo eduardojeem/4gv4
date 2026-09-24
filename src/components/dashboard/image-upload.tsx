@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -374,7 +376,7 @@ export function ImageUpload({
               <h4 className="font-medium">Vista Principal</h4>
               <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-black/5">
                 <div className="aspect-video">
-                  <img
+                  <AppImage
                     src={(imageFiles.find(i => i.isMain)?.url) || imageFiles[0].url}
                     alt={(imageFiles.find(i => i.isMain)?.name) || imageFiles[0].name}
                     className="w-full h-full object-cover"
@@ -418,7 +420,7 @@ export function ImageUpload({
                 {imageFiles.map((imageFile) => (
                   <Card key={imageFile.id} className="relative overflow-hidden hover:shadow-md transition-shadow">
                     <div className="aspect-square relative">
-                      <img
+                      <AppImage
                         src={imageFile.url}
                         alt={imageFile.name}
                         className="w-full h-full object-cover"

@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { useState, useMemo, useEffect } from 'react'
 import {
   Dialog,
@@ -468,7 +470,7 @@ export function POSProductDetailDialog({
 
             <div className="w-14 h-14 shrink-0 rounded-md bg-background border border-border/60 flex items-center justify-center overflow-hidden">
               {imageSrc ? (
-                <img
+                <AppImage
                   src={imageSrc}
                   alt={product.name}
                   className="w-full h-full object-contain p-1.5 transition-all duration-200"

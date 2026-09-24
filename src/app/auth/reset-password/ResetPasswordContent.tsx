@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -187,7 +189,7 @@ export default function ResetPasswordContent() {
                   >
                     {branding.logoUrl ? (
                       <div className="flex h-16 items-center">
-                        <img src={branding.logoUrl} alt={branding.platformName} className="h-16 w-auto max-w-[200px] object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
+                        <AppImage src={branding.logoUrl} alt={branding.platformName} className="h-16 w-auto max-w-[200px] object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
                       </div>
                     ) : (
                       <div className="w-16 h-16 bg-gradient-to-tr from-blue-600/20 to-violet-600/20 rounded-2xl flex items-center justify-center border border-white/10 shadow-[0_0_40px_rgba(37,99,235,0.15)] relative">

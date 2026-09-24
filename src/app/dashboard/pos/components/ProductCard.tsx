@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { memo } from 'react'
 import { Plus, Star, Package, ShoppingCart, AlertTriangle, EyeOff, Eye, Info, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -42,10 +44,10 @@ export const ProductCard = memo(({
   const stock = product.stock_quantity || 0
   const minStock = product.min_stock || 5
   const price = product.sale_price || 0
-  
+
   const stockStatus = inventoryManager ? formatStockStatus(stock) : formatStockStatus(stock, minStock)
   const isOutOfStock = stock === 0
-  
+
   const hasExplicitWholesale = typeof product.wholesale_price === 'number' && product.wholesale_price > 0
   const computedWholesale = Math.round(price * (1 - (wholesaleDiscountRate / 100)))
   const appliedPrice = isWholesale ? (hasExplicitWholesale ? product.wholesale_price! : computedWholesale) : price
@@ -72,14 +74,14 @@ export const ProductCard = memo(({
     }
   }
 
-  const stockBarColor = stockStatus?.status === 'out' ? 'bg-red-500' 
-    : stockStatus?.status === 'critical' ? 'bg-orange-500' 
-    : stockStatus?.status === 'low' ? 'bg-amber-400' 
+  const stockBarColor = stockStatus?.status === 'out' ? 'bg-red-500'
+    : stockStatus?.status === 'critical' ? 'bg-orange-500'
+    : stockStatus?.status === 'low' ? 'bg-amber-400'
     : 'bg-emerald-500'
 
   if (viewMode === 'list') {
     return (
-      <Card 
+      <Card
         className={cn(
           "transition-all duration-200 hover:shadow-xs border-border/60 mb-1.5",
           isOutOfStock && 'opacity-50'
@@ -94,7 +96,7 @@ export const ProductCard = memo(({
             {/* Imagen / Icono */}
             <div className="flex-shrink-0 w-10 h-10 bg-muted/30 rounded-md flex items-center justify-center border border-border/50 overflow-hidden">
               {imageSrc ? (
-                <img src={imageSrc} alt={product.name} className="h-full w-full object-cover" />
+                <AppImage src={imageSrc} alt={product.name} className="h-full w-full object-cover" />
               ) : (
                 <Package className="h-5 w-5 text-muted-foreground/50" />
               )}
@@ -113,12 +115,12 @@ export const ProductCard = memo(({
                   </EyeOff>
                 )}
                 {showStock && stockStatus && (
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     className={cn(
                       "h-4 px-1 text-[9px] font-normal border-0",
-                      stockStatus.status === 'out' || stockStatus.status === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 
-                      stockStatus.status === 'low' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 
+                      stockStatus.status === 'out' || stockStatus.status === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                      stockStatus.status === 'low' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
                       'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                     )}
                   >
@@ -126,7 +128,7 @@ export const ProductCard = memo(({
                   </Badge>
                 )}
               </div>
-              
+
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                 <span className="truncate">{product.category?.name || product.category_id}</span>
                 {product.sku && (
@@ -137,7 +139,7 @@ export const ProductCard = memo(({
                 )}
               </div>
               {featuredCreditPlan && (
-                <div 
+                <div
                   className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-sky-700 dark:text-sky-300 cursor-pointer hover:bg-sky-500/10 hover:text-sky-800 dark:hover:text-sky-200 rounded px-1 -ml-1 transition-colors"
                   onClick={(e) => {
                     if (onViewDetail) {
@@ -217,7 +219,7 @@ export const ProductCard = memo(({
 
   // Grid View — Premium Redesign (Compact)
   return (
-    <Card 
+    <Card
       className={cn(
         "relative overflow-hidden transition-all duration-200 cursor-pointer group select-none",
         "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
@@ -250,12 +252,12 @@ export const ProductCard = memo(({
       {/* Badge: Stock bajo/critico */}
       {showStock && stockStatus && (stockStatus.status === 'low' || stockStatus.status === 'critical' || stockStatus.status === 'out') && (
         <div className={`absolute ${onViewDetail ? 'top-1.5 right-8' : 'top-1.5 right-1.5'} z-10`}>
-          <Badge 
+          <Badge
             variant="secondary"
             className={cn(
               "shadow-xs border-0 font-semibold px-1 py-0.2 text-[8px] backdrop-blur-md",
-              stockStatus.status === 'out' ? 'bg-rose-500 text-white' : 
-                stockStatus.status === 'critical' ? 'bg-orange-500 text-white' : 
+              stockStatus.status === 'out' ? 'bg-rose-500 text-white' :
+                stockStatus.status === 'critical' ? 'bg-orange-500 text-white' :
                 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300'
             )}
           >
@@ -285,16 +287,16 @@ export const ProductCard = memo(({
         {/* Imagen compacta y nítida */}
         <div className="h-12 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
           {imageSrc ? (
-            <img 
-              src={imageSrc} 
-              alt={product.name} 
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+            <AppImage
+              src={imageSrc}
+              alt={product.name}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
             <Package className="h-5 w-5 text-muted-foreground/30 sm:h-8 sm:w-8" />
           )}
         </div>
-        
+
         <div className="p-1 sm:p-2.5 flex flex-col flex-1 justify-between gap-0 sm:gap-1">
           {/* Titulo y Categoria */}
           <div className="mb-0.5">
@@ -322,7 +324,7 @@ export const ProductCard = memo(({
             </div>
           )}
               {featuredCreditPlan && (
-            <div 
+            <div
               className="rounded border border-sky-500/20 bg-sky-500/10 px-1 py-0.5 sm:px-1.5 sm:py-1 text-[7.5px] sm:text-[9px] leading-[1.1] text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors mb-0.5"
               onClick={(e) => {
                 if (onViewDetail) {
@@ -362,8 +364,8 @@ export const ProductCard = memo(({
               size="sm"
               className={cn(
                 "h-5 px-1 sm:h-6.5 sm:px-2 text-[9px] sm:text-[10.5px] font-semibold rounded sm:rounded-md shadow-xs transition-all",
-                cartQuantity > 0 
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                cartQuantity > 0
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
               )}
             >

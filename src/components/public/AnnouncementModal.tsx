@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useCallback, useEffect, useState } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
@@ -158,7 +160,7 @@ function AnnouncementImageView({
     <div className={cn('relative h-full w-full overflow-hidden flex items-center justify-center', containerBackdrop)}>
       {/* Fondo difuminado para rellenar los bordes con los mismos colores de la imagen */}
       {backdrop !== 'dark' && (
-        <img
+        <AppImage
           src={image.url}
           alt=""
           aria-hidden="true"
@@ -183,7 +185,7 @@ function AnnouncementImageView({
       )}
 
       {/* Imagen principal: contain (sin cortes) o cover (panorámico completo) */}
-      <img
+      <AppImage
         src={image.url}
         alt={image.alt || 'Imagen de anuncio'}
         className={cn(

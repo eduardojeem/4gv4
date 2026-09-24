@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import {
   Barcode,
@@ -46,7 +48,7 @@ export function GuideVisualPreview({
       {image && (
         <div className="group relative overflow-hidden bg-muted/40">
           <div className="relative aspect-video w-full cursor-zoom-in overflow-hidden" onClick={() => setZoomOpen(true)}>
-            <img
+            <AppImage
               src={image.src}
               alt={image.alt || title || 'Ejemplo visual'}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
@@ -79,7 +81,7 @@ export function GuideVisualPreview({
                 >
                   <X className="h-4 w-4" />
                 </button>
-                <img
+                <AppImage
                   src={image.src}
                   alt={image.alt || 'Captura ampliada'}
                   className="max-h-[82vh] w-auto rounded-xl object-contain"

@@ -26,10 +26,12 @@ vi.mock('next/link', () => ({
   default: ({ children, href, ...rest }: any) => <a href={String(href)} {...rest}>{children}</a>,
 }))
 
+/* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({
   __esModule: true,
   default: ({ alt, ...rest }: any) => <img alt={alt} {...rest} />,
 }))
+/* eslint-enable @next/next/no-img-element */
 
 vi.mock('../Favorites', () => ({ FavoriteButton: () => <button type="button">fav</button> }))
 vi.mock('../MarketplaceProductModal', () => ({ MarketplaceProductModal: () => null }))

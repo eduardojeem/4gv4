@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 // El chip del mapa usa `onClick` y `onKeyDown` —es un `<span>` y no un `<a>`
 // porque la tarjeta entera ya es un `<Link>`, y anidar anclas es HTML invalido—.
 // Sin esta directiva, Next lo renderiza como componente de servidor y falla con
@@ -105,7 +107,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
         {/* Logo superpuesto con Identidad de Marca */}
         <div className="absolute -bottom-5 left-3.5 z-10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-background bg-card p-1 shadow-md">
           {organization.logo_url ? (
-            <img
+            <AppImage
               src={organization.logo_url}
               alt={organization.name}
               className="h-full w-full object-contain"

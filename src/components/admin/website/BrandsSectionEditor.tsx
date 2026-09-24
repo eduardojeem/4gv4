@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -583,8 +585,8 @@ export function BrandsSectionEditor() {
                     )}
                   >
                     {b.logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+
+                      <AppImage
                         src={b.logoUrl}
                         alt={b.name}
                         className="h-4 w-6 object-contain rounded-xs"
@@ -745,7 +747,7 @@ export function BrandsSectionEditor() {
             <div className="sm:col-span-3 flex items-center gap-2">
               {customBrandLogoUrl ? (
                 <div className="h-10 w-12 shrink-0 rounded-lg border border-border/60 bg-muted/30 p-1 flex items-center justify-center">
-                  <img
+                  <AppImage
                     src={customBrandLogoUrl}
                     alt="Logo preview"
                     className="max-h-7 max-w-full object-contain"
@@ -833,8 +835,8 @@ export function BrandsSectionEditor() {
                       {/* Logo Preview Container */}
                       <div className="h-10 w-14 shrink-0 rounded-lg border border-border/70 bg-background/80 flex items-center justify-center p-1.5 shadow-2xs">
                         {hasCustomImage ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
+
+                          <AppImage
                             src={item.imageUrl}
                             alt={item.name}
                             className="max-h-7 max-w-full object-contain"

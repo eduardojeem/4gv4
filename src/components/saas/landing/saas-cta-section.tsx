@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,7 @@ export function SaaSCTASection({ branding }: { branding: PlatformBranding }) {
           <div className="flex items-center gap-3 mb-4">
             {branding.logoDarkUrl || branding.logoUrl ? (
               <div className="flex h-10 items-center">
-                <img
+                <AppImage
                   src={branding.logoDarkUrl || branding.logoUrl}
                   alt={branding.platformName}
                   className="h-9 w-auto max-w-[180px] object-contain drop-shadow-[0_2px_14px_rgba(6,182,212,0.3)]"

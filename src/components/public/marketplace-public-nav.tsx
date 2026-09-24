@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import Link from 'next/link'
 import { PublicFavorites } from './Favorites'
 import { useState, useEffect } from 'react'
@@ -129,7 +131,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
               <div className="flex items-center transition-transform duration-200 group-hover:scale-[1.02]">
                 {branding.logoDarkUrl && branding.logoUrl ? (
                   <>
-                    <img
+                    <AppImage
                       src={branding.logoUrl}
                       alt={branding.platformName}
                       className={`${
@@ -137,7 +139,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                       } w-auto object-contain dark:hidden drop-shadow-xs`}
                       style={logoSize.style}
                     />
-                    <img
+                    <AppImage
                       src={branding.logoDarkUrl}
                       alt={branding.platformName}
                       className={`${
@@ -147,7 +149,7 @@ export function MarketplacePublicNav({ initialBranding }: { initialBranding?: Pl
                     />
                   </>
                 ) : (
-                  <img
+                  <AppImage
                     src={branding.logoUrl || branding.logoDarkUrl}
                     alt={branding.platformName}
                     className={`${

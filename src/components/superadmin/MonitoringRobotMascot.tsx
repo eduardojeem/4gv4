@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -122,7 +124,7 @@ export function MonitoringRobotMascot({
           transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           className="relative flex h-11 w-11 shrink-0 items-center justify-center p-0.5"
         >
-          <img
+          <AppImage
             src={
               mood === 'healthy'
                 ? '/images/robot/robot-black-gold.png'
@@ -183,7 +185,7 @@ export function MonitoringRobotMascot({
           <div className="absolute inset-2 rounded-full bg-gradient-to-tr from-amber-500/20 via-cyan-500/20 to-violet-500/20 blur-xl opacity-80" />
 
           {/* High quality Transparent 3D Robot Mascot Render */}
-          <img
+          <AppImage
             src={
               mood === 'healthy'
                 ? '/images/robot/robot-black-gold.png'

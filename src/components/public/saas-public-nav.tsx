@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -127,7 +129,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
               <div className="flex items-center transition-all duration-300 group-hover:scale-[1.03]">
                 {branding.logoDarkUrl && branding.logoUrl ? (
                   <>
-                    <img
+                    <AppImage
                       src={branding.logoUrl}
                       alt={branding.platformName}
                       className={`${currentHeight} w-auto object-contain drop-shadow-xs ${
@@ -135,7 +137,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                       }`}
                       style={logoSize.style}
                     />
-                    <img
+                    <AppImage
                       src={branding.logoDarkUrl}
                       alt={branding.platformName}
                       className={`${currentHeight} w-auto object-contain ${darkGlowClass} ${
@@ -145,7 +147,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                     />
                   </>
                 ) : (
-                  <img
+                  <AppImage
                     src={branding.logoUrl || branding.logoDarkUrl}
                     alt={branding.platformName}
                     className={`${currentHeight} w-auto object-contain ${

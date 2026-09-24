@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 /**
  * Componente para mostrar el código QR de una reparación
  * Útil para mostrar en la interfaz de administración
@@ -89,7 +90,7 @@ export function RepairQRCode({
                 <QrCode className="h-12 w-12 text-muted-foreground" />
               </div>
             )}
-            <img
+            <AppImage
               src={qrURL}
               alt={`QR Code for ${ticketNumber}`}
               width={size}

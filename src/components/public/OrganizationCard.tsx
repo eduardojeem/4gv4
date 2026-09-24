@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 import Image from 'next/image'
 import { rubroLabel } from '@/lib/public/organization-rubro'
 import Link from 'next/link'
@@ -32,7 +33,7 @@ export function OrganizationCard({ organization, className }: Props) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-white p-1 shadow-xs dark:border-slate-800 dark:bg-slate-900">
             {organization.logo_url ? (
-              <img
+              <AppImage
                 src={organization.logo_url}
                 alt={organization.name}
                 className="h-full w-full object-contain"

@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 import React, { useState, useRef } from 'react'
 import {
   Dialog,
@@ -2450,7 +2451,7 @@ export function RepairDetailDialog({
                           <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start bg-background p-3 rounded-xl border">
                             {imagePreviewUrl && (
                               <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border bg-muted shadow-xs">
-                                <img
+                                <AppImage
                                   src={imagePreviewUrl}
                                   alt="Vista previa"
                                   className="h-full w-full object-cover"
@@ -2525,7 +2526,7 @@ export function RepairDetailDialog({
                               key={imageKey}
                               className="group relative aspect-square rounded-2xl overflow-hidden border bg-muted shadow-xs transition-all"
                             >
-                              <img
+                              <AppImage
                                 src={image.url}
                                 alt={image.description || `Imagen ${index + 1}`}
                                 className="w-full h-full object-cover transition-transform group-hover:scale-105"

@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -132,7 +134,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
             {/* Logo de la Empresa */}
             <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-background/80 bg-card p-1.5 shadow-md">
               {organization.logo_url ? (
-                <img
+                <AppImage
                   src={organization.logo_url}
                   alt={organization.name}
                   className="h-full w-full object-contain"

@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { X, Upload, Image as ImageIcon, Loader2, AlertCircle, Link as LinkIcon } from 'lucide-react'
@@ -254,7 +256,7 @@ export function ImageUploader({
               >
                 <Card className="overflow-hidden border-2 hover:border-blue-300 transition-colors">
                   <div className="aspect-square relative">
-                    <img
+                    <AppImage
                       src={url}
                       alt={`Imagen ${index + 1}`}
                       className="w-full h-full object-cover"

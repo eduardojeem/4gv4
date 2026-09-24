@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { MarketplaceProductModal } from '@/components/public/MarketplaceProductModal'
 import { pickOrganizationContact, type MarketplaceProduct } from '@/lib/public/marketplace'
 
+/* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({ default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} /> }))
+/* eslint-enable @next/next/no-img-element */
 vi.mock('next/navigation', () => ({ usePathname: () => '/marketplace/productos' }))
 vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: null }) }))
 

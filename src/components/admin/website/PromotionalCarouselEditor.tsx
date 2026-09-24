@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useEffect, useRef, useState } from 'react'
 import {
   AlignCenter, AlignLeft, AlignRight,
@@ -398,8 +400,8 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
           className={cn('relative overflow-hidden bg-muted', mode === 'mobile' ? 'aspect-[12/5]' : 'aspect-[16/8]')}
         >
         {slide.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={slide.imageUrl} alt={slide.imageAlt || ''} className="absolute inset-0 h-full w-full object-cover" />
+
+          <AppImage src={slide.imageUrl} alt={slide.imageAlt || ''} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             {uploading
@@ -561,8 +563,8 @@ function ImageUploadZone({
       )}
       {imageUrl ? (
         <div className={cn('relative overflow-hidden rounded-lg border bg-muted/30', error ? 'border-destructive' : 'border-border/60')}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="" className="aspect-[16/7] w-full object-cover" />
+          { }
+          <AppImage src={imageUrl} alt="" className="aspect-[16/7] w-full object-cover" />
           <button
             type="button"
             onClick={onClear}
@@ -1191,8 +1193,8 @@ export function PromotionalCarouselEditor({
             {current.slides.map((slide, index) => (
               <div key={slide.id} className="grid gap-4 p-4 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-center">
                 <div className="relative aspect-[16/7] overflow-hidden rounded-lg bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={slide.imageUrl} alt={slide.imageAlt} className="h-full w-full object-cover" />
+                  { }
+                  <AppImage src={slide.imageUrl} alt={slide.imageAlt} className="h-full w-full object-cover" />
                   {!slide.active && <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-semibold text-white">Oculta</span>}
                 </div>
                 <div className="min-w-0">
@@ -1880,9 +1882,9 @@ export function PromotionalCarouselEditor({
                             : 'border-border/70 hover:shadow-xs',
                         )}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
-                          <img src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                          <AppImage src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
                           <span className="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
                             {example.badgeIcon} {example.category}
                           </span>

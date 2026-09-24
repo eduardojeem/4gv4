@@ -15,10 +15,12 @@ vi.mock('swr', () => ({
   }),
 }))
 
+/* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({
   __esModule: true,
   default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
 }))
+/* eslint-enable @next/next/no-img-element */
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/4g-celulares/inicio',

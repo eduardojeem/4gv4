@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -13,19 +15,19 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Separator } from '@/components/ui/separator'
-import { 
-  generateAvatarVariants, 
-  generateDiceBearAvatar, 
+import {
+  generateAvatarVariants,
+  generateDiceBearAvatar,
   generateUserSeed,
   AVATAR_STYLES,
   BACKGROUND_COLORS,
   type DiceBearStyle,
   type AvatarVariant
 } from '@/lib/dicebear'
-import { 
-  Palette, 
-  Shuffle, 
-  Check, 
+import {
+  Palette,
+  Shuffle,
+  Check,
   RefreshCw,
   Sparkles,
   User,
@@ -79,8 +81,8 @@ function AvatarSelectorContent({
   const [isLoading, setIsLoading] = useState(false)
 
   // Generar seed basado en usuario
-  const userSeed = useMemo(() => 
-    generateUserSeed(userId, email, name), 
+  const userSeed = useMemo(() =>
+    generateUserSeed(userId, email, name),
     [userId, email, name]
   )
 
@@ -90,7 +92,7 @@ function AvatarSelectorContent({
   // Generar variantes del estilo seleccionado con animación
   const avatarVariants = useMemo(() => {
     const variants = []
-    
+
     // Generar 28 variantes para el modal más ancho
     for (let i = 0; i < 28; i++) {
       const seed = `${currentSeed}-${i}`
@@ -105,7 +107,7 @@ function AvatarSelectorContent({
       })
       variants.push({ seed, url, index: i })
     }
-    
+
     return variants
   }, [selectedStyle, currentSeed, backgroundIndex, useRoundedCorners, scale, flip, rotate])
 
@@ -127,7 +129,7 @@ function AvatarSelectorContent({
       acc[style.category].push(style)
       return acc
     }, {} as Record<string, AvatarVariant[]>)
-    
+
     return grouped
   }, [])
 
@@ -158,7 +160,7 @@ function AvatarSelectorContent({
     const timer = setTimeout(() => {
       setIsLoading(false)
     }, 300)
-    
+
     return () => clearTimeout(timer)
   }, [selectedStyle, currentSeed, backgroundIndex, useRoundedCorners, scale, flip, rotate])
 
@@ -190,13 +192,13 @@ function AvatarSelectorContent({
 
   const handleRandomize = useCallback(() => {
     setIsGenerating(true)
-    
+
     // Animación más fluida
     setTimeout(() => {
       const randomStyle = AVATAR_STYLES[Math.floor(Math.random() * AVATAR_STYLES.length)]
       const randomBg = Math.floor(Math.random() * BACKGROUND_COLORS.length)
       const randomSeed = Math.random().toString(36).substring(7)
-      
+
       setSelectedStyle(randomStyle.style)
       setBackgroundIndex(randomBg)
       setUseRoundedCorners(Math.random() > 0.5)
@@ -245,15 +247,15 @@ function AvatarSelectorContent({
                     "w-40 h-40 border-4 border-background shadow-xl relative transition-all duration-300",
                     useRoundedCorners ? "rounded-full" : "rounded-2xl"
                   )}>
-                    <AvatarImage 
-                      src={previewAvatar || avatarVariants[0]?.url} 
+                    <AvatarImage
+                      src={previewAvatar || avatarVariants[0]?.url}
                       className="object-cover bg-white"
                     />
                     <AvatarFallback className="bg-muted">
                       <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground/50" />
                     </AvatarFallback>
                   </Avatar>
-                  
+
                   {/* Quick Actions Overlay */}
                   <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 translate-y-2 group-hover:translate-y-0">
                     <Button
@@ -268,7 +270,7 @@ function AvatarSelectorContent({
                     </Button>
                   </div>
                 </div>
-                
+
                 <div className="text-center space-y-1">
                   <h3 className="font-medium text-sm">Vista previa</h3>
                   <p className="text-xs text-muted-foreground">Así se verá tu avatar en el perfil.</p>
@@ -308,8 +310,8 @@ function AvatarSelectorContent({
               <div className="px-6 border-b bg-background/50 backdrop-blur-sm sticky top-0 z-10">
                 <TabsList className="w-full justify-start h-14 bg-transparent p-0 gap-6">
                   {Object.entries(categoryNames).map(([category, name]) => (
-                    <TabsTrigger 
-                      key={category} 
+                    <TabsTrigger
+                      key={category}
                       value={category}
                       className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium text-muted-foreground data-[state=active]:text-primary transition-all hover:text-foreground"
                     >
@@ -372,7 +374,7 @@ function AvatarSelectorContent({
                               {avatarVariants.length} opciones
                             </Badge>
                           </div>
-                          
+
                           {isLoading ? (
                             <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-4">
                               {Array.from({ length: 24 }).map((_, i) => (
@@ -395,13 +397,13 @@ function AvatarSelectorContent({
                                   onMouseLeave={handleAvatarLeave}
                                 >
                                   <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  <img 
-                                    src={variant.url} 
+                                  <AppImage
+                                    src={variant.url}
                                     alt="Avatar variant"
                                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                     loading="lazy"
                                   />
-                                  
+
                                   {selectedAvatar === variant.url && (
                                     <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1 shadow-md animate-in zoom-in duration-200">
                                       <Check className="h-3 w-3" />
@@ -436,7 +438,7 @@ function AvatarSelectorContent({
             <Button variant="outline" onClick={() => onOpenChange(false)} className="h-10 px-4">
               Cancelar
             </Button>
-            <Button 
+            <Button
               onClick={handleConfirm}
               disabled={!selectedAvatar}
               className={cn(

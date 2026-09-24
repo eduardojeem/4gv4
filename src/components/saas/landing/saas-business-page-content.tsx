@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -207,7 +209,7 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
             >
               {store.logo_url ? (
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs dark:border-slate-700">
-                  <img
+                  <AppImage
                     src={store.logo_url}
                     alt={`Logo de ${store.name}`}
                     loading="lazy"
@@ -328,7 +330,7 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                             transparente no quede invisible. */}
                         {store.logo_url ? (
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md dark:border-slate-700">
-                            <img
+                            <AppImage
                               src={store.logo_url}
                               alt={`Logo de ${store.name}`}
                               loading="lazy"

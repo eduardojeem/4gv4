@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 /**
  * POS Cart Component — Redesign Premium
  * Carrito de compras optimizado con diseño premium
@@ -141,7 +142,7 @@ const CartItemRow = memo<{
         {/* Image */}
         <div className="h-12 w-12 rounded-lg bg-muted/30 border border-border/30 overflow-hidden flex items-center justify-center shrink-0">
           {imageSrc ? (
-            <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
+            <AppImage src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
           ) : (
             <ShoppingCart className="h-5 w-5 text-muted-foreground/20" />
           )}

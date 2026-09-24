@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Dialog,
@@ -523,7 +525,7 @@ export function UserDetailDialog({
                 <div className="absolute -inset-0.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full blur opacity-30 group-hover:opacity-50 transition duration-500" />
                 <div className="relative h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl shadow-xl border-2 border-white dark:border-slate-900 overflow-hidden">
                   {user.avatar_url ? (
-                    <img
+                    <AppImage
                       src={user.avatar_url}
                       alt={user.name}
                       className="h-full w-full object-cover"
