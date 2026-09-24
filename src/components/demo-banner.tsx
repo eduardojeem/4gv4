@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { isDemoMode } from '@/lib/config'
 

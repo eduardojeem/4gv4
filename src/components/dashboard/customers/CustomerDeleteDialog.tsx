@@ -13,19 +13,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
-  AlertTriangle,
-  ShieldAlert,
   ShieldCheck,
   UserX,
   Trash2,
   CheckCircle2,
   ShoppingBag,
   Wrench,
-  CreditCard,
-  Info,
-  Loader2,
-  ArrowRight,
-  Lock
+  CreditCard, Loader2, Lock
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { formatCurrency } from '@/lib/currency'

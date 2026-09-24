@@ -14,23 +14,18 @@ import {
   CreditCard,
   Download,
   ExternalLink,
-  Globe,
-  Layers,
-  LayoutGrid,
+  Globe, LayoutGrid,
   List,
   Minus,
   Package,
   Receipt,
   RefreshCw,
   Search,
-  Shield,
-  ShieldAlert,
-  Sparkles,
+  Shield, Sparkles,
   User,
   Users,
   Wrench,
-  X,
-  Zap,
+  X
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -45,7 +40,7 @@ import { cn } from '@/lib/utils'
 import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import { countOrganizationsWithoutSubscription, getSubscriptionTiming } from '@/lib/superadmin/organization-directory'
 import { describeLastAccess } from '@/lib/superadmin/last-access'
-import { MonitoringRobotMascot, type RobotMood } from '../MonitoringRobotMascot'
+import { type RobotMood } from '../MonitoringRobotMascot'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 
 // ---------------------------------------------------------------------------

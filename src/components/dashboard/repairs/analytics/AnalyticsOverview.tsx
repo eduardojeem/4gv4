@@ -5,18 +5,18 @@ import { useState, useCallback, memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Area } from 'recharts/es6/cartesian/Area';
-import { BarChart } from 'recharts/es6/chart/BarChart';
-import { Bar } from 'recharts/es6/cartesian/Bar';
-import { PieChart } from 'recharts/es6/chart/PieChart';
-import { Pie } from 'recharts/es6/polar/Pie';
-import { Cell } from 'recharts/es6/component/Cell';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
+import { Area } from 'recharts/es6/cartesian/Area'
+import { BarChart } from 'recharts/es6/chart/BarChart'
+import { Bar } from 'recharts/es6/cartesian/Bar'
+import { PieChart } from 'recharts/es6/chart/PieChart'
+import { Pie } from 'recharts/es6/polar/Pie'
+import { Cell } from 'recharts/es6/component/Cell'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import {
   TrendingUp,
   TrendingDown,
@@ -26,8 +26,7 @@ import {
   Activity,
   CheckCircle2,
   Download,
-  RefreshCw,
-  BarChart3
+  RefreshCw
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useRepairs } from '@/contexts/RepairsContext'

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, Building2, CheckCircle2, Package, Rocket, ShoppingBag, Sparkles, Store, Tag, Zap } from 'lucide-react'
+import { ArrowRight, Building2, CheckCircle2, Package, Rocket, Sparkles, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProductCarousel'
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'

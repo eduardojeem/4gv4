@@ -1,17 +1,17 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useMemo } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  Bell, BellRing, AlertTriangle, CheckCircle, Info, X, 
-  Users, ShoppingCart, Shield, Server, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  Bell, BellRing, CheckCircle, X,
+  Users, ShoppingCart, Shield, Server,
   Clock, Search, Trash2
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'

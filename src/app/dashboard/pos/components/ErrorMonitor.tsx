@@ -11,11 +11,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { 
-  AlertTriangle, 
-  CheckCircle2, 
-  XCircle, 
-  Info, 
+import {
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Info,
   RefreshCw,
   TrendingDown,
   TrendingUp,

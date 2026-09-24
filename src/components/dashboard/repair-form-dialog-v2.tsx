@@ -12,7 +12,7 @@
  * - CustomerSelector para búsqueda y creación inline de clientes
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/auth-context'
@@ -22,12 +22,12 @@ import { calculateRepairPricing, validateRepairPricing } from '@/lib/repairs/pri
 import { cn } from '@/lib/utils'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format, addMonths, addDays } from 'date-fns'
+import { format, addMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   Save, User, Phone, Mail, Smartphone, Laptop, Tablet,
   AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText,
-  Search, Loader2, Maximize2, Minimize2, CheckSquare, Sparkles, Droplets, CheckCircle2, ChevronDown, ChevronUp, Clock, Check, X, Tag, Wrench, Shield, Star, Camera
+  Search, Loader2, Maximize2, Minimize2, CheckSquare, Sparkles, ChevronDown, Check, X, Wrench, Shield, Star, Camera
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,7 +51,6 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import {
   RepairFormSchema,
@@ -81,6 +80,26 @@ import {
 } from '@/lib/repairs/warranty'
 import { hasSingleDeviceOnlyData, describeSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
 import { describeDeviceName, describeDeviceSummary, deviceAccent } from '@/lib/repairs/device-label'
+import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
+import { UpgradeHint } from '@/components/admin/PlanGate'
+import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
+import { PAYMENT_METHODS } from './repairs/RepairPaymentDialog'
+import { useCashRegister } from '@/hooks/useCashRegister'
+import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
+import { Repair } from '@/types/repairs'
+import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSearch'
+import { CatalogQuickCreateDialog } from './repairs/new-repair/CatalogQuickCreateDialog'
+import { addRepairService, catalogItemPrice, toRepairPart } from './repairs/new-repair/repair-catalog-selection'
+import type { CatalogItemKind, RepairCatalogItem } from './repairs/new-repair/types'
+import type { RepairFormSectionId } from './repairs/new-repair/types'
+import { buildSectionState } from './repairs/new-repair/repair-form-sections'
+import { RepairFormSectionNav } from './repairs/new-repair/RepairFormSectionNav'
+import { RepairReview } from './repairs/new-repair/RepairReview'
+import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
+import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
+import { CatalogSearchDialogFooter } from './repairs/new-repair/CatalogSearchDialogFooter'
+import { PartsSectionSummary } from './repairs/new-repair/PartsSectionSummary'
+import { countRepairLineItems, getRepairLinePresentation } from './repairs/new-repair/repair-line-presentation'
 
 // La garantia predeterminada dejo de vivir en `localStorage`: era por navegador,
 // asi que dos computadoras del mismo local tenian politicas distintas y un
@@ -117,26 +136,6 @@ function saveQuickModePreference(val: boolean) {
     localStorage.setItem(QUICK_MODE_PREF_KEY, val ? 'true' : 'false')
   } catch {}
 }
-import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
-import { UpgradeHint } from '@/components/admin/PlanGate'
-import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
-import { PAYMENT_METHODS } from './repairs/RepairPaymentDialog'
-import { useCashRegister } from '@/hooks/useCashRegister'
-import { OpenCashRegisterDialog } from '@/app/dashboard/pos/components/OpenCashRegisterDialog'
-import { Repair } from '@/types/repairs'
-import { useRepairCatalogSearch } from './repairs/new-repair/useRepairCatalogSearch'
-import { CatalogQuickCreateDialog } from './repairs/new-repair/CatalogQuickCreateDialog'
-import { addRepairService, catalogItemPrice, toRepairPart } from './repairs/new-repair/repair-catalog-selection'
-import type { CatalogItemKind, RepairCatalogItem } from './repairs/new-repair/types'
-import type { RepairFormSectionId } from './repairs/new-repair/types'
-import { buildSectionState } from './repairs/new-repair/repair-form-sections'
-import { RepairFormSectionNav } from './repairs/new-repair/RepairFormSectionNav'
-import { RepairReview } from './repairs/new-repair/RepairReview'
-import { RepairFieldHelp } from './repairs/new-repair/RepairFieldHelp'
-import { invalidateBranchCatalogParts } from './repairs/new-repair/branch-catalog-selection'
-import { CatalogSearchDialogFooter } from './repairs/new-repair/CatalogSearchDialogFooter'
-import { PartsSectionSummary } from './repairs/new-repair/PartsSectionSummary'
-import { countRepairLineItems, getRepairLinePresentation } from './repairs/new-repair/repair-line-presentation'
 
 export type RepairFormMode = 'add' | 'edit'
 

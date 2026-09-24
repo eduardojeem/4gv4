@@ -7,8 +7,7 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import {
   Edit, Trash2, Copy, Eye, Package,
-  AlertTriangle, CheckCircle2, XCircle,
-  Globe, EyeOff, Wrench, Layers3,
+  AlertTriangle, CheckCircle2, XCircle, Wrench, Layers3,
   ChevronDown, ChevronUp, ArrowUpRight
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'

@@ -23,25 +23,20 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Clipboard,
-  Compass,
-  Sparkles,
+  Clipboard, Sparkles,
   MessageCircle,
   Building2,
   Upload,
   Info,
   Globe,
   ExternalLink,
-  HelpCircle,
-  Navigation,
-  Search,
+  HelpCircle, Search,
   Trash2,
-  Images,
+  Images
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { STOREFRONT_STYLE_LABELS, STOREFRONT_STYLE_OPTIONS, resolveStorefrontStyle } from '@/lib/website/storefront-style'
-import { Switch } from '@/components/ui/switch'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'

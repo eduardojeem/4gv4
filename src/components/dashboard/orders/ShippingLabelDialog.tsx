@@ -2,13 +2,11 @@
 
 import { useState } from 'react'
 import {
-  AlertTriangle, CheckCircle2, FileText, Layers,
-  MapPin, Package, Phone, Printer, QrCode, Store,
-  Tag, Truck, User, ExternalLink
+  AlertTriangle, CheckCircle2, Layers,
+  MapPin, Package, Phone, Printer, Store, Truck, User
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { PAYMENT_METHOD_META, PAYMENT_STATUS_META } from '@/lib/orders/constants'
 import type { CustomerOrder } from '@/lib/orders/types'
 import { formatDate, formatMoney } from './format'

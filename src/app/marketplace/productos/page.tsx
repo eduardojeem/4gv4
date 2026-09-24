@@ -4,7 +4,6 @@ import { ArrowRight, ChevronRight, Flame, Package, Sparkles, Star, Store, Tag } 
 import { Button } from '@/components/ui/button'
 import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProductCarousel'
 import { ProductsClient } from '@/components/public/ProductsClient'
-import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
 import { getMarketplaceProductsPage, getMarketplaceCategories, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
 import { getOfferPricing, mergeOffersIntoCatalog, sortOffersByDiscount } from '@/lib/public/marketplace-offers'
 

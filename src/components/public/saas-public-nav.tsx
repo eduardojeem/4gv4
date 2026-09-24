@@ -8,19 +8,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   Building2,
   ChevronRight,
-  CreditCard,
-  Home,
-  LayoutDashboard,
-  LayoutGrid,
-  LogOut,
-  Menu,
-  Rocket,
-  Sparkles,
-  Store,
-  User,
-  LogIn,
+  CreditCard, LayoutDashboard, LogOut,
+  Menu, Sparkles,
+  Store, LogIn,
   X,
-  Zap,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'

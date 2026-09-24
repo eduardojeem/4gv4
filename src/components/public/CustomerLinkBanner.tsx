@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Sparkles, UserPlus, X, Loader2, Store } from 'lucide-react'
+import { Sparkles, UserPlus, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'

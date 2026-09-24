@@ -19,9 +19,7 @@ import {
   Sparkles,
   Tag,
   Users,
-  Settings2,
-  Filter,
-  Infinity as InfinityIcon,
+  Settings2, Infinity as InfinityIcon
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

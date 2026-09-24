@@ -1,22 +1,20 @@
 "use client"
 
-import React, { useState, useEffect, memo } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { 
-  Users, Activity, TrendingUp, TrendingDown, 
-  RefreshCw, Download, AlertTriangle, CheckCircle, Clock
+import {
+  Users, Activity, RefreshCw, Download, AlertTriangle, Clock
 } from 'lucide-react'
-import { LineChart as RechartsLineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
+import { LineChart as RechartsLineChart } from 'recharts/es6/chart/LineChart'
+import { Line } from 'recharts/es6/cartesian/Line'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { SystemMetrics } from '@/hooks/use-admin-dashboard'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
@@ -24,13 +22,13 @@ import { useHydrated } from '@/hooks/use-hydrated'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { 
-  StandardGrid, 
-  KPICard, 
-  SectionHeader, 
-  Container, 
-  FlexContainer, 
-  IconWrapper 
+import {
+  StandardGrid,
+  KPICard,
+  SectionHeader,
+  Container,
+  FlexContainer,
+  IconWrapper
 } from '@/components/ui/standardized-components'
 
 interface EnhancedOverviewProps {

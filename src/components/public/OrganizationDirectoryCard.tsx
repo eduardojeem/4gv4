@@ -11,7 +11,6 @@ import { describeCatalogState } from '@/lib/public/catalog-state'
 import { organizationAccentColor } from '@/lib/public/organization-brand'
 import Link from 'next/link'
 import {
-  Building2,
   ExternalLink,
   Heart,
   Home,
@@ -24,10 +23,8 @@ import {
   Smartphone,
   Sparkles,
   Star,
-  Store,
-  Tag,
-  Wrench,
-  Car,
+  Store, Wrench,
+  Car
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'

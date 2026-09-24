@@ -14,7 +14,7 @@ import {
   subDays,
   subMonths,
 } from 'date-fns'
-import { Calendar as CalendarIcon, Filter, RefreshCw, Sparkles } from 'lucide-react'
+import { Calendar as CalendarIcon, Filter, RefreshCw } from 'lucide-react'
 
 import { BranchSelector } from '@/components/branches/branch-selector'
 import { Button } from '@/components/ui/button'

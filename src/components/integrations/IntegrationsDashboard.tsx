@@ -12,22 +12,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
-import { 
-  CreditCard, 
-  Calculator, 
-  Package, 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  Settings, 
+import {
+  CreditCard,
+  Calculator,
+  Package,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Settings,
   Plus,
   Activity,
   TrendingUp,
-  AlertTriangle,
-  ShoppingCart,
-  Users
+  AlertTriangle
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { usePaymentSystem } from '@/lib/integrations/payment-processors'

@@ -1,16 +1,16 @@
 import React from 'react';
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency } from '@/lib/currency';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Package, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Package,
+  TrendingUp,
+  TrendingDown,
   AlertTriangle,
   BarChart3
 } from 'lucide-react';
-import { GSIcon } from '@/components/ui/standardized-components'
+import { GSIcon } from '@/components/ui/standardized-components';
 
 interface ProductStatsData {
   totalProducts: number;

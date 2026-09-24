@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -9,13 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
-  BarChart3, Calendar, Download, Printer, Save, 
+import {
+  Download, Save,
   ArrowUpCircle, ArrowDownCircle, DollarSign, History,
   FileText, TrendingUp, CreditCard, Banknote, RefreshCcw
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import { CashRegisterState, CashMovement, normalizeCashMovementType } from '../types'
+import { CashRegisterState, normalizeCashMovementType } from '../types'
 
 interface CashReportData {
   periodStart: string

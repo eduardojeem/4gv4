@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { AppError } from '@/lib/errors'
 import { Customer, CustomerFilters } from './use-customer-state'
-export type { Customer, CustomerFilters }
 import { useDebounce } from './use-debounce'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+export type { Customer, CustomerFilters }
 
 interface UseCustomersOptions {
   initialFilters?: Partial<CustomerFilters>

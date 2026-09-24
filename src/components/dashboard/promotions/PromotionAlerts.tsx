@@ -5,15 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  AlertTriangle,
-  TrendingDown,
-  CheckCircle2,
-  XCircle,
+  TrendingDown, XCircle,
   ChevronDown,
   ChevronUp,
-  Sparkles,
-  ArrowRight,
-  Clock,
+  Sparkles, Clock
 } from 'lucide-react'
 import type { Promotion, PromotionFilters } from '@/types/promotion'
 

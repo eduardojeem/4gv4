@@ -1,15 +1,15 @@
-import { 
-  Package, 
-  Users, 
-  Tags, 
-  Layers, 
-  Truck, 
-  CreditCard, 
-  Percent, 
-  ShoppingBag, 
-  BarChart3, 
-  ShieldCheck, 
-  Lock, 
+import {
+  Package,
+  Users,
+  Tags,
+  Layers,
+  Truck,
+  CreditCard,
+  Percent,
+  ShoppingBag,
+  BarChart3,
+  ShieldCheck,
+  Lock,
   Store,
   Ticket,
   Sparkles,
@@ -32,13 +32,11 @@ import {
   MessageCircle,
   AlertTriangle,
   FileText,
-  CheckCircle2,
-  TrendingUp,
-  Clock,
+  CheckCircle2, Clock,
   ArrowLeftRight,
   PackageCheck,
   RotateCcw,
-  Wrench,
+  Wrench
 } from 'lucide-react'
 import type { SectionGuideData } from './SectionGuideModal'
 

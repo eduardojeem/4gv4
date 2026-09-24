@@ -19,14 +19,10 @@ import {
   Receipt,
   Sparkles,
   DollarSign,
-  Wallet,
-  ArrowRight,
-  Printer,
+  Wallet, Printer,
   Share2,
-  RefreshCw,
-  Clock,
-  Coins,
-  Building2,
+  RefreshCw, Coins,
+  Building2
 } from 'lucide-react'
 import {
   Select,

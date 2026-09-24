@@ -12,14 +12,11 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { useTheme } from "@/contexts/theme-context"
 import { useHydrated } from '@/hooks/use-hydrated'
-  import { 
-    Palette, Monitor, Smartphone, Tablet, Sun, Moon, 
-    Settings, Save, RotateCcw, Eye, Download, Upload, Copy,
-    Type, Layout, Image, Brush, Zap, Star, Heart,
-    Grid, List, BarChart3, PieChart, LineChart,
-    Home, User, ShoppingCart, FileText, Bell,
-    ChevronRight, Plus, Minus, Check, X
-  } from 'lucide-react'
+import {
+  Palette, Monitor, Smartphone, Tablet, Sun, Moon,
+  Settings, Save, RotateCcw, Eye, Download, Upload, Copy,
+  Type, Layout, Brush, Home, User, ShoppingCart, FileText, ChevronRight, Check
+} from 'lucide-react'
 
 interface ThemeConfig {
   id: string

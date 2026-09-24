@@ -3,8 +3,8 @@
 import { AppImage } from '@/components/ui/app-image'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence  } from './motion'
-import { User, ImageIcon, Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from './motion'
+import { User, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface LazyImageProps {

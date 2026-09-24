@@ -13,11 +13,9 @@ import {
   Clock,
   Eye,
   MessageCircle,
-  Package,
-  Phone,
-  Sparkles,
+  Package, Sparkles,
   Store,
-  Tag,
+  Tag
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'

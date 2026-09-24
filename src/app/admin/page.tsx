@@ -23,24 +23,19 @@ import {
   type NavItem,
 } from '@/config/admin-navigation'
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
   Building2,
   CheckCircle2,
-  ChevronRight,
-  Clock,
-  LayoutDashboard,
+  ChevronRight, LayoutDashboard,
   Monitor,
   Package,
   RefreshCw,
-  Settings,
-  ShieldCheck,
-  TrendingUp,
+  Settings, TrendingUp,
   Users,
   WalletCards,
   Wrench,
-  type LucideIcon,
+  type LucideIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

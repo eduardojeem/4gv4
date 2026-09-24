@@ -17,10 +17,7 @@ import {
   Shield,
   Download,
   Copy,
-  Link2,
-  CheckCircle2,
-  AlertCircle,
-  ShoppingBag,
+  Link2, ShoppingBag,
   Wrench,
   Coins
 } from "lucide-react"

@@ -1,5 +1,5 @@
 import { toast } from 'sonner'
-import { NotificationError, ErrorType } from './error-handling'
+import { NotificationError } from './error-handling'
 
 // Tipos de contexto para las notificaciones
 export enum NotificationContext {

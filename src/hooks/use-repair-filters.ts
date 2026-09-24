@@ -3,7 +3,7 @@ import { Repair, RepairStatus, RepairPriority } from '@/types/repairs'
 import { DateRange } from 'react-day-picker'
 import { startOfDay, endOfDay, isWithinInterval } from 'date-fns'
 import { useDebounce } from '@/hooks/use-debounce'
-import { getWarrantyStatus, WarrantyStatus } from '@/lib/warranty-utils'
+import { getWarrantyStatus } from '@/lib/warranty-utils'
 
 export type WarrantyFilterType = 'all' | 'in_warranty' | 'expiring' | 'expired' | 'no_warranty'
 

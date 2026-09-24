@@ -1,13 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogDescription, DialogHeader,
+  DialogTitle
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -25,17 +23,11 @@ import type { Product } from '@/types/product-unified'
 import { toast } from 'sonner'
 import {
   DollarSign,
-  Wrench,
-  HelpCircle,
-  TrendingUp,
+  Wrench, TrendingUp,
   Users,
   User,
   ShieldCheck,
-  Calculator,
-  Sparkles,
-  AlertTriangle,
-  ArrowRight,
-  Zap,
+  Calculator, AlertTriangle, Zap
 } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'

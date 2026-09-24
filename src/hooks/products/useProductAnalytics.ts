@@ -7,18 +7,15 @@ import type { Database } from '@/lib/supabase/types'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
-import { 
-  usePerformanceMetrics, 
-  useAdvancedMemoization, 
-  useOptimizedDebounce,
-  PerformanceUtils,
-  DEFAULT_PERFORMANCE_CONFIG,
+import {
+  usePerformanceMetrics,
+  useAdvancedMemoization, DEFAULT_PERFORMANCE_CONFIG,
   type PerformanceConfig
 } from '@/lib/performance-optimization'
-import type { 
-  Product, 
-  ProductMovement, 
-  ProductAlert, 
+import type {
+  Product,
+  ProductMovement,
+  ProductAlert,
   DashboardStats,
   AnalyticsConfig
 } from './types'

@@ -4,7 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  ArrowRight,
   Car,
   Check,
   Clock,
@@ -15,10 +14,8 @@ import {
   MapPin,
   MessageCircle,
   Navigation,
-  Phone,
-  ShieldCheck,
-  Sparkles,
-  Store,
+  Phone, Sparkles,
+  Store
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo } from '@/types/website-settings'
@@ -26,7 +23,6 @@ import type { BrandTheme } from '@/lib/constants/brand-theme'
 import { getCompanyMapsHref, isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 import { getSocialLinks } from '@/lib/public/social-links'
 import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
-import { cn } from '@/lib/utils'
 
 interface ContactCTAProps {
   companyInfo: CompanyInfo

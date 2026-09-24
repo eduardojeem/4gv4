@@ -1,19 +1,14 @@
 "use client"
 
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import {
-  CreditCard,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
+  CreditCard, AlertTriangle,
   CheckCircle,
   Clock,
   DollarSign,
@@ -21,25 +16,14 @@ import {
   Target,
   Shield,
   AlertCircle,
-  Info,
-  Zap,
-  BarChart3,
-  PieChart,
-  Activity,
-  Eye,
-  ExternalLink,
-  Download,
-  RefreshCw,
-  Coins,
-  Wallet,
-  Wrench,
+  Info, BarChart3, Activity, RefreshCw,
+  Coins, Wrench,
   Receipt,
-  CheckCircle2,
-  HelpCircle
+  CheckCircle2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
-import { useCustomerCredits, CustomerCreditSummary, DebtItem } from '@/hooks/use-customer-credits'
+import { useCustomerCredits, CustomerCreditSummary } from '@/hooks/use-customer-credits'
 import { Customer } from '@/hooks/use-customer-state'
 
 interface CustomerCreditInfoProps {

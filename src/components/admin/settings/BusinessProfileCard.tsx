@@ -5,9 +5,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Boxes,
-  Building2,
-  Check,
-  CheckCircle2,
+  Building2, CheckCircle2,
   Coins,
   CreditCard,
   FileText,
@@ -23,7 +21,7 @@ import {
   TrendingUp,
   Truck,
   Users,
-  Wrench,
+  Wrench
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'

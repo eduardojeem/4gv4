@@ -1,17 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { 
-  AlertTriangle, 
-  Package, 
-  Calendar, 
-  TrendingDown, 
-  Bell, 
-  X, 
-  Eye,
-  RefreshCw,
-  Settings,
-  Filter
+import { useState } from 'react'
+import {
+  AlertTriangle,
+  Package,
+  Calendar,
+  TrendingDown,
+  Bell,
+  X, RefreshCw,
+  Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,12 +28,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'

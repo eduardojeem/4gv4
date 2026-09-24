@@ -6,21 +6,16 @@ import Link from 'next/link'
 import {
   ArrowRight,
   BadgeCheck,
-  Building2,
-  Check,
-  ChevronLeft,
+  Building2, ChevronLeft,
   ChevronRight,
   Eye,
   MapPin,
   MessageCircle,
   Package,
-  ShieldCheck,
-  Sparkles,
-  Store,
-  Tag,
+  ShieldCheck, Store,
+  Tag
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { formatPrice, cn } from '@/lib/utils'
 import { getOfferPricing } from '@/lib/public/marketplace-offers'
@@ -28,7 +23,6 @@ import { getWhatsAppLink } from '@/lib/whatsapp'
 import { FavoriteButton } from './Favorites'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
 import type { MarketplaceOrganization, MarketplaceProduct } from '@/lib/public/marketplace'
-import type { PublicProduct } from '@/types/public'
 
 interface Props {
   organizations: MarketplaceOrganization[]

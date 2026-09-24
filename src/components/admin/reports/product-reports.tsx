@@ -26,18 +26,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { BarChart } from 'recharts/es6/chart/BarChart';
-import { Bar } from 'recharts/es6/cartesian/Bar';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { PieChart as RechartsPieChart } from 'recharts/es6/chart/PieChart';
-import { Pie } from 'recharts/es6/polar/Pie';
-import { Cell } from 'recharts/es6/component/Cell';
-import { Area } from 'recharts/es6/cartesian/Area';
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
+import { BarChart } from 'recharts/es6/chart/BarChart'
+import { Bar } from 'recharts/es6/cartesian/Bar'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { PieChart as RechartsPieChart } from 'recharts/es6/chart/PieChart'
+import { Pie } from 'recharts/es6/polar/Pie'
+import { Cell } from 'recharts/es6/component/Cell'
+import { Area } from 'recharts/es6/cartesian/Area'
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
 import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 

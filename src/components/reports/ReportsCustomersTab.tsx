@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Users,
   CheckCircle2,
@@ -18,8 +18,7 @@ import {
   Globe,
   Store,
   FileText,
-  Loader2,
-  ArrowUpDown,
+  Loader2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'

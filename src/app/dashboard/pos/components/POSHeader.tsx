@@ -2,10 +2,10 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { 
-  Settings, 
-  Maximize, 
-  Minimize, 
+import {
+  Settings,
+  Maximize,
+  Minimize,
   MoreVertical,
   BarChart3,
   CreditCard,
@@ -22,7 +22,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { GSIcon } from '@/components/ui/standardized-components'
 import { cn } from '@/lib/utils'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { POS_GUIDE } from '@/components/dashboard/common/section-guides-data'

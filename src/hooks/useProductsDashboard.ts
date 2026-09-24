@@ -2,7 +2,7 @@
  * Custom hook for managing products dashboard state and operations
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { Product, ProductAlert, Category, Supplier } from '@/types/product-unified'
 import { DashboardFilters, DashboardMetrics, SortConfig, ViewMode } from '@/types/products-dashboard'

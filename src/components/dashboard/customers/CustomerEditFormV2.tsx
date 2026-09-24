@@ -13,19 +13,14 @@
  * - Barra de guardado superior e inferior para máxima comodidad
  */
 
-import React, { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  User, Phone, Mail, MapPin, FileText, AlertCircle, Check, 
-  CreditCard, Building, Tag, Save, X, 
-  Calendar, Smartphone, Clock, Star, Shield,
-  Loader2, CheckCircle2, Info, Plus, Minus,
-  Settings, Bell, LayoutDashboard, ArrowLeft,
-  Copy, MessageSquare, ExternalLink, Sparkles,
-  Percent, Hash, Coins
+  User, Phone, Mail, MapPin, FileText, AlertCircle, CreditCard, Building, Tag, Save, X,
+  Calendar, Smartphone, Star, Loader2, CheckCircle2, Info, Plus, ArrowLeft, MessageSquare, ExternalLink, Percent, Hash, Coins
 } from 'lucide-react'
 
 // UI Components
@@ -37,7 +32,6 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 

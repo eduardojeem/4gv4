@@ -3,16 +3,9 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Monitor,
-  DollarSign,
-  AlertTriangle,
-  Lock,
-  PauseCircle,
-  CheckCircle2,
+  Monitor, AlertTriangle, CheckCircle2,
   TrendingUp,
-  Wallet,
-  CreditCard,
-  QrCode
+  Wallet
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import type { CashMonitorMetrics } from '../types'

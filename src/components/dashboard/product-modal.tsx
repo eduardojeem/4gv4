@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, ArrowRight, TrendingUp, Percent, RotateCcw } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, TrendingUp, Percent, RotateCcw } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice, cn } from '@/lib/utils'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -17,9 +17,7 @@ import { CreditDefaultsLink, CreditHowItWorks } from '@/components/dashboard/pro
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  DialogDescription, DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

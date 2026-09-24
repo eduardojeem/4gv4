@@ -1,21 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertCircle,
-  BookOpenCheck,
-  Building2,
-  Ban,
+  BookOpenCheck, Ban,
   Calculator,
   Calendar,
   CheckCircle2,
   Clock,
-  Coins,
-  DollarSign,
-  Eye,
-  FileText,
-  Filter,
-  Info,
-  Layers,
-  Pencil,
+  Coins, Eye,
+  FileText, Info, Pencil,
   Percent,
   Plus,
   ScrollText,
@@ -23,19 +14,16 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
-  Trash2,
-  TrendingUp,
-  User,
+  Trash2, User,
   Users,
   Wallet,
-  Wrench,
-  X,
+  Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,

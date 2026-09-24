@@ -2,13 +2,6 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { backupManager } from './backup-manager'
-import type { 
-  BackupConfiguration, 
-  BackupJob, 
-  BackupHealth, 
-  HealthIssue,
-  BackupMetrics 
-} from './backup-manager'
 
 // Interfaces para monitoreo
 export interface MonitoringRule {

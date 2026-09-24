@@ -27,13 +27,11 @@ import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagin
 import type { EditForm, SuperAdminSubscription, SortValue, TabValue } from './types'
 import {
   csvCell,
-  daysUntil,
-  formatMoney,
-  getRecommendation,
+  daysUntil, getRecommendation,
   isAttention,
   isRunningTrial,
   periodLabel,
-  toDateTimeLocalValue,
+  toDateTimeLocalValue
 } from './utils'
 import { normalizeText } from '@/lib/text/normalize'
 import { cn } from '@/lib/utils'

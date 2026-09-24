@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Search, Tag, X, Sparkles } from 'lucide-react'
+import { Check, Search, Tag, X } from 'lucide-react'
 import {
   AccordionContent,
   AccordionItem,

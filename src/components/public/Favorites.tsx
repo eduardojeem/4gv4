@@ -3,29 +3,23 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  Heart, 
-  Package, 
-  Trash2, 
-  ArrowRight, 
-  Store, 
-  Sparkles, 
-  ShoppingBag, 
-  CloudCheck, 
-  Laptop, 
-  Tag, 
-  PackageX, 
-  EyeOff, 
-  RefreshCw 
+import {
+  Heart,
+  Package,
+  Trash2,
+  ArrowRight,
+  Store, ShoppingBag,
+  CloudCheck,
+  Laptop, RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Image from 'next/image'
 import { useAuth } from '@/contexts/auth-context'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogTitle, 
-  DialogDescription, 
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
   DialogTrigger,
   DialogHeader,
   DialogFooter

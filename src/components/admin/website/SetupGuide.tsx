@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
+import {
   CheckCircle2, Circle, Compass, ChevronDown, ChevronUp, Sparkles,
-  Building2, Tag, Briefcase, Footprints, ShoppingCart, Info, GalleryHorizontalEnd,
-  ArrowRight, Lightbulb, ShieldCheck
+  Building2, Tag, Briefcase, Footprints, ShoppingCart, GalleryHorizontalEnd, Lightbulb, ShieldCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { isCustomHeroTitle } from '@/lib/website/template-hero-titles'

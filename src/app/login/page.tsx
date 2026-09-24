@@ -19,9 +19,7 @@ import {
   CheckCircle2,
   Mail,
   Lock,
-  Store,
-  Cpu,
-  Building2,
+  Store, Building2
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'

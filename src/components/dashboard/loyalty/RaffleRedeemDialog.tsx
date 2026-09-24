@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Coins, Loader2, Search, ShieldAlert, Ticket, User, CreditCard, Sparkles } from 'lucide-react'
+import { Coins, Loader2, Search, ShieldAlert, Ticket, User, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   checkParticipation,

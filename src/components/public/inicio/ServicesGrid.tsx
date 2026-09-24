@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Wrench, CheckCircle, Tag, Clock, ExternalLink, MessageCircle, ArrowRight, Sparkles } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { iconMap } from '@/lib/constants/brand-theme'
 import type { Service } from '@/types/website-settings'

@@ -6,30 +6,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  Zap, 
-  Database, 
-  Shield, 
-  BarChart3, 
-  Clock, 
-  Users, 
-  Activity,
+import {
+  Database, Clock, Activity,
   RefreshCw,
   Trash2,
   Settings,
   TrendingUp,
   TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  Server,
-  Network,
-  HardDrive,
-  Cpu
+  AlertTriangle
 } from 'lucide-react'
 import { LineChart } from 'recharts/es6/chart/LineChart'
 import { Line } from 'recharts/es6/cartesian/Line'

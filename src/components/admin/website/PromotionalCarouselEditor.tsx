@@ -5,13 +5,10 @@ import { AppImage } from '@/components/ui/app-image'
 import { useEffect, useRef, useState } from 'react'
 import {
   AlignCenter, AlignLeft, AlignRight,
-  ArrowDown, ArrowUp, Check, Eye, EyeOff,
-  GalleryHorizontalEnd, ImagePlus, Link2, Loader2,
+  ArrowDown, ArrowUp, Check, GalleryHorizontalEnd, ImagePlus, Link2, Loader2,
   Monitor, MoonStar, Pencil, Plus, Save, Smartphone, SunMedium,
   Trash2, Type, Upload, X,
-  ChevronDown, ChevronUp, HelpCircle, Sparkles, Lightbulb, Flame,
-  Shirt, ShoppingBag, Truck, Tag, ExternalLink, Zap,
-  Images,
+  ChevronDown, ChevronUp, HelpCircle, Sparkles, Lightbulb, ExternalLink, Images
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'

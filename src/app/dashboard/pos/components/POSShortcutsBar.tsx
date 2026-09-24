@@ -1,14 +1,12 @@
 'use client'
 
-import React from 'react'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Search, 
-  UserPlus, 
-  CreditCard, 
-  PauseCircle, 
-  Tag, 
+import {
+  Search,
+  UserPlus,
+  CreditCard,
+  PauseCircle,
+  Tag,
   RotateCcw,
   Keyboard,
   Wrench

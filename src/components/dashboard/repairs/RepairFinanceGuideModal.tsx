@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -13,21 +13,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Sparkles,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  Wrench,
+  TrendingUp, Wrench,
   Package,
-  Layers,
-  HelpCircle,
-  X,
-  Wallet,
-  Coins,
+  Layers, Coins,
   Scale,
-  ShieldCheck,
-  ArrowRight
+  ShieldCheck
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 interface RepairFinanceGuideModalProps {

@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
-import { createSupabaseClient } from '@/lib/supabase/client'
+import { useState, useEffect } from 'react'
 import { Repair, RepairStatus } from '@/types/repairs'
 
 export function useKanban(

@@ -1,4 +1,3 @@
-import type { Database } from '@/lib/supabase/types'
 import type { Product as UnifiedProduct, Category as UnifiedCategory, Supplier as UnifiedSupplier, ProductMovement as UnifiedProductMovement, ProductAlert as UnifiedProductAlert } from '@/types/product-unified'
 
 // Re-export unified types

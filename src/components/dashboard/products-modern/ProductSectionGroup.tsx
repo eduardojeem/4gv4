@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   ChevronDown, ChevronUp, Package, Wrench,
-  Tag, Sparkles, FolderOpen, Maximize2, Minimize2,
-  TrendingUp, BarChart2
+  Tag, FolderOpen, Maximize2, Minimize2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

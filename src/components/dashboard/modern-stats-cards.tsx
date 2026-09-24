@@ -1,11 +1,9 @@
 'use client'
 
-import { motion, useMotionValue, useTransform, animate  } from '../ui/motion'
+import { motion, useMotionValue, useTransform, animate } from '../ui/motion'
 import { useEffect, memo } from 'react'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  ArrowUpRight, 
+import {
+  ArrowUpRight,
   ArrowDownRight,
   Minus
 } from 'lucide-react'

@@ -7,10 +7,10 @@
  * Diseño más denso que la vista de cuadrícula
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'

@@ -7,7 +7,7 @@
  * con información visual atractiva y acciones rápidas
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,12 +36,9 @@ import {
   MoreVertical,
   Star,
   CreditCard,
-  ShoppingBag,
-  Calendar,
-  Building,
+  ShoppingBag, Building,
   User,
-  TrendingUp,
-  Award
+  TrendingUp
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Customer } from '@/hooks/use-customer-state'

@@ -10,17 +10,15 @@
  * - Search suggestions
  */
 
-import React from 'react'
 import { motion } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { 
-  Search, 
-  TrendingUp, 
-  Clock, 
+import {
+  Search,
+  TrendingUp,
+  Clock,
   Target,
-  Zap,
-  Users
+  Zap
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

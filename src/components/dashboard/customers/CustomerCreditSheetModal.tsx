@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Dialog,
@@ -11,7 +11,6 @@ import {
   DialogFooter
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -27,14 +26,7 @@ import {
   Mail,
   Copy,
   DollarSign,
-  Calendar,
-  ShieldCheck,
-  TrendingUp,
-  Receipt,
-  FileText,
-  Download,
-  ExternalLink,
-  ShoppingBag,
+  Calendar, Receipt, Download, ShoppingBag,
   RefreshCw,
   X,
   Loader2,

@@ -1,24 +1,21 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { searchCustomers } from '@/lib/customers/search'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  CreditCard, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
-  Search, 
-  MessageCircle, 
-  ExternalLink, 
-  Eye, 
-  TrendingUp, 
-  Users, 
+import {
+  CreditCard,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Search,
+  MessageCircle,
+  ExternalLink,
+  Eye,
+  TrendingUp,
+  Users,
   DollarSign,
-  ArrowRight,
-  Filter,
-  CalendarClock,
+  ArrowRight, CalendarClock,
   Coins
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

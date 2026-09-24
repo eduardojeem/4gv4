@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -9,36 +9,19 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import {
-  TrendingUp,
-  TrendingDown,
-  Users,
-  DollarSign,
-  ShoppingCart,
-  Calendar,
+  TrendingUp, Users,
+  DollarSign, Calendar,
   Download,
-  Settings,
-  Filter,
-  BarChart3,
-  PieChart as PieChartIcon,
-  LineChart as LineChartIcon,
-  Activity,
-  Target,
-  Zap,
-  Eye,
-  RefreshCw,
-  ArrowUpRight,
+  Settings, BarChart3,
+  PieChart as PieChartIcon, Activity,
+  Target, ArrowUpRight,
   ArrowDownRight,
-  Minus,
-  Star,
-  Award,
-  CreditCard
+  Minus, CreditCard
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerMetrics, UseCustomerMetricsOptions } from '@/hooks/use-customer-metrics'

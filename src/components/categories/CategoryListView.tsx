@@ -1,30 +1,29 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import {
-    Tag, Edit, Trash2, MoreVertical, Package,
-    ChevronRight, ToggleLeft, ToggleRight, ArrowUpDown,
-    Calendar, User, Eye, EyeOff, Plus
+  Tag, Edit, Trash2, MoreVertical, Package,
+  ChevronRight, ToggleLeft, ToggleRight, ArrowUpDown, Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table'
 import type { Category as BaseCategory } from '@/hooks/useCategories'
 

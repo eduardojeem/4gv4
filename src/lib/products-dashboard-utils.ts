@@ -3,7 +3,7 @@
  */
 
 import { Product, ProductAlert } from '@/types/product-unified'
-import { DashboardFilters, DashboardMetrics, SortConfig, SearchOptions, GroupedAlerts } from '@/types/products-dashboard'
+import { DashboardFilters, DashboardMetrics, SortConfig, GroupedAlerts } from '@/types/products-dashboard'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 
 export { isServiceLikeProduct }

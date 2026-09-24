@@ -12,31 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { formatCurrency } from '@/lib/currency'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { 
-  Search, 
-  Filter, 
-  X, 
-  ChevronDown, 
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
+import {
+  Search,
+  Filter,
+  X,
+  ChevronDown,
   ChevronUp,
   Save,
   Bookmark,
   History,
-  SlidersHorizontal,
-  Tag,
-  Calendar,
-  Package,
-  Building,
-  Users,
-  Star,
-  Clock,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  RotateCcw,
-  Download,
-  Share2
+  SlidersHorizontal, Star, RotateCcw
 } from 'lucide-react'
 
 // Interfaces

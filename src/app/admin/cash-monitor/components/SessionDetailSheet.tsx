@@ -29,10 +29,7 @@ import {
   User,
   CreditCard,
   QrCode,
-  Search,
-  Printer,
-  ShieldAlert,
-  Wrench
+  Search
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'

@@ -1,15 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo, memo } from 'react'
-import { 
-  Filter, 
-  X, 
-  ChevronDown, 
+import {
+  Filter,
+  X,
+  ChevronDown,
   Search,
-  Package,
-  AlertTriangle,
-  Calendar,
-  Tag,
+  Package, Tag,
   Users,
   BarChart3,
   Sliders,

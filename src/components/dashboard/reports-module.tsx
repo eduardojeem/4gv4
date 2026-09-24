@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react';
 import { BarChart } from 'recharts/es6/chart/BarChart';
 import { Bar } from 'recharts/es6/cartesian/Bar';
 import { LineChart } from 'recharts/es6/chart/LineChart';
@@ -17,48 +17,25 @@ import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { Area } from 'recharts/es6/cartesian/Area';
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
 import { ComposedChart } from 'recharts';
-import { Scatter } from 'recharts';
-import { ScatterChart } from 'recharts';
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
-  TrendingUp, 
-  TrendingDown, 
-  Package, 
-  Users, 
-  Activity,
-  Filter,
-  RefreshCw,
-  Eye,
-  Settings,
-  Share,
-  Printer,
-  Mail,
-  FileSpreadsheet,
-  FileImage,
-  PieChart as PieChartIcon,
-  BarChart3,
-  LineChart as LineChartIcon,
-  Target,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Zap
-} from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DatePickerWithRange } from '@/components/ui/date-range-picker'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
-import { toast } from 'sonner'
-import { addDays, subDays, format, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns'
+import {
+  FileText,
+  Download, TrendingUp,
+  TrendingDown,
+  Package,
+  Users, RefreshCw, Settings, FileSpreadsheet,
+  FileImage, BarChart3, Target, Zap
+} from 'lucide-react';
+import { GSIcon } from '@/components/ui/standardized-components';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
+import { subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 
 // Tipos para reportes
 export interface ReportData {

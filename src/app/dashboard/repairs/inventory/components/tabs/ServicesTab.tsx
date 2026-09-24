@@ -28,8 +28,7 @@ import {
   Lock,
   Wrench,
   LayoutGrid,
-  List,
-  TrendingUp,
+  List
 } from 'lucide-react'
 import { useInventory } from '../../context/InventoryContext'
 import { ServiceDialog } from '../ServiceDialog'

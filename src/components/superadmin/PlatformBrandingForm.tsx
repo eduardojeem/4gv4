@@ -2,7 +2,6 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -13,10 +12,7 @@ import {
   Save,
   Sparkles,
   Store,
-  Upload,
-  X,
-  Check,
-  RefreshCw,
+  Upload, RefreshCw,
   Sun,
   Moon,
   Globe,
@@ -27,10 +23,8 @@ import {
   Trash2,
   CheckCircle2,
   HelpCircle,
-  Sliders,
-  Type,
-  MousePointerClick,
-  Search,
+  Sliders, MousePointerClick,
+  Search
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { BrandAssetHistory } from '@/components/superadmin/BrandAssetHistory'

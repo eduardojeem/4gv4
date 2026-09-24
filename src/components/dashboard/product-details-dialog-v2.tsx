@@ -11,8 +11,8 @@ import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Package, Tag, DollarSign, Users, CalendarDays, Copy, Edit, X, 
+import {
+  Package, Tag, DollarSign, Users, Copy, Edit, X,
   Printer, TrendingUp, Barcode, MapPin, Star, CheckCircle2, AlertCircle,
   ChevronLeft, ChevronRight, Minus, Plus
 } from 'lucide-react'

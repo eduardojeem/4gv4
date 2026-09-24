@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  Tag, 
-  Percent, 
-  X, 
-  Plus, 
-  Check, 
+import {
+  Tag,
+  Percent,
+  X,
+  Plus,
+  Check,
   AlertCircle,
   Loader2,
   Gift

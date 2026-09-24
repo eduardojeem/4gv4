@@ -11,27 +11,18 @@
  * - Métricas de rendimiento
  */
 
-import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { 
-  Search, 
-  TrendingUp, 
-  Clock, 
-  Target,
+import {
+  Search, Target,
   Zap,
   Mail,
   Phone,
-  Hash,
-  MapPin,
-  Building,
-  User,
-  Filter,
-  BarChart3,
-  Lightbulb
+  Hash, Filter, Lightbulb
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Customer } from '@/hooks/use-customer-state'

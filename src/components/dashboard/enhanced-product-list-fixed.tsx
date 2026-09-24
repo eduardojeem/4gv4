@@ -1,49 +1,19 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { 
-  Package, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  Copy, 
-  MoreHorizontal,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Star,
-  StarOff,
-  ExternalLink,
-  ShoppingCart,
-  Calendar,
-  User,
-  Tag,
-  BarChart3,
-  Filter,
-  SortAsc,
-  SortDesc,
-  Grid3X3,
-  List,
-  Download,
-  Upload,
-  RefreshCw
+import { useState } from 'react'
+import {
+  Package,
+  Edit,
+  Trash2,
+  Eye, Star,
+  StarOff, SortAsc,
+  SortDesc, Download
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 // import { Progress } from '@/components/ui/progress' // Comentado para evitar error de React
-import { Separator } from '@/components/ui/separator'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,

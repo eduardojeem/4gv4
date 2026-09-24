@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { Activity, Loader2, Shield, Info, ShieldCheck, Lock, Users } from 'lucide-react'
+import { Activity, Loader2, Info, ShieldCheck } from 'lucide-react'
 import { SecurityPanel } from '@/components/admin/system/security-panel'
 import { PlanGate } from '@/components/admin/PlanGate'
 import { Card, CardContent } from '@/components/ui/card'

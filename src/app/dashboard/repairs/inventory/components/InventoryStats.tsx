@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Package, Wrench, AlertTriangle, ShieldAlert, DollarSign, Layers } from 'lucide-react'
+import { Package, Wrench, AlertTriangle, ShieldAlert, DollarSign } from 'lucide-react'
 import { useInventory } from '../context/InventoryContext'
 import { formatPrice } from '@/lib/utils'
 

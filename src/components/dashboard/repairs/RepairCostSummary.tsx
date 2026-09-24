@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Edit, History, TrendingUp, Package, Wrench, Coins, CheckCircle2 } from 'lucide-react'
+import { Edit, History, TrendingUp, Package, Wrench, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'

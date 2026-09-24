@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -45,43 +45,13 @@ import {
   AlertCircle,
   XCircle,
   Eye,
-  Download,
-  Filter,
-  Search,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  Star,
-  FileText,
-  Phone,
-  Smartphone,
+  Download, Search,
+  TrendingUp, Activity, Smartphone,
   Laptop,
   Monitor,
   Tablet,
-  Watch,
-  Headphones,
-  Camera,
-  Gamepad2,
-  Printer,
-  Router,
-  HardDrive,
-  MoreHorizontal,
-  Edit,
-  Trash2,
-  Copy,
-  ExternalLink,
-  Plus,
-  RefreshCw,
-  MapPin,
-  User,
-  Building,
-  CreditCard,
-  Receipt,
-  History,
-  BarChart3,
-  PieChart,
-  LineChart,
-  ChevronDown,
+  Watch, Plus,
+  RefreshCw, CreditCard, History, ChevronDown,
   ChevronUp,
   ArrowUpDown
 } from 'lucide-react'
@@ -89,10 +59,6 @@ import { GSIcon } from '@/components/ui/standardized-components'
 import { Customer } from '@/hooks/use-customer-state'
 import { useAuth } from '@/contexts/auth-context'
 import { useDebounce } from '@/hooks/use-debounce'
-import { config } from '@/lib/config'
-import { generateReceiptNumber } from '@/lib/receipt-utils'
-import { printRepairReceipt } from '@/lib/repair-receipt'
-import { generatePersistentRepairTicketNumber, previewPersistentRepairTicketNumber } from '@/lib/repair-receipt'
 import { formatCurrency } from '@/lib/currency'
 import { useCustomerPurchases } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'

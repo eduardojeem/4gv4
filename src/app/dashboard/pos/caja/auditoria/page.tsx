@@ -10,14 +10,12 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
+  DialogFooter, DialogTitle
 } from '@/components/ui/dialog'
 import {
   Activity,
@@ -49,9 +47,7 @@ import {
   Banknote,
   Copy,
   Check,
-  CreditCard,
-  Receipt,
-  X
+  CreditCard, X
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { CashRegisterState } from '../../types'

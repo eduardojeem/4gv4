@@ -2,29 +2,18 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   ArrowRight,
-  Briefcase,
-  CheckCircle,
-  MessageCircle,
+  Briefcase, MessageCircle,
   Package,
-  Search,
-  ShieldCheck,
-  ShoppingBag,
-  Sparkles,
-  Star,
-  Store,
-  Truck,
-  Wrench,
-  CreditCard,
-  Clock,
+  Search, ShoppingBag,
+  Sparkles, Truck,
+  Wrench, Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { isPublicRepairsAvailable } from '@/lib/website/services'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'

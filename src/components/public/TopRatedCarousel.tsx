@@ -2,9 +2,8 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import Image from 'next/image'
 import Link from 'next/link'
-import { Building2, Star } from 'lucide-react'
+import { Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { organizationAccentColor } from '@/lib/public/organization-brand'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'

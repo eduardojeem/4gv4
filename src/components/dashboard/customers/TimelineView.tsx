@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
@@ -13,16 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Calendar,
   Clock,
-  User,
-  Phone,
-  Mail,
-  Star,
-  ChevronDown,
-  ChevronUp,
-  ShoppingCart,
-  Wrench,
-  Filter,
-  Search,
+  User, ShoppingCart,
+  Wrench, Search,
   RefreshCw,
   AlertCircle
 } from 'lucide-react'

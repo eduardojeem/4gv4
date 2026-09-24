@@ -27,7 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { supplierSchema, type SupplierFormData } from '@/lib/validations/supplier'
+import { supplierSchema } from '@/lib/validations/supplier'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 
 interface SupplierModalProps {

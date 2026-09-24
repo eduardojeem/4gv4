@@ -2,31 +2,18 @@
 
 import { useState, type ComponentType, type ReactNode } from 'react'
 import {
-  AlertTriangle,
-  ArrowUpRight,
-  Building2,
+  AlertTriangle, Building2,
   CalendarClock,
   CheckCircle2,
   Clock,
   Copy,
   CreditCard,
-  ExternalLink,
-  Gauge,
-  Globe,
-  Hash,
-  Landmark,
-  Layers3,
+  ExternalLink, Globe,
+  Hash, Layers3,
   Mail,
-  Plus,
-  RotateCcw,
-  Shield,
-  ShieldCheck,
-  Sparkles,
-  Store,
+  Plus, ShieldCheck, Store,
   UserRound,
-  Wrench,
-  X,
-  Zap,
+  Wrench, Zap
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -37,13 +24,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFooter, DialogTitle
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
@@ -54,9 +38,7 @@ import {
   formatDate,
   formatMoney,
   getRecommendation,
-  normalizeLimitValue,
-  periodLabel,
-  periodProgress,
+  normalizeLimitValue, periodProgress
 } from './utils'
 import { cn } from '@/lib/utils'
 

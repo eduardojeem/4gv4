@@ -10,26 +10,14 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
-  Monitor,
-  Store,
-  Calculator,
-  ShieldCheck,
-  CheckCircle2,
-  HelpCircle,
-  Clock,
-  CreditCard,
-  History,
-  ShieldAlert,
-  Printer,
-  Search,
-  Wallet,
+  Monitor, Calculator,
+  ShieldCheck, Clock,
+  CreditCard, ShieldAlert,
+  Printer, Wallet,
   AlertTriangle,
   Lock,
-  PauseCircle,
-  PlayCircle,
-  RotateCcw,
+  PauseCircle, RotateCcw,
   XCircle,
   Sparkles,
   ArrowRight,

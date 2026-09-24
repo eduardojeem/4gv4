@@ -1,7 +1,6 @@
 'use client'
 
-import React from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import { ShieldAlert, ArrowLeft, Home } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'

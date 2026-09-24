@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
-import { 
+import {
   FileText, Download, Printer, Calendar, User,
   DollarSign, AlertTriangle,
   Banknote, CreditCard, Smartphone, RefreshCcw,
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { ZClosureRecord, useCashRegisterContext } from '../contexts/CashRegisterContext'
-import { formatRegisterName, formatUserLabel, formatEventConcept } from '@/app/dashboard/pos/lib/formatters'
+import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
 import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
 import { downloadPdfReport } from '@/app/dashboard/pos/lib/exportPdf'
 

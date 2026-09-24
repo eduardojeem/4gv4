@@ -1,4 +1,4 @@
-import { MapPin, Phone, Clock, MessageCircle, ExternalLink, Navigation } from 'lucide-react'
+import { MapPin, Phone, MessageCircle, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 

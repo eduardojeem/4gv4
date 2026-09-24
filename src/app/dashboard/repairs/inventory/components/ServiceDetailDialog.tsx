@@ -10,9 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Wrench,
-  DollarSign,
-  EyeOff,
+  Wrench, EyeOff,
   Globe,
   Lock,
   ShieldCheck,
@@ -21,15 +19,10 @@ import {
   Pencil,
   Sparkles,
   Info,
-  Calculator,
-  Plus,
-  Equal,
-  Users,
-  User,
-  Zap,
+  Calculator, User
 } from 'lucide-react'
 import type { Product } from '@/types/product-unified'
-import { formatPrice, cn } from '@/lib/utils'
+import { formatPrice } from '@/lib/utils'
 
 interface ServiceDetailDialogProps {
   service: Product | null

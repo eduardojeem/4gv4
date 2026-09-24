@@ -8,14 +8,12 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   History, Search, Download, Eye, Calendar,
-  TrendingUp, TrendingDown, AlertTriangle, BarChart3,
-  ArrowLeft, Receipt, CreditCard, Wallet, Banknote, User
+  TrendingUp, AlertTriangle, ArrowLeft, Receipt, CreditCard, Wallet, Banknote, User
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext, ZClosureRecord } from '../contexts/CashRegisterContext'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
+import { formatRegisterName } from '@/app/dashboard/pos/lib/formatters'
 
 interface ZClosureHistoryModalProps {
   isOpen: boolean

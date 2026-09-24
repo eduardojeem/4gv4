@@ -1,22 +1,19 @@
 'use client'
 
-import React from 'react'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFooter, DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Package, 
-  Wrench, 
-  History, 
-  ShieldCheck, 
-  CheckCircle2, 
+import {
+  Package,
+  Wrench,
+  History,
+  ShieldCheck,
+  CheckCircle2,
   Layers
 } from 'lucide-react'
 

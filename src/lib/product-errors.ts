@@ -3,7 +3,7 @@
  * Extiende el sistema base de error-handling.ts
  */
 
-import { NotificationError, ErrorType, createError } from './error-handling';
+import { NotificationError, ErrorType } from './error-handling';
 import { useCallback } from 'react';
 
 // Códigos de error específicos para productos

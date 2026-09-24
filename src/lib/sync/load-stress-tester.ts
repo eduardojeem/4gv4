@@ -1,8 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
-import { syncPerformanceMonitor } from './sync-performance-monitor'
 import { communicationOptimizer } from './communication-optimizer'
-import { failureRecoverySystem } from './failure-recovery-system'
-import { dataIntegrityValidator } from './data-integrity-validator'
 
 export interface LoadTestConfig {
   name: string

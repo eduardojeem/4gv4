@@ -1,11 +1,8 @@
 import { Customer } from '@/hooks/use-customer-state'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  createCustomerSchema, 
-  updateCustomerSchema,
-  validateCustomerData,
-  getValidationErrors,
-  preprocessCustomerData
+import {
+  createCustomerSchema,
+  updateCustomerSchema, preprocessCustomerData
 } from '@/lib/validations/customer'
 
 export interface CreateCustomerRequest {

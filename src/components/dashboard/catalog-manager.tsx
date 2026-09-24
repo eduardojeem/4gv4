@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { Plus, Package, Building2, Users, Search, Filter, MoreVertical, Edit, Trash2, Eye, ToggleLeft, ToggleRight } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Plus, Package, Building2, Users, Search, MoreVertical, Edit, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,14 +26,12 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
-import { 
-  Category, 
-  Brand, 
-  CatalogItemType, 
-  ModalMode, 
-  CatalogFilters,
-  DEFAULT_CATEGORIES,
-  DEFAULT_BRANDS
+import {
+  Category,
+  Brand,
+  CatalogItemType,
+  ModalMode,
+  CatalogFilters, DEFAULT_BRANDS
 } from '@/lib/types/catalog'
 import { CategoryModal } from './category-modal'
 import { BrandModal } from './brands/BrandModal'

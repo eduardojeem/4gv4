@@ -5,19 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import {
-    TrendingUp,
-    TrendingDown,
-    Clock,
-    Star,
-    Award,
-    Target,
-    Calendar,
-    DollarSign
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  Star,
+  Award,
+  Target,
+  Calendar,
+  DollarSign
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Repair } from '@/types/repairs'
-import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { subMonths, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns'
 
 interface TechnicianPerformanceMetricsProps {
     repairs: Repair[]

@@ -29,34 +29,19 @@ import {
   TrendingDown,
   Minus,
   InboxIcon,
-  FileText,
-  Layers,
-  Layers3,
+  FileText, Layers3,
   Activity,
   Info,
   Building2,
   Barcode,
-  Star,
-  Globe,
-  EyeOff,
+  Star, EyeOff,
   CheckCircle2,
-  Boxes,
-  ShieldCheck,
-  ShieldAlert,
+  Boxes, ShieldAlert,
   Loader2,
-  ZoomIn,
-  Maximize2,
-  ChevronLeft,
-  ChevronRight,
+  ZoomIn, ChevronRight,
   Percent,
-  Search,
-  Filter,
-  SlidersHorizontal,
-  LayoutGrid,
-  List,
-  Sparkles,
-  RefreshCw,
-  X,
+  Search, LayoutGrid,
+  List, X
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -65,7 +50,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'

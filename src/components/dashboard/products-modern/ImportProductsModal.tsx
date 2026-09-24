@@ -4,17 +4,7 @@ import React, { useCallback, useRef, useState } from 'react'
 import {
   Upload,
   FileSpreadsheet,
-  AlertTriangle,
-  CheckCircle2,
-  Download,
-  X,
-  Loader2,
-  FileText,
-  AlertCircle,
-  HelpCircle,
-  ArrowRight,
-  Sparkles,
-  RefreshCw,
+  AlertTriangle, Download, Loader2, AlertCircle, RefreshCw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,7 +19,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import {
   parseImportFile,

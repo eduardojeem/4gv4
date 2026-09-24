@@ -1,18 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  Database, 
-  Shield, 
-  Users, 
-  CheckCircle, 
-  AlertTriangle, 
-  Copy, 
+import {
+  Database,
+  Shield,
+  Users,
+  CheckCircle,
+  AlertTriangle,
+  Copy,
   ExternalLink,
   Settings,
   Key,

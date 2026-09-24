@@ -5,19 +5,14 @@ import Link from 'next/link'
 import {
   ArrowLeft,
   ArrowRight,
-  CalendarDays,
-  CheckCircle2,
-  ExternalLink,
-  Eye,
-  ImageIcon,
-  Info,
+  CalendarDays, Eye, Info,
   Link2,
   Loader2,
   Megaphone,
   Maximize2,
   RotateCcw,
   Save,
-  Sparkles,
+  Sparkles
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'

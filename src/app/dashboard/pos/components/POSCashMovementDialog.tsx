@@ -15,16 +15,11 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
   ArrowUpCircle,
-  ArrowDownCircle,
-  DollarSign,
-  Loader2,
+  ArrowDownCircle, Loader2,
   TrendingUp,
   TrendingDown,
   Tag,
-  FileText,
-  AlertCircle,
-  CheckCircle2,
-  Sparkles
+  FileText, Sparkles
 } from 'lucide-react'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { toast } from 'sonner'

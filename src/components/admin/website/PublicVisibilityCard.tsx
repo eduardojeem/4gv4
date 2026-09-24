@@ -1,6 +1,6 @@
 'use client'
 
-import { Eye, EyeOff, Sparkles, Globe } from 'lucide-react'
+import { Eye, EyeOff, Globe } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'

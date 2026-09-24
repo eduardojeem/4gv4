@@ -1,15 +1,15 @@
 "use client"
 
 import { memo, useMemo } from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import { useVirtualScroll } from '@/hooks/use-virtual-scroll'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { 
-  Eye, 
-  Edit, 
+import {
+  Eye,
+  Edit,
   Package,
   AlertTriangle,
   TrendingDown,

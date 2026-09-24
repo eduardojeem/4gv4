@@ -5,7 +5,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  AlertCircle,
   ArrowRight,
   Boxes,
   Briefcase,
@@ -16,9 +15,7 @@ import {
   Circle,
   Clock,
   Coins,
-  Cpu,
-  CreditCard,
-  ExternalLink,
+  Cpu, ExternalLink,
   Globe,
   Hammer,
   Layers,
@@ -26,22 +23,15 @@ import {
   Mail,
   MapPin,
   MessageCircle,
-  Package,
-  Percent,
-  Phone,
+  Package, Phone,
   RotateCcw,
   ShieldAlert,
   Shirt,
   ShoppingBag,
   Sparkles,
-  Store,
-  Tag,
-  TrendingUp,
-  Truck,
-  Users,
+  Store, Users,
   Utensils,
-  Wrench,
-  Zap,
+  Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'

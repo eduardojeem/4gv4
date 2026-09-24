@@ -2,12 +2,10 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import { useState } from 'react'
 import { X, Edit, ShoppingCart, Package, Star, TrendingUp, Calendar, Barcode, Building2, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/currency'

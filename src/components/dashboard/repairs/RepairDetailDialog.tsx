@@ -40,7 +40,7 @@ import {
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
   PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
   Loader2, Sparkles, History, FileCheck2, User, TrendingUp, ShieldCheck, UserCheck, ArrowRight,
-  UploadCloud, Trash2, Plus, Pencil, AlertTriangle
+  UploadCloud, Trash2, Pencil, AlertTriangle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -81,7 +81,7 @@ import { calculateRepairCost } from '@/lib/repairs/cost-breakdown'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
 import { UpgradeHint } from '@/components/admin/PlanGate'
-import { CustomerQuickCreateDialog, type QuickCustomerData } from './CustomerQuickCreateDialog'
+import { CustomerQuickCreateDialog } from './CustomerQuickCreateDialog'
 import { CustomerDetailModal } from './CustomerDetailModal'
 import { ReceptionSiblings } from './ReceptionSiblings'
 import { RepairPaymentIndicator } from './RepairPaymentIndicator'

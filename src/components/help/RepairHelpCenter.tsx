@@ -2,35 +2,23 @@
 
 import { useMemo, useState } from 'react'
 import {
-  BookOpen,
-  ChevronRight,
-  Download,
+  BookOpen, Download,
   Play,
   Search,
   Sparkles,
   CheckCircle2,
   Clock,
   ArrowRight,
-  Wrench,
-  Package,
-  Banknote,
-  ShieldCheck,
-  Printer,
+  Wrench, Banknote, Printer,
   MessageSquare,
   LayoutGrid,
-  Filter,
-  KeyRound,
-  Smartphone,
-  AlertTriangle,
-  Layers,
+  Filter, Layers,
   HelpCircle,
   Lightbulb,
   FileCheck2,
   Video,
-  PlayCircle,
-  ExternalLink,
-  Film,
-  Tv,
+  PlayCircle, Film,
+  Tv
 } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'

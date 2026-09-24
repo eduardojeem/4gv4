@@ -1,29 +1,28 @@
 'use client'
 
-import React, { useState, memo } from 'react'
+import React, { useState } from 'react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { RepairCard } from './RepairCard'
 import {
-    DndContext,
-    DragOverlay,
-    useSensors,
-    useSensor,
-    PointerSensor,
-    KeyboardSensor,
-    DragStartEvent,
-    DragEndEvent,
-    DropAnimation,
-    defaultDropAnimationSideEffects,
-} from '@dnd-kit/core';
+  DndContext,
+  DragOverlay,
+  useSensors,
+  useSensor,
+  PointerSensor,
+  KeyboardSensor,
+  DragStartEvent,
+  DragEndEvent,
+  DropAnimation,
+  defaultDropAnimationSideEffects,
+} from '@dnd-kit/core'
 import {
-    SortableContext,
-    useSortable,
-    sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { EmptyState } from '@/components/shared/EmptyState'
+  SortableContext,
+  useSortable,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Package } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 

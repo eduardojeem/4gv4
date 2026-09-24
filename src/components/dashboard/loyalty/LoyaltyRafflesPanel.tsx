@@ -6,12 +6,10 @@ import {
   Loader2,
   Coins,
   Zap,
-  Trophy,
-  Ticket,
-  ClipboardList,
+  Trophy, ClipboardList,
   ArrowRight,
   Sparkles,
-  ShoppingBag,
+  ShoppingBag
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

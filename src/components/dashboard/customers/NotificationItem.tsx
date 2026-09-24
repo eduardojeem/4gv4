@@ -22,16 +22,7 @@ import {
   Eye,
   EyeOff,
   Archive,
-  Trash2,
-  Share2,
-  Copy,
-  ExternalLink,
-  AlertCircle,
-  CheckCircle,
-  Users,
-  MapPin,
-  Calendar,
-  Zap
+  Trash2, Copy, AlertCircle, Users, Zap
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'

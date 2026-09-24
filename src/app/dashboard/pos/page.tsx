@@ -1,38 +1,30 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useEffect, memo, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, FileText,
-  Users, Package, Star, Filter, Grid, List,
-  Keyboard, Maximize, Minimize, BarChart3,
-  Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
+  Search, Plus, ShoppingCart, CreditCard, FileText, Package, Star, Filter, Grid, List,
+  Keyboard, Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
   Printer, Download, Share2, Settings, AlertTriangle,
-  Loader2, CheckCircle2, XCircle, Tag, Sparkles, Award, ArrowRight, Wrench,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info,
-  UserPlus, DollarSign, RotateCcw, SlidersHorizontal, BookOpen
+  Loader2, XCircle, Tag, Sparkles, Wrench, MoreHorizontal, UserPlus, DollarSign, RotateCcw, SlidersHorizontal, BookOpen
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
+  SheetContent, SheetHeader,
   SheetTitle,
-  SheetTrigger,
+  SheetTrigger
 } from "@/components/ui/sheet"
 import {
   DropdownMenu,
@@ -45,36 +37,24 @@ import {
 import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
-import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
+import { printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
 // Limpieza: se retiran componentes de debug/diagnóstico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
-import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { config, isDemoNoDb, getFeatureFlag } from '@/lib/config'
+import { config, getFeatureFlag } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { SupabaseStatus } from '@/components/supabase-status'
 import { formatCurrency as formatCurrencyBase } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { 
-  calculateRepairTotal, 
-  createRepairCartItem, 
-  calculateMixedCartTotal,
-  CartRepairItem 
-} from '@/lib/pos-calculator'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { POSBarcodeScanner } from '@/components/barcode/BarcodeScanner'
 import { VariantSelector } from '@/components/pos/VariantSelector'
 import { useProductVariants } from '@/hooks/useProductVariants'
-import { useSmartSearch } from './hooks/useSmartSearch'
 import { usePromotionEngine } from '@/hooks/use-promotion-engine'
 import { usePromotions } from '@/hooks/use-promotions'
 import { ProductWithVariants, ProductVariant } from '@/types/product-variants'
 import { usePerformanceMonitor, useRenderTimeMonitor } from './hooks/usePerformanceMonitor'
-import { recordMetric } from './utils/performance-monitor'
 import { useErrorHandler } from './hooks/useErrorHandler'
-import { ErrorMonitor } from './components/ErrorMonitor'
-import { PerformanceDashboard } from './components/PerformanceDashboard'
 import { ProductCard } from './components/ProductCard'
 import { POSHeader } from './components/POSHeader'
 import { POSCart } from './components/POSCart'
@@ -86,7 +66,7 @@ import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { useBranch } from '@/contexts/branch-context'
 import { useAuth } from '@/contexts/auth-context'
-import { CartItem, PaymentMethodOption } from './types'
+import { CartItem } from './types'
 import type { Product } from '@/types/product-unified'
 import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError, getQuickItemMargin } from './lib/quick-item'
@@ -98,13 +78,9 @@ import { POSRepairChargeModal } from './components/POSRepairChargeModal'
 import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
 import { POSProductDetailDialog } from './components/POSProductDetailDialog'
 import { POSCashMovementDialog } from './components/POSCashMovementDialog'
-import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
-import { getMixedPaymentValidation } from './lib/payment-validation'
-import { getRepairBalanceDue, type ChargeableRepair } from './lib/repair-charge'
-import { hasProductCredit } from './lib/product-credit'
+import { getRepairBalanceDue } from './lib/repair-charge'
 import {
-  applyProductCreditFilter,
-  type ProductCreditSort,
+  type ProductCreditSort
 } from './lib/product-credit-filter'
 // Hooks extraídos por la refactorización de page.tsx
 import { usePOSRepairs, type PosCartRepair } from './hooks/usePOSRepairs'

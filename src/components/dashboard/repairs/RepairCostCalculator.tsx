@@ -12,7 +12,7 @@
  * - Vista previa en tiempo real
  */
 
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { Calculator, DollarSign, Wrench, Package, Receipt, AlertTriangle, Percent, Sparkles, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -23,7 +23,6 @@ import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { calculateRepairTotal, type RepairCalculationInput } from '@/lib/pos-calculator'
 import { calculateRepairPricing, type RepairPricingMode } from '@/lib/repairs/pricing'
-import { getCurrencyFractionDigits } from '@/lib/currency'
 import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
 import { commissionableAmount } from '@/lib/technician/earnings'
 

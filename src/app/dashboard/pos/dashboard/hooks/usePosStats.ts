@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { DateRange } from 'react-day-picker'
 import { calculateProfit, calculateSalesCost, type ProfitResult } from '../lib/pos-profit'
 import { useBranch } from '@/contexts/branch-context'

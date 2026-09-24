@@ -9,15 +9,9 @@ import {
   Loader2,
   Package,
   Tags,
-  Wrench,
-  Sparkles,
-  TrendingUp,
-  HelpCircle,
-  ShieldCheck,
-  Wallet,
-  Scale,
-  Maximize2,
-  Minimize2,
+  Wrench, TrendingUp,
+  HelpCircle, Maximize2,
+  Minimize2
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'

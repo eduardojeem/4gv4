@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Edit, Trash2, Star, Mail, Phone, MapPin, Building2, ChevronRight, Eye, ShoppingCart, MessageCircle } from 'lucide-react'
+import { Edit, Trash2, Star, Mail, Phone, MapPin, Building2, ChevronRight, Eye, ShoppingCart } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'

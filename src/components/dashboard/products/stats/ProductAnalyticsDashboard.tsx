@@ -1,18 +1,14 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { motion  } from '../../../ui/motion'
+import { useState } from 'react'
+import { motion } from '../../../ui/motion'
 import {
   TrendingUp,
   TrendingDown,
   Package,
   AlertTriangle,
   BarChart3,
-  PieChart,
-  Users,
-  Calendar,
-  Filter,
-  Download,
+  PieChart, Download,
   RefreshCw,
   Eye,
   EyeOff
@@ -31,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useProductAnalytics } from '@/hooks/products'
+import { GSIcon } from '@/components/ui/standardized-components'
 
 interface ProductAnalyticsDashboardProps {
   className?: string
@@ -462,4 +459,3 @@ export const ProductAnalyticsDashboard = ({
 }
 
 export default ProductAnalyticsDashboard
-import { GSIcon } from '@/components/ui/standardized-components'

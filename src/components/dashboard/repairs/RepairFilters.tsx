@@ -3,16 +3,16 @@
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Search, X, Users, Calendar as CalendarIcon, SlidersHorizontal, Shield, ShieldCheck, ShieldAlert, Sparkles, Wrench } from 'lucide-react'
+import { Search, X, Users, Calendar as CalendarIcon, SlidersHorizontal, Shield, ShieldCheck, ShieldAlert, Wrench } from 'lucide-react'
 import { RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { DateRange } from 'react-day-picker'
 import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'

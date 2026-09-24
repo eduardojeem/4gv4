@@ -8,12 +8,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { WorkStatusBadge } from '../WorkStatusBadge'
-import { 
-  ArrowLeft, 
-  Edit, 
-  UserPlus, 
-  Star, 
-  Clock, 
+import {
+  ArrowLeft,
+  Edit,
+  UserPlus,
+  Star,
+  Clock,
   Wrench,
   DollarSign,
   Target,

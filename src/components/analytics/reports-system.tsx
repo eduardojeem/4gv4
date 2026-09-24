@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,31 +9,16 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
-  Clock, 
-  Filter, 
-  Share2, 
-  Mail, 
-  Printer,
-  BarChart3,
-  PieChart,
-  TrendingUp,
-  Users,
-  ShoppingCart,
-  Eye,
-  Settings,
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  FileText,
+  Download, Clock, Share2,
+  Mail, TrendingUp, Settings,
   Play,
   Pause,
   RefreshCw,
-  CheckCircle,
-  AlertCircle,
-  XCircle
+  CheckCircle
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 
 // Interfaces para el sistema de reportes
 interface Report {

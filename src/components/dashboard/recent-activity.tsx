@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Activity, ShoppingCart, Wrench, Users, Package, AlertTriangle, CheckCircle, Clock, RefreshCw } from 'lucide-react'
+import { Activity, ShoppingCart, Wrench, Users, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 

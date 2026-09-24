@@ -10,11 +10,9 @@ import {
   PackageSearch,
   Search,
   Truck,
-  User,
-  CheckCircle,
-  Building,
+  User, Building,
   CreditCard,
-  Check,
+  Check
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

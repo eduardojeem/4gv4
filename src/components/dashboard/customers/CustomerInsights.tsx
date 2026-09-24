@@ -1,6 +1,5 @@
 "use client"
 
-import React from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,16 +8,13 @@ import {
   TrendingUp,
   TrendingDown,
   ShoppingBag,
-  Star,
-  Calendar,
-  Target,
+  Star, Target,
   Activity,
   Heart,
   Award,
   Clock,
   BarChart3,
-  PieChart,
-  LineChart
+  PieChart
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'

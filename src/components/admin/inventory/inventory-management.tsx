@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,6 @@ import {
   SelectLabel,
   SelectSeparator,
 } from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import AdvancedSearch from '@/components/admin/advanced-search'
@@ -41,9 +40,7 @@ import {
   Tag,
   Search,
   XCircle,
-  AlertTriangle,
-  RefreshCw,
-  Trash2,
+  AlertTriangle, Trash2,
   Edit,
   Loader2,
   ChevronLeft,

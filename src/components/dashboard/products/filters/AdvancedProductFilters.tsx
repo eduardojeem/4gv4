@@ -1,19 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence  } from '../../../ui/motion'
 import {
   Filter,
-  Search,
-  X,
-  ChevronDown,
+  Search, ChevronDown,
   Calendar,
   Package,
   Tag,
   TrendingUp,
   AlertTriangle,
-  RefreshCw,
-  Settings
+  RefreshCw
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,11 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import {
   Collapsible,
   CollapsibleContent,

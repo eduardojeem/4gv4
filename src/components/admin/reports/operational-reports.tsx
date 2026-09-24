@@ -1,13 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { BarChart } from 'recharts/es6/chart/BarChart'
 import { Bar } from 'recharts/es6/cartesian/Bar'
 import { AreaChart } from 'recharts/es6/chart/AreaChart'
@@ -25,17 +23,10 @@ import { Cell } from 'recharts/es6/component/Cell'
 import { ChartExporter } from '@/components/reports/ChartExporter'
 import { useSubscriptionStatus, canExportReports } from '@/contexts/SubscriptionStatusContext'
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
+  TrendingUp, DollarSign,
   ShoppingCart,
   Users,
-  Package,
-  Calendar as CalendarIcon,
-  Download,
-  Filter,
-  Loader2,
-  AlertCircle,
+  Package, Download, AlertCircle,
   BarChart3,
   Wrench,
   Clock,
@@ -44,17 +35,13 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-  PieChart as PieChartIcon,
-  Award,
-  CreditCard,
+  PieChart as PieChartIcon, CreditCard,
   FileText
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { DatePickerWithRange } from '@/components/ui/date-range-picker'
-import { Input } from '@/components/ui/input'
 import { chartColors } from '@/utils/chart-utils'
 import { logger } from '@/lib/logger'
 import { isCompletedSaleStatus } from '@/lib/sales-status'

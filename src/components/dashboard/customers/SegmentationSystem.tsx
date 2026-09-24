@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -11,46 +11,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Separator } from '@/components/ui/separator'
-import { 
-  Users, 
-  Target, 
-  Sparkles, 
-  TrendingUp, 
-  Star, 
-  Clock, 
-  ShoppingBag,
-  MapPin,
-  Calendar,
-  DollarSign,
-  Zap,
-  Brain,
-  Filter,
-  Plus,
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import {
+  Users,
+  Target, Star, Zap,
+  Brain, Plus,
   Edit,
   Trash2,
   Play,
-  Pause,
-  BarChart3,
-  PieChart,
-  Activity,
-  Lightbulb,
-  Wand2,
-  Eye,
-  Settings,
-  Download,
-  RefreshCw,
-  Copy,
+  Pause, Activity, Wand2, Copy,
   Crown,
   Heart,
   UserPlus,
   UserX
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
-import { useSegmentationUnified, Segment, SegmentRule } from '@/hooks/use-segmentation-unified'
+import { useSegmentationUnified, Segment } from '@/hooks/use-segmentation-unified'
 import { formatters, SEGMENT_COLORS } from '@/lib/formatters'
 import { ChartWrapper } from '@/components/charts/ChartWrapper'
 import { StatusBadge } from '@/components/ui/StatusBadge'

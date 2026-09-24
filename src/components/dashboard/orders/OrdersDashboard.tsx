@@ -5,14 +5,13 @@ import Image from 'next/image'
 import {
   AlertTriangle, ArrowLeft, Calendar, Check, CheckCircle2,
   ChevronLeft, ChevronRight, Clock, Coins, Copy, CreditCard, Download,
-  ExternalLink, FileText, Globe, Layers, Loader2, Mail, MapPin,
+  ExternalLink, Globe, Layers, Loader2, Mail, MapPin,
   MessageSquare, Package, PackageSearch, Phone, Plus,
   Printer, RefreshCw, Search, ShoppingBag, Store,
-  Tag, Truck, User, X, Info
+  Tag, Truck, User, X
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'

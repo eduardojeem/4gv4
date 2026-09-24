@@ -3,21 +3,20 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import {
-    Building2, Mail, Phone, MapPin, Globe, Star,
-    Package, DollarSign, Edit, Plus, ExternalLink,
-    MessageCircle, Calendar, ShieldCheck, Tag, Info,
-    CheckCircle2, XCircle, Clock, AlertTriangle
+  Building2, Mail, Phone, MapPin, Globe, Star,
+  Package, DollarSign, Edit, Plus, ExternalLink,
+  MessageCircle, Tag, CheckCircle2, XCircle, Clock, AlertTriangle
 } from 'lucide-react'
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { formatCurrency } from '@/lib/currency'

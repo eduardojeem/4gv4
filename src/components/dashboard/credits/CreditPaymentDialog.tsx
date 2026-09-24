@@ -1,16 +1,16 @@
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState } from 'react'
-import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
+import { CreditCard, User, DollarSign, FileText, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
 import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf, projectPaidInstallments } from '@/lib/credits/payment-receipt'

@@ -12,9 +12,7 @@ import {
   Clock,
   Copy,
   Download,
-  Edit3,
-  Filter,
-  Gift,
+  Edit3, Gift,
   History,
   Info,
   LayoutGrid,
@@ -27,16 +25,14 @@ import {
   Search,
   Sparkles,
   TicketPercent,
-  Trash2,
-  TrendingUp,
-  Users,
+  Trash2, Users,
   Wand2,
-  X,
+  X
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,

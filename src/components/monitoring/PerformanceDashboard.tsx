@@ -9,14 +9,12 @@ import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  Activity, 
-  Cpu, 
-  HardDrive, 
-  MemoryStick, 
-  Network, 
-  Database, 
-  Users, 
+import {
+  Activity,
+  Cpu,
+  HardDrive,
+  MemoryStick, Database,
+  Users,
   Clock,
   AlertTriangle,
   CheckCircle,
@@ -34,16 +32,13 @@ import { AreaChart } from 'recharts/es6/chart/AreaChart'
 import { Area } from 'recharts/es6/cartesian/Area'
 import { BarChart } from 'recharts/es6/chart/BarChart'
 import { Bar } from 'recharts/es6/cartesian/Bar'
-import { PieChart } from 'recharts/es6/chart/PieChart'
-import { Pie } from 'recharts/es6/polar/Pie'
-import { Cell } from 'recharts/es6/component/Cell'
 import { XAxis } from 'recharts/es6/cartesian/XAxis'
 import { YAxis } from 'recharts/es6/cartesian/YAxis'
 import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
 import { Tooltip } from 'recharts/es6/component/Tooltip'
 import { Legend } from 'recharts/es6/component/Legend'
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
-import { usePerformanceMonitor, SystemMetrics, PerformanceAlert, HealthCheck } from '@/lib/monitoring/performance-monitor'
+import { usePerformanceMonitor, PerformanceAlert, HealthCheck } from '@/lib/monitoring/performance-monitor'
 
 interface MetricCardProps {
   title: string

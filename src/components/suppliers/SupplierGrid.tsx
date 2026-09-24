@@ -1,22 +1,20 @@
 'use client'
 
-import React from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from '../ui/motion'
 import {
-    Building2, Mail, Phone, MapPin, Globe, Star,
-    Package, DollarSign, MoreVertical, Edit, Trash2,
-    TrendingUp, Calendar, Eye, ExternalLink, ShoppingCart
+  Building2, Mail, Phone, MapPin, Globe, Star,
+  Package, DollarSign, MoreVertical, Edit, Trash2, Calendar, Eye, ExternalLink, ShoppingCart
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { formatCurrency } from '@/lib/currency'

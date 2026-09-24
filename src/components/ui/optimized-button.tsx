@@ -1,7 +1,7 @@
 'use client'
 
 import React, { forwardRef, useState, useCallback } from 'react'
-import { Loader2, Check, AlertTriangle, Info } from 'lucide-react'
+import { Loader2, Check, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useButtonNotifications, NotificationOptions } from '@/hooks/use-optimized-notifications'

@@ -2,31 +2,17 @@
 
 import React, { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  Users, 
-  Shield, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal,
+import {
+  Users,
+  Shield,
+  Edit, Plus,
+  Search, MoreHorizontal,
   UserCheck,
   UserX,
   Crown,
   Key,
-  Eye,
-  EyeOff,
-  Calendar,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Settings,
-  Mail,
-  Phone,
-  MapPin,
-  Activity
+  Eye, CheckCircle,
+  XCircle
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -54,8 +40,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -66,8 +51,6 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'

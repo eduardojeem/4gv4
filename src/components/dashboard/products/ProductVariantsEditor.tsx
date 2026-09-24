@@ -2,18 +2,13 @@ import { useState } from 'react'
 import {
   Check,
   ChevronDown,
-  ChevronUp,
-  HelpCircle,
-  Info,
-  Layers3,
+  ChevronUp, Layers3,
   Lightbulb,
   Plus,
   Shirt,
-  Smartphone,
-  Sparkles,
-  Trash2,
+  Smartphone, Trash2,
   X,
-  Zap,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

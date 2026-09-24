@@ -3,7 +3,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { uploadFile } from '@/lib/supabase-storage'
 import { createClient } from '@/lib/supabase/client'
-import { config } from '@/lib/config'
 import { toast } from 'sonner'
 
 interface AvatarUploadOptions {

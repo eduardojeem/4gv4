@@ -1,19 +1,16 @@
 'use client'
 
-import React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { 
-  CheckCircle, 
-  XCircle, 
-  Pause, 
-  AlertTriangle, 
+import {
+  CheckCircle,
+  XCircle, AlertTriangle,
   ChevronDown,
   Power,
   PowerOff,

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  cacheManager, 
-  rateLimiter, 
-  metricsCollector, 
+import {
+  cacheManager,
+  rateLimiter,
+  metricsCollector,
   withOptimization,
   CacheConfig,
   RateLimitConfig

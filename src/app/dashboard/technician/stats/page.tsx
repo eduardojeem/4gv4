@@ -22,8 +22,7 @@ import { AreaChart } from 'recharts/es6/chart/AreaChart'
 import { Area } from 'recharts/es6/cartesian/Area'
 import {
   TrendingUp, Clock, CheckCircle2, CalendarRange,
-  Smartphone, Banknote, BarChart3, PieChart as PieChartIcon,
-  Activity
+  Smartphone, Banknote, BarChart3, Activity
 } from 'lucide-react'
 import { Repair } from '@/types/repairs'
 import { formatCurrency } from '@/lib/currency'

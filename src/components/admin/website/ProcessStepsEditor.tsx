@@ -4,10 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  Check,
-  Eye,
-  EyeOff,
-  Footprints,
+  Check, Footprints,
   Landmark,
   Loader2,
   MessagesSquare,
@@ -16,7 +13,7 @@ import {
   Save,
   ShoppingBag,
   Trash2,
-  Wrench,
+  Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'

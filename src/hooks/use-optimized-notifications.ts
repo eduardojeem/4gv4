@@ -1,29 +1,23 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { 
-  notificationCache, 
-  useCachedOperation, 
-  createCacheKey, 
-  CACHE_TTL 
+import {
+  notificationCache, createCacheKey,
+  CACHE_TTL
 } from '@/lib/notification-cache'
-import { 
-  useDebounce, 
-  useThrottle, 
-  measurePerformance, 
-  notificationQueue, 
-  notificationBatcher, 
-  PERFORMANCE_CONFIG 
+import {
+  useDebounce,
+  useThrottle,
+  measurePerformance,
+  notificationQueue,
+  notificationBatcher,
+  PERFORMANCE_CONFIG
 } from '@/lib/notification-performance'
 import {
   useErrorHandler,
   ErrorClassifier,
-  ErrorMessageGenerator,
-  globalRetryHandler,
-  NotificationError,
-  ErrorType,
-  createError
+  ErrorMessageGenerator, NotificationError
 } from '@/lib/error-handling'
 
 export type NotificationVariant = 'success' | 'error' | 'warning' | 'info' | 'loading'

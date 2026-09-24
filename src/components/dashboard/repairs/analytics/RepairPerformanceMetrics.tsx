@@ -3,17 +3,16 @@
 import { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Area } from 'recharts/es6/cartesian/Area';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
+import { Area } from 'recharts/es6/cartesian/Area'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import {
   Clock,
   TrendingUp,
@@ -27,8 +26,7 @@ import {
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useRepairs } from '@/contexts/RepairsContext'
-import { format, subDays, isWithinInterval, differenceInDays, startOfWeek, endOfWeek } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { format, subDays, isWithinInterval, differenceInDays } from 'date-fns'
 
 interface RepairPerformanceMetricsProps {
   className?: string

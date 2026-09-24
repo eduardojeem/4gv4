@@ -10,21 +10,21 @@ import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { CreditPaperPicker } from './CreditPaperPicker'
 import { isRollFormat } from '@/lib/credits/paper'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
 import { createClient } from '@/lib/supabase/client'
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -32,10 +32,10 @@ import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { getCreditDisplayInfo, resolveInstallmentStatus } from '@/lib/credits/display'
 import {
-    Calendar, DollarSign, Percent, TrendingUp,
-    Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
-    AlertCircle, CalendarClock, ChevronDown, ChevronUp, ShoppingBag, History,
-    Package2, Wallet, BadgeDollarSign, Hash, Phone, Mail, IdCard, MapPin, Building2, User
+  Calendar, DollarSign, Percent, TrendingUp,
+  Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
+  AlertCircle, CalendarClock, ChevronDown, ChevronUp, ShoppingBag, History,
+  Package2, Wallet, BadgeDollarSign, Hash, Phone, Mail, IdCard, MapPin
 } from 'lucide-react'
 import { customerTypeLabel } from '@/lib/i18n/labels'
 

@@ -7,22 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Upload, 
-  X, 
-  Image as ImageIcon, 
-  Camera, 
-  FileImage, 
-  Eye,
-  Download,
+import {
+  Upload,
+  X,
+  Image as ImageIcon,
+  Camera,
+  FileImage, Download,
   RotateCw,
   Crop
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { Slider } from '@/components/ui/slider'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface ImageFile {
   id: string

@@ -18,16 +18,9 @@ import {
   MinusCircle,
   CreditCard,
   Wallet,
-  Banknote,
-  CheckCircle2,
-  Clock,
+  Banknote, Clock,
   Sparkles,
-  Search,
-  Filter,
-  ArrowUpRight,
-  ArrowDownRight,
-  TrendingUp,
-  ShieldCheck,
+  Search, ShieldCheck,
   Smartphone,
   HelpCircle
 } from 'lucide-react'

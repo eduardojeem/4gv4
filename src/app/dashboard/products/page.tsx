@@ -5,13 +5,13 @@
 
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Plus, RefreshCw, Warehouse, X, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useProductsSupabase } from "@/hooks/useProductsSupabase";
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
@@ -65,7 +65,7 @@ import type { QuickFilterCounts } from "@/components/dashboard/products-modern/Q
 import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
 import { useBranch } from "@/contexts/branch-context";
-import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext';
 import {
   PRODUCT_VIEW_PREFERENCES_KEY,
   loadProductViewPreferences,

@@ -1,17 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Calendar, 
-  Eye, 
-  Heart, 
+import {
+  Calendar,
+  Eye,
+  Heart,
   MessageCircle,
-  ExternalLink,
-  Filter,
-  Grid3x3,
+  ExternalLink, Grid3x3,
   List
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'

@@ -7,9 +7,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   BookOpenCheck,
-  Building2,
-  CheckCircle2,
-  Coins,
+  Building2, Coins,
   Download,
   Eye,
   FileDown,
@@ -23,7 +21,7 @@ import {
   ShoppingBag,
   TrendingUp,
   User,
-  Wrench,
+  Wrench
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'

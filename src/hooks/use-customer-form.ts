@@ -9,11 +9,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { 
-  validateFormStep, 
-  calculateFormProgress, 
+import {
+  validateFormStep,
+  calculateFormProgress,
   shouldAutoSave,
-  transformFormDataToCustomer 
+  transformFormDataToCustomer
 } from '@/lib/customer-form-utils'
 import { Customer } from '@/hooks/use-customer-state'
 

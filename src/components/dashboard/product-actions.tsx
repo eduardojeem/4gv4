@@ -1,44 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Package, 
-  Upload, 
-  Download, 
-  Copy, 
-  Star,
-  Eye,
-  MoreHorizontal,
-  AlertTriangle,
-  Check,
-  X,
-  Settings,
-  Filter,
-  RefreshCw,
-  FileText,
-  BarChart3
+import {
+  Plus,
+  Edit,
+  Trash2, Upload,
+  Download,
+  Copy,
+  Star, MoreHorizontal,
+  AlertTriangle, X, RefreshCw, BarChart3
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +35,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { OptimizedButton, ConfirmationButton } from '@/components/ui/optimized-button'
 import { useOptimizedNotifications } from '@/hooks/use-optimized-notifications'
-import { useContextualNotifications, NotificationContext, ActionType } from '@/lib/contextual-notifications'
+import { useContextualNotifications, ActionType } from '@/lib/contextual-notifications'
 import type { Product } from '@/lib/types/product'
 
 interface ProductActionsProps {

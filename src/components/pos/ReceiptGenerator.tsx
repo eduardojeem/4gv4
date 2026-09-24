@@ -2,7 +2,7 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Printer, Download, Share2, CheckCircle2 } from 'lucide-react'

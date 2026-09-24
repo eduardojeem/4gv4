@@ -1,25 +1,23 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useCallback, useMemo } from 'react'
-import Link from 'next/link'
+import { useEffect, useState, useCallback } from 'react'
 import {
-    ArrowLeft, Building2, Mail, Phone, MapPin, Globe, Star,
-    Package, DollarSign, Edit, Plus, ExternalLink, MessageCircle,
-    Calendar, ShieldCheck, Tag, Info, CheckCircle2, XCircle, Clock,
-    AlertTriangle, RefreshCw, ShoppingCart
+  ArrowLeft, Building2, Mail, Phone, MapPin, Globe, Star,
+  Package, DollarSign, Edit, ExternalLink, MessageCircle, Tag, CheckCircle2, XCircle, Clock,
+  AlertTriangle, RefreshCw, ShoppingCart
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import type { UISupplier } from '@/lib/types/supplier-ui'
-import { SupplierProductsList, type SupplierProduct } from '@/components/suppliers/SupplierProductsList'
+import { SupplierProductsList } from '@/components/suppliers/SupplierProductsList'
 import { SupplierNotes } from '@/components/suppliers/SupplierNotes'
 import { SupplierOrdersList } from '@/components/suppliers/SupplierOrdersList'
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'

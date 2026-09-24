@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react'
-import { 
+import {
   posPerformanceMonitor,
   measurePerformance,
   recordMetric,

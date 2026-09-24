@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  AlertTriangle, 
-  X, 
-  CheckCircle, 
-  Package, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  AlertTriangle,
+  X,
+  CheckCircle,
+  Package,
   Clock,
   RefreshCw,
   AlertCircle
@@ -14,7 +14,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { useProductAlerts } from '@/hooks/useProductAlerts'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'

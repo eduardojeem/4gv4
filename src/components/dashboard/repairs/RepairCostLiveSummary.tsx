@@ -10,10 +10,7 @@ import {
   ChevronUp,
   AlertTriangle,
   ShieldAlert,
-  Sparkles,
-  Wallet,
-  ArrowUpRight,
-  Scale
+  Sparkles, Scale
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

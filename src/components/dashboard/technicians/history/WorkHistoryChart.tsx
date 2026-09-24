@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { BarChart } from 'recharts/es6/chart/BarChart';
 import { Bar } from 'recharts/es6/cartesian/Bar';
 import { XAxis } from 'recharts/es6/cartesian/XAxis';
@@ -10,15 +10,13 @@ import { YAxis } from 'recharts/es6/cartesian/YAxis';
 import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
 import { Tooltip } from 'recharts/es6/component/Tooltip';
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { TrendingUp, Calendar, DollarSign } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
-import { Repair } from '@/types/repairs'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { TrendingUp, Calendar, DollarSign } from 'lucide-react';
+import { GSIcon } from '@/components/ui/standardized-components';
+import { Repair } from '@/types/repairs';
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 interface WorkHistoryChartProps {
     repairs: Repair[]

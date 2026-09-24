@@ -40,16 +40,11 @@ import {
   Medal,
   ChevronDown,
   ChevronUp,
-  Search,
-  PartyPopper,
-  Copy,
-  Check,
-  Share2,
-  MessageCircle,
+  Search, Copy,
+  Check, MessageCircle,
   ShieldCheck,
   Phone,
-  Mail,
-  ExternalLink,
+  Mail
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { responsiblePlayNotice } from '@/lib/raffles/responsible-play'

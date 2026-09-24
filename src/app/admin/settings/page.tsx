@@ -3,18 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowRight,
+  AlertCircle, ArrowRight,
   Building2,
-  Check,
-  CheckCircle2,
-  Clock,
+  Check, Clock,
   ExternalLink,
   Globe,
-  Info,
-  Layers,
-  Loader2,
+  Info, Loader2,
   Mail,
   MapPin,
   Moon,
@@ -28,7 +22,7 @@ import {
   Sparkles,
   Store,
   Sun,
-  Laptop,
+  Laptop
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'

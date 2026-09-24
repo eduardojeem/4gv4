@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence  } from '../../../../components/ui/motion'
+import { motion, AnimatePresence } from '../../../../components/ui/motion'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { getPublicUrl } from '@/lib/supabase-storage'
 import { logger } from '@/lib/logger'
 import type { Database } from '@/lib/supabase/types'
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { toast } from 'sonner'
 import { ProductDetailHeader } from '@/components/dashboard/products/ProductDetailHeader'
@@ -33,6 +32,7 @@ import {
   Plus,
   AlertTriangle
 } from 'lucide-react'
+type Json = Database['public']['Tables']['products']['Row']['dimensions']
 
 interface StockMovement {
   id: string

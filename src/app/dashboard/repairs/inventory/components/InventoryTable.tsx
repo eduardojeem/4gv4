@@ -45,9 +45,7 @@ import {
   Package,
   TrendingUp,
   ChevronLeft,
-  ChevronRight,
-  ShieldAlert,
-  SlidersHorizontal,
+  ChevronRight, SlidersHorizontal
 } from 'lucide-react'
 import type { Product } from '@/types/product-unified'
 import { formatPrice } from '@/lib/utils'

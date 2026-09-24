@@ -3,10 +3,8 @@
 import { useState, useMemo } from 'react'
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
+  DialogContent, DialogTitle,
+  DialogTrigger
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,18 +23,10 @@ import {
   ArrowRight,
   Store,
   Layers,
-  Search,
-  ListChecks,
-  Copy,
-  ExternalLink,
-  MessageSquare,
+  Search, Copy, MessageSquare,
   ChevronRight,
   Eye,
-  X,
-  Compass,
-  LayoutTemplate,
-  SlidersHorizontal,
-  CheckCircle,
+  X, LayoutTemplate, CheckCircle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'

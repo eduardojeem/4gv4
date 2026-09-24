@@ -1,12 +1,10 @@
 'use client'
 
 import { useState, memo } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  Search, 
-  Filter, 
-  X, 
-  Grid, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  Search, X,
+  Grid,
   List,
   SlidersHorizontal,
   ChevronDown

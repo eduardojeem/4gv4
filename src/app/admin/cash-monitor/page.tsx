@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { useCashMonitor } from './hooks/useCashMonitor'
@@ -19,7 +18,7 @@ import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/for
 import { downloadPdfReport, type PdfSection } from '@/app/dashboard/pos/lib/exportPdf'
 import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
 import type { CashSession, AdminAction } from './types'
-import { Monitor, AlertTriangle, Shield, List, Info, FileDown, Download, RefreshCw, HelpCircle } from 'lucide-react'
+import { Monitor, AlertTriangle, Shield, List, FileDown, Download, RefreshCw, HelpCircle } from 'lucide-react'
 
 export default function CashMonitorPage() {
   const { user } = useAuth()

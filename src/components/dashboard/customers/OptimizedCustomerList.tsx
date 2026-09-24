@@ -5,12 +5,12 @@ import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  Eye, 
-  Edit, 
-  History, 
-  Phone, 
-  Mail, 
+import {
+  Eye,
+  Edit,
+  History,
+  Phone,
+  Mail,
   MapPin,
   Star,
   TrendingUp,

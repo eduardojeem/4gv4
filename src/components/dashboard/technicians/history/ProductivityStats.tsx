@@ -5,20 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import {
-    Trophy,
-    Target,
-    Clock,
-    Star,
-    TrendingUp,
-    Calendar,
-    Zap,
-    Award,
-    CheckCircle2
+  Trophy,
+  Target,
+  Clock,
+  Star,
+  TrendingUp,
+  Calendar,
+  Zap,
+  Award
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Repair } from '@/types/repairs'
-import { format, differenceInDays, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { differenceInDays, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
 
 interface ProductivityStatsProps {
     repairs: Repair[]

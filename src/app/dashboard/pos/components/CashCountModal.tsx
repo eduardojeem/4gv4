@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -12,17 +12,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import {
-  Calculator,
-  AlertTriangle,
-  CheckCircle2,
+  Calculator, CheckCircle2,
   Banknote,
   Coins,
-  RotateCcw,
-  Sparkles,
-  ArrowUpRight,
+  RotateCcw, ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'

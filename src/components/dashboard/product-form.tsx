@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ImageUpload } from './image-upload'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
-import type { Database } from '@/lib/supabase/types'
 
 interface ProductFormData {
   // Información básica

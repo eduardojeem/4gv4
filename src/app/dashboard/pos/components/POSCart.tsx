@@ -1,4 +1,4 @@
-import { AppImage } from '@/components/ui/app-image'
+import { AppImage } from '@/components/ui/app-image';
 /**
  * POS Cart Component — Redesign Premium
  * Carrito de compras optimizado con diseño premium
@@ -8,23 +8,20 @@ import React, { memo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Plus, 
-  Minus, 
-  Trash2, 
-  ShoppingCart, 
+import {
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
   CreditCard,
   Tag,
   Percent,
-  Store,
-  AlertTriangle,
-  ChevronDown,
+  Store, ChevronDown,
   ChevronUp,
   Sparkles,
   PauseCircle,
@@ -43,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 
 interface CartItem {
   id: string;

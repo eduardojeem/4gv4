@@ -5,32 +5,22 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFooter, DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Sparkles, 
-  Store, 
-  ArrowDownRight, 
-  ArrowUpRight, 
-  Calculator, 
-  ShieldCheck, 
-  CheckCircle2, 
-  HelpCircle,
-  Clock,
+import {
+  Sparkles,
+  Store, ArrowUpRight,
+  Calculator,
+  ShieldCheck,
+  CheckCircle2, Clock,
   CreditCard,
   FileText,
   History,
-  ShieldAlert,
-  Smartphone,
-  Printer,
+  ShieldAlert, Printer,
   Search,
-  Banknote,
-  Wallet,
-  AlertCircle
+  Banknote, AlertCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

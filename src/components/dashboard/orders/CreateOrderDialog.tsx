@@ -5,27 +5,19 @@ import Image from 'next/image'
 import {
   Check,
   ChevronDown,
-  ChevronRight,
-  FileText,
-  Loader2,
-  Mail,
-  MapPin,
+  ChevronRight, Loader2, MapPin,
   Maximize2,
   Minimize2,
   Minus,
-  Package,
-  Phone,
-  Plus,
+  Package, Plus,
   Search,
   ShoppingBag,
-  ShoppingCart,
-  Sparkles,
-  Trash2,
+  ShoppingCart, Trash2,
   Truck,
   User,
   UserPlus,
   Wallet,
-  X,
+  X
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

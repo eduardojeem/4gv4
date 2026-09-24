@@ -21,20 +21,11 @@ import {
   RotateCcw,
   ArrowUp,
   ArrowDown,
-  Sparkles,
-  Eye,
-  EyeOff,
-  Upload,
-  Image as ImageIcon,
-  Images,
-  X,
-  Link as LinkIcon,
-  Building2,
+  Sparkles, Upload, Images, Building2,
   ExternalLink,
   RefreshCw,
   Globe,
-  Check,
-  ShoppingBag,
+  Check
 } from 'lucide-react'
 import type { BrandsSectionSettings, BrandItemSettings } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'

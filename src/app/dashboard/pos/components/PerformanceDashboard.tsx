@@ -11,21 +11,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Activity, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
-  Database,
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2, Database,
   Gauge,
   RefreshCw,
   Search,
-  ShoppingCart,
-  TrendingDown,
-  TrendingUp,
-  Zap,
+  ShoppingCart, Zap,
   BarChart3,
   Eye,
   Settings

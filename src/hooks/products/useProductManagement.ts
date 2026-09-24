@@ -5,16 +5,15 @@ import { useProductsSupabase } from '../useProductsSupabase'
 import { useProducts } from '../useProducts'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
 import { useErrorHandler } from '@/lib/error-handling'
-import { useDebounce } from '@/lib/notification-performance'
-import { 
-  usePerformanceMetrics, 
+import {
+  usePerformanceMetrics,
   PerformanceUtils,
   DEFAULT_PERFORMANCE_CONFIG,
   type PerformanceConfig
 } from '@/lib/performance-optimization'
-import type { 
-  ProductFilters, 
-  ProductSort, 
+import type {
+  ProductFilters,
+  ProductSort,
   PaginationOptions,
   LoadingState,
   OperationResult

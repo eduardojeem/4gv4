@@ -1,4 +1,3 @@
-import React from 'react'
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { BarChart } from 'recharts/es6/chart/BarChart';
@@ -14,8 +13,7 @@ import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
 import { Tooltip } from 'recharts/es6/component/Tooltip';
 import { Legend } from 'recharts/es6/component/Legend';
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { ReferenceLine } from 'recharts';
-import { formatValue, CHART_COLORS } from '@/lib/formatters'
+import { formatValue, CHART_COLORS } from '@/lib/formatters';
 
 interface ChartConfig {
   dataKey: string

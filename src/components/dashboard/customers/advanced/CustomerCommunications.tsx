@@ -9,35 +9,21 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   MessageSquare,
   Mail,
   Phone,
-  Send,
-  Calendar,
-  Clock,
-  Users,
-  Target,
-  Zap,
-  Bell,
-  Settings,
-  Plus,
-  Filter,
-  Search,
+  Send, Clock, Target,
+  Zap, Plus, Search,
   MoreVertical,
   CheckCircle2,
   AlertCircle,
   XCircle,
   Eye,
-  Edit,
-  Trash2,
-  Download,
-  Upload
+  Edit
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerCommunications } from '@/hooks/use-customer-communications'
 import { format } from 'date-fns'

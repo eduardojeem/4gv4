@@ -2,10 +2,9 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
-import { Building, User, CreditCard, Calendar, DollarSign, FileText, CheckCircle, Download, Printer } from 'lucide-react'
+import { User, CreditCard, DollarSign, FileText, CheckCircle, Download, Printer } from 'lucide-react'
 
 interface PaymentReceipt {
     id: string

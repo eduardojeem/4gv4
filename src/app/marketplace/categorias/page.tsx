@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, ChevronRight, Grid3X3, Package, Sparkles, Store } from 'lucide-react'
+import { ArrowRight, ChevronRight, Grid3X3, Package, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'

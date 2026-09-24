@@ -7,11 +7,11 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import {
   ArrowUpDown, ArrowUp, ArrowDown,
-  Edit, Trash2, Copy, Eye, Package,
-  TrendingUp, AlertTriangle, XCircle,
+  Edit, Trash2, Copy, Eye, Package, AlertTriangle, XCircle,
   Sparkles, Globe, EyeOff, MoreHorizontal,
   Wrench, Layers3, ChevronDown, ChevronUp,
-  Barcode, Tag, CheckCircle2, ShieldCheck, Smartphone} from 'lucide-react'
+  Barcode, CheckCircle2, Smartphone
+} from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -22,8 +22,6 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +37,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Product } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
-import { getStockStatus, isServiceLikeProduct } from '@/lib/products-dashboard-utils'
+import { isServiceLikeProduct } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 import { describeDeviceCompatibility, usesDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'

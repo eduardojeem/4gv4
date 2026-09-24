@@ -6,17 +6,12 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Slider } from '@/components/ui/slider'
 import { Separator } from '@/components/ui/separator'
 import {
-  generateAvatarVariants,
   generateDiceBearAvatar,
   generateUserSeed,
   AVATAR_STYLES,
@@ -25,7 +20,6 @@ import {
   type AvatarVariant
 } from '@/lib/dicebear'
 import {
-  Palette,
   Shuffle,
   Check,
   RefreshCw,
@@ -33,11 +27,7 @@ import {
   User,
   Bot,
   Heart,
-  Clock,
-  Wand2,
-  Eye,
-  Zap,
-  X
+  Clock, X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

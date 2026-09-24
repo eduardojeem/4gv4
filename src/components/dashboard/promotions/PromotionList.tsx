@@ -44,11 +44,9 @@ import {
   Loader2,
   X,
   Check,
-  Calendar,
-  Sparkles,
-  ArrowUpRight,
+  Calendar
 } from 'lucide-react'
-import { format, parseISO, differenceInDays } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'

@@ -1,25 +1,24 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { 
-  Search, Filter, Download, Eye, AlertTriangle, 
-  CheckCircle, XCircle, Info, User, Settings, 
-  Database, Shield, FileText, Calendar, Clock,
-  Activity, Trash2, Edit, Plus, RefreshCw,
-  Globe, Lock, Unlock, LogIn, LogOut, UserPlus,
-  FileEdit, FilePlus, FileX, Server, Zap
+import {
+  Search, Filter, Download, Eye, AlertTriangle,
+  CheckCircle, XCircle, Info, User, Settings,
+  Database, Shield, FileText, Clock,
+  Activity, Trash2, Edit, RefreshCw,
+  Globe, Lock, LogIn, LogOut, UserPlus, FileX, Server, Zap
 } from 'lucide-react'
 import { format, subDays, subHours, subMinutes } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useSecurityLogs } from '@/hooks/use-security-logs'
 import { Loader2 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 
 interface AuditLog {
   id: string

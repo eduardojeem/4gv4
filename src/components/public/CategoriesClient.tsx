@@ -3,51 +3,13 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
-  ArrowRight,
-  Boxes,
-  Briefcase,
-  Building2,
-  ChevronDown,
-  ChevronRight,
-  CircleDot,
-  Coffee,
-  Cpu,
-  Dumbbell,
-  FileText,
-  FolderTree,
-  Gamepad2,
-  GraduationCap,
-  HardHat,
-  Heart,
-  Home,
-  Laptop,
-  Layers,
-  LayoutGrid,
-  Leaf,
-  MapPin,
-  Monitor,
-  Music,
-  Package,
-  PawPrint,
-  Plane,
-  Scissors,
-  Search,
-  Shirt,
-  ShoppingBag,
-  ShoppingBasket,
-  ShoppingCart,
-  Smartphone,
-  Sparkles,
-  Store,
-  Tag,
-  Trophy,
-  Tv,
-  Utensils,
-  Wrench,
-  X,
+  ArrowRight, Briefcase, ChevronDown,
+  ChevronRight, Cpu, FolderTree, Home, LayoutGrid, Package, Search,
+  Shirt, ShoppingBasket, Sparkles,
+  Store, Trophy, Wrench,
+  X
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import type { MarketplaceCategory } from '@/lib/public/marketplace'
 import { cn } from '@/lib/utils'
 

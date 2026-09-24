@@ -7,10 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BookOpen,
-  Building2,
-  Check,
-  CheckCircle2,
-  ChevronRight,
+  Building2, ChevronRight,
   ChevronsDown,
   ChevronsUp,
   Clock,
@@ -29,12 +26,10 @@ import {
   Store,
   Sun,
   Sunrise,
-  Sunset,
-  Target,
-  Users,
+  Sunset, Users,
   Wrench,
   X,
-  type LucideIcon,
+  type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

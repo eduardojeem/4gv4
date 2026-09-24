@@ -4,7 +4,6 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { resolveProductImageUrl } from '@/lib/images'
 
 // ============================================================================
 // Types

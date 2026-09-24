@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useHydrated } from '@/hooks/use-hydrated'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Activity,
   AlertTriangle,
@@ -25,10 +24,7 @@ import {
   XCircle,
   Zap,
   Sparkles,
-  Search,
-  Filter,
-  Layers,
-  Cpu,
+  Search, Layers
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

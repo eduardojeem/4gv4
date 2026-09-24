@@ -1,19 +1,14 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { 
-  AlertTriangle, 
-  Package, 
-  TrendingDown, 
-  Clock, 
-  X,
-  Eye,
-  EyeOff,
+import {
+  AlertTriangle,
+  Package,
+  TrendingDown,
+  Clock, EyeOff,
   Filter,
   Bell,
-  BellOff,
-  ChevronRight,
-  ExternalLink,
+  BellOff, ExternalLink,
   RefreshCw
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,11 +18,6 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import {
   Tooltip,
   TooltipContent,

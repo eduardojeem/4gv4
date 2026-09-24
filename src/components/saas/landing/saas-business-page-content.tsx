@@ -7,29 +7,21 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowRight,
-  Building2,
-  CheckCircle2,
-  ExternalLink,
-  MapPin,
-  Package,
-  Search,
+  Building2, ExternalLink,
+  MapPin, Search,
   ShieldCheck,
   Smartphone,
   Sparkles,
   Star,
-  Store,
-  Tag,
-  Truck,
-  Wrench,
-  Hammer,
-  ShoppingBag,
+  Store, Truck, Hammer,
+  ShoppingBag
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 import { describeCatalogState } from '@/lib/public/catalog-state'
 import { rubroLabel } from '@/lib/public/organization-rubro'
-import { organizationAccentColor, organizationAccentSoft } from '@/lib/public/organization-brand'
+import { organizationAccentColor } from '@/lib/public/organization-brand'
 
 
 // Filtros por rubro comercial

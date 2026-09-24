@@ -2,8 +2,6 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { backupManager } from './backup-manager'
-import { backupMonitor } from './backup-monitor'
-import { backupVersioning } from './backup-versioning'
 
 // Interfaces para recuperación automática
 export interface RecoveryStrategy {

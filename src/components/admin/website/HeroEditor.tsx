@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import {
@@ -23,33 +22,21 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  EyeOff,
-  Flame,
-  HelpCircle,
-  Plus,
-  RefreshCw,
-  Store,
-  Tag,
+  EyeOff, HelpCircle,
+  Plus, Tag,
   Wrench,
   Smartphone,
   ShoppingBag,
   Monitor,
   ShieldCheck,
-  Truck,
-  CreditCard,
-  MessageCircle,
-  ExternalLink,
-  Zap,
-  Award,
+  Truck, MessageCircle, Award,
   Briefcase,
   ThumbsUp,
   Clock,
   ArrowRight,
   Package,
-  Search,
-  MapPin,
+  Search
 } from 'lucide-react'
-import Image from 'next/image'
 import { HeroContent, HeroStats } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'

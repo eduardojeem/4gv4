@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -11,15 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Progress } from '@/components/ui/progress'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Bell,
-  BellRing,
-  AlertTriangle,
+  Bell, AlertTriangle,
   CheckCircle,
   Info,
   Star,
@@ -29,12 +24,8 @@ import {
   MessageSquare,
   Settings,
   Search,
-  Filter,
-  MoreHorizontal,
-  X,
-  Eye,
-  EyeOff,
-  Archive,
+  Filter, X,
+  Eye, Archive,
   Trash2,
   Clock,
   Zap,
@@ -44,56 +35,14 @@ import {
   AlertCircle,
   Calendar,
   Phone,
-  Mail,
-  Send,
-  Bookmark,
-  BookmarkCheck,
-  Share2,
-  Download,
-  Upload,
-  RefreshCw,
+  Mail, Share2, RefreshCw,
   Lightbulb,
-  TrendingDown,
-  Heart,
-  Gift,
-  CreditCard,
-  MapPin,
-  Smartphone,
-  Globe,
-  BarChart3,
+  TrendingDown, BarChart3,
   PieChart,
-  Activity,
-  Wifi,
-  WifiOff,
-  Volume2,
-  VolumeX,
-  Moon,
-  Sun,
-  Palette,
-  Sliders,
+  Activity, Volume2,
+  VolumeX, Sliders,
   Database,
-  Shield,
-  Lock,
-  Unlock,
-  Key,
-  FileText,
-  Image,
-  Video,
-  Music,
-  Headphones,
-  Mic,
-  Camera,
-  Monitor,
-  Printer,
-  HardDrive,
-  Cpu,
-  MemoryStick,
-  Battery,
-  BatteryLow,
-  Plug,
-  Power,
-  PowerOff,
-  Plus
+  Shield, FileText, Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'

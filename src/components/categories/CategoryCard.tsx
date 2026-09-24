@@ -1,20 +1,19 @@
 'use client'
 
-import React from 'react'
 import { motion } from '../ui/motion'
 import {
-    Tag, Edit, Trash2, MoreVertical, Package,
-    ChevronRight, ToggleLeft, ToggleRight, Plus, FolderOpen
+  Edit, Trash2, MoreVertical, Package,
+  ChevronRight, ToggleLeft, ToggleRight, Plus, FolderOpen
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { Category as BaseCategory } from '@/hooks/useCategories'
 

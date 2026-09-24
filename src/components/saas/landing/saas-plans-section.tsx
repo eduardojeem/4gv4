@@ -8,17 +8,13 @@ import {
   Minus,
   Sparkles,
   ChevronDown,
-  ShieldCheck,
-  Zap,
-  ArrowRight,
+  ShieldCheck, ArrowRight,
   Building2,
   Wrench,
-  Store,
-  Users,
-  Compass,
+  Store, Compass,
   CreditCard,
   Gift,
-  CheckCircle2,
+  CheckCircle2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

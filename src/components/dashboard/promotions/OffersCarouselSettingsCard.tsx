@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { Check, ExternalLink, GalleryHorizontalEnd, Loader2, RotateCcw, Save } from 'lucide-react'
+import { Check, GalleryHorizontalEnd, Loader2, RotateCcw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'

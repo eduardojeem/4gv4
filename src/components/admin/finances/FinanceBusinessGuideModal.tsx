@@ -7,32 +7,19 @@ import {
   Briefcase,
   Calculator,
   Lightbulb,
-  AlertTriangle,
-  CheckCircle2,
-  TrendingUp,
-  WalletCards,
-  ArrowRight,
-  ShieldCheck,
-  Layers,
-  Sparkles,
-  HelpCircle,
-  Coins,
+  AlertTriangle, Sparkles, Coins,
   ReceiptText,
   UsersRound,
   CircleDollarSign,
   ChartNoAxesCombined,
   Settings2,
-  Wrench,
-  ShoppingBag,
-  Info,
-  Calendar,
-  Percent,
+  Wrench, Percent,
   Download,
   FileDown,
   FileText,
   Printer,
   ChevronDown,
-  Loader2,
+  Loader2
 } from 'lucide-react'
 import {
   Dialog,
@@ -44,7 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DropdownMenu,
   DropdownMenuContent,

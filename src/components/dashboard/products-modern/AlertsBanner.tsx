@@ -3,8 +3,8 @@
  * Notificación compacta, elegante y descartable para alertas de inventario
  */
 
-import React, { useState } from 'react'
-import { AlertTriangle, AlertCircle, Info, X, ChevronRight, Eye, ShieldAlert } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, Info, X, Eye, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ProductAlert } from '@/types/products-dashboard'

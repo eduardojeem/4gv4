@@ -1,7 +1,6 @@
 'use client'
 
-import React from 'react'
-import { Building2, Globe, Calendar, Link as LinkIcon, Package, CheckCircle2, XCircle, Edit, CalendarDays } from 'lucide-react'
+import { Building2, Globe, Calendar, Link as LinkIcon, Package, Edit, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,

@@ -1,6 +1,6 @@
 'use client'
 
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion';
 import { BarChart } from 'recharts/es6/chart/BarChart';
 import { Bar } from 'recharts/es6/cartesian/Bar';
 import { XAxis } from 'recharts/es6/cartesian/XAxis';
@@ -11,15 +11,14 @@ import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { PieChart } from 'recharts/es6/chart/PieChart';
 import { Pie } from 'recharts/es6/polar/Pie';
 import { Cell } from 'recharts/es6/component/Cell';
-import { LineChart } from 'recharts/es6/chart/LineChart';
 import { Line } from 'recharts/es6/cartesian/Line';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { TrendingUp, Package } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
-import { formatCurrency } from '@/lib/currency'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { TrendingUp, Package } from 'lucide-react';
+import { GSIcon } from '@/components/ui/standardized-components';
+import { formatCurrency } from '@/lib/currency';
 
 interface ProductChartsProps {
   stockData: Array<{

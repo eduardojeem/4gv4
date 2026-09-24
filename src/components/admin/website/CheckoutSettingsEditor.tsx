@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { CheckoutCustomerPreview } from '@/components/admin/website/CheckoutCustomerPreview'
-import { SectionHowItWorks } from '@/components/admin/website/SectionHowItWorks'
 import { BankTransferOptionsEditor } from '@/components/admin/website/BankTransferOptionsEditor'
 import { DeliveryZoneOptionsEditor } from '@/components/admin/website/DeliveryZoneOptionsEditor'
 import { CommerceModeSelector } from '@/components/admin/website/CommerceModeSelector'
@@ -27,15 +26,9 @@ import {
   Save,
   Store,
   Truck,
-  Wallet,
-  Info,
-  QrCode,
-  Banknote,
-  CheckCircle,
-  HelpCircle,
-  Sparkles,
-  MapPin,
-  Images,
+  Wallet, QrCode,
+  Banknote, MapPin,
+  Images
 } from 'lucide-react'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { cn } from '@/lib/utils'

@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, X, Tag, Clock, AlertTriangle } from 'lucide-react'
+import { X, Tag, Clock, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { usePromotions } from '@/hooks/use-promotions'
-import { formatCurrency } from '@/lib/currency'
 import { differenceInDays, parseISO } from 'date-fns'
 
 interface PromotionNotification {

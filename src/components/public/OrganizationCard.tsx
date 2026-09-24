@@ -1,8 +1,7 @@
 import { AppImage } from '@/components/ui/app-image'
-import Image from 'next/image'
 import { rubroLabel } from '@/lib/public/organization-rubro'
 import Link from 'next/link'
-import { ArrowRight, Building2, Package } from 'lucide-react'
+import { ArrowRight, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 

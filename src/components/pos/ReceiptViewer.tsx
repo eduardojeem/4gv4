@@ -8,15 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { CartItem } from '@/hooks/usePOS'
 import { formatCurrency } from '@/lib/currency'
-import { 
-    formatInvoiceHTML, 
-    formatReceiptText, 
-    formatReceiptForPrinter,
-    formatThermalReceipt,
-    formatReceiptWithQR,
-    formatReceiptLargeText,
-    formatThermalReceiptXL,
-    InvoiceData 
+import {
+  formatInvoiceHTML, formatReceiptForPrinter, formatReceiptWithQR,
+  formatReceiptLargeText,
+  formatThermalReceiptXL,
+  InvoiceData
 } from '@/lib/invoice-generator'
 
 import { useSharedSettings } from '@/hooks/use-shared-settings'

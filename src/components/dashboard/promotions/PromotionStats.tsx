@@ -6,9 +6,7 @@ import {
   BarChart3,
   CheckCircle2,
   Clock,
-  TrendingUp,
-  Tag,
-  Percent,
+  TrendingUp
 } from 'lucide-react'
 import type { PromotionStats as Stats, PromotionFilters } from '@/types/promotion'
 import { cn } from '@/lib/utils'

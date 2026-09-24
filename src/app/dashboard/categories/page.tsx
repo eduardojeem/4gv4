@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from '@/components/ui/motion'
 import {
   Plus, Download, LayoutGrid, List, Trash2,
   CheckCircle, XCircle, RefreshCw, FolderTree,
   MoreHorizontal, AlertTriangle, FolderOpen, Layers,
-  Tag, Search, SlidersHorizontal, Info, X
+  Tag, Search, SlidersHorizontal, X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

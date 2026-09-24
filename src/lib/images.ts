@@ -1,4 +1,3 @@
-import { config } from './config'
 import { getPublicUrl } from './supabase-storage'
 import { isSupportedImageSource } from './image-url-policy'
 

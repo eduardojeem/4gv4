@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Plus, Search, RefreshCw, Building2, MoreVertical, Edit, Trash2, CheckCircle, XCircle, ChevronLeft, ChevronRight, Info } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Search, RefreshCw, Building2, MoreVertical, Edit, Trash2, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'

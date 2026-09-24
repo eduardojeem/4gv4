@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
-import { formatCurrency } from '@/lib/currency'
 
 interface UseCashRegisterReportReturn {
     reportStart: string

@@ -1,28 +1,20 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence  } from '../../../components/ui/motion'
-import { 
-  ArrowLeft, 
-  Package, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  Minus,
-  TrendingUp,
+import { motion, AnimatePresence } from '../../../components/ui/motion'
+import {
+  ArrowLeft,
+  Package,
+  Edit,
+  Trash2,
+  Plus, TrendingUp,
   TrendingDown,
   Calendar,
-  User,
-  MapPin,
-  AlertTriangle,
+  User, AlertTriangle,
   CheckCircle,
   Clock,
-  BarChart3,
-  Download,
-  Share2,
-  Star,
-  Tag,
+  BarChart3, Share2, Tag,
   Truck
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
@@ -34,10 +26,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '@/components/dashboard/notification-system'
-import { formatDate } from '@/lib/utils'
 
 // Función helper para formatear números
 const formatNumber = (num: number): string => {

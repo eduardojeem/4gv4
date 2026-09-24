@@ -7,9 +7,7 @@ import Link from 'next/link'
 import {
   ArrowDownAZ,
   ArrowDownNarrowWide,
-  ArrowUpNarrowWide,
-  ArrowUpDown,
-  ArrowRight,
+  ArrowUpNarrowWide, ArrowRight,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -26,7 +24,7 @@ import {
   Store,
   Tag,
   MessageCircle,
-  X,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

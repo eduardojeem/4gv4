@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
   AlertTriangle,
@@ -17,8 +16,7 @@ import {
   PackageMinus,
   PackagePlus,
   SlidersHorizontal,
-  TrendingUp,
-  XCircle,
+  TrendingUp
 } from 'lucide-react'
 
 const GUIDE_STORAGE_KEY = 'mipos:inventory:guide-open'

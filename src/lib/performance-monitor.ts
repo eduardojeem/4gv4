@@ -3,7 +3,7 @@
  * Sistema de monitoreo de rendimiento en tiempo real
  */
 
-import React from 'react'
+import React from 'react';
 
 interface PerformanceMetric {
   name: string;

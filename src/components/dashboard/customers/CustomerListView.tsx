@@ -31,11 +31,7 @@ import {
   SortAsc,
   SortDesc,
   Mail,
-  Phone,
-  MapPin,
-  Eye,
-  History,
-  Star,
+  Phone, Eye, Star,
   MoreVertical,
   Edit,
   Trash2,
@@ -45,9 +41,7 @@ import {
   PowerOff,
   ShoppingBag,
   Wrench,
-  Copy,
-  Check,
-  CreditCard
+  Copy, CreditCard
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'

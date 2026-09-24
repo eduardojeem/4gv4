@@ -1,13 +1,10 @@
 'use client'
 
-import React from 'react'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogFooter, DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,12 +17,7 @@ import {
   PackageCheck,
   Search,
   LayoutGrid,
-  List as ListIcon,
-  HelpCircle,
-  Smartphone,
-  Key,
-  ShieldCheck,
-  Lightbulb,
+  List as ListIcon, Lightbulb
 } from 'lucide-react'
 
 interface TechnicianGuideDialogProps {

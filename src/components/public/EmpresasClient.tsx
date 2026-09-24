@@ -12,15 +12,13 @@ import {
   ShoppingBasket,
   Smartphone,
   Sparkles,
-  Store,
-  Tag,
-  Wrench,
+  Store, Wrench,
   Car,
   X,
-  Layers,
+  Layers
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { OrganizationDirectoryCard, RUBRO_LABELS } from '@/components/public/OrganizationDirectoryCard'
+import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { OrganizationDetailModal } from '@/components/public/OrganizationDetailModal'
 import { normalizeCity, removeAccents } from '@/lib/public/city-normalizer'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'

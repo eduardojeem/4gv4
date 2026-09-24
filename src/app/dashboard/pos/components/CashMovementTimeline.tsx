@@ -1,11 +1,9 @@
 'use client'
 
-import React from 'react'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
-import { 
-  ArrowUpCircle, ArrowDownCircle, DollarSign, History, 
-  Clock, FileText 
+import {
+  ArrowUpCircle, ArrowDownCircle, DollarSign, History,
+  Clock, FileText
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { normalizeCashMovementType } from '../types'

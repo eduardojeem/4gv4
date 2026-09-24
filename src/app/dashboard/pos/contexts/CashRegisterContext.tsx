@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { useCashRegister } from '@/hooks/useCashRegister'
-import { calculateExpectedCashBalance, isPhysicalManualMovement } from '../lib/cash-balance'
+import { calculateExpectedCashBalance } from '../lib/cash-balance'
 
 // Extended types for advanced features
 export interface ZClosureRecord {

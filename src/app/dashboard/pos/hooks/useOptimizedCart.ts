@@ -3,7 +3,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CartItem, Product } from '../types'
 import { toast } from 'sonner'
-import { formatCurrency } from '@/lib/currency'
 
 // Constantes copiadas de page.tsx
 const WHOLESALE_DISCOUNT_RATE = 10

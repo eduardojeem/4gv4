@@ -17,14 +17,9 @@ import {
   Menu,
   Package,
   Rocket,
-  Search,
-  ShoppingBag,
-  Store,
+  Search, Store,
   User,
-  X,
-  Sparkles,
-  Wrench,
-  ShoppingCart,
+  X, Wrench
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'

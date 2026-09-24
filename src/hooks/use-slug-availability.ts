@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { normalizeTenantSlug, validateTenantSlug, type TenantSlugProblem } from '@/lib/saas/reserved-slugs'
+import { useEffect, useState } from 'react';
+import { normalizeTenantSlug, validateTenantSlug, type TenantSlugProblem } from '@/lib/saas/reserved-slugs';
 
 /**
  * Verifica la direccion de la tienda mientras se escribe.

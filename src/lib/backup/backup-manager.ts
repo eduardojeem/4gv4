@@ -1,7 +1,6 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import crypto from 'crypto'
 
 // Interfaces para sistema de backup
 export interface BackupConfiguration {

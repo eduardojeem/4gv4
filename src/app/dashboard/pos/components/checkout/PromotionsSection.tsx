@@ -5,11 +5,11 @@
 
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Tag, Sparkles, X, TrendingUp, Percent, Gift } from 'lucide-react'
+import { Tag, Sparkles, TrendingUp, Percent, Gift } from 'lucide-react'
 import { CartItem } from '../../types'
 import type { Promotion } from '@/types/promotion'
 

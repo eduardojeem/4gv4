@@ -40,13 +40,8 @@ import {
   HelpCircle,
   Receipt,
   Banknote,
-  CreditCard,
-  User,
-  Sparkles,
-  FileText,
-  Layers,
-  Check,
-  Eye
+  CreditCard, Sparkles,
+  FileText
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
