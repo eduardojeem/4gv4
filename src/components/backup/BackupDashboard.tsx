@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence  } from '../ui/motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -113,11 +113,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
     testRestore: false
   })
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       await loadBackupData()
@@ -126,7 +122,11 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [loadBackupData])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const handleRefresh = async () => {
     setRefreshing(true)

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence  } from '../ui/motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,30 @@ const CHART_COLORS = [
   '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6b7280'
 ]
 
+function getDateRange(range: string) {
+  const end = new Date()
+  const start = new Date()
+
+  switch (range) {
+    case '7d':
+      start.setDate(end.getDate() - 7)
+      break
+    case '30d':
+      start.setDate(end.getDate() - 30)
+      break
+    case '90d':
+      start.setDate(end.getDate() - 90)
+      break
+    case '1y':
+      start.setFullYear(end.getFullYear() - 1)
+      break
+    default:
+      start.setDate(end.getDate() - 30)
+  }
+
+  return { start, end }
+}
+
 export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyticsDashboardProps) {
   const [analyticsData, setAnalyticsData] = useState<AdvancedAnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -74,7 +98,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   const [refreshing, setRefreshing] = useState(false)
 
   // Cargar datos de analytics
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -88,7 +112,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
     } finally {
       setLoading(false)
     }
-  }
+  }, [timeRange])
 
   // Refrescar datos
   const refreshAnalytics = async () => {
@@ -101,32 +125,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   // Cargar datos al montar el componente
   useEffect(() => {
     loadAnalytics()
-  }, [timeRange])
-
-  // Función para obtener rango de fechas
-  const getDateRange = (range: string) => {
-    const end = new Date()
-    const start = new Date()
-    
-    switch (range) {
-      case '7d':
-        start.setDate(end.getDate() - 7)
-        break
-      case '30d':
-        start.setDate(end.getDate() - 30)
-        break
-      case '90d':
-        start.setDate(end.getDate() - 90)
-        break
-      case '1y':
-        start.setFullYear(end.getFullYear() - 1)
-        break
-      default:
-        start.setDate(end.getDate() - 30)
-    }
-    
-    return { start, end }
-  }
+  }, [loadAnalytics])
 
   // Componente de KPI Card
   const KPICard = ({ 

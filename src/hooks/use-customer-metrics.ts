@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
 import type { CustomerSpendMetrics } from '@/lib/customers/customer-spend'
@@ -182,14 +182,14 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
 
   const retentionRate = totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 1000) / 10 : 0
 
-  const creditSummaries = options?.creditSummaries || {}
+  const creditSummaries = useMemo(() => options?.creditSummaries || {}, [options?.creditSummaries])
 
-  const getCustomerDebt = (c: Customer) => {
+  const getCustomerDebt = useCallback((c: Customer) => {
     const summary = creditSummaries[c.id]
     const summaryPending = summary ? Number(summary.total_pending ?? summary.current_balance ?? 0) : 0
     const customerPending = Number(c.current_balance || c.pending_amount || 0)
     return Math.max(0, summaryPending || customerPending)
-  }
+  }, [creditSummaries])
 
   const totalDebt = customers.reduce((sum, c) => sum + getCustomerDebt(c), 0)
   const customersWithDebt = customers.filter(c => getCustomerDebt(c) > 0).length
@@ -214,7 +214,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
       { name: 'Deuda Media (500k - 2M)', value: deudaMedia, color: '#f59e0b' },
       { name: 'Deuda Alta (> 2M)', value: deudaAlta, color: '#ef4444' },
     ].filter(item => item.value > 0)
-  }, [customers, creditSummaries])
+  }, [customers, getCustomerDebt])
 
   return {
     totalCustomers,

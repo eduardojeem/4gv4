@@ -282,7 +282,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [credits, installments])
 
   // Verificar si un cliente puede comprar a crédito (SINCRONIZADO)
   const canSellOnCredit = useCallback((customer: Customer, amount: number): boolean => {

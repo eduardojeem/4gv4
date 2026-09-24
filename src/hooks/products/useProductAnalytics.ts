@@ -98,13 +98,19 @@ export function useProductAnalytics(
   const { handleProductError } = useProductErrorHandler()
   const { selectedBranchId } = useBranch()
 
+  const includeMovements = config.includeMovements
+  const includeAlerts = config.includeAlerts
+  const dateRangeStart = config.dateRange?.start?.getTime()
+  const dateRangeEnd = config.dateRange?.end?.getTime()
+
   // Stabilize config to prevent infinite loops
-  const stableConfig = useMemo(() => config, [
-    config.includeMovements,
-    config.includeAlerts,
-    config.dateRange?.start?.getTime(),
-    config.dateRange?.end?.getTime()
-  ])
+  const stableConfig = useMemo<AnalyticsConfig>(() => ({
+    includeMovements,
+    includeAlerts,
+    dateRange: dateRangeStart !== undefined && dateRangeEnd !== undefined
+      ? { start: new Date(dateRangeStart), end: new Date(dateRangeEnd) }
+      : undefined,
+  }), [dateRangeEnd, dateRangeStart, includeAlerts, includeMovements])
 
   // Validar configuración de análisis
   const validateAnalyticsConfig = useCallback((config: AnalyticsConfig): boolean => {

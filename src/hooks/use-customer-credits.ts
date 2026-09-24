@@ -114,16 +114,18 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
   const [refreshIndex, setRefreshIndex] = useState(0)
 
   const supabase = useMemo(() => createClient(), [])
+  const initialCreditLimit = initialCustomer?.credit_limit
+  const initialStoreCredit = (initialCustomer as { store_credit?: number | null } | undefined)?.store_credit
 
   // Sincronizar límite inicial si cambia en el prop del cliente
   useEffect(() => {
-    if (initialCustomer?.credit_limit !== undefined) {
-      setCustomerLimit(Number(initialCustomer.credit_limit || 0))
+    if (initialCreditLimit !== undefined) {
+      setCustomerLimit(Number(initialCreditLimit || 0))
     }
-    if ((initialCustomer as any)?.store_credit !== undefined) {
-      setStoreBalance(Number((initialCustomer as any).store_credit || 0))
+    if (initialStoreCredit !== undefined) {
+      setStoreBalance(Number(initialStoreCredit || 0))
     }
-  }, [initialCustomer?.credit_limit, (initialCustomer as any)?.store_credit])
+  }, [initialCreditLimit, initialStoreCredit])
 
   // Cargar datos de créditos y deudas reales
   useEffect(() => {

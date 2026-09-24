@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -127,27 +127,19 @@ export default function AnalyticsDashboard() {
   const [userBehaviorData, setUserBehaviorData] = useState<ChartData[]>([])
   const [performanceData, setPerformanceData] = useState<ChartData[]>([])
   const [predictiveData, setPredictiveData] = useState<ChartData[]>([])
+  const dashboardLoadersRef = useRef<Array<() => Promise<void>>>([])
 
   // Función para cargar datos del dashboard
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true)
     try {
-      await Promise.all([
-        loadMetrics(),
-        loadRevenueData(),
-        loadOrdersData(),
-        loadCustomersData(),
-        loadProductData(),
-        loadUserBehaviorData(),
-        loadPerformanceData(),
-        loadPredictiveData()
-      ])
+      await Promise.all(dashboardLoadersRef.current.map((load) => load()))
     } catch (error) {
       console.error('Error loading dashboard data:', error)
     } finally {
       setIsLoading(false)
     }
-  }, [filters])
+  }, [])
 
   // Función para refrescar datos
   const refreshData = useCallback(async () => {
@@ -345,6 +337,17 @@ export default function AnalyticsDashboard() {
       setPredictiveData(generateSampleData('predictive', 30))
     }
   }
+
+  dashboardLoadersRef.current = [
+    loadMetrics,
+    loadRevenueData,
+    loadOrdersData,
+    loadCustomersData,
+    loadProductData,
+    loadUserBehaviorData,
+    loadPerformanceData,
+    loadPredictiveData,
+  ]
 
   // Generar datos de ejemplo
   const generateSampleData = (type: string, count: number): ChartData[] => {

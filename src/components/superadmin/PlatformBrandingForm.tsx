@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -415,7 +415,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
     }
   }
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaving(true)
 
     try {
@@ -438,7 +438,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
     } finally {
       setSaving(false)
     }
-  }
+  }, [draft])
 
   // Atajo de teclado Ctrl+S / Cmd+S
   useEffect(() => {
@@ -450,7 +450,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [draft])
+  }, [handleSave])
 
   // Logo a mostrar según el tema en el simulador
   const activeNavbarLogo =

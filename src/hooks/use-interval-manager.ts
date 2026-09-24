@@ -60,6 +60,14 @@ export const useIntervalManager = (
     }
   }, [onError])
 
+  const stop = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    setState(prev => ({ ...prev, isRunning: false }))
+  }, [])
+
   const start = useCallback(() => {
     if (intervalRef.current || !enabled) return
 
@@ -79,15 +87,7 @@ export const useIntervalManager = (
 
       executeCallback()
     }, interval)
-  }, [interval, immediate, enabled, maxExecutions, executeCallback, state.executionCount])
-
-  const stop = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-    setState(prev => ({ ...prev, isRunning: false }))
-  }, [])
+  }, [enabled, executeCallback, immediate, interval, maxExecutions, state.executionCount, stop])
 
   const restart = useCallback(() => {
     stop()

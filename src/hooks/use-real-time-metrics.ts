@@ -68,6 +68,7 @@ export function useRealTimeMetrics(customers: Customer[]) {
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const unsubscribeRef = useRef<(() => void) | null>(null)
+  const checkThresholdsRef = useRef<(metrics: RealTimeMetrics) => void>(() => undefined)
 
   // Cargar métricas iniciales
   const loadMetrics = useCallback(async () => {
@@ -88,7 +89,7 @@ export function useRealTimeMetrics(customers: Customer[]) {
       if (realTimeResult.success && realTimeResult.data) {
         setRealTimeMetrics(realTimeResult.data)
         setLastUpdate(new Date())
-        checkThresholds(realTimeResult.data)
+        checkThresholdsRef.current(realTimeResult.data)
       } else {
         throw new Error(realTimeResult.error || 'Error loading real-time metrics')
       }
@@ -204,7 +205,9 @@ export function useRealTimeMetrics(customers: Customer[]) {
         }
       })
     }
-  }, [thresholds, alerts])
+  }, [alerts, evaluateThreshold, getAlertMessage, getAlertTitle, getMetricValue, thresholds])
+
+  checkThresholdsRef.current = checkThresholds
 
 
 

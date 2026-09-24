@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -68,7 +68,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const { fetchRepairs } = useCustomerRepairs()
 
   // Fetch activity data for a specific customer
-  const fetchCustomerActivity = async (customerId: string) => {
+  const fetchCustomerActivity = useCallback(async (customerId: string) => {
     setLoading(true)
     try {
       const customer = customers.find(c => c.id === customerId)
@@ -132,7 +132,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     } finally {
       setLoading(false)
     }
-  }
+  }, [customers, fetchRepairs])
 
   // Effect to load activity when selectedCustomerId changes
   useEffect(() => {
@@ -142,7 +142,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       setActivities([])
       setSelectedCustomer(null)
     }
-  }, [selectedCustomerId])
+  }, [fetchCustomerActivity, selectedCustomerId])
 
   // Filter activities based on search and type
   const filteredActivities = useMemo(() => {

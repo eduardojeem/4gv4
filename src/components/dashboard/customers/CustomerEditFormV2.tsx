@@ -13,7 +13,7 @@
  * - Barra de guardado superior e inferior para máxima comodidad
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -203,7 +203,7 @@ export function CustomerEditFormV2({
     return () => subscription.unsubscribe()
   }, [watch])
 
-  const handleSave = async (data: CustomerEditFormData) => {
+  const handleSave = useCallback(async (data: CustomerEditFormData) => {
     setIsSaving(true)
     try {
       const preparedData = {
@@ -236,7 +236,7 @@ export function CustomerEditFormV2({
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [onSave])
 
   // Atajos de teclado: Ctrl+S para guardar, ESC para cancelar
   useEffect(() => {
