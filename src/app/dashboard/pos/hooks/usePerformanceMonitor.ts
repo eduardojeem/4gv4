@@ -3,7 +3,7 @@
  * Proporciona una interfaz React-friendly para el sistema de performance monitoring
  */
 
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { 
   posPerformanceMonitor,
   measurePerformance,
@@ -280,7 +280,10 @@ export const useOperationPerformance = () => {
 export const usePerformanceAlerts = () => {
   const { lastReport } = usePerformanceMonitor()
   const [dismissedReport, setDismissedReport] = useState<typeof lastReport>(null)
-  const alerts = lastReport === dismissedReport ? [] : lastReport?.alerts ?? []
+  const alerts = useMemo(
+    () => (lastReport === dismissedReport ? [] : lastReport?.alerts ?? []),
+    [dismissedReport, lastReport],
+  )
 
   const clearAlerts = useCallback(() => {
     setDismissedReport(lastReport)

@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useMemo, useCallback, React
 import { toast } from 'sonner'
 import { config } from '@/lib/config'
 
+const METRICS_CACHE_TTL = 5 * 60 * 1000
+
 interface POSCustomerContextType {
   // Customer Selection State
   selectedCustomer: string
@@ -195,8 +197,6 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
 
   // Load real aggregates from Supabase when selecting a customer (parallelized + cached)
   const customerMetricsCache = React.useRef<Map<string, { data: any; timestamp: number }>>(new Map())
-  const METRICS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
   React.useEffect(() => {
     const run = async () => {
       if (!config.supabase.isConfigured || !selectedCustomer) return

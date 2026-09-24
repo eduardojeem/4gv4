@@ -716,7 +716,7 @@ function POSPageContent() {
     repairSubtotal: unifiedCalculations.repairSubtotal,
     repairTax: unifiedCalculations.repairTax,
     totalItemCount: unifiedCalculations.totalItemCount
-  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid])
+  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid, roundToTwo])
 
   // Aplicación automática de descuento VIP después de cálculos del carrito
   useEffect(() => {
@@ -741,7 +741,7 @@ function POSPageContent() {
         toast.info('Descuento VIP removido por cambio de cliente')
       }
     } catch {}
-  }, [customers, selectedCustomer, unifiedCalculations.subtotal, generalDiscount, vipAutoApplied])
+  }, [customers, selectedCustomer, unifiedCalculations.subtotal, generalDiscount, setGeneralDiscount, vipAutoApplied])
 
   // Adapter for POSCart items
   //
@@ -856,7 +856,7 @@ function POSPageContent() {
     toast.success('Venta recuperada al carrito', {
       description: `${saleItems.length} producto${saleItems.length !== 1 ? 's' : ''} cargados.`
     })
-  }, [clearCart, addToCartHook, setIsWholesale, setGeneralDiscount, setSelectedCustomer])
+  }, [clearCart, addToCartHook, repairsEnabled, setIsWholesale, setGeneralDiscount, setSelectedCustomer, setSelectedRepairIds])
 
   // handleAddRepairToCart viene de usePOSRepairs (ver desestructuración arriba)
 
@@ -987,7 +987,7 @@ function POSPageContent() {
     }
 
     return true
-  }, [combinedCartItems, allPromotions, isWholesale, updateItemDiscount])
+  }, [allPromotions, applyPromotionByCode, combinedCartItems, formatCurrency, isWholesale, updateItemDiscount, updateItemPromoCode])
 
   // ── Wrappers de procesamiento de venta (delegan a usePOSSaleProcessor) ──────
   //
@@ -1082,7 +1082,7 @@ function POSPageContent() {
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [setSelectedSuggestionIndex, setShowSuggestions])
 
   // Atajos de teclado mejorados
   useEffect(() => {
@@ -1197,7 +1197,7 @@ function POSPageContent() {
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [cart.length, clearCart, viewMode, showAdvancedFilters, showFeatured, isFullscreen, isCheckoutOpen, showKeyboardShortcuts, showAccessibilitySettings, filteredProducts, addToCart])
+  }, [addToCart, cart.length, clearCart, combinedCartItems.length, filteredProducts, isCheckoutOpen, isFullscreen, setIsCheckoutOpen, setSelectedCustomer, setShowFeatured, showAccessibilitySettings, showAdvancedFilters, showFeatured, showKeyboardShortcuts, viewMode])
 
   // Búsqueda por código de barras
   useEffect(() => {

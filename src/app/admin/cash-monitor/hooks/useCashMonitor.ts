@@ -442,7 +442,7 @@ export function useCashMonitor() {
     } catch (error) {
       console.error('Error fetching audit log:', error)
     }
-  }, [organization?.id, selectedBranchId, supabase])
+  }, [organization?.id, supabase])
 
   // =========================================================================
   // COMPUTE METRICS

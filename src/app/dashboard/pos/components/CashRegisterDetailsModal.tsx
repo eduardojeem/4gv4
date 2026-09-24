@@ -60,7 +60,7 @@ export function CashRegisterDetailsModal({
     if (isOpen && !cashReport) {
       onGenerateReport()
     }
-  }, [isOpen])
+  }, [cashReport, isOpen, onGenerateReport])
 
   const movements = [...register.movements].reverse()
 
