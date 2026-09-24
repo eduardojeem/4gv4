@@ -1,12 +1,12 @@
-import { AppImage } from '@/components/ui/app-image'
+'use client'
+
 /**
  * Componente para mostrar el código QR de una reparación
  * Útil para mostrar en la interfaz de administración
  */
 
-'use client'
-
 import { useState } from 'react'
+import { AppImage } from '@/components/ui/app-image'
 import { QrCode, Copy, Download, ExternalLink, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

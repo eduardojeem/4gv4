@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { createElement, useState } from 'react'
 import Link from 'next/link'
 import {
   CheckCircle2,
@@ -126,7 +126,7 @@ function StepCard({
                   : 'bg-primary/10 text-primary border-primary/25 group-hover:bg-primary group-hover:text-primary-foreground'
               )}
             >
-              <Icon className="h-6 w-6 stroke-[2.2]" />
+              {createElement(Icon, { className: 'h-6 w-6 stroke-[2.2]' })}
             </div>
 
             <div className="flex items-center gap-1.5">

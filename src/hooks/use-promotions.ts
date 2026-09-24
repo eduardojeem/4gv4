@@ -305,7 +305,6 @@ export function usePromotions() {
   // The real duplicate flow goes through PromotionDialog (handleDuplicate in page.tsx),
   // which opens the modal so the user can review/edit before saving.
   // Exporting this function would create a second, silent path that bypasses the modal.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _duplicatePromotion = useCallback(async (promotion: Promotion) => {
     const duplicatedData = {
       ...promotion,

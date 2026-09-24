@@ -9,12 +9,13 @@ export type AppImageProps = Omit<ImageProps, 'height' | 'width'> & {
 }
 
 export const AppImage = forwardRef<HTMLImageElement, AppImageProps>(function AppImage(
-  { height = 1, unoptimized = true, width = 1, ...props },
+  { alt, height = 1, unoptimized = true, width = 1, ...props },
   ref,
 ) {
   return (
     <Image
       {...props}
+      alt={alt}
       ref={ref}
       height={height}
       width={width}

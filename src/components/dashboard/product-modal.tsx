@@ -661,6 +661,8 @@ export function ProductModal({
   // recupero nada.
   useEffect(() => {
     if (!isDirty) return
+    // React Hook Form exposes a subscription API that React Compiler cannot memoize.
+    // eslint-disable-next-line react-hooks/incompatible-library
     const subscription = form.watch((values) => {
       saveProductDraft(productId, values as Record<string, unknown>)
     })
