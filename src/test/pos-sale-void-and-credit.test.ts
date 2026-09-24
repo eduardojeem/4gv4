@@ -161,3 +161,28 @@ describe('el POS pudo dejar de vender sin decir por qué', () => {
     expect(API_VENTA).toContain('raw: error,')
   })
 })
+
+describe('vender una variante', () => {
+  const V5 = leer('supabase/migrations/20260908010913_pos_variant_sales_atomic.sql')
+  const ARREGLO = leer('supabase/migrations/20260924130000_fix_pos_variant_name_column.sql')
+
+  it('copia el nombre desde la columna que existe', () => {
+    // `product_variants` no tiene `name`: tiene `variant_name`. Con `v.name`
+    // cualquier cobro con variante moria con 42703 y el mostrador veia un 500.
+    expect(V5).toContain('g.variant_id,v.variant_name,v.sku')
+    expect(V5).not.toContain('g.variant_id,v.name,v.sku')
+    expect(ARREGLO).toContain("replace(definicion, 'g.variant_id,v.name,v.sku', 'g.variant_id,v.variant_name,v.sku')")
+  })
+
+  it('y la migración no deja la función a medias si ya cambió', () => {
+    expect(ARREGLO).toContain('la función cambió y hay que revisarla a mano')
+    expect(ARREGLO).toContain("if strpos(definicion, 'g.variant_id,v.variant_name,v.sku') > 0 then return; end if;")
+  })
+
+  it('las dos funciones nacen con permiso para el servidor', () => {
+    // Instalar desde cero no puede repetir el POS sin permisos.
+    const V4 = leer('supabase/migrations/20260816153000_atomic_pos_store_credit.sql')
+    expect(V4).toContain('to authenticated, service_role;')
+    expect(V5).toContain('to authenticated, service_role;')
+  })
+})

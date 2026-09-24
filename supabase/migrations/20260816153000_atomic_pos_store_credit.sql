@@ -157,6 +157,6 @@ end;
 $$;
 
 revoke all on function public.process_pos_sale_atomic_v4(uuid, uuid, uuid, uuid, text, text, uuid, jsonb, jsonb, text, numeric, text, numeric, boolean, jsonb, jsonb, boolean, text, numeric) from public;
-grant execute on function public.process_pos_sale_atomic_v4(uuid, uuid, uuid, uuid, text, text, uuid, jsonb, jsonb, text, numeric, text, numeric, boolean, jsonb, jsonb, boolean, text, numeric) to authenticated;
+grant execute on function public.process_pos_sale_atomic_v4(uuid, uuid, uuid, uuid, text, text, uuid, jsonb, jsonb, text, numeric, text, numeric, boolean, jsonb, jsonb, boolean, text, numeric) to authenticated, service_role;
 
 commit;

@@ -66,7 +66,7 @@ begin
 
   insert into public.sale_items(sale_id,product_id,variant_id,variant_name,variant_sku,variant_attributes,
     quantity,unit_price,discount_amount,subtotal,organization_id)
-  select created_sale_id,g.product_id,g.variant_id,v.name,v.sku,v.attributes,g.quantity,
+  select created_sale_id,g.product_id,g.variant_id,v.variant_name,v.sku,v.attributes,g.quantity,
     case when p_price_mode='wholesale' and coalesce(v.wholesale_price,0)>0 then v.wholesale_price else v.sale_price end,
     least(g.discount_amount,round((case when p_price_mode='wholesale' and coalesce(v.wholesale_price,0)>0 then v.wholesale_price else v.sale_price end)*g.quantity,2)),
     round((case when p_price_mode='wholesale' and coalesce(v.wholesale_price,0)>0 then v.wholesale_price else v.sale_price end)*g.quantity,2)
@@ -84,6 +84,6 @@ begin
 end; $$;
 
 revoke all on function public.process_pos_sale_atomic_v5(uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,text,numeric,text,numeric,boolean,jsonb,jsonb,boolean,text,numeric) from public;
-grant execute on function public.process_pos_sale_atomic_v5(uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,text,numeric,text,numeric,boolean,jsonb,jsonb,boolean,text,numeric) to authenticated;
+grant execute on function public.process_pos_sale_atomic_v5(uuid,uuid,uuid,uuid,text,text,uuid,jsonb,jsonb,text,numeric,text,numeric,boolean,jsonb,jsonb,boolean,text,numeric) to authenticated, service_role;
 
 commit;
