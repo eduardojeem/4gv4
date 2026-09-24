@@ -298,7 +298,7 @@ class AutoRecovery {
     await this.loadConfiguration()
     await this.loadRecoveryStrategies()
     await this.loadActiveExecutions()
-    
+
     if (this.config.enabled && !this.config.maintenanceMode) {
       this.startMonitoring()
       this.startHealthChecks()
@@ -392,7 +392,7 @@ class AutoRecovery {
 
       try {
         const shouldTrigger = await this.evaluateConditions(strategy.conditions)
-        
+
         if (shouldTrigger && !this.isStrategyRunning(strategyId)) {
           await this.triggerRecovery(strategyId, 'automatic', 'Conditions met')
         }
@@ -444,7 +444,7 @@ class AutoRecovery {
   // Verificar si una estrategia está ejecutándose
   private isStrategyRunning(strategyId: string): boolean {
     for (const execution of this.activeExecutions.values()) {
-      if (execution.strategyId === strategyId && 
+      if (execution.strategyId === strategyId &&
           (execution.status === 'pending' || execution.status === 'running')) {
         return true
       }
@@ -454,8 +454,8 @@ class AutoRecovery {
 
   // Activar recuperación
   async triggerRecovery(
-    strategyId: string, 
-    triggeredBy: string, 
+    strategyId: string,
+    triggeredBy: string,
     reason: string,
     metadata?: { [key: string]: any }
   ): Promise<string> {
@@ -535,13 +535,13 @@ class AutoRecovery {
     return this.compareValues(currentValue, operator, value)
   }
 
-  private async checkDataCorruption(condition: RecoveryCondition): Promise<boolean> {
+  private async checkDataCorruption(_condition: RecoveryCondition): Promise<boolean> {
     try {
       const verifyDataIntegrity = (backupManager as unknown as { verifyDataIntegrity?: () => Promise<{ isValid: boolean }> }).verifyDataIntegrity
       if (!verifyDataIntegrity) return false
       const integrityCheck = await verifyDataIntegrity()
       return !integrityCheck.isValid
-    } catch (error) {
+    } catch (_error) {
       return true
     }
   }
@@ -551,7 +551,7 @@ class AutoRecovery {
     try {
       const response = await fetch(metric, { method: 'GET' })
       return !response.ok
-    } catch (error) {
+    } catch (_error) {
       return true
     }
   }
@@ -563,7 +563,7 @@ class AutoRecovery {
     return this.compareValues(currentValue, operator, value)
   }
 
-  private async checkSecurityBreach(condition: RecoveryCondition): Promise<boolean> {
+  private async checkSecurityBreach(_condition: RecoveryCondition): Promise<boolean> {
     const securityEvents = await this.getSecurityEvents()
     return securityEvents.some(event => event.severity === 'critical')
   }
@@ -615,7 +615,7 @@ class AutoRecovery {
     return []
   }
 
-  private async executeCustomLogic(logic: string): Promise<any> {
+  private async executeCustomLogic(_logic: string): Promise<any> {
     // Implementar ejecución segura de lógica personalizada
     return false
   }
@@ -688,7 +688,7 @@ class AutoRecovery {
     // Realizar verificaciones de salud del sistema
   }
 
-  private async failExecution(execution: RecoveryExecution, reason: string): Promise<void> {
+  private async failExecution(execution: RecoveryExecution, _reason: string): Promise<void> {
     execution.status = 'failed'
     execution.completedAt = new Date()
     execution.duration = execution.completedAt.getTime() - execution.startedAt.getTime()
@@ -704,15 +704,15 @@ class AutoRecovery {
     this.activeExecutions.delete(execution.id)
   }
 
-  private async verifySuccess(execution: RecoveryExecution, criteria: SuccessCriteria): Promise<{ success: boolean; reason?: string }> {
+  private async verifySuccess(_execution: RecoveryExecution, _criteria: SuccessCriteria): Promise<{ success: boolean; reason?: string }> {
     return { success: true }
   }
 
-  private async executeRollback(execution: RecoveryExecution, strategy: RollbackStrategy): Promise<void> {
+  private async executeRollback(_execution: RecoveryExecution, _strategy: RollbackStrategy): Promise<void> {
     // Implementar rollback
   }
 
-  private async sendNotification(execution: RecoveryExecution, event: string, data: any): Promise<void> {
+  private async sendNotification(_execution: RecoveryExecution, _event: string, _data: any): Promise<void> {
     // Implementar notificaciones
   }
 

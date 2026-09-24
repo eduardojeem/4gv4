@@ -95,7 +95,7 @@ function StepCard({
   index,
   totalSteps,
   isLast,
-  brand,
+  brand: _brand,
 }: {
   step: ProcessStep
   index: number

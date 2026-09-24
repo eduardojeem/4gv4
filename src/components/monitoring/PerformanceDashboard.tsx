@@ -153,8 +153,8 @@ function AlertCard({ alert, onResolve }: AlertCardProps) {
             </div>
           )}
           <div className="flex justify-end mt-4">
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={() => onResolve(alert.id)}
               disabled={alert.resolved}
             >
@@ -232,7 +232,7 @@ export default function PerformanceDashboard() {
   const [selectedTab, setSelectedTab] = React.useState('overview')
   const [timeRange, setTimeRange] = React.useState('24h')
   const [showReportDialog, setShowReportDialog] = React.useState(false)
-  
+
   const {
     loading,
     metrics,
@@ -246,7 +246,7 @@ export default function PerformanceDashboard() {
 
   // Procesar datos para gráficos
   const chartData = React.useMemo(() => {
-    return metrics.slice(-50).map((metric, index) => ({
+    return metrics.slice(-50).map((metric, _index) => ({
       time: metric.timestamp.toLocaleTimeString(),
       cpu: metric.cpu.usage,
       memory: metric.memory.percentage,
@@ -264,10 +264,10 @@ export default function PerformanceDashboard() {
   // Calcular tendencias
   const calculateTrend = (metricKey: string) => {
     if (metrics.length < 2) return { trend: 'stable' as const, value: 0 }
-    
+
     const current = metrics[metrics.length - 1]
     const previous = metrics[metrics.length - 2]
-    
+
     let currentValue: number
     let previousValue: number
 
@@ -289,7 +289,7 @@ export default function PerformanceDashboard() {
     }
 
     const change = ((currentValue - previousValue) / previousValue) * 100
-    
+
     if (Math.abs(change) < 2) return { trend: 'stable' as const, value: change }
     return { trend: change > 0 ? 'up' as const : 'down' as const, value: change }
   }
@@ -301,7 +301,7 @@ export default function PerformanceDashboard() {
       startDate.setDate(startDate.getDate() - 7) // Última semana
 
       const report = await generateReport('weekly', startDate, endDate)
-      
+
       // Crear y descargar archivo
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
@@ -312,7 +312,7 @@ export default function PerformanceDashboard() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      
+
       setShowReportDialog(false)
     } catch (error) {
       console.error('Error generating report:', error)
@@ -657,7 +657,7 @@ export default function PerformanceDashboard() {
               Configurar Umbrales
             </Button>
           </div>
-          
+
           <div className="grid gap-4">
             {alerts.filter(alert => !alert.resolved).length === 0 ? (
               <Card>
@@ -691,7 +691,7 @@ export default function PerformanceDashboard() {
               Verificar Estado
             </Button>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {healthChecks.length === 0 ? (
               <Card className="col-span-full">

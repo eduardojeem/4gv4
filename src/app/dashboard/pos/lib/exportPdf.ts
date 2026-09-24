@@ -80,7 +80,7 @@ export async function downloadPdfReport({
 
     summaryStats.forEach((stat, idx) => {
       const cardX = margin + idx * (cardWidth + 8)
-      
+
       // Fondo Card
       doc.setFillColor(248, 250, 252) // Slate 50
       doc.setDrawColor(226, 232, 240) // Slate 200
@@ -107,7 +107,7 @@ export async function downloadPdfReport({
     ? sections
     : (headers && rows ? [{ headers, rows, columnStyles }] : [])
 
-  tableSections.forEach((sec, idx) => {
+  tableSections.forEach((sec, _idx) => {
     // Si la sección tiene título
     if (sec.title) {
       if (currentY > pageHeight - 90) {
@@ -159,7 +159,7 @@ export async function downloadPdfReport({
       columnStyles: sec.columnStyles || columnStyles,
       didParseCell: (data) => {
         const cellText = String(data.cell.raw || '')
-        
+
         // Fila divisoria especial
         if (cellText.startsWith('---') || cellText.startsWith('TOTAL') || cellText.startsWith('FASE')) {
           data.cell.styles.fillColor = [241, 245, 249]
@@ -206,7 +206,7 @@ export async function downloadPdfReport({
           data.cell.styles.fontStyle = 'bold'
         }
       },
-      didDrawPage: (data) => {
+      didDrawPage: (_data) => {
         // Pie de página profesional
         const pageNumber = (doc as any).internal.getNumberOfPages()
         doc.setFont('helvetica', 'normal')

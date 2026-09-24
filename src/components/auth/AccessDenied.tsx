@@ -9,7 +9,7 @@ interface AccessDeniedProps {
     className?: string
 }
 
-export function AccessDenied({ className }: AccessDeniedProps) {
+export function AccessDenied({ className: _className }: AccessDeniedProps) {
     const router = useRouter()
 
     return (

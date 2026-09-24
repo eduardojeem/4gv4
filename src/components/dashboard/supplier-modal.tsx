@@ -78,7 +78,7 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
   // Reset form when modal opens or supplier changes
   useEffect(() => {
     if (isOpen) {
-      
+
       const values: any = {
         name: supplier?.name || '',
         contact_name: supplier?.contact_name || '',
@@ -108,9 +108,9 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
       if (error instanceof Error) {
         // Handle specific Supabase/Hook errors
         if (error.message.includes('duplicate key') || error.message.includes('23505') || error.message.includes('Ya existe')) {
-          form.setError('email', { 
-            type: 'manual', 
-            message: 'Ya existe un proveedor con este email o nombre.' 
+          form.setError('email', {
+            type: 'manual',
+            message: 'Ya existe un proveedor con este email o nombre.'
           })
           setGeneralError('Ya existe un proveedor con estos datos. Por favor verifica el email.')
           setActiveTab('contact')
@@ -139,7 +139,7 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !loading && !form.formState.isSubmitting && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(_open) => !loading && !form.formState.isSubmitting && onClose()}>
       <DialogContent className="max-w-4xl w-[95vw] h-[90vh] p-0 overflow-hidden gap-0">
         <DialogHeader className="px-6 py-5 border-b shrink-0 flex flex-row items-center space-y-0 gap-4">
           <div className="p-3 bg-primary/10 rounded-lg">

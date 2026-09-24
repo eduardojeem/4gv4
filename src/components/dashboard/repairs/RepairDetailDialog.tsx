@@ -599,7 +599,7 @@ export function RepairDetailDialog({
     if (!dateString) return 'Pendiente'
     try {
       return format(new Date(dateString), "d 'de' MMMM, yyyy - h:mm a", { locale: es })
-    } catch (e) {
+    } catch (_e) {
       return 'Fecha inválida'
     }
   }
@@ -707,7 +707,7 @@ export function RepairDetailDialog({
       try {
         await navigator.clipboard.writeText(shareText)
         toast.success('Texto copiado al portapapeles')
-      } catch (error) {
+      } catch (_error) {
         toast.error('No se pudo copiar el texto')
       }
     } else if (method === 'native') {
@@ -2745,7 +2745,7 @@ export function RepairDetailDialog({
               <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               ¿Cómo proceder si el cliente tiene un reclamo o reingreso?
             </p>
-            
+
             <div className="space-y-2 text-[11px]">
               <div className="flex gap-2.5 items-start p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <span className="flex h-5 w-5 rounded-full bg-amber-600 text-white font-bold items-center justify-center shrink-0 text-[10px]">

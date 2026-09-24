@@ -288,7 +288,7 @@ export function GuideSectionCard({
             </div>
 
             <ol className="relative ml-2.5 space-y-4 border-l border-border/80 pl-4 sm:ml-3 sm:pl-5">
-              {section.steps.map((step, index) => (
+              {section.steps.map((step, _index) => (
                 <li key={step.title} className="relative">
                   <span
                     className={cn(

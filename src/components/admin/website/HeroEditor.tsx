@@ -201,7 +201,7 @@ const DEFAULT_CAPABILITIES = resolveStorefrontCapabilities({
   effectiveModules: ['inventory', 'ecommerce', 'orders'],
 })
 
-export function HeroEditor({ initialContent, initialStats, capabilities = DEFAULT_CAPABILITIES }: HeroEditorProps = {}) {
+export function HeroEditor({ initialContent: _initialContent, initialStats: _initialStats, capabilities = DEFAULT_CAPABILITIES }: HeroEditorProps = {}) {
   const { settings, isLoading, error, isSaving, updateSettings } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults()
   const [heroContentDraft, setHeroContentDraft] = useState<HeroContent | null>(null)

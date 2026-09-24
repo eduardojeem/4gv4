@@ -112,7 +112,7 @@ export function calculateTaxFromInclusivePrice(inclusivePrice: number, taxRate: 
     // Fórmula: subtotal = precio_con_iva / (1 + tasa_iva/100)
     const subtotal = Math.round((inclusivePrice / (1 + taxRate / 100)) * 100) / 100
     const taxAmount = Math.round((inclusivePrice - subtotal) * 100) / 100
-    
+
     return {
         subtotal,
         taxAmount
@@ -135,7 +135,7 @@ export function calculateRepairTotal(input: RepairCalculationInput): RepairCalcu
         // Los precios YA incluyen IVA, necesitamos extraerlo
         const laborCalc = calculateTaxFromInclusivePrice(laborCost, taxRate)
         const partsCalc = calculateTaxFromInclusivePrice(partsCost, taxRate)
-        
+
         laborSubtotal = laborCalc.subtotal
         partsSubtotal = partsCalc.subtotal
         laborTax = laborCalc.taxAmount
@@ -182,7 +182,7 @@ export function calculateRepairTotal(input: RepairCalculationInput): RepairCalcu
     // Aplicar descuento proporcionalmente al subtotal y al IVA
     const totalBeforeDiscount = laborCost + partsCost
     const discountRatio = totalBeforeDiscount > 0 ? discount / totalBeforeDiscount : 0
-    
+
     const finalLaborSubtotal = Math.max(0, laborSubtotal - (laborSubtotal * discountRatio))
     const finalPartsSubtotal = Math.max(0, partsSubtotal - (partsSubtotal * discountRatio))
     const finalLaborTax = Math.max(0, laborTax - (laborTax * discountRatio))
@@ -213,7 +213,7 @@ export function calculateRepairTotal(input: RepairCalculationInput): RepairCalcu
  * Ahora soporta precios con IVA incluido por defecto
  */
 export function createRepairCartItem(
-    repair: Repair, 
+    repair: Repair,
     taxRate: number = 10,
     discountPercentage?: number,
     discountAmount?: number,
@@ -261,7 +261,7 @@ export function applyRounding(amount: number, roundTo: number = 10): number {
 /**
  * Formatear moneda
  */
-export function formatCurrency(amount: number, currency: string = 'PYG'): string {
+export function formatCurrency(amount: number, _currency: string = 'PYG'): string {
     return formatCurrencyCentral(amount)
 }
 

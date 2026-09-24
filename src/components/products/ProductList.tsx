@@ -134,7 +134,7 @@ const ProductCard = memo(function ProductCard({
     onView,
     onDuplicate,
     selected,
-    onSelect
+    onSelect: _onSelect
 }: ProductCardProps) {
     const stockStatus = getStockStatus(product.stock_quantity, product.min_stock)
 

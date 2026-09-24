@@ -45,7 +45,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
   onCashIn,
   onCashOut,
   onCashCount,
-  advancedMode = false
+  advancedMode: _advancedMode = false
 }: CashRegisterOverviewProps) {
   const {
     getCurrentRegister,
@@ -168,7 +168,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      
+
       {/* ── 1. HUB DE ACCIONES RÁPIDAS (REUBICADO AL INICIO) ── */}
       <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -232,9 +232,9 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
           </Button>
 
           {/* Arqueo de Caja */}
-          <Button 
-            variant="outline" 
-            className="h-16 flex items-center justify-start gap-3 p-3.5 rounded-xl border-blue-200 bg-blue-50/40 hover:bg-blue-100/70 hover:border-blue-300 hover:text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:hover:bg-blue-900/40 dark:hover:text-blue-300 transition-all shadow-2xs group" 
+          <Button
+            variant="outline"
+            className="h-16 flex items-center justify-start gap-3 p-3.5 rounded-xl border-blue-200 bg-blue-50/40 hover:bg-blue-100/70 hover:border-blue-300 hover:text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:hover:bg-blue-900/40 dark:hover:text-blue-300 transition-all shadow-2xs group"
             onClick={onCashCount}
             title="Realizar conteo físico y arqueo (Alt+A)"
           >
@@ -346,8 +346,8 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
         <Card className={cn(
           "border shadow-sm hover:shadow-md transition-shadow rounded-2xl",
           lastCashCount
-            ? Math.abs(discrepancy) > 0 
-              ? "border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20 dark:border-amber-900/40" 
+            ? Math.abs(discrepancy) > 0
+              ? "border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20 dark:border-amber-900/40"
               : "border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20 dark:border-emerald-900/40"
             : "border-slate-200/80 bg-gradient-to-br from-slate-50/50 to-transparent dark:from-slate-900/20 dark:border-slate-800/60"
         )}>
@@ -387,7 +387,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
       </div>
       {/* ── 3. DISTRIBUCIÓN DE COBROS + TIMELINE DE MOVIMIENTOS ── */}
       <div className="grid gap-6 lg:grid-cols-3">
-        
+
         {/* Distribución por Formas de Cobro */}
         <div className="space-y-6 lg:col-span-1">
           <Card className="border border-border/70 shadow-sm rounded-2xl overflow-hidden">
@@ -466,7 +466,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
                 <History className="h-4 w-4 text-primary" />
                 Línea de Tiempo de Movimientos ({movements.length})
               </CardTitle>
-              
+
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 sm:w-48">
                   <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />

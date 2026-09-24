@@ -40,7 +40,7 @@ const workloadConfig = {
 }
 
 export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader({
-  id,
+  id: _id,
   name,
   avatar,
   specialty,

@@ -197,7 +197,7 @@ export const MetricsOnly: Story = {
       }
     }
   },
-  render: (args) => (
+  render: (_args) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {/* Métricas principales */}
       <div className="bg-card p-6 rounded-lg border">

@@ -89,7 +89,7 @@ export function CatalogManager({
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   })))
-  
+
   const {
     suppliers: dbSuppliers,
     createSupplier,
@@ -244,7 +244,7 @@ export function CatalogManager({
           toast.error(res.error || 'Error al actualizar categoría')
         }
       }
-    } catch (e) {
+    } catch (_e) {
       toast.error('Ocurrió un error inesperado')
     }
   }
@@ -276,7 +276,7 @@ export function CatalogManager({
 
   const handleBrandSave = async (brandData: any) => {
     let updatedBrands: Brand[]
-    
+
     const brand: Brand = {
       id: brandModal.brand?.id || crypto.randomUUID(),
       name: brandData.name,
@@ -295,7 +295,7 @@ export function CatalogManager({
     } else {
       updatedBrands = brands.map(b => b.id === brand.id ? brand : b)
     }
-    
+
     setBrands(updatedBrands)
     onBrandChange?.(updatedBrands)
     setBrandModal({ isOpen: false, mode: 'add' })
@@ -355,7 +355,7 @@ export function CatalogManager({
           toast.error(res.error || 'Error al actualizar proveedor')
         }
       }
-    } catch (e) {
+    } catch (_e) {
       toast.error('Ocurrió un error inesperado')
     }
   }
@@ -363,7 +363,7 @@ export function CatalogManager({
   // Funciones de filtrado
   const getFilteredItems = () => {
     let items: any[] = []
-    
+
     switch (activeTab) {
       case 'categories':
         items = categories
@@ -389,7 +389,7 @@ export function CatalogManager({
       if (activeTab === 'suppliers') {
         items = items.filter(item => item.status === filters.status)
       } else {
-        items = items.filter(item => 
+        items = items.filter(item =>
           filters.status === 'active' ? item.isActive : !item.isActive
         )
       }
@@ -399,12 +399,12 @@ export function CatalogManager({
     items.sort((a, b) => {
       let aValue = a[filters.sortBy]
       let bValue = b[filters.sortBy]
-      
+
       if (typeof aValue === 'string') {
         aValue = aValue.toLowerCase()
         bValue = bValue.toLowerCase()
       }
-      
+
       if (filters.sortOrder === 'asc') {
         return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
       } else {
@@ -467,7 +467,7 @@ export function CatalogManager({
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     className="text-red-600"
                     onClick={() => {
                       if (type === 'categories') handleCategoryDelete(item.id)

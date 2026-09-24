@@ -48,7 +48,7 @@ const routeConfigs: Record<string, {
 // Middleware principal de optimización
 export function apiOptimizationMiddleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
-  
+
   // Solo aplicar a rutas de API
   if (!pathname.startsWith('/api/')) {
     return NextResponse.next()
@@ -56,13 +56,13 @@ export function apiOptimizationMiddleware(request: NextRequest) {
 
   // Obtener configuración para la ruta
   const config = getRouteConfig(pathname)
-  
+
   if (!config.enableOptimization) {
     return NextResponse.next()
   }
 
   // Aplicar optimizaciones usando el wrapper
-  return withOptimization(async (req: NextRequest) => {
+  return withOptimization(async (_req: NextRequest) => {
     // El handler real se ejecutará en el endpoint específico
     return NextResponse.next()
   })(request)
@@ -115,10 +115,10 @@ export function withCache<T>(
 
       // Ejecutar fetcher
       const result = await fetcher()
-      
+
       // Guardar en cache
       cacheManager.set(key, result, ttl, tags)
-      
+
       resolve(result)
     } catch (error) {
       reject(error)
@@ -141,7 +141,7 @@ export async function checkRateLimit(
   headers: Record<string, string>
 }> {
   const result = await rateLimiter.checkLimit(request)
-  
+
   const headers = {
     'X-RateLimit-Limit': (options?.maxRequests || 100).toString(),
     'X-RateLimit-Remaining': result.remaining.toString(),
@@ -165,7 +165,7 @@ export function recordAPIMetric(
   }
 ) {
   const responseTime = Date.now() - startTime
-  
+
   metricsCollector.recordMetric({
     endpoint: request.nextUrl.pathname,
     method: request.method,
@@ -220,7 +220,7 @@ export function optimizedEndpoint(
               { error: 'Rate limit exceeded' },
               { status: 429 }
             )
-            
+
             // Agregar headers de rate limit
             Object.entries(rateLimitResult.headers).forEach(([key, value]) => {
               response.headers.set(key, value)
@@ -232,7 +232,7 @@ export function optimizedEndpoint(
 
         // Cache
         if (options?.cache?.enabled !== false && request.method === 'GET') {
-          const cacheKey = options?.cache?.keyGenerator 
+          const cacheKey = options?.cache?.keyGenerator
             ? options.cache.keyGenerator(request)
             : `${request.method}:${request.nextUrl.pathname}:${request.nextUrl.search}`
 
@@ -241,12 +241,12 @@ export function optimizedEndpoint(
             cacheHit = true
             const response = NextResponse.json(cached)
             response.headers.set('X-Cache-Hit', 'true')
-            
+
             // Registrar métricas
             if (options?.metrics?.enabled !== false) {
               recordAPIMetric(request, response, startTime, { cacheHit, queryTime })
             }
-            
+
             return response
           }
         }
@@ -257,22 +257,22 @@ export function optimizedEndpoint(
         queryTime = Date.now() - queryStartTime
 
         // Guardar en cache si es exitoso
-        if (options?.cache?.enabled !== false && 
-            request.method === 'GET' && 
+        if (options?.cache?.enabled !== false &&
+            request.method === 'GET' &&
             result.status === 200) {
-          const cacheKey = options?.cache?.keyGenerator 
+          const cacheKey = options?.cache?.keyGenerator
             ? options.cache.keyGenerator(request)
             : `${request.method}:${request.nextUrl.pathname}:${request.nextUrl.search}`
 
           try {
             const data = await result.clone().json()
             cacheManager.set(
-              cacheKey, 
-              data, 
-              options?.cache?.ttl, 
+              cacheKey,
+              data,
+              options?.cache?.ttl,
               options?.cache?.tags
             )
-          } catch (error) {
+          } catch (_error) {
             // Ignorar errores de cache
           }
         }
@@ -293,7 +293,7 @@ export function optimizedEndpoint(
           )
           recordAPIMetric(request, errorResponse, startTime, { cacheHit, queryTime })
         }
-        
+
         throw error
       }
     }

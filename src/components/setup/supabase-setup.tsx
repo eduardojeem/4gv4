@@ -116,16 +116,16 @@ export default function SupabaseSetup() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {SETUP_STEPS.map((step, index) => {
+            {SETUP_STEPS.map((step, _index) => {
               const Icon = step.icon
               const completed = isStepCompleted(step.id)
-              
+
               return (
                 <div
                   key={step.id}
                   className={`p-4 border rounded-lg transition-colors ${
-                    completed 
-                      ? 'bg-green-50 border-green-200' 
+                    completed
+                      ? 'bg-green-50 border-green-200'
                       : 'bg-gray-50 border-gray-200'
                   }`}
                 >
@@ -258,7 +258,7 @@ export default function SupabaseSetup() {
               </p>
               <Badge variant="outline">Recomendado</Badge>
             </div>
-            
+
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium mb-2">Proveedores OAuth</h4>
               <p className="text-sm text-gray-600 mb-3">
@@ -348,8 +348,8 @@ export default function SupabaseSetup() {
             <div>
               <p className="font-medium">Pasos completados</p>
               <p className="text-sm text-gray-500">
-                {completedSteps.length === SETUP_STEPS.length 
-                  ? '¡Configuración completa!' 
+                {completedSteps.length === SETUP_STEPS.length
+                  ? '¡Configuración completa!'
                   : `${SETUP_STEPS.length - completedSteps.length} pasos restantes`
                 }
               </p>

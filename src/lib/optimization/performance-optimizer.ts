@@ -385,7 +385,7 @@ export class PerformanceOptimizer {
   private async checkOptimizationTriggers(): Promise<void> {
     try {
       const rules = await this.getActiveOptimizationRules()
-      
+
       for (const rule of rules) {
         if (await this.shouldTriggerRule(rule)) {
           await this.executeOptimizationRule(rule.id, {
@@ -423,9 +423,9 @@ export class PerformanceOptimizer {
     // Get recent metrics for the condition
     const endTime = new Date()
     const startTime = new Date(endTime.getTime() - condition.duration * 60000)
-    
+
     const metrics = await this.getMetrics(condition.metricName, startTime, endTime)
-    
+
     if (metrics.length === 0) return false
 
     // Calculate aggregated value
@@ -483,8 +483,8 @@ export class PerformanceOptimizer {
   }
 
   async getMetrics(
-    metricName: string, 
-    startTime: Date, 
+    metricName: string,
+    startTime: Date,
     endTime: Date
   ): Promise<PerformanceMetric[]> {
     const { data, error } = await this.supabase
@@ -590,14 +590,14 @@ export class PerformanceOptimizer {
 
   // Ejecución de optimizaciones
   async executeOptimizationRule(
-    ruleId: string, 
+    ruleId: string,
     trigger: OptimizationTrigger
   ): Promise<string> {
     const rule = await this.getOptimizationRule(ruleId)
     if (!rule) throw new Error(`Rule ${ruleId} not found`)
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const execution: OptimizationExecution = {
       id: executionId,
       ruleId,
@@ -625,7 +625,7 @@ export class PerformanceOptimizer {
   }
 
   private async executeOptimizationAsync(
-    execution: OptimizationExecution, 
+    execution: OptimizationExecution,
     rule: OptimizationRule
   ): Promise<void> {
     try {
@@ -638,7 +638,7 @@ export class PerformanceOptimizer {
       for (const action of rule.actions) {
         const actionExecution = await this.executeAction(action, execution.id)
         actionExecutions.push(actionExecution)
-        
+
         if (actionExecution.status === 'failed') {
           overallSuccess = false
           if (action.rollbackOnFailure) {
@@ -650,7 +650,7 @@ export class PerformanceOptimizer {
 
       // Calculate results
       const results = await this.calculateOptimizationResults(actionExecutions)
-      
+
       execution.actions = actionExecutions
       execution.results = results
       execution.endTime = new Date()
@@ -669,8 +669,8 @@ export class PerformanceOptimizer {
   }
 
   private async executeAction(
-    action: OptimizationAction, 
-    executionId: string
+    action: OptimizationAction,
+    _executionId: string
   ): Promise<ActionExecution> {
     const actionExecution: ActionExecution = {
       actionId: action.id,
@@ -690,7 +690,7 @@ export class PerformanceOptimizer {
 
     try {
       actionExecution.status = 'running'
-      
+
       // Capture before metrics
       const beforeMetrics = await this.captureActionMetrics('before')
       actionExecution.metrics = {
@@ -906,7 +906,7 @@ export class PerformanceOptimizer {
   }
 
   private async updateExecutionStatus(
-    executionId: string, 
+    executionId: string,
     status: OptimizationExecution['status']
   ): Promise<void> {
     const { error } = await this.supabase
@@ -959,7 +959,7 @@ export class PerformanceOptimizer {
   }
 
   async generateOptimizationReport(
-    startDate: Date, 
+    startDate: Date,
     endDate: Date
   ): Promise<OptimizationReport> {
     // Implementation would generate comprehensive optimization report

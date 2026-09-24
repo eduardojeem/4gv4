@@ -23,7 +23,7 @@ export function ConnectionStatus() {
       } else {
         toast.error('Error en la sincronización')
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error en la sincronización')
     } finally {
       setIsSyncing(false)

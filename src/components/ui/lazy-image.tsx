@@ -30,7 +30,7 @@ export function LazyImage({
   onError,
   priority = false,
   sizes,
-  quality = 75
+  quality: _quality = 75
 }: LazyImageProps) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [isError, setIsError] = useState(false)
@@ -124,7 +124,7 @@ export function LazyImage({
                 <Loader2 className="w-1/3 h-1/3 text-gray-400 animate-spin" />
               </div>
             )}
-            
+
             {/* Actual image */}
             {src && (
               <AppImage
@@ -157,12 +157,12 @@ interface LazyAvatarProps {
   priority?: boolean
 }
 
-export function LazyAvatar({ 
-  src, 
-  name, 
-  size = 'md', 
+export function LazyAvatar({
+  src,
+  name,
+  size = 'md',
   className,
-  priority = false 
+  priority = false
 }: LazyAvatarProps) {
   const sizeClasses = {
     sm: 'w-8 h-8 text-xs',

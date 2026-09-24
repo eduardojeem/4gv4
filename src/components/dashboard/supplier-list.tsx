@@ -101,7 +101,7 @@ export default function SupplierList({
   onSupplierCreate,
   onSupplierUpdate,
   onSupplierDelete,
-  onSupplierSelect
+  onSupplierSelect: _onSupplierSelect
 }: SupplierListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const debouncedSearchTerm = useDebounce(searchTerm, 300)

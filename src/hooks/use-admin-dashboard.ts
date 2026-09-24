@@ -205,7 +205,7 @@ export function useAdminDashboard() {
   // El hook no tenia donde reportar una falla: la carga se caia, las metricas
   // quedaban en sus ceros iniciales y la pantalla se veia normal.
   const [error, setError] = useState<string | null>(null)
-  
+
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
@@ -219,7 +219,7 @@ export function useAdminDashboard() {
           .select('*')
           .eq('id', 'system')
           .single()
-        
+
         if (!settingsError && settingsData) {
           const { mapDBToSettings } = await import('@/lib/validations/system-settings')
           const mappedSettings = mapDBToSettings(settingsData)
@@ -230,7 +230,7 @@ export function useAdminDashboard() {
         const { data: usersData, error: usersError } = await supabase
           .from('profiles')
           .select('*')
-        
+
         if (!usersError && usersData) {
             const mappedUsers: User[] = usersData.map((u: any) => ({
                 id: u.id,
@@ -250,7 +250,7 @@ export function useAdminDashboard() {
         // Fetch Metrics
         const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
         const { data: salesData } = await supabase.from('sales').select('total_amount')
-        
+
         const totalSales = salesData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0
 
         setMetrics(prev => ({
@@ -307,17 +307,17 @@ export function useAdminDashboard() {
     }, {}),
   }), [users])
 
-  const createUser = useCallback(async (userData: Partial<User>) => {
+  const createUser = useCallback(async (_userData: Partial<User>) => {
     // TODO: Implement real user creation logic (likely requires server-side admin API)
     return { success: false, error: 'User creation not implemented yet in this version' }
   }, [])
 
-  const updateUser = useCallback(async (userId: string, userData: Partial<User>) => {
+  const updateUser = useCallback(async (_userId: string, _userData: Partial<User>) => {
     // TODO: Implement real user update logic
     return { success: false, error: 'User update not implemented yet in this version' }
   }, [])
 
-  const deleteUser = useCallback(async (userId: string) => {
+  const deleteUser = useCallback(async (_userId: string) => {
     // TODO: Implement real user deletion logic
     return { success: false, error: 'User deletion not implemented yet in this version' }
   }, [])
@@ -325,21 +325,21 @@ export function useAdminDashboard() {
   const updateSettings = useCallback(async (newSettings: Partial<SystemSettings>) => {
     try {
       setIsLoading(true)
-      
+
       // 1. Validar con Zod
       const { SystemSettingsPartialSchema } = await import('@/lib/validations/system-settings')
       const validated = SystemSettingsPartialSchema.parse(newSettings)
-      
+
       // 2. Verificar rate limit
       const { checkRateLimit } = await import('@/lib/security/rate-limit')
       const rateLimitCheck = await checkRateLimit('settings_update')
       if (!rateLimitCheck.allowed) {
-        return { 
-          success: false, 
-          error: `Demasiadas solicitudes. Intente nuevamente en ${rateLimitCheck.resetAt.toLocaleTimeString()}.` 
+        return {
+          success: false,
+          error: `Demasiadas solicitudes. Intente nuevamente en ${rateLimitCheck.resetAt.toLocaleTimeString()}.`
         }
       }
-      
+
       // 3. Actualizar via endpoint protegido en servidor
       const response = await fetch('/api/admin/system/settings', {
         method: 'PUT',
@@ -356,11 +356,11 @@ export function useAdminDashboard() {
         console.error('Error updating settings via API:', errorMessage)
         return { success: false, error: errorMessage }
       }
-      
+
       // 4. Registrar en audit log
       const { logAuditEvent, getChangedFields, determineSeverity } = await import('@/lib/security/audit-log')
       const changes = getChangedFields(settings, validated as SystemSettings)
-      
+
       // Registrar cada cambio individualmente
       for (const change of changes) {
         await logAuditEvent({
@@ -369,32 +369,32 @@ export function useAdminDashboard() {
           oldValue: change.oldValue,
           newValue: change.newValue,
           severity: determineSeverity(change.field),
-          details: { 
+          details: {
             totalChanges: changes.length,
             timestamp: new Date().toISOString()
           }
         })
       }
-      
+
       // 5. Actualizar estado local
       const { mapDBToSettings } = await import('@/lib/validations/system-settings')
       const updatedSettings = mapDBToSettings(responseData.data)
       setSettings(updatedSettings)
-      
+
       return { success: true }
     } catch (error) {
       console.error('Update settings error:', error)
-      
+
       if (error instanceof Error) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: error.message
         }
       }
-      
-      return { 
-        success: false, 
-        error: 'Error al actualizar configuración' 
+
+      return {
+        success: false,
+        error: 'Error al actualizar configuración'
       }
     } finally {
       setIsLoading(false)
@@ -406,17 +406,17 @@ export function useAdminDashboard() {
       // Validar acción
       const { SystemActionSchema } = await import('@/lib/validations/system-settings')
       const validatedAction = SystemActionSchema.parse(action)
-      
+
       // Verificar rate limit
       const { checkRateLimit } = await import('@/lib/security/rate-limit')
       const rateLimitCheck = await checkRateLimit(`system_action_${validatedAction}`)
       if (!rateLimitCheck.allowed) {
-        return { 
-          success: false, 
-          error: 'Demasiadas solicitudes. Intente más tarde.' 
+        return {
+          success: false,
+          error: 'Demasiadas solicitudes. Intente más tarde.'
         }
       }
-      
+
       // Registrar en audit log
       const { logAuditEvent } = await import('@/lib/security/audit-log')
       await logAuditEvent({
@@ -424,7 +424,7 @@ export function useAdminDashboard() {
         severity: 'high',
         details: { action: validatedAction }
       })
-      
+
       // Ejecutar acción (aquí deberías implementar la lógica real)
       let message = ''
       switch (validatedAction) {
@@ -445,13 +445,13 @@ export function useAdminDashboard() {
           // TODO: Implementar envío de email
           break
       }
-      
+
       return { success: true, message }
     } catch (error) {
       console.error('System action error:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Error al realizar acción' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error al realizar acción'
       }
     }
   }, [])

@@ -40,9 +40,9 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
   const [promotionCode, setPromotionCode] = useState('')
   const [isApplying, setIsApplying] = useState(false)
   const [showAvailable, setShowAvailable] = useState(false)
-  
+
   const { promotions: allPromotions } = usePromotions()
-  
+
   const {
     appliedPromotions,
     calculateCartSummary,
@@ -62,17 +62,17 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
 
   // Get active promotions only
   const activePromotions = allPromotions.filter(p => p.is_active)
-  
+
   // Calculate cart summary with current promotions
   const cartSummary = calculateCartSummary(
-    cart, 
-    activePromotions, 
+    cart,
+    activePromotions,
     appliedPromotions.map(p => p.code)
   )
 
   // Get available promotions for current cart
   const availablePromotions = getAvailablePromotions(cart, activePromotions)
-  
+
   // Get insights for current cart
   const insights = getPromotionInsights(cart, activePromotions)
 
@@ -92,7 +92,7 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
     setIsApplying(true)
     try {
       const result = applyPromotionByCode(promotionCode.trim(), cart, activePromotions)
-      
+
       if (result.applied) {
         addAppliedPromotion(result)
         handlePromotionSuccess(result)
@@ -100,7 +100,7 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
       } else {
         handlePromotionError(result.reason || 'Código inválido', result.code)
       }
-    } catch (error) {
+    } catch (_error) {
       handlePromotionError('Error al aplicar promoción')
     } finally {
       setIsApplying(false)
@@ -114,7 +114,7 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
 
   const handleApplyAvailable = (promotion: Promotion) => {
     const result = applyPromotionByCode(promotion.code, cart, activePromotions)
-    
+
     if (result.applied) {
       addAppliedPromotion(result)
       handlePromotionSuccess(result)
@@ -195,8 +195,8 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
               onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}
               className="flex-1"
             />
-            <Button 
-              onClick={handleApplyCode} 
+            <Button
+              onClick={handleApplyCode}
               disabled={isApplying || !promotionCode.trim()}
               size="sm"
             >
@@ -324,26 +324,26 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
             <span>Subtotal:</span>
             <span>{formatCurrency(cartSummary.subtotal)}</span>
           </div>
-          
+
           {cartSummary.discount_amount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
               <span>Descuento:</span>
               <span>-{formatCurrency(cartSummary.discount_amount)}</span>
             </div>
           )}
-          
+
           <div className="flex justify-between text-sm">
             <span>IVA (10%):</span>
             <span>{formatCurrency(cartSummary.tax_amount)}</span>
           </div>
-          
+
           <Separator />
-          
+
           <div className="flex justify-between font-medium">
             <span>Total:</span>
             <span>{formatCurrency(cartSummary.total)}</span>
           </div>
-          
+
           {cartSummary.discount_amount > 0 && (
             <div className="text-center text-sm text-green-600 font-medium">
               ¡Ahorras {formatCurrency(cartSummary.discount_amount)}!
@@ -363,7 +363,7 @@ export function PromotionEngine({ cart, onPromotionsChange }: PromotionEnginePro
                   ¡Promoción recomendada!
                 </p>
                 <p className="text-xs text-blue-700 dark:text-blue-200 mt-1">
-                  Usa el código <Badge variant="secondary" className="mx-1">{insights.bestPromotion.code}</Badge> 
+                  Usa el código <Badge variant="secondary" className="mx-1">{insights.bestPromotion.code}</Badge>
                   y ahorra {formatCurrency(insights.bestPromotion.discount_amount)}
                 </p>
                 <Button

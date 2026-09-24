@@ -409,7 +409,7 @@ function EmployeeCommissionsModal({
 
 function PayrollDetailModal({
   run,
-  organizationId,
+  organizationId: _organizationId,
   onClose,
   onPayEntry,
   onInspectEntry,

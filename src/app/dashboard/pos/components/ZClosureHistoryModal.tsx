@@ -21,7 +21,7 @@ interface ZClosureHistoryModalProps {
   onViewDetails: (closure: ZClosureRecord) => void
 }
 
-export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosureHistoryModalProps) {
+export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails: _onViewDetails }: ZClosureHistoryModalProps) {
   const { zClosureHistory, checkPermission, registers } = useCashRegisterContext()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('week')
@@ -61,17 +61,17 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
 
     return filtered.sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime())
   }, [zClosureHistory, searchTerm, selectedPeriod])
-  
+
   // Reset selection when modal closes
   React.useEffect(() => {
       if (!isOpen) setSelectedClosure(null)
   }, [isOpen])
-  
+
   // Also, if onViewDetails prop is called from parent (legacy), select that closure
   // This is a bit of a hack to support both internal and external selection
   // But for the new "Client Detail" style, we might want to default to list if no selection
   // or allow passing an initial selection.
-  
+
   // IMPORTANT: If we want to mimic Client Detail exactly, we might want to start with a closure selected if provided?
   // But usually it starts as a list.
 
@@ -150,7 +150,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 bg-gray-50 dark:bg-gray-950">
-        
+
         {selectedClosure ? (
            // --- DETAIL VIEW ---
            <div className="flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-300">
@@ -179,7 +179,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
               {/* Scrollable Content */}
               <ScrollArea className="flex-1">
                   <div className="p-6 space-y-6">
-                      
+
                       {/* Top KPI Cards */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <Card className="shadow-sm border-l-4 border-l-emerald-500">
@@ -192,7 +192,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                   <p className="text-xs text-muted-foreground mt-1">{selectedClosure.movementsCount} movimientos registrados</p>
                               </CardContent>
                           </Card>
-                          
+
                           <Card className="shadow-sm border-l-4 border-l-blue-500">
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                   <CardTitle className="text-sm font-medium text-muted-foreground">Saldo Final en Caja</CardTitle>
@@ -240,7 +240,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                           </div>
                                           <span className="font-bold">{formatCurrency(selectedClosure.salesByCash)}</span>
                                       </div>
-                                      
+
                                       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                                           <div className="flex items-center gap-3">
                                               <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
@@ -260,7 +260,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                           </div>
                                           <span className="font-bold">{formatCurrency(selectedClosure.salesByTransfer)}</span>
                                       </div>
-                                      
+
                                       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                                           <div className="flex items-center gap-3">
                                               <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">

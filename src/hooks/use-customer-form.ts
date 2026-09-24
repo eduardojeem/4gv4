@@ -1,6 +1,6 @@
 /**
  * useCustomerForm - Hook personalizado para el formulario de edición de clientes
- * 
+ *
  * Maneja el estado del formulario, validaciones, auto-guardado y navegación por pasos
  */
 
@@ -82,7 +82,7 @@ export function useCustomerForm({
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [autoSaveInProgress, setAutoSaveInProgress] = useState(false)
   const [stepValidation, setStepValidation] = useState<Record<string, boolean>>({})
-  
+
   // Refs
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedDataRef = useRef<CustomerFormData | null>(null)
@@ -135,33 +135,33 @@ export function useCustomerForm({
   const validateCurrentStep = useCallback(() => {
     const currentStepId = FORM_STEPS[currentStep].id
     const validation = validateFormStep(currentStepId, formValues)
-    
+
     setStepValidation(prev => ({
       ...prev,
       [currentStepId]: validation.isValid
     }))
-    
+
     return validation
   }, [currentStep, formValues])
 
   // Auto-save functionality
   const performAutoSave = useCallback(async () => {
     if (!autoSaveEnabled || !hasUnsavedChanges) return
-    
+
     try {
       setAutoSaveInProgress(true)
       const transformedData = transformFormDataToCustomer(formValues)
       await onSave(transformedData)
-      
+
       setLastSaved(new Date())
       setHasUnsavedChanges(false)
       lastSavedDataRef.current = formValues
-      
+
       toast.success('Cambios guardados automáticamente', {
         duration: 2000,
         position: 'bottom-right'
       })
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al guardar automáticamente')
     } finally {
       setAutoSaveInProgress(false)
@@ -172,18 +172,18 @@ export function useCustomerForm({
   useEffect(() => {
     if (shouldAutoSave(formValues, lastSavedDataRef.current)) {
       setHasUnsavedChanges(true)
-      
+
       if (autoSaveEnabled) {
         // Clear existing timeout
         if (autoSaveTimeoutRef.current) {
           clearTimeout(autoSaveTimeoutRef.current)
         }
-        
+
         // Set new timeout
         autoSaveTimeoutRef.current = setTimeout(performAutoSave, autoSaveDelay)
       }
     }
-    
+
     return () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current)
@@ -199,19 +199,19 @@ export function useCustomerForm({
   // Navigation functions
   const nextStep = useCallback(() => {
     const validation = validateCurrentStep()
-    
+
     if (!validation.isValid) {
       validation.errors.forEach(error => {
         toast.error(error)
       })
       return false
     }
-    
+
     if (currentStep < FORM_STEPS.length - 1) {
       setCurrentStep(currentStep + 1)
       return true
     }
-    
+
     return false
   }, [currentStep, validateCurrentStep])
 
@@ -234,18 +234,18 @@ export function useCustomerForm({
   // Form submission
   const handleSubmit = useCallback(async (data: CustomerFormData) => {
     setIsSubmitting(true)
-    
+
     try {
       const transformedData = transformFormDataToCustomer(data)
       await onSave(transformedData)
-      
+
       setHasUnsavedChanges(false)
       setLastSaved(new Date())
       lastSavedDataRef.current = data
-      
+
       toast.success('Cliente actualizado exitosamente')
       return true
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al actualizar cliente')
       return false
     } finally {
@@ -275,7 +275,7 @@ export function useCustomerForm({
   return {
     // Form instance
     form,
-    
+
     // State
     currentStep,
     isSubmitting,
@@ -283,26 +283,26 @@ export function useCustomerForm({
     lastSaved,
     autoSaveInProgress,
     progress,
-    
+
     // Navigation
     nextStep,
     prevStep,
     goToStep,
     canProceedToNext,
     isStepCompleted,
-    
+
     // Actions
     handleSubmit: form.handleSubmit(handleSubmit),
     resetForm,
     validateCurrentStep,
-    
+
     // Data
     formValues,
     steps: FORM_STEPS,
-    
+
     // Validation
     stepValidation,
-    
+
     // Utils
     performAutoSave
   }

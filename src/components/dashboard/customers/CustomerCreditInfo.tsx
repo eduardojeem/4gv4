@@ -34,7 +34,7 @@ interface CustomerCreditInfoProps {
   onEditCustomer?: () => void
 }
 
-export function CustomerCreditInfo({ customer, compact = false, showActions = true, onOpenPayment, onEditCustomer }: CustomerCreditInfoProps) {
+export function CustomerCreditInfo({ customer, compact: _compact = false, showActions = true, onOpenPayment, onEditCustomer }: CustomerCreditInfoProps) {
   const { loading, error, creditSummary, credits, installments, payments, refresh } = useCustomerCredits(customer.id, customer)
   const [activeTab, setActiveTab] = useState('resumen')
 
@@ -143,7 +143,7 @@ export function CustomerCreditInfo({ customer, compact = false, showActions = tr
         {/* ─── TARJETA PRINCIPAL DE RESUMEN FINANCIERO ─── */}
         <Card className="border border-slate-200 dark:border-slate-800 shadow-sm bg-gradient-to-br from-slate-900 to-indigo-950 text-white overflow-hidden relative">
           <div className="absolute right-0 top-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-          
+
           <CardHeader className="pb-4 relative z-10">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
@@ -308,8 +308,8 @@ export function CustomerCreditInfo({ customer, compact = false, showActions = tr
                     </div>
                   </div>
 
-                  <Progress 
-                    value={summary.credit_utilization} 
+                  <Progress
+                    value={summary.credit_utilization}
                     className={cn(
                       "h-2.5 rounded-full",
                       summary.credit_utilization > 80 ? "[&>div]:bg-rose-500" : summary.credit_utilization > 50 ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
@@ -636,9 +636,9 @@ export function CustomerCreditInfo({ customer, compact = false, showActions = tr
                             {formatCurrency(payment.amount)}
                           </div>
                           <div className="text-xs text-slate-500">
-                            {new Date(payment.created_at).toLocaleDateString('es-PY')} • 
-                            {payment.payment_method === 'cash' ? ' Efectivo' : 
-                             payment.payment_method === 'card' ? ' Tarjeta' : 
+                            {new Date(payment.created_at).toLocaleDateString('es-PY')} •
+                            {payment.payment_method === 'cash' ? ' Efectivo' :
+                             payment.payment_method === 'card' ? ' Tarjeta' :
                              payment.payment_method === 'transfer' ? ' Transferencia' : ' Pago a cuenta'}
                           </div>
                         </div>

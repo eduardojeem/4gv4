@@ -10,6 +10,11 @@ const eslintConfig = [
     rules: {
       // Deuda de tipado heredada: mantener visible sin bloquear correcciones funcionales.
       "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        caughtErrors: "all",
+        caughtErrorsIgnorePattern: "^_",
+      }],
     },
   },
   {

@@ -340,7 +340,7 @@ function UICustomizationContent() {
     const dataStr = JSON.stringify(customTheme, null, 2)
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr)
     const exportFileDefaultName = `theme-${customTheme.name.toLowerCase().replace(/\s+/g, '-')}.json`
-    
+
     const linkElement = document.createElement('a')
     linkElement.setAttribute('href', dataUri)
     linkElement.setAttribute('download', exportFileDefaultName)
@@ -389,7 +389,7 @@ function UICustomizationContent() {
       applyTheme(parsed)
       // limpiar input para permitir reimportar el mismo archivo
       if (fileInputRef.current) fileInputRef.current.value = ''
-    } catch (err) {
+    } catch (_err) {
       setImportError('No se pudo importar el tema. Verifique el JSON.')
     }
   }
@@ -449,9 +449,9 @@ function UICustomizationContent() {
               <div className="mt-2 text-xs text-red-600">{importError}</div>
             )}
           </div>
-          
+
           <div className="flex items-center space-x-3">
-            <Button 
+            <Button
               variant="outline"
               onClick={() => setTheme(isDark ? 'light' : 'dark')}
               className="border-indigo-300 text-indigo-600 hover:bg-indigo-50"
@@ -460,16 +460,16 @@ function UICustomizationContent() {
               {isDark ? 'Modo Claro' : 'Modo Oscuro'}
             </Button>
             <div className="flex items-center space-x-2 bg-white rounded-lg p-2 border border-indigo-200">
-              <Monitor className={`h-5 w-5 cursor-pointer ${previewMode === 'desktop' ? 'text-indigo-600' : 'text-gray-400'}`} 
+              <Monitor className={`h-5 w-5 cursor-pointer ${previewMode === 'desktop' ? 'text-indigo-600' : 'text-gray-400'}`}
                       onClick={() => setPreviewMode('desktop')} />
-              <Tablet className={`h-5 w-5 cursor-pointer ${previewMode === 'tablet' ? 'text-indigo-600' : 'text-gray-400'}`} 
+              <Tablet className={`h-5 w-5 cursor-pointer ${previewMode === 'tablet' ? 'text-indigo-600' : 'text-gray-400'}`}
                      onClick={() => setPreviewMode('tablet')} />
-              <Smartphone className={`h-5 w-5 cursor-pointer ${previewMode === 'mobile' ? 'text-indigo-600' : 'text-gray-400'}`} 
+              <Smartphone className={`h-5 w-5 cursor-pointer ${previewMode === 'mobile' ? 'text-indigo-600' : 'text-gray-400'}`}
                           onClick={() => setPreviewMode('mobile')} />
             </div>
-            
-            <Button 
-              variant="outline" 
+
+            <Button
+              variant="outline"
               onClick={exportTheme}
               className="border-indigo-300 text-indigo-600 hover:bg-indigo-50"
             >
@@ -477,17 +477,17 @@ function UICustomizationContent() {
               Exportar
             </Button>
 
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={copyCSSVariables}
               className="border-indigo-300 text-indigo-600 hover:bg-indigo-50"
             >
               <Copy className="h-4 w-4 mr-2" />
               Copiar CSS
             </Button>
-            
-            <Button 
-              variant="outline" 
+
+            <Button
+              variant="outline"
               onClick={handleImportClick}
               className="border-indigo-300 text-indigo-600 hover:bg-indigo-50"
             >
@@ -495,8 +495,8 @@ function UICustomizationContent() {
               Importar
             </Button>
             <input type="file" accept="application/json" ref={fileInputRef} onChange={handleImportFile} className="hidden" />
-            
-            <Button 
+
+            <Button
               onClick={() => applyTheme(customTheme)}
               className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
             >
@@ -512,26 +512,26 @@ function UICustomizationContent() {
         <div className="lg:col-span-1 space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-4 bg-gradient-to-r from-indigo-100 to-purple-100 p-1">
-              <TabsTrigger 
-                value="themes" 
+              <TabsTrigger
+                value="themes"
                 className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white"
               >
                 <Palette className="h-4 w-4" />
               </TabsTrigger>
-              <TabsTrigger 
-                value="colors" 
+              <TabsTrigger
+                value="colors"
                 className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-purple-600 data-[state=active]:text-white"
               >
                 <Brush className="h-4 w-4" />
               </TabsTrigger>
-              <TabsTrigger 
-                value="typography" 
+              <TabsTrigger
+                value="typography"
                 className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-pink-600 data-[state=active]:text-white"
               >
                 <Type className="h-4 w-4" />
               </TabsTrigger>
-              <TabsTrigger 
-                value="layout" 
+              <TabsTrigger
+                value="layout"
                 className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white"
               >
                 <Layout className="h-4 w-4" />
@@ -556,8 +556,8 @@ function UICustomizationContent() {
                     <Badge variant="outline">{filteredThemes.length} resultados</Badge>
                   </div>
                   {filteredThemes.map((theme) => (
-                    <div 
-                      key={theme.id} 
+                    <div
+                      key={theme.id}
                       className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-300 ${
                         customTheme.id === theme.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'
                       }`}
@@ -568,18 +568,18 @@ function UICustomizationContent() {
                         {customTheme.id === theme.id && <Check className="h-5 w-5 text-indigo-600" />}
                       </div>
                       <p className="text-sm text-gray-600 mb-3">{theme.description}</p>
-                      
+
                       <div className="flex space-x-2">
-                        <div 
-                          className="w-6 h-6 rounded-full border border-gray-300" 
+                        <div
+                          className="w-6 h-6 rounded-full border border-gray-300"
                           style={{ backgroundColor: theme.colors.primary }}
                         ></div>
-                        <div 
-                          className="w-6 h-6 rounded-full border border-gray-300" 
+                        <div
+                          className="w-6 h-6 rounded-full border border-gray-300"
                           style={{ backgroundColor: theme.colors.secondary }}
                         ></div>
-                        <div 
-                          className="w-6 h-6 rounded-full border border-gray-300" 
+                        <div
+                          className="w-6 h-6 rounded-full border border-gray-300"
                           style={{ backgroundColor: theme.colors.accent }}
                         ></div>
                       </div>
@@ -588,8 +588,8 @@ function UICustomizationContent() {
                 </CardContent>
               </Card>
               <div className="flex space-x-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={resetColors}
                   className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-50"
                 >
@@ -634,8 +634,8 @@ function UICustomizationContent() {
                 </CardContent>
               </Card>
               <div className="flex space-x-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={resetTypographyTab}
                   className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-50"
                 >
@@ -655,8 +655,8 @@ function UICustomizationContent() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Familia de Fuente</Label>
-                    <Select 
-                      value={customTheme.typography.fontFamily} 
+                    <Select
+                      value={customTheme.typography.fontFamily}
                       onValueChange={(value) => updateTypography('fontFamily', value)}
                     >
                       <SelectTrigger>
@@ -696,8 +696,8 @@ function UICustomizationContent() {
 
                   <div className="space-y-2">
                     <Label>Peso de Fuente</Label>
-                    <Select 
-                      value={customTheme.typography.fontWeight} 
+                    <Select
+                      value={customTheme.typography.fontWeight}
                       onValueChange={(value) => updateTypography('fontWeight', value)}
                     >
                       <SelectTrigger>
@@ -766,8 +766,8 @@ function UICustomizationContent() {
 
                   <div className="space-y-2">
                     <Label>Estilo de Botones</Label>
-                    <Select 
-                      value={customTheme.components.buttonStyle} 
+                    <Select
+                      value={customTheme.components.buttonStyle}
                       onValueChange={(value) => updateComponent('buttonStyle', value)}
                     >
                       <SelectTrigger>
@@ -783,8 +783,8 @@ function UICustomizationContent() {
 
                   <div className="space-y-2">
                     <Label>Estilo de Tarjetas</Label>
-                    <Select 
-                      value={customTheme.components.cardStyle} 
+                    <Select
+                      value={customTheme.components.cardStyle}
                       onValueChange={(value) => updateComponent('cardStyle', value)}
                     >
                       <SelectTrigger>
@@ -800,8 +800,8 @@ function UICustomizationContent() {
 
                   <div className="space-y-2">
                     <Label>Estilo de Navegación</Label>
-                    <Select 
-                      value={customTheme.components.navigationStyle} 
+                    <Select
+                      value={customTheme.components.navigationStyle}
                       onValueChange={(value) => updateComponent('navigationStyle', value)}
                     >
                       <SelectTrigger>
@@ -818,8 +818,8 @@ function UICustomizationContent() {
               </Card>
 
               <div className="flex space-x-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={resetLayoutTab}
                   className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-50"
                 >
@@ -852,7 +852,7 @@ function UICustomizationContent() {
             </CardHeader>
             <CardContent>
               <div className={`mx-auto border border-gray-300 rounded-lg overflow-hidden ${getPreviewSize()}`}>
-                <div 
+                <div
                   className="h-full p-4 overflow-y-auto"
                   style={{
                     backgroundColor: customTheme.colors.background,
@@ -863,7 +863,7 @@ function UICustomizationContent() {
                   }}
                 >
                   {/* Header de Ejemplo */}
-                  <div 
+                  <div
                     className="p-4 rounded-lg mb-4"
                     style={{
                       backgroundColor: customTheme.colors.primary,
@@ -876,7 +876,7 @@ function UICustomizationContent() {
                   </div>
 
                   {/* Navegación de Ejemplo */}
-                  <div 
+                  <div
                     className="p-3 rounded-lg mb-4"
                     style={{
                       backgroundColor: customTheme.colors.surface,
@@ -891,7 +891,7 @@ function UICustomizationContent() {
                         { icon: ShoppingCart, label: 'Ventas' },
                         { icon: FileText, label: 'Reportes' }
                       ].map((item, index) => (
-                        <div 
+                        <div
                           key={index}
                           className="flex items-center space-x-2 px-3 py-2 rounded cursor-pointer"
                           style={{
@@ -913,7 +913,7 @@ function UICustomizationContent() {
                       { title: 'Usuarios Activos', value: '1,247', color: customTheme.colors.primary },
                       { title: 'Ventas del Mes', value: '$45,678', color: customTheme.colors.accent }
                     ].map((card, index) => (
-                      <div 
+                      <div
                         key={index}
                         className="p-4 rounded-lg"
                         style={{
@@ -960,7 +960,7 @@ function UICustomizationContent() {
                   </div>
 
                   {/* Lista de Ejemplo */}
-                  <div 
+                  <div
                     className="rounded-lg overflow-hidden"
                     style={{
                       backgroundColor: customTheme.colors.surface,
@@ -969,7 +969,7 @@ function UICustomizationContent() {
                     }}
                   >
                     {['Elemento 1', 'Elemento 2', 'Elemento 3'].map((item, index) => (
-                      <div 
+                      <div
                         key={index}
                         className="p-3 border-b last:border-b-0 flex items-center justify-between"
                         style={{ borderColor: customTheme.colors.secondary + '20' }}

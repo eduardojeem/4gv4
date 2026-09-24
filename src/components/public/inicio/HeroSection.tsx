@@ -107,7 +107,7 @@ function ClassicHeroSection({
   companyInfo,
   heroStats,
   heroContent,
-  brand,
+  brand: _brand,
   phoneClean,
   contactHref,
   hasRepairs = false,
@@ -164,10 +164,10 @@ function ClassicHeroSection({
 
       <div className="container relative mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-12">
-          
+
           {/* ── Columna Izquierda: Mensaje Comercial y Búsqueda ── */}
           <div className="flex flex-col items-start lg:col-span-7">
-            
+
             {/* Badges superiores: Estado & Tienda */}
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-xs">

@@ -162,7 +162,7 @@ export class StripeProcessor extends PaymentProcessor {
     try {
       // Simulación de procesamiento con Stripe
       const fees = this.calculateFees(transaction.amount)
-      
+
       const paymentTransaction: PaymentTransaction = {
         ...transaction,
         id: `stripe_${Date.now()}`,
@@ -175,7 +175,7 @@ export class StripeProcessor extends PaymentProcessor {
 
       // Simular llamada a Stripe API
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
       // Actualizar estado según respuesta
       paymentTransaction.status = Math.random() > 0.1 ? 'completed' : 'failed'
       if (paymentTransaction.status === 'completed') {
@@ -204,7 +204,7 @@ export class StripeProcessor extends PaymentProcessor {
 
       // Simular llamada a Stripe API
       await new Promise(resolve => setTimeout(resolve, 500))
-      
+
       refund.status = 'completed'
       refund.completedAt = new Date()
 
@@ -215,13 +215,13 @@ export class StripeProcessor extends PaymentProcessor {
     }
   }
 
-  async getTransactionStatus(providerTransactionId: string): Promise<PaymentTransaction['status']> {
+  async getTransactionStatus(_providerTransactionId: string): Promise<PaymentTransaction['status']> {
     // Simular consulta a Stripe
     await new Promise(resolve => setTimeout(resolve, 200))
     return 'completed'
   }
 
-  validateWebhook(payload: string, signature: string): boolean {
+  validateWebhook(_payload: string, _signature: string): boolean {
     // Implementar validación de webhook de Stripe
     return true
   }
@@ -278,7 +278,7 @@ export class PayPalProcessor extends PaymentProcessor {
   async processPayment(transaction: Omit<PaymentTransaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<PaymentTransaction> {
     try {
       const fees = this.calculateFees(transaction.amount)
-      
+
       const paymentTransaction: PaymentTransaction = {
         ...transaction,
         id: `paypal_${Date.now()}`,
@@ -291,7 +291,7 @@ export class PayPalProcessor extends PaymentProcessor {
 
       // Simular llamada a PayPal API
       await new Promise(resolve => setTimeout(resolve, 1500))
-      
+
       paymentTransaction.status = Math.random() > 0.05 ? 'completed' : 'failed'
       if (paymentTransaction.status === 'completed') {
         paymentTransaction.completedAt = new Date()
@@ -323,16 +323,16 @@ export class PayPalProcessor extends PaymentProcessor {
     return refund
   }
 
-  async getTransactionStatus(providerTransactionId: string): Promise<PaymentTransaction['status']> {
+  async getTransactionStatus(_providerTransactionId: string): Promise<PaymentTransaction['status']> {
     await new Promise(resolve => setTimeout(resolve, 300))
     return 'completed'
   }
 
-  validateWebhook(payload: string, signature: string): boolean {
+  validateWebhook(_payload: string, _signature: string): boolean {
     return true
   }
 
-  async processWebhook(webhook: PaymentWebhook): Promise<void> {
+  async processWebhook(_webhook: PaymentWebhook): Promise<void> {
     // Implementar lógica de webhooks de PayPal
   }
 }
@@ -342,7 +342,7 @@ export class MercadoPagoProcessor extends PaymentProcessor {
   async processPayment(transaction: Omit<PaymentTransaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<PaymentTransaction> {
     try {
       const fees = this.calculateFees(transaction.amount)
-      
+
       const paymentTransaction: PaymentTransaction = {
         ...transaction,
         id: `mp_${Date.now()}`,
@@ -355,7 +355,7 @@ export class MercadoPagoProcessor extends PaymentProcessor {
 
       // Simular llamada a MercadoPago API
       await new Promise(resolve => setTimeout(resolve, 1200))
-      
+
       paymentTransaction.status = Math.random() > 0.08 ? 'completed' : 'failed'
       if (paymentTransaction.status === 'completed') {
         paymentTransaction.completedAt = new Date()
@@ -386,16 +386,16 @@ export class MercadoPagoProcessor extends PaymentProcessor {
     return refund
   }
 
-  async getTransactionStatus(providerTransactionId: string): Promise<PaymentTransaction['status']> {
+  async getTransactionStatus(_providerTransactionId: string): Promise<PaymentTransaction['status']> {
     await new Promise(resolve => setTimeout(resolve, 250))
     return 'completed'
   }
 
-  validateWebhook(payload: string, signature: string): boolean {
+  validateWebhook(_payload: string, _signature: string): boolean {
     return true
   }
 
-  async processWebhook(webhook: PaymentWebhook): Promise<void> {
+  async processWebhook(_webhook: PaymentWebhook): Promise<void> {
     // Implementar lógica de webhooks de MercadoPago
   }
 }
@@ -518,14 +518,14 @@ export class PaymentManager {
     if (error) throw error
 
     const transactions = data || []
-    
+
     return {
       totalTransactions: transactions.length,
       totalAmount: transactions.reduce((sum, t) => sum + t.amount, 0),
       successfulTransactions: transactions.filter(t => t.status === 'completed').length,
       failedTransactions: transactions.filter(t => t.status === 'failed').length,
       totalFees: transactions.reduce((sum, t) => sum + (t.fees?.totalFees || 0), 0),
-      averageTransactionAmount: transactions.length > 0 ? 
+      averageTransactionAmount: transactions.length > 0 ?
         transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length : 0,
       providerBreakdown: transactions.reduce((acc, t) => {
         acc[t.provider] = (acc[t.provider] || 0) + 1

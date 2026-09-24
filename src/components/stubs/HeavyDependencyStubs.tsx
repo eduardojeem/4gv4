@@ -42,7 +42,7 @@ export const XLSX = {
       wb.Sheets[name] = ws;
     }
   },
-  writeFile: (wb: any, filename: string) => {
+  writeFile: (_wb: any, _filename: string) => {
     console.warn('XLSX export deshabilitado temporalmente para optimización de bundle');
     alert('Función de exportación temporalmente deshabilitada');
   }
@@ -51,24 +51,24 @@ export const XLSX = {
 // Stub para jsPDF
 export class jsPDF {
   internal = { pageSize: { width: 792, height: 612 } }
-  constructor(options?: any) {
+  constructor(_options?: any) {
     console.warn('PDF export deshabilitado temporalmente para optimización de bundle');
   }
-  text(text: string, x: number, y: number) { return this }
-  save(filename: string) {
+  text(_text: string, _x: number, _y: number) { return this }
+  save(_filename: string) {
     console.warn('PDF export deshabilitado');
     alert('Función de exportación PDF temporalmente deshabilitada');
   }
-  setFontSize(size: number) { return this }
-  setTextColor(r: number, g?: number, b?: number) { return this }
-  setDrawColor(r: number, g?: number, b?: number) { return this }
-  line(x1: number, y1: number, x2: number, y2: number) { return this }
+  setFontSize(_size: number) { return this }
+  setTextColor(_r: number, _g?: number, _b?: number) { return this }
+  setDrawColor(_r: number, _g?: number, _b?: number) { return this }
+  line(_x1: number, _y1: number, _x2: number, _y2: number) { return this }
   getNumberOfPages() { return 1 }
-  autoTable(options: any) { return this }
+  autoTable(_options: any) { return this }
 }
 
 // Stub para html2canvas
-export const html2canvas = (element: HTMLElement, options?: any) => {
+export const html2canvas = (_element: HTMLElement, _options?: any) => {
   console.warn('html2canvas deshabilitado temporalmente para optimización de bundle');
   return Promise.resolve({
     toDataURL: () => 'data:image/png;base64,',
@@ -78,12 +78,12 @@ export const html2canvas = (element: HTMLElement, options?: any) => {
 };
 
 // Stub para DND Kit
-export const DndContext = ({ 
-  children, 
-  onDragStart, 
-  onDragOver, 
-  onDragEnd 
-}: { 
+export const DndContext = ({
+  children,
+  onDragStart: _onDragStart,
+  onDragOver: _onDragOver,
+  onDragEnd: _onDragEnd
+}: {
   children: React.ReactNode;
   onDragStart?: (event: DragStartEvent) => void;
   onDragOver?: (event: DragOverEvent) => void;
@@ -92,7 +92,7 @@ export const DndContext = ({
   return <div>{children}</div>;
 };
 
-export const useDraggable = (options: any) => ({
+export const useDraggable = (_options: any) => ({
   attributes: {},
   listeners: {},
   setNodeRef: () => {},
@@ -100,12 +100,12 @@ export const useDraggable = (options: any) => ({
   isDragging: false
 });
 
-export const useDroppable = (options: any) => ({
+export const useDroppable = (_options: any) => ({
   setNodeRef: () => {},
   isOver: false
 });
 
-export const DragOverlay = ({ children }: { children?: React.ReactNode }) => {
+export const DragOverlay = ({ children: _children }: { children?: React.ReactNode }) => {
   return null;
 };
 
@@ -113,7 +113,7 @@ export const SortableContext = ({ children }: { children: React.ReactNode }) => 
   return <div>{children}</div>;
 };
 
-export const useSortable = (options: any) => ({
+export const useSortable = (_options: any) => ({
   attributes: {},
   listeners: {},
   setNodeRef: () => {},

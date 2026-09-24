@@ -25,7 +25,7 @@ export const LazyRepairsAnalyticsPage = lazy(() => import('../../app/dashboard/r
 export const LazyTechnicianStatsPage = lazy(() => import('../../app/dashboard/technician/stats/page'));
 
 // Wrapper para rutas con loading
-export const RouteWrapper = ({ children, fallback = <div className="loading-page">Cargando página...</div> }) => {
+export const RouteWrapper = ({ children, fallback: _fallback = <div className="loading-page">Cargando página...</div> }) => {
   return (
     <div className="route-container">
       {children}

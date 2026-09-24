@@ -19,7 +19,7 @@ type Props = {
   variant?: 'default' | 'offers'
 }
 
-export function ProductsCarousel({ products, title, variant = 'default' }: Props) {
+export function ProductsCarousel({ products, title: _title, variant = 'default' }: Props) {
   const trackRef = useRef<HTMLDivElement>(null)
 
   function scroll(dir: 'left' | 'right') {

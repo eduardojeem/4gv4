@@ -46,7 +46,7 @@ export default function CatalogPage() {
     try {
       exportData()
       toast.success('Datos exportados exitosamente')
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al exportar los datos')
     }
   }
@@ -174,11 +174,11 @@ export default function CatalogPage() {
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Aquí puedes gestionar todas las categorías, marcas y proveedores de tu sistema. 
+              Aquí puedes gestionar todas las categorías, marcas y proveedores de tu sistema.
               Los cambios se sincronizan automáticamente con el resto de la aplicación.
             </AlertDescription>
           </Alert>
-          
+
           <CatalogManager />
         </TabsContent>
 
@@ -187,7 +187,7 @@ export default function CatalogPage() {
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Este es el selector integrado que se puede usar en formularios de productos. 
+              Este es el selector integrado que se puede usar en formularios de productos.
               Permite seleccionar y crear nuevos elementos sobre la marcha.
             </AlertDescription>
           </Alert>
@@ -244,7 +244,7 @@ export default function CatalogPage() {
           <Alert>
             <CheckCircle className="h-4 w-4" />
             <AlertDescription>
-              Esta demostración muestra cómo el sistema integra todos los componentes 
+              Esta demostración muestra cómo el sistema integra todos los componentes
               para crear una experiencia fluida de gestión de catálogo.
             </AlertDescription>
           </Alert>
@@ -261,8 +261,8 @@ export default function CatalogPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Nombre del Producto</label>
-                  <input 
-                    className="w-full p-2 border rounded-md" 
+                  <input
+                    className="w-full p-2 border rounded-md"
                     placeholder="iPhone 15 Pro Max"
                     disabled
                   />
@@ -270,8 +270,8 @@ export default function CatalogPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Descripción</label>
-                  <textarea 
-                    className="w-full p-2 border rounded-md" 
+                  <textarea
+                    className="w-full p-2 border rounded-md"
                     rows={3}
                     placeholder="Smartphone premium con..."
                     disabled
@@ -296,16 +296,16 @@ export default function CatalogPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Precio</label>
-                    <input 
-                      className="w-full p-2 border rounded-md" 
+                    <input
+                      className="w-full p-2 border rounded-md"
                       placeholder="$999.99"
                       disabled
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Stock</label>
-                    <input 
-                      className="w-full p-2 border rounded-md" 
+                    <input
+                      className="w-full p-2 border rounded-md"
                       placeholder="50"
                       disabled
                     />

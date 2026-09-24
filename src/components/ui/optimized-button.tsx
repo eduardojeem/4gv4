@@ -16,7 +16,7 @@ export interface OptimizedButtonProps extends Omit<ButtonProps, 'onClick'> {
     error?: string | ((error: any) => string)
   }
   notificationOptions?: NotificationOptions
-  
+
   // Configuración de comportamiento
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>
   onAsyncClick?: () => Promise<any>
@@ -26,24 +26,24 @@ export interface OptimizedButtonProps extends Omit<ButtonProps, 'onClick'> {
   showErrorState?: boolean
   successStateDuration?: number
   notificationDuration?: number
-  
+
   // Configuración de caché y rendimiento
   enableCache?: boolean
   cacheDuration?: number
   optimizePerformance?: boolean
-  
+
   // Configuración visual
   loadingIcon?: React.ReactNode
   successIcon?: React.ReactNode
   errorIcon?: React.ReactNode
-  
+
   // Estados personalizados
   isProcessing?: boolean
   processingText?: string
-  
+
   // Identificador único para el botón
   buttonId?: string
-  
+
   // Configuración de accesibilidad
   ariaLabel?: string
   ariaDescription?: string
@@ -61,15 +61,15 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     onClick,
     onAsyncClick,
     notificationMessages,
-    notificationOptions,
+    notificationOptions: _notificationOptions,
     preventDoubleClick = true,
-    showLoadingState = true,
-    showSuccessState = true,
-    successStateDuration = 2000,
-    notificationDuration = 3000,
-    enableCache = false,
-    cacheDuration = 5000,
-    optimizePerformance = true,
+    showLoadingState: _showLoadingState = true,
+    showSuccessState: _showSuccessState = true,
+    successStateDuration: _successStateDuration = 2000,
+    notificationDuration: _notificationDuration = 3000,
+    enableCache: _enableCache = false,
+    cacheDuration: _cacheDuration = 5000,
+    optimizePerformance: _optimizePerformance = true,
     loadingIcon,
     successIcon,
     errorIcon,
@@ -82,7 +82,7 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
   }, ref) => {
     const [buttonState, setButtonState] = useState<ButtonState>('idle')
     const [isClicked, setIsClicked] = useState(false)
-    
+
     const {
       buttonState: hookButtonState,
       executeAction,
@@ -113,7 +113,7 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
       if (isProcessing && processingText) {
         return processingText
       }
-      
+
       switch (buttonState) {
         case 'loading':
           return notificationMessages?.loading || 'Procesando...'
@@ -129,14 +129,14 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     // Manejar click del botón
     const handleClick = useCallback(async (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault()
-      
+
       // Prevenir doble click
       if (hookIsLoading || isClicked) {
         return
       }
 
       setIsClicked(true)
-      
+
       try {
         if (onAsyncClick) {
           await executeAction(
@@ -247,10 +247,10 @@ export interface ConfirmationButtonProps extends OptimizedButtonProps {
 export const ConfirmationButton = forwardRef<HTMLButtonElement, ConfirmationButtonProps>(
   ({
     confirmationMessage = '¿Estás seguro de que quieres realizar esta acción?',
-    confirmationTitle = 'Confirmar acci�n',
+    confirmationTitle: _confirmationTitle = 'Confirmar acci�n',
     confirmationDescription,
-    confirmButtonText,
-    cancelButtonText,
+    confirmButtonText: _confirmButtonText,
+    cancelButtonText: _cancelButtonText,
     requireConfirmation = true,
     onAsyncClick,
     onClick,

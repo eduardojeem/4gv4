@@ -269,7 +269,7 @@ export abstract class SupplierIntegration {
 
   protected mapProductData(rawData: any): SupplierProduct {
     const mapping = this.config.mapping
-    
+
     return {
       id: `${this.supplier.id}_${rawData[mapping.skuField]}`,
       supplierId: this.supplier.id,
@@ -292,7 +292,7 @@ export abstract class SupplierIntegration {
 
   private mapAvailability(stock: any): SupplierProduct['availability'] {
     const stockLevel = parseInt(stock) || 0
-    
+
     if (stockLevel === 0) return 'out_of_stock'
     if (stockLevel < 10) return 'low_stock'
     return 'in_stock'
@@ -410,12 +410,12 @@ export class APISupplierIntegration extends SupplierIntegration {
     try {
       // Simular actualización de inventario
       const products = await this.getProducts()
-      
+
       for (const product of products) {
         try {
           // Simular obtención de stock actualizado
           const updatedStock = Math.floor(Math.random() * 200)
-          const availability = updatedStock === 0 ? 'out_of_stock' : 
+          const availability = updatedStock === 0 ? 'out_of_stock' :
                              updatedStock < 10 ? 'low_stock' : 'in_stock'
 
           await this.supabase
@@ -567,7 +567,7 @@ export class APISupplierIntegration extends SupplierIntegration {
         price: data.unitPrice
       }
 
-    } catch (error) {
+    } catch (_error) {
       return { available: false, quantity: 0, price: 0 }
     }
   }
@@ -620,7 +620,7 @@ export class EDISupplierIntegration extends SupplierIntegration {
 
   async createPurchaseOrder(order: Omit<PurchaseOrder, 'id' | 'externalOrderId' | 'syncStatus' | 'createdAt' | 'updatedAt'>): Promise<PurchaseOrder> {
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     return {
       ...order,
       id: `edi_po_${Date.now()}`,
@@ -631,16 +631,16 @@ export class EDISupplierIntegration extends SupplierIntegration {
     }
   }
 
-  async updateOrderStatus(orderId: string): Promise<PurchaseOrder> {
+  async updateOrderStatus(_orderId: string): Promise<PurchaseOrder> {
     await new Promise(resolve => setTimeout(resolve, 1000))
-    
+
     // Simular actualización
     return {} as PurchaseOrder
   }
 
   async getQuote(productId: string, quantity: number): Promise<SupplierQuote> {
     await new Promise(resolve => setTimeout(resolve, 1500))
-    
+
     return {
       id: `edi_quote_${Date.now()}`,
       supplierId: this.supplier.id,
@@ -655,9 +655,9 @@ export class EDISupplierIntegration extends SupplierIntegration {
     }
   }
 
-  async checkProductAvailability(sku: string): Promise<{ available: boolean; quantity: number; price: number }> {
+  async checkProductAvailability(_sku: string): Promise<{ available: boolean; quantity: number; price: number }> {
     await new Promise(resolve => setTimeout(resolve, 500))
-    
+
     return {
       available: true,
       quantity: Math.floor(Math.random() * 100),
@@ -713,7 +713,7 @@ export class SupplierManager {
         try {
           const integration = SupplierIntegrationFactory.create(config, config.supplier)
           const authenticated = await integration.authenticate()
-          
+
           if (authenticated) {
             this.integrations.set(config.supplierId, integration)
           }
@@ -772,7 +772,7 @@ export class SupplierManager {
           reorderPoint: product.reorder_point,
           reorderQuantity: product.reorder_quantity || supplierProduct.minimumOrderQuantity,
           preferredSupplierId: supplierProduct.supplierId,
-          urgency: product.stock_quantity === 0 ? 'critical' : 
+          urgency: product.stock_quantity === 0 ? 'critical' :
                    product.stock_quantity < product.reorder_point * 0.5 ? 'high' : 'medium',
           estimatedCost: supplierProduct.unitPrice * (product.reorder_quantity || supplierProduct.minimumOrderQuantity),
           status: 'pending',
@@ -873,12 +873,12 @@ export class SupplierManager {
     const totalOrders = orders.length
     const totalValue = orders.reduce((sum, order) => sum + order.totalAmount, 0)
     const deliveredOrders = orders.filter(order => order.status === 'delivered')
-    const onTimeDeliveries = deliveredOrders.filter(order => 
+    const onTimeDeliveries = deliveredOrders.filter(order =>
       order.actualDeliveryDate && order.expectedDeliveryDate &&
       new Date(order.actualDeliveryDate) <= new Date(order.expectedDeliveryDate)
     )
 
-    const onTimeDeliveryRate = deliveredOrders.length > 0 ? 
+    const onTimeDeliveryRate = deliveredOrders.length > 0 ?
       (onTimeDeliveries.length / deliveredOrders.length) * 100 : 0
 
     const averageDeliveryTime = deliveredOrders.length > 0 ?

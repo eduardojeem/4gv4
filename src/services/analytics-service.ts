@@ -59,13 +59,13 @@ class AnalyticsService {
     try {
       // Calcular datos mensuales
       const monthlyRevenue = this.calculateMonthlyRevenue(customers, period)
-      
+
       // Calcular segmentos de clientes
       const customerSegments = this.calculateCustomerSegments(customers)
-      
+
       // Calcular métricas principales
       const metrics = this.calculateMetrics(customers)
-      
+
       // Calcular tendencias
       const trends = this.calculateTrends(customers, period)
 
@@ -90,7 +90,7 @@ class AnalyticsService {
     try {
       // Simular predicciones basadas en datos históricos
       const monthlyRevenue = this.calculateMonthlyRevenue(customers, period)
-      
+
       // Predicción simple basada en tendencia
       const revenuePredict = this.predictRevenue(monthlyRevenue)
       const customersPredict = this.predictCustomers(monthlyRevenue)
@@ -113,10 +113,10 @@ class AnalyticsService {
   }
 
   // Obtener comparaciones temporales
-  async getComparisons(customers: Customer[], period: string): Promise<{ success: boolean; data?: Record<string, any>; error?: string }> {
+  async getComparisons(customers: Customer[], _period: string): Promise<{ success: boolean; data?: Record<string, any>; error?: string }> {
     try {
       const currentMetrics = this.calculateMetrics(customers)
-      
+
       // Simular métricas del período anterior
       const previousMetrics = {
         averageLifetimeValue: currentMetrics.averageLifetimeValue * 0.9,
@@ -167,7 +167,7 @@ class AnalyticsService {
       // Simular exportación
       const data = JSON.stringify(analytics, null, 2)
       const blob = new Blob([data], { type: format === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel' })
-      
+
       // Crear enlace de descarga
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -191,13 +191,13 @@ class AnalyticsService {
 
   private calculateMonthlyRevenue(customers: Customer[], period: string): MonthlyRevenueData[] {
     const months = this.getMonthsForPeriod(period)
-    
+
     return months.map(month => {
       // Simular datos mensuales basados en clientes
       const baseRevenue = customers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0) / months.length
       const variation = (Math.random() - 0.5) * 0.3 // ±15% variación
       const revenue = baseRevenue * (1 + variation)
-      
+
       const newCustomers = Math.floor(customers.length / months.length * (1 + variation))
       const orders = Math.floor(newCustomers * 1.5 * (1 + variation))
       const averageOrderValue = revenue / Math.max(orders, 1)
@@ -233,7 +233,7 @@ class AnalyticsService {
     const totalCustomers = customers.length
     const totalRevenue = customers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0)
     const totalOrders = customers.reduce((sum, c) => sum + (c.total_purchases || 0), 0)
-    
+
     // Calcular métricas
     const averageLifetimeValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
     const customerAcquisitionCost = averageLifetimeValue * 0.2 // Simulado como 20% del CLV
@@ -254,9 +254,9 @@ class AnalyticsService {
     }
   }
 
-  private calculateTrends(customers: Customer[], period: string): TrendData[] {
+  private calculateTrends(customers: Customer[], _period: string): TrendData[] {
     const metrics = this.calculateMetrics(customers)
-    
+
     return [
       {
         metric: 'CLV',
@@ -277,11 +277,11 @@ class AnalyticsService {
 
   private predictRevenue(monthlyData: MonthlyRevenueData[]): number[] {
     if (monthlyData.length < 2) return []
-    
+
     // Predicción simple basada en tendencia lineal
     const lastTwo = monthlyData.slice(-2)
     const trend = lastTwo[1].revenue - lastTwo[0].revenue
-    
+
     return Array.from({ length: 3 }, (_, i) => {
       const predicted = lastTwo[1].revenue + (trend * (i + 1))
       return Math.max(0, predicted) // No permitir valores negativos
@@ -290,20 +290,20 @@ class AnalyticsService {
 
   private predictCustomers(monthlyData: MonthlyRevenueData[]): number[] {
     if (monthlyData.length < 2) return []
-    
+
     const lastTwo = monthlyData.slice(-2)
     const trend = lastTwo[1].newCustomers - lastTwo[0].newCustomers
-    
+
     return Array.from({ length: 3 }, (_, i) => {
       const predicted = lastTwo[1].newCustomers + (trend * (i + 1))
       return Math.max(0, Math.round(predicted))
     })
   }
 
-  private predictChurn(customers: Customer[]): number[] {
+  private predictChurn(_customers: Customer[]): number[] {
     // Predicción simple de churn basada en actividad reciente
     const baseChurn = Math.random() * 10 + 5 // 5-15%
-    
+
     return Array.from({ length: 3 }, () => {
       const variation = (Math.random() - 0.5) * 2 // ±1%
       return Math.max(0, Math.min(100, baseChurn + variation))
@@ -313,7 +313,7 @@ class AnalyticsService {
   private getMonthsForPeriod(period: string): string[] {
     const now = new Date()
     const months = []
-    
+
     let monthCount = 12
     switch (period) {
       case '7d': monthCount = 1; break
@@ -321,12 +321,12 @@ class AnalyticsService {
       case '90d': monthCount = 6; break
       case '1y': monthCount = 12; break
     }
-    
+
     for (let i = monthCount - 1; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
       months.push(date.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }))
     }
-    
+
     return months
   }
 

@@ -68,7 +68,7 @@ export const generateReceiptNumber = (): string => {
   const month = (now.getMonth() + 1).toString().padStart(2, '0')
   const day = now.getDate().toString().padStart(2, '0')
   const time = now.getTime().toString().slice(-6)
-  
+
   return `${year}${month}${day}-${time}`
 }
 
@@ -85,7 +85,7 @@ export const formatDateTime = () => {
     minute: '2-digit',
     second: '2-digit'
   })
-  
+
   return { date, time }
 }
 
@@ -117,7 +117,7 @@ export const createReceiptData = (
   shift?: string
 ): ReceiptData => {
   const { date, time } = formatDateTime()
-  
+
   return {
     receiptNumber: generateReceiptNumber(),
     date,
@@ -232,7 +232,7 @@ const printWhenReady = (printWindow: Window, fallbackDelay = 1500): void => {
 export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   // Intentar capturar el contenido del modal primero
   const receiptElement = document.getElementById('receipt-content')
-  
+
   if (receiptElement) {
     // Si existe el elemento del modal, clonar su contenido
     const printWindow = window.open('', '_blank')
@@ -248,7 +248,7 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
           return Array.from(styleSheet.cssRules)
             .map(rule => rule.cssText)
             .join('\n')
-        } catch (e) {
+        } catch (_e) {
           return ''
         }
       })
@@ -275,11 +275,11 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
               display: none !important;
             }
           }
-          
+
           * {
             box-sizing: border-box;
           }
-          
+
           body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 80mm;
@@ -288,9 +288,9 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
             background: white;
             color: black;
           }
-          
+
           ${styles}
-          
+
           /* Asegurar que los colores se impriman */
           * {
             -webkit-print-color-adjust: exact !important;
@@ -324,16 +324,16 @@ const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInf
   }
 
   const printContent = generatePrintHTML(receiptData, companyInfo)
-  
+
   printWindow.document.write(printContent)
   printWindow.document.close()
-  
+
   printWhenReady(printWindow)
 }
 
 // Generar HTML para impresión con diseño mejorado
 export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): string => {
-  
+
   const company = companyInfo || config.company
 
   // El config global lo llama `logo` y CompanyInfo `logoUrl`: se acepta
@@ -381,11 +381,11 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
             print-color-adjust: exact !important;
           }
         }
-        
+
         * {
           box-sizing: border-box;
         }
-        
+
         body {
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           font-size: 11px;
@@ -395,7 +395,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           padding: 8px;
           color: #000;
         }
-        
+
         .header {
           text-align: center;
           border-bottom: 2px dashed #333;
@@ -404,7 +404,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
           padding-top: 12px;
         }
-        
+
         .logo-img {
           display: block;
           margin: 0 auto 8px auto;
@@ -427,7 +427,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           font-weight: bold;
           margin-bottom: 8px;
         }
-        
+
         .header h1 {
           font-size: 18px;
           font-weight: bold;
@@ -435,20 +435,20 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
-        
+
         .header .subtitle {
           font-size: 11px;
           font-weight: 600;
           color: #666;
           margin: 2px 0;
         }
-        
+
         .header p {
           margin: 2px 0;
           font-size: 9px;
           color: #666;
         }
-        
+
         .ticket-number {
           background: #f0f0f0;
           border-left: 4px solid #000;
@@ -458,42 +458,42 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           justify-content: space-between;
           align-items: center;
         }
-        
+
         .ticket-number .label {
           font-size: 10px;
           color: #666;
         }
-        
+
         .ticket-number .number {
           font-size: 14px;
           font-weight: bold;
           font-family: 'Courier New', monospace;
         }
-        
+
         .info-section {
           margin: 10px 0;
         }
-        
+
         .info-row {
           display: flex;
           justify-content: space-between;
           margin: 3px 0;
           font-size: 10px;
         }
-        
+
         .info-row .label {
           color: #666;
         }
-        
+
         .info-row .value {
           font-weight: 600;
         }
-        
+
         .separator {
           border-top: 1px dashed #999;
           margin: 12px 0;
         }
-        
+
         .section-title {
           text-align: center;
           font-weight: bold;
@@ -503,17 +503,17 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           margin: 10px 0 8px 0;
           border-radius: 3px;
         }
-        
+
         .item {
           margin-bottom: 10px;
           padding-bottom: 8px;
           border-bottom: 1px dotted #ddd;
         }
-        
+
         .item:last-child {
           border-bottom: none;
         }
-        
+
         .item-header {
           display: flex;
           justify-content: space-between;
@@ -521,18 +521,18 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           font-weight: 600;
           margin-bottom: 3px;
         }
-        
+
         .item-name {
           flex: 1;
           line-height: 1.3;
         }
-        
+
         .item-price {
           font-weight: bold;
           white-space: nowrap;
           margin-left: 8px;
         }
-        
+
         .tag-service {
           display: inline-block;
           font-size: 8px;
@@ -544,7 +544,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           border-radius: 10px;
           margin-left: 6px;
         }
-        
+
         .item-details {
           display: flex;
           justify-content: space-between;
@@ -552,7 +552,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           color: #666;
           margin-top: 2px;
         }
-        
+
         .item-discount {
           display: flex;
           justify-content: space-between;
@@ -561,23 +561,23 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           font-weight: 600;
           margin-top: 2px;
         }
-        
+
         .totals {
           margin: 12px 0;
         }
-        
+
         .total-row {
           display: flex;
           justify-content: space-between;
           margin: 4px 0;
           font-size: 11px;
         }
-        
+
         .total-row.discount {
           color: #28a745;
           font-weight: 600;
         }
-        
+
         .total-row.final {
           background: #f0f0f0;
           padding: 10px;
@@ -586,11 +586,11 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           font-size: 14px;
           font-weight: bold;
         }
-        
+
         .payment-section {
           margin: 12px 0;
         }
-        
+
         .payment-item {
           background: #f8f8f8;
           padding: 8px 10px;
@@ -600,13 +600,13 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           justify-content: space-between;
           align-items: center;
         }
-        
+
         .payment-item.change {
           background: #e8f5e9;
           color: #2e7d32;
           font-weight: bold;
         }
-        
+
         .payment-status {
           text-align: center;
           background: #e8f5e9;
@@ -617,7 +617,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           font-weight: bold;
           font-size: 12px;
         }
-        
+
         .loyalty-box {
           background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
           border: 1px solid #ffc107;
@@ -626,13 +626,13 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           margin: 12px 0;
           border-radius: 4px;
         }
-        
+
         .loyalty-box .text {
           font-weight: bold;
           color: #856404;
           font-size: 11px;
         }
-        
+
         .warranty-box {
           background: #e3f2fd;
           border: 1px solid #2196f3;
@@ -641,19 +641,19 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           margin: 12px 0;
           border-radius: 4px;
         }
-        
+
         .warranty-box .title {
           font-weight: bold;
           color: #1565c0;
           font-size: 11px;
           margin-bottom: 3px;
         }
-        
+
         .warranty-box .subtitle {
           font-size: 9px;
           color: #1976d2;
         }
-        
+
         .footer {
           text-align: center;
           font-size: 9px;
@@ -662,18 +662,18 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           padding-top: 12px;
           color: #666;
         }
-        
+
         .footer .thanks {
           font-weight: bold;
           font-size: 11px;
           color: #000;
           margin-bottom: 5px;
         }
-        
+
         .footer .contact {
           margin: 3px 0;
         }
-        
+
         .footer .id {
           font-family: 'Courier New', monospace;
           font-size: 8px;
@@ -695,7 +695,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
         <p>☎ ${company.phone}</p>
         ${company.email ? `<p>📧 ${company.email}</p>` : ''}
       </div>
-      
+
       ${receiptData.isReprint ? `
       <div style="margin: 6px 0; padding: 4px; border: 2px dashed #000; text-align: center; font-weight: bold; letter-spacing: 2px; font-size: 12px;">
         REIMPRESIÓN
@@ -707,7 +707,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
         <span class="label">Ticket N°</span>
         <span class="number">${receiptData.receiptNumber}</span>
       </div>
-      
+
       <!-- Información de la venta -->
       <div class="info-section">
         <div class="info-row">
@@ -746,12 +746,12 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           </div>
         ` : ''}
       </div>
-      
+
       <div class="separator"></div>
-      
+
       <!-- Productos -->
       <div class="section-title">DETALLE DE PRODUCTOS</div>
-      
+
       ${receiptData.items.map(item => `
         <div class="item">
           <div class="item-header">
@@ -773,16 +773,16 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           ` : ''}
         </div>
       `).join('')}
-      
+
       <div class="separator"></div>
-      
+
       <!-- Totales -->
       <div class="totals">
         ${(() => {
           const taxConfig = getTaxConfig()
           const taxRate = taxConfig.rate
           const pricesIncludeTax = config.pricesIncludeTax
-          
+
           // Calculate tax breakdown
           // If prices include tax: base = total / (1 + rate), tax = total - base
           // If prices exclude tax: base = subtotal, tax = subtotal * rate
@@ -793,7 +793,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           const ivaAmount = pricesIncludeTax
             ? totalAmount - baseImponible
             : Math.round(receiptData.subtotal * taxRate)
-          
+
           return `
             <div class="total-row">
               <span>Subtotal (${receiptData.items.length} ${receiptData.items.length === 1 ? 'item' : 'items'}):</span>
@@ -821,9 +821,9 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           `
         })()}
       </div>
-      
+
       <div class="separator"></div>
-      
+
       <!-- Métodos de pago -->
       <div class="section-title">FORMA DE PAGO</div>
       <div class="payment-section">
@@ -845,22 +845,22 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
         ` : ''}
         <div class="payment-status">✅ PAGADO</div>
       </div>
-      
+
       ${receiptData.loyaltyPoints && receiptData.loyaltyPoints > 0 ? `
         <div class="separator"></div>
         <div class="loyalty-box">
           <div class="text">🎉 ¡Ganaste ${receiptData.loyaltyPoints} puntos de lealtad! 🎉</div>
         </div>
       ` : ''}
-      
+
       <div class="separator"></div>
-      
+
       <!-- Garantía -->
       <div class="warranty-box">
         <div class="title">🛡️ GARANTÍA: 30 días</div>
         <div class="subtitle">Válido para cambios y reparaciones</div>
       </div>
-      
+
       <!-- Pie del ticket -->
       <div class="footer">
         <div class="thanks">¡Gracias por su compra!</div>
@@ -891,7 +891,7 @@ export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: Co
     // Importar dinámicamente para evitar problemas de SSR
     const html2canvas = (await import('html2canvas')).default
     const jsPDF = (await import('jspdf')).default
-    
+
     const element = document.getElementById('receipt-content')
     if (!element) {
       console.error('Receipt element not found')
@@ -934,26 +934,26 @@ const downloadReceiptHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo
   const printContent = generatePrintHTML(receiptData, companyInfo)
   const blob = new Blob([printContent], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
-  
+
   const link = document.createElement('a')
   link.href = url
   link.download = `ticket-${receiptData.receiptNumber}.html`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  
+
   URL.revokeObjectURL(url)
 }
 
 // Compartir ticket como imagen
 export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: CompanyInfo): Promise<void> => {
   const companyName = companyInfo?.name || config.company.name
-  
+
   try {
     // Intentar compartir como imagen
     const html2canvas = (await import('html2canvas')).default
     const element = document.getElementById('receipt-content')
-    
+
     if (element && navigator.share) {
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -1035,7 +1035,7 @@ const showShareModal = (text: string): void => {
     justify-content: center;
     z-index: 10000;
   `
-  
+
   const content = document.createElement('div')
   content.style.cssText = `
     background: white;
@@ -1044,7 +1044,7 @@ const showShareModal = (text: string): void => {
     max-width: 400px;
     width: 90%;
   `
-  
+
   content.innerHTML = `
     <h3 style="margin-top: 0;">Compartir Ticket</h3>
     <textarea readonly style="width: 100%; height: 150px; margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">${text}</textarea>
@@ -1052,10 +1052,10 @@ const showShareModal = (text: string): void => {
       <button onclick="this.closest('[style*=fixed]').remove()" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Cerrar</button>
     </div>
   `
-  
+
   modal.appendChild(content)
   document.body.appendChild(modal)
-  
+
   // Cerrar al hacer clic fuera
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {

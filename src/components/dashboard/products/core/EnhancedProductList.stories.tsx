@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
- 
+
 import { EnhancedProductList } from './EnhancedProductList'
 
 // Mock de datos de productos para las stories
@@ -265,7 +265,7 @@ export const Loading: Story = {
       }
     }
   },
-  render: (args) => {
+  render: (_args) => {
     // Simular estado de carga
     return (
       <div className="space-y-4">
@@ -306,7 +306,7 @@ export const Empty: Story = {
       }
     }
   },
-  render: (args) => {
+  render: (_args) => {
     return (
       <div className="text-center py-12">
         <div className="h-12 w-12 mx-auto text-muted-foreground mb-4">

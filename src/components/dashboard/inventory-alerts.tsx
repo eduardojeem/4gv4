@@ -76,14 +76,14 @@ const getStockColor = (product: Product) => {
   return 'bg-green-500'
 }
 
-const AlertCard = ({ 
-  title, 
-  products, 
-  icon: Icon, 
-  variant, 
+const AlertCard = ({
+  title,
+  products,
+  icon: Icon,
+  variant,
   alertType,
   onDismiss
-}: { 
+}: {
   title: string
   products: Product[]
   icon: any
@@ -94,8 +94,8 @@ const AlertCard = ({
   if (products.length === 0) return null
 
   return (
-    <Alert className={`${variant === 'destructive' ? 'border-red-200 bg-red-50' : 
-                       variant === 'secondary' ? 'border-yellow-200 bg-yellow-50' : 
+    <Alert className={`${variant === 'destructive' ? 'border-red-200 bg-red-50' :
+                       variant === 'secondary' ? 'border-yellow-200 bg-yellow-50' :
                        'border-blue-200 bg-blue-50'}`}>
       <Icon className="h-4 w-4" />
       <AlertTitle className="flex items-center justify-between">
@@ -113,8 +113,8 @@ const AlertCard = ({
                 <div className="text-xs text-muted-foreground">SKU: {product.sku}</div>
                 {alertType === 'stock' && (
                   <div className="flex items-center gap-2 mt-1">
-                    <Progress 
-                      value={getStockPercentage(product)} 
+                    <Progress
+                      value={getStockPercentage(product)}
                       className="h-2 flex-1"
                     />
                     <span className="text-xs font-medium">
@@ -150,7 +150,7 @@ const AlertCard = ({
   )
 }
 
-export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAlertsProps) {
+export function InventoryAlerts({ products = [], onProductUpdate: _onProductUpdate }: InventoryAlertsProps) {
   const [alertSettings, setAlertSettings] = useState<AlertSettings>({
     lowStockEnabled: true,
     lowStockThreshold: 10,
@@ -166,13 +166,13 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([])
 
   // Calcular alertas
-  const lowStockProducts = products.filter(product => 
-    alertSettings.lowStockEnabled && 
+  const lowStockProducts = products.filter(product =>
+    alertSettings.lowStockEnabled &&
     product.stock <= Math.max(product.minStock, alertSettings.lowStockThreshold) &&
     !dismissedAlerts.includes(`low-stock-${product.id}`)
   )
 
-  const outOfStockProducts = products.filter(product => 
+  const outOfStockProducts = products.filter(product =>
     product.stock === 0 &&
     !dismissedAlerts.includes(`out-of-stock-${product.id}`)
   )
@@ -180,7 +180,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
   const expiringProducts = products.filter(product => {
     if (!alertSettings.expiryEnabled || !product.expiryDate) return false
     const daysUntilExpiry = Math.ceil((product.expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    return daysUntilExpiry <= alertSettings.expiryDaysWarning && 
+    return daysUntilExpiry <= alertSettings.expiryDaysWarning &&
            daysUntilExpiry > 0 &&
            !dismissedAlerts.includes(`expiry-${product.id}`)
   })
@@ -205,8 +205,8 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
            !dismissedAlerts.includes(`no-movement-${product.id}`)
   })
 
-  const totalAlerts = lowStockProducts.length + outOfStockProducts.length + 
-                     expiringProducts.length + expiredProducts.length + 
+  const totalAlerts = lowStockProducts.length + outOfStockProducts.length +
+                     expiringProducts.length + expiredProducts.length +
                      overstockedProducts.length + noMovementProducts.length
 
   const dismissAlert = (alertId: string) => {
@@ -262,7 +262,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="low-stock"
                           checked={alertSettings.lowStockEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, lowStockEnabled: checked }))
                           }
                         />
@@ -274,10 +274,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="low-stock-threshold"
                             type="number"
                             value={alertSettings.lowStockThreshold}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                lowStockThreshold: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                lowStockThreshold: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -297,7 +297,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="expiry"
                           checked={alertSettings.expiryEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, expiryEnabled: checked }))
                           }
                         />
@@ -309,10 +309,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="expiry-days"
                             type="number"
                             value={alertSettings.expiryDaysWarning}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                expiryDaysWarning: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                expiryDaysWarning: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -332,7 +332,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="overstock"
                           checked={alertSettings.overstockEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, overstockEnabled: checked }))
                           }
                         />
@@ -344,10 +344,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="overstock-threshold"
                             type="number"
                             value={alertSettings.overstockThreshold}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                overstockThreshold: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                overstockThreshold: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -369,7 +369,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="no-movement"
                           checked={alertSettings.noMovementEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, noMovementEnabled: checked }))
                           }
                         />
@@ -381,10 +381,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="no-movement-days"
                             type="number"
                             value={alertSettings.noMovementDays}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                noMovementDays: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                noMovementDays: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"

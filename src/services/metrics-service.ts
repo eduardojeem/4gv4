@@ -73,7 +73,7 @@ class MetricsService {
       // Calcular métricas básicas
       const totalCustomers = customerList.length
       const activeCustomers = customerList.filter((c: Customer) => c.status === 'active').length
-      const newCustomersThisMonth = customerList.filter((c: Customer) => 
+      const newCustomersThisMonth = customerList.filter((c: Customer) =>
         new Date(c.created_at || c.registration_date) >= thisMonth
       ).length
 
@@ -220,7 +220,7 @@ class MetricsService {
           break
       }
 
-      const periodCustomers = customers?.filter((c: Record<string, unknown>) => 
+      const periodCustomers = customers?.filter((c: Record<string, unknown>) =>
         new Date((c.created_at || c.registration_date) as string) >= startDate
       ) || []
 
@@ -246,7 +246,7 @@ class MetricsService {
   }
 
   // Métodos auxiliares
-  private generateActivityDescription(customer: Customer): string {
+  private generateActivityDescription(_customer: Customer): string {
     const activities = [
       `Realizó una compra por Gs ${(Math.random() * 1000000).toFixed(0)}`,
       `Se registró en el sistema`,

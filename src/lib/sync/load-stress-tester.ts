@@ -91,7 +91,7 @@ export class TestDataGenerator {
   generateProduct(size: LoadTestConfig['dataSize'] = 'medium'): Record<string, unknown> {
     const template = this.productTemplates[Math.floor(Math.random() * this.productTemplates.length)]
     const id = Math.random().toString(36).substr(2, 9)
-    
+
     const baseProduct = {
       id: `test_${id}`,
       sku: `SKU_${id}`,
@@ -124,7 +124,7 @@ export class TestDataGenerator {
 
   private generateDescription(size: LoadTestConfig['dataSize']): string {
     const baseDesc = 'Producto de prueba para testing de carga'
-    
+
     switch (size) {
       case 'small':
         return baseDesc
@@ -213,7 +213,7 @@ export class NetworkSimulator {
     const baseLatency = this.delays.get('latency') || 0
     const jitter = this.delays.get('jitter') || 0
     const delay = baseLatency + (Math.random() * jitter)
-    
+
     if (delay > 0) {
       await new Promise(resolve => setTimeout(resolve, delay))
     }
@@ -280,7 +280,7 @@ export class LoadStressTester {
     this.testMetrics.set(testId, [])
 
     console.log(`Iniciando prueba de carga: ${config.name}`)
-    
+
     const startTime = new Date()
     let totalOperations = 0
     let successfulOperations = 0
@@ -295,7 +295,7 @@ export class LoadStressTester {
 
       // Main test phase
       const testPromises: Promise<void>[] = []
-      
+
       for (let user = 0; user < config.concurrentUsers; user++) {
         testPromises.push(this.simulateUser(testId, config, user))
       }
@@ -317,7 +317,7 @@ export class LoadStressTester {
 
     const endTime = new Date()
     const metrics = this.testMetrics.get(testId) || []
-    
+
     totalOperations = metrics.length
     successfulOperations = metrics.filter(m => m.success).length
     failedOperations = totalOperations - successfulOperations
@@ -331,7 +331,7 @@ export class LoadStressTester {
     this.testMetrics.set(testId, [])
 
     console.log(`Iniciando prueba de estrés: ${config.name}`)
-    
+
     const startTime = new Date()
     let currentUsers = 1
     let totalOperations = 0
@@ -358,8 +358,8 @@ export class LoadStressTester {
 
         // Check if we should stop due to failures
         const recentMetrics = this.testMetrics.get(testId)?.slice(-100) || []
-        const errorRate = recentMetrics.length > 0 
-          ? recentMetrics.filter(m => !m.success).length / recentMetrics.length 
+        const errorRate = recentMetrics.length > 0
+          ? recentMetrics.filter(m => !m.success).length / recentMetrics.length
           : 0
 
         if (errorRate > config.failureThreshold) {
@@ -387,7 +387,7 @@ export class LoadStressTester {
 
     const endTime = new Date()
     const metrics = this.testMetrics.get(testId) || []
-    
+
     totalOperations = metrics.length
     successfulOperations = metrics.filter(m => m.success).length
     failedOperations = totalOperations - successfulOperations
@@ -405,7 +405,7 @@ export class LoadStressTester {
 
     for (let step = 0; step < steps; step++) {
       const usersInThisStep = Math.min(usersPerStep, config.concurrentUsers - (step * usersPerStep))
-      
+
       for (let user = 0; user < usersInThisStep; user++) {
         this.simulateUser(testId, config, step * usersPerStep + user)
       }
@@ -423,12 +423,12 @@ export class LoadStressTester {
 
   private async simulateUser(testId: string, config: LoadTestConfig, userId: number): Promise<void> {
     const operationInterval = 1000 / config.operationsPerSecond
-    
+
     while (this.activeTests.get(testId)) {
       try {
         const operation = this.selectRandomOperation(config.operations)
         await this.executeOperation(testId, operation, config, userId)
-        
+
         await new Promise(resolve => setTimeout(resolve, operationInterval))
       } catch (error) {
         console.error(`Error en usuario ${userId}:`, error)
@@ -439,21 +439,21 @@ export class LoadStressTester {
   private selectRandomOperation(operations: TestOperation[]): TestOperation {
     const totalWeight = operations.reduce((sum, op) => sum + op.weight, 0)
     let random = Math.random() * totalWeight
-    
+
     for (const operation of operations) {
       random -= operation.weight
       if (random <= 0) {
         return operation
       }
     }
-    
+
     return operations[0]
   }
 
   private async executeOperation(
-    testId: string, 
-    operation: TestOperation, 
-    config: LoadTestConfig, 
+    testId: string,
+    operation: TestOperation,
+    config: LoadTestConfig,
     userId: number
   ): Promise<void> {
     const startTime = performance.now()
@@ -518,7 +518,7 @@ export class LoadStressTester {
 
   private async executeCreateOperation(operation: TestOperation, config: LoadTestConfig): Promise<void> {
     const data = this.dataGenerator.generateProduct(config.dataSize)
-    
+
     const { error } = await this.supabase
       .from(operation.table)
       .insert(data)
@@ -539,7 +539,7 @@ export class LoadStressTester {
     }
   }
 
-  private async executeUpdateOperation(operation: TestOperation, config: LoadTestConfig): Promise<void> {
+  private async executeUpdateOperation(operation: TestOperation, _config: LoadTestConfig): Promise<void> {
     // First get a random record
     const { data: records, error: selectError } = await this.supabase
       .from(operation.table)
@@ -551,7 +551,7 @@ export class LoadStressTester {
     }
 
     const randomRecord = records[Math.floor(Math.random() * records.length)]
-    const updateData = { 
+    const updateData = {
       name: `Updated ${Date.now()}`,
       updated_at: new Date().toISOString()
     }
@@ -650,14 +650,14 @@ export class LoadStressTester {
   ): TestResult {
     const duration = endTime.getTime() - startTime.getTime()
     const responseTimes = metrics.map(m => m.responseTime).sort((a, b) => a - b)
-    
-    const averageResponseTime = responseTimes.length > 0 
-      ? responseTimes.reduce((sum, rt) => sum + rt, 0) / responseTimes.length 
+
+    const averageResponseTime = responseTimes.length > 0
+      ? responseTimes.reduce((sum, rt) => sum + rt, 0) / responseTimes.length
       : 0
 
     const p95Index = Math.floor(responseTimes.length * 0.95)
     const p99Index = Math.floor(responseTimes.length * 0.99)
-    
+
     const p95ResponseTime = responseTimes[p95Index] || 0
     const p99ResponseTime = responseTimes[p99Index] || 0
     const maxResponseTime = responseTimes[responseTimes.length - 1] || 0
@@ -668,16 +668,16 @@ export class LoadStressTester {
 
     const memoryUsages = metrics.map(m => m.memoryUsage)
     const cpuUsages = metrics.map(m => m.cpuUsage)
-    
+
     const peakMemoryUsage = Math.max(...memoryUsages, 0)
-    const averageCpuUsage = cpuUsages.length > 0 
-      ? cpuUsages.reduce((sum, cpu) => sum + cpu, 0) / cpuUsages.length 
+    const averageCpuUsage = cpuUsages.length > 0
+      ? cpuUsages.reduce((sum, cpu) => sum + cpu, 0) / cpuUsages.length
       : 0
     const peakCpuUsage = Math.max(...cpuUsages, 0)
 
     const bottlenecks = this.identifyBottlenecks(metrics)
     const recommendations = this.generateRecommendations(metrics, errorRate, averageResponseTime)
-    
+
     // Determine if test passed based on baselines
     const passed = this.evaluateTestResults(metrics, errorRate, averageResponseTime, peakMemoryUsage, peakCpuUsage)
 
@@ -709,7 +709,7 @@ export class LoadStressTester {
 
   private identifyBottlenecks(metrics: TestMetrics[]): string[] {
     const bottlenecks: string[] = []
-    
+
     const avgResponseTime = metrics.reduce((sum, m) => sum + m.responseTime, 0) / metrics.length
     const avgMemoryUsage = metrics.reduce((sum, m) => sum + m.memoryUsage, 0) / metrics.length
     const avgCpuUsage = metrics.reduce((sum, m) => sum + m.cpuUsage, 0) / metrics.length
@@ -764,26 +764,26 @@ export class LoadStressTester {
 
   private calculateTrend(values: number[]): number {
     if (values.length < 2) return 0
-    
+
     const firstHalf = values.slice(0, Math.floor(values.length / 2))
     const secondHalf = values.slice(Math.floor(values.length / 2))
-    
+
     const firstAvg = firstHalf.reduce((sum, v) => sum + v, 0) / firstHalf.length
     const secondAvg = secondHalf.reduce((sum, v) => sum + v, 0) / secondHalf.length
-    
+
     return (secondAvg - firstAvg) / firstAvg
   }
 
   private evaluateTestResults(
-    metrics: TestMetrics[], 
-    errorRate: number, 
-    avgResponseTime: number, 
-    peakMemoryUsage: number, 
+    metrics: TestMetrics[],
+    errorRate: number,
+    avgResponseTime: number,
+    peakMemoryUsage: number,
     peakCpuUsage: number
   ): boolean {
     // Check against baselines for different operation types
     const operationTypes = [...new Set(metrics.map(m => m.operation))]
-    
+
     for (const opType of operationTypes) {
       const baseline = this.baselines.get(opType)
       if (!baseline) continue

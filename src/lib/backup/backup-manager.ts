@@ -356,7 +356,7 @@ class BackupManager {
     await this.scheduleBackups()
     this.startMonitoring()
     this.startHealthChecks()
-    
+
     this.isInitialized = true
   }
 
@@ -531,24 +531,24 @@ class BackupManager {
       // Fase 1: Escaneo
       job.progress.phase = 'scanning'
       await this.updateBackupJob(job)
-      
+
       const sourceItems = await this.scanSource(configuration.source, job)
       job.progress.totalItems = sourceItems.length
       job.progress.totalSize = sourceItems.reduce((sum, item) => sum + item.size, 0)
-      
+
       this.addLog(job, 'info', `Scanned ${sourceItems.length} items (${this.formatBytes(job.progress.totalSize)})`)
 
       // Fase 2: Backup
       job.progress.phase = 'backing_up'
       await this.updateBackupJob(job)
-      
+
       const backupData = await this.performBackup(sourceItems, configuration, job)
-      
+
       // Fase 3: Compresión
       if (configuration.compression.enabled) {
         job.progress.phase = 'compressing'
         await this.updateBackupJob(job)
-        
+
         await this.compressBackup(backupData, configuration.compression, job)
       }
 
@@ -556,21 +556,21 @@ class BackupManager {
       if (configuration.encryption.enabled) {
         job.progress.phase = 'encrypting'
         await this.updateBackupJob(job)
-        
+
         await this.encryptBackup(backupData, configuration.encryption, job)
       }
 
       // Fase 5: Subida
       job.progress.phase = 'uploading'
       await this.updateBackupJob(job)
-      
+
       const backupLocation = await this.uploadBackup(backupData, configuration.destination, job)
 
       // Fase 6: Verificación
       if (configuration.verification.enabled && configuration.verification.verifyAfterBackup) {
         job.progress.phase = 'verifying'
         await this.updateBackupJob(job)
-        
+
         const verification = await this.verifyBackup(backupLocation, configuration, job)
         job.verification = verification
       }
@@ -615,7 +615,7 @@ class BackupManager {
         type: 'system',
         severity: 'critical',
         message: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error 
+        details: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
           : { error: String(error) },
         timestamp: new Date(),
@@ -709,14 +709,14 @@ class BackupManager {
       // Fase 1: Descarga
       restoreJob.progress.phase = 'downloading'
       await this.updateRestoreJob(restoreJob)
-      
+
       const backupData = await this.downloadBackup(backupInfo.location, configuration.destination)
 
       // Fase 2: Desencriptación
       if (configuration.encryption.enabled) {
         restoreJob.progress.phase = 'decrypting'
         await this.updateRestoreJob(restoreJob)
-        
+
         await this.decryptBackup(backupData, configuration.encryption)
       }
 
@@ -724,21 +724,21 @@ class BackupManager {
       if (configuration.compression.enabled) {
         restoreJob.progress.phase = 'decompressing'
         await this.updateRestoreJob(restoreJob)
-        
+
         await this.decompressBackup(backupData, configuration.compression)
       }
 
       // Fase 4: Extracción
       restoreJob.progress.phase = 'extracting'
       await this.updateRestoreJob(restoreJob)
-      
+
       await this.extractBackup(backupData, restoreJob.destination, restoreJob.options)
 
       // Fase 5: Verificación
       if (restoreJob.options.verifyAfterRestore) {
         restoreJob.progress.phase = 'verifying'
         await this.updateRestoreJob(restoreJob)
-        
+
         await this.verifyRestore(restoreJob.destination, backupInfo)
       }
 
@@ -760,7 +760,7 @@ class BackupManager {
         type: 'system',
         severity: 'critical',
         message: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error 
+        details: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
           : { error: String(error) },
         timestamp: new Date(),
@@ -775,7 +775,7 @@ class BackupManager {
   // Verificar salud de backups
   async checkBackupHealth(configurationId?: string): Promise<BackupHealth[]> {
     try {
-      const configs = configurationId 
+      const configs = configurationId
         ? [this.configurations.get(configurationId)].filter(Boolean)
         : Array.from(this.configurations.values())
 
@@ -811,12 +811,12 @@ class BackupManager {
 
       const jobs = recentJobs || []
       const lastJob = jobs[0]
-      
+
       // Calcular métricas
       const successfulJobs = jobs.filter(j => j.status === 'completed')
       const successRate = jobs.length > 0 ? successfulJobs.length / jobs.length : 0
-      
-      const lastBackupAge = config.lastBackupAt 
+
+      const lastBackupAge = config.lastBackupAt
         ? (now.getTime() - config.lastBackupAt.getTime()) / (1000 * 60 * 60) // horas
         : Infinity
 
@@ -904,8 +904,8 @@ class BackupManager {
       const successfulBackups = jobs.filter(j => j.status === 'completed').length
       const failedBackups = jobs.filter(j => j.status === 'failed').length
       const totalDataBacked = jobs.reduce((sum, j) => sum + (j.statistics?.totalSize || 0), 0)
-      const averageBackupTime = jobs.length > 0 
-        ? jobs.reduce((sum, j) => sum + (j.statistics?.duration || 0), 0) / jobs.length 
+      const averageBackupTime = jobs.length > 0
+        ? jobs.reduce((sum, j) => sum + (j.statistics?.duration || 0), 0) / jobs.length
         : 0
       const successRate = totalBackups > 0 ? successfulBackups / totalBackups : 0
 
@@ -1011,24 +1011,24 @@ class BackupManager {
     }
   }
 
-  private async downloadBackup(location: string, destination: BackupDestination): Promise<any> {
+  private async downloadBackup(_location: string, _destination: BackupDestination): Promise<any> {
     // Implementar descarga
     return {}
   }
 
-  private async decryptBackup(data: Record<string, unknown>, settings: EncryptionSettings): Promise<void> {
+  private async decryptBackup(_data: Record<string, unknown>, _settings: EncryptionSettings): Promise<void> {
     // Implementar desencriptación
   }
 
-  private async decompressBackup(data: Record<string, unknown>, settings: CompressionSettings): Promise<void> {
+  private async decompressBackup(_data: Record<string, unknown>, _settings: CompressionSettings): Promise<void> {
     // Implementar descompresión
   }
 
-  private async extractBackup(data: Record<string, unknown>, destination: string, options: RestoreOptions): Promise<void> {
+  private async extractBackup(_data: Record<string, unknown>, _destination: string, _options: RestoreOptions): Promise<void> {
     // Implementar extracción
   }
 
-  private async verifyRestore(destination: string, backupInfo: BackupInfo): Promise<void> {
+  private async verifyRestore(_destination: string, _backupInfo: BackupInfo): Promise<void> {
     // Implementar verificación de restauración
   }
 
@@ -1046,7 +1046,7 @@ class BackupManager {
 
     // Aplicar reglas de retención
     const toDelete = this.calculateBackupsToDelete(backups, config.retention)
-    
+
     for (const backup of toDelete) {
       if (typeof backup.id === 'string') {
         await this.deleteBackup(backup.id)
@@ -1054,12 +1054,12 @@ class BackupManager {
     }
   }
 
-  private calculateBackupsToDelete(backups: Array<Record<string, unknown>>, retention: RetentionPolicy): Array<Record<string, unknown>> {
+  private calculateBackupsToDelete(_backups: Array<Record<string, unknown>>, _retention: RetentionPolicy): Array<Record<string, unknown>> {
     // Implementar lógica de retención
     return []
   }
 
-  private async deleteBackup(backupId: string): Promise<void> {
+  private async deleteBackup(_backupId: string): Promise<void> {
     // Implementar eliminación de backup
   }
 
@@ -1078,7 +1078,7 @@ class BackupManager {
 
     if (schedule.type === 'interval' && schedule.interval) {
       const intervalMs = schedule.interval * 60 * 60 * 1000 // Convertir horas a ms
-      
+
       const timeout = setInterval(async () => {
         try {
           await this.executeBackup(config.id)
@@ -1093,11 +1093,11 @@ class BackupManager {
 
   private calculateNextBackup(schedule: BackupSchedule): Date {
     const now = new Date()
-    
+
     if (schedule.type === 'interval' && schedule.interval) {
       return new Date(now.getTime() + schedule.interval * 60 * 60 * 1000)
     }
-    
+
     return new Date(now.getTime() + 24 * 60 * 60 * 1000) // Default: 24 horas
   }
 
@@ -1122,7 +1122,7 @@ class BackupManager {
       if (job.status === 'running' && (now - job.startedAt.getTime()) > timeout) {
         job.status = 'failed'
         job.completedAt = new Date()
-        
+
         const error: BackupError = {
           id: `err_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           jobId: job.id,
@@ -1144,7 +1144,7 @@ class BackupManager {
   private async performHealthChecks(): Promise<void> {
     // Implementar verificaciones de salud automáticas
     const healthResults = await this.checkBackupHealth()
-    
+
     for (const health of healthResults) {
       if (health.overallHealth === 'critical') {
         // Enviar alertas críticas
@@ -1161,7 +1161,7 @@ class BackupManager {
   private async cleanupOldJobs(): Promise<void> {
     try {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      
+
       await this.supabase
         .from('backup_jobs')
         .delete()

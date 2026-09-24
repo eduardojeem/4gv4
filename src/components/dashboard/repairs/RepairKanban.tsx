@@ -174,7 +174,7 @@ export function RepairKanban({ repairs, onStatusChange, onEdit, onView, onReques
             // Update in database
             try {
                 await onStatusChange(activeRepairId, newStatus)
-            } catch (error) {
+            } catch (_error) {
                 // Revert on error
                 const initial: Record<RepairStatus, string[]> = {
                     recibido: [],

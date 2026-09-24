@@ -48,7 +48,7 @@ interface TimelineViewProps {
 
 export const TimelineView: React.FC<TimelineViewProps> = ({
   customers,
-  onCustomerSelect,
+  onCustomerSelect: _onCustomerSelect,
   selectedCustomerId
 }) => {
   const [activities, setActivities] = useState<ActivityItem[]>([])
@@ -114,7 +114,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
       // Sort by date (most recent first)
       combinedActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      
+
       setActivities(combinedActivities)
     } catch (error) {
       console.error('Error fetching customer activity:', error)
@@ -138,12 +138,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   // Filter activities based on search and type
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
-      const matchesSearch = searchTerm === '' || 
+      const matchesSearch = searchTerm === '' ||
         activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         activity.description.toLowerCase().includes(searchTerm.toLowerCase())
-      
+
       const matchesType = filterType === 'all' || activity.type === filterType
-      
+
       return matchesSearch && matchesType
     })
   }, [activities, searchTerm, filterType])
@@ -218,7 +218,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
             </Badge>
           )}
         </CardTitle>
-        
+
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3 mt-4">
           <div className="relative flex-1">
@@ -290,7 +290,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                 >
                   <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
-                    {activities.length === 0 
+                    {activities.length === 0
                       ? 'No se encontró actividad para este cliente'
                       : 'No se encontraron actividades que coincidan con los filtros'
                     }

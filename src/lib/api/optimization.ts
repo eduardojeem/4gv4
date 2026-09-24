@@ -92,7 +92,7 @@ export class CacheManager {
 
   get<T>(key: string): T | null {
     const entry = this.cache.get(key) as CacheEntry<T> | undefined
-    
+
     if (!entry) return null
 
     // Verificar TTL
@@ -170,7 +170,7 @@ export class CacheManager {
 
   private evict(neededSize: number): void {
     const entries = Array.from(this.cache.entries())
-    
+
     switch (this.config.strategy) {
       case 'lru':
         entries.sort(([, a], [, b]) => a.lastAccessed.getTime() - b.lastAccessed.getTime())
@@ -204,9 +204,9 @@ export class RateLimiter {
   async checkLimit(req: NextRequest): Promise<{ allowed: boolean; remaining: number; resetTime: Date }> {
     const key = this.config.keyGenerator ? this.config.keyGenerator(req) : this.getDefaultKey(req)
     const now = new Date()
-    
+
     let entry = this.limits.get(key)
-    
+
     if (!entry || now >= entry.resetTime) {
       // Nueva ventana o entrada
       entry = {
@@ -219,7 +219,7 @@ export class RateLimiter {
     }
 
     entry.count++
-    
+
     const allowed = entry.count <= this.config.maxRequests
     const remaining = Math.max(0, this.config.maxRequests - entry.count)
 
@@ -242,12 +242,12 @@ export class RateLimiter {
   getStats() {
     const now = new Date()
     const activeEntries = Array.from(this.limits.values()).filter(entry => now < entry.resetTime)
-    
+
     return {
       activeConnections: activeEntries.length,
       blockedRequests: activeEntries.filter(entry => entry.blocked).length,
       totalRequests: activeEntries.reduce((sum, entry) => sum + entry.count, 0),
-      averageRequestsPerKey: activeEntries.length > 0 ? 
+      averageRequestsPerKey: activeEntries.length > 0 ?
         activeEntries.reduce((sum, entry) => sum + entry.count, 0) / activeEntries.length : 0
     }
   }
@@ -290,7 +290,7 @@ export class QueryOptimizer {
     cacheTtl?: number
   ): Promise<{ data: T | null; error: any; fromCache: boolean; queryTime: number }> {
     const startTime = Date.now()
-    
+
     // Verificar cache si está habilitado
     if (this.config.cacheQueries && cacheKey) {
       const cached = cacheManager.get<T>(cacheKey)
@@ -325,7 +325,7 @@ export class QueryOptimizer {
     }
   }
 
-  private limitJoinDepth(query: any, maxDepth: number): any {
+  private limitJoinDepth(query: any, _maxDepth: number): any {
     // Implementación simplificada para limitar joins
     return query
   }
@@ -356,7 +356,7 @@ export class MetricsCollector {
 
   recordMetric(metric: APIMetrics): void {
     this.metrics.push(metric)
-    
+
     // Mantener solo las últimas 1000 métricas en memoria
     if (this.metrics.length > 1000) {
       this.metrics = this.metrics.slice(-1000)
@@ -413,7 +413,7 @@ export class MetricsCollector {
 
   private getSlowestEndpoints(metrics: APIMetrics[]) {
     const endpointTimes = new Map<string, number[]>()
-    
+
     metrics.forEach(metric => {
       const key = `${metric.method} ${metric.endpoint}`
       if (!endpointTimes.has(key)) {
@@ -435,7 +435,7 @@ export class MetricsCollector {
 
   private getStatusCodeDistribution(metrics: APIMetrics[]) {
     const distribution = new Map<number, number>()
-    
+
     metrics.forEach(metric => {
       distribution.set(metric.statusCode, (distribution.get(metric.statusCode) || 0) + 1)
     })
@@ -454,12 +454,12 @@ export class MetricsCollector {
     metrics.forEach(metric => {
       const key = `${metric.method} ${metric.endpoint}`
       const existing = endpointMetrics.get(key) || { count: 0, totalTime: 0, errors: 0, cacheHits: 0 }
-      
+
       existing.count++
       existing.totalTime += metric.responseTime
       if (metric.statusCode >= 400) existing.errors++
       if (metric.cacheHit) existing.cacheHits++
-      
+
       endpointMetrics.set(key, existing)
     })
 
@@ -505,7 +505,7 @@ export const metricsCollector = new MetricsCollector(
 export function withOptimization(handler: (req: NextRequest) => Promise<NextResponse>) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const startTime = Date.now()
-    
+
     // Rate limiting
     const rateLimitResult = await rateLimiter.checkLimit(req)
     if (!rateLimitResult.allowed) {
@@ -521,7 +521,7 @@ export function withOptimization(handler: (req: NextRequest) => Promise<NextResp
 
     // Ejecutar handler
     const response = await handler(req)
-    
+
     // Registrar métricas
     const responseTime = Date.now() - startTime
     metricsCollector.recordMetric({
@@ -539,7 +539,7 @@ export function withOptimization(handler: (req: NextRequest) => Promise<NextResp
     // Agregar headers de optimización
     response.headers.set('X-Response-Time', `${responseTime}ms`)
     response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString())
-    
+
     return response
   }
 }

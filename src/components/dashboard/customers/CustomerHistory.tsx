@@ -2,10 +2,10 @@
 
 /**
  * CustomerHistory - Componente consolidado
- * 
+ *
  * Combina funcionalidades de CustomerHistory, CustomerHistoryEnhanced y TransactionHistory
  * en un solo componente unificado con múltiples modos de visualización.
- * 
+ *
  * Características:
  * - Modo compacto/detallado/mejorado
  * - Historial completo de reparaciones y compras
@@ -325,7 +325,7 @@ function HistoryItemCard({ item, index, mode }: { item: HistoryItem; index: numb
   )
 }
 
-export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detailed' }: CustomerHistoryProps) {
+export function CustomerHistory({ customer, onBack, onViewDetail: _onViewDetail, mode = 'detailed' }: CustomerHistoryProps) {
   // Sin modulo de taller no se muestran la tarjeta, el filtro ni la pestaña de
   // reparaciones: eran un «0 reparaciones» permanente en un negocio sin taller.
   const { effectiveModules } = useSubscriptionStatus()
@@ -338,7 +338,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
   const [typeFilter, setTypeFilter] = useState("all")
   const [sortBy, setSortBy] = useState<'date' | 'amount'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  
+
   // Estado para modales
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseRecord | null>(null)
   const [showPurchaseDetail, setShowPurchaseDetail] = useState(false)

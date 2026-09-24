@@ -81,7 +81,7 @@ export function RepairHelpCenter({
   open,
   onOpenChange,
   audience = 'admin',
-  onStartTour,
+  onStartTour: _onStartTour,
 }: RepairHelpCenterProps) {
   const [query, setQuery] = useState('')
   const [activeTab, setActiveTab] = useState<RepairHelpTab>('flow')

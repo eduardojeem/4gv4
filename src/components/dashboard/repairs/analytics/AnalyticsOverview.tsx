@@ -36,11 +36,11 @@ import { cn } from '@/lib/utils'
 import { useRepairAnalytics } from '@/hooks/use-repair-analytics'
 
 // Componente de métrica optimizado
-const MetricCard = memo(({ 
-  title, 
-  value, 
-  change, 
-  icon: Icon, 
+const MetricCard = memo(({
+  title,
+  value,
+  change,
+  icon: Icon,
   format = 'number',
   gradient,
   trend
@@ -56,9 +56,9 @@ const MetricCard = memo(({
   const formatValue = useCallback((val: number | string) => {
     if (typeof val === 'string') return val
     if (val === undefined || val === null || isNaN(Number(val))) return '0'
-    
+
     const numVal = Number(val)
-    
+
     switch (format) {
       case 'currency':
         return (
@@ -79,7 +79,7 @@ const MetricCard = memo(({
   return (
     <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
       <div className={`absolute inset-0 opacity-[0.03] bg-gradient-to-br ${gradient} group-hover:opacity-10 transition-opacity duration-300`} />
-      
+
       {/* Subtle top border accent */}
       <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r ${gradient} opacity-50`} />
 
@@ -99,8 +99,8 @@ const MetricCard = memo(({
           <div className="flex items-center gap-1.5 text-sm mt-2">
             <span className={cn(
               "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold",
-              trend === 'up' ? "bg-green-500/10 text-green-600 dark:text-green-400" : 
-              trend === 'down' ? "bg-red-500/10 text-red-600 dark:text-red-400" : 
+              trend === 'up' ? "bg-green-500/10 text-green-600 dark:text-green-400" :
+              trend === 'down' ? "bg-red-500/10 text-red-600 dark:text-red-400" :
               "bg-slate-500/10 text-slate-600 dark:text-slate-400"
             )}>
               {trend === 'up' ? (
@@ -129,8 +129,8 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
       <div className="font-medium text-sm mb-1">{label}</div>
       {payload.map((entry: any, index: number) => (
         <div key={index} className="text-sm flex items-center gap-2" style={{ color: entry.color }}>
-          <div 
-            className="w-3 h-3 rounded-full flex-shrink-0" 
+          <div
+            className="w-3 h-3 rounded-full flex-shrink-0"
             style={{ backgroundColor: entry.color }}
           />
           <span>{entry.name}:</span>
@@ -157,12 +157,12 @@ interface AnalyticsOverviewProps {
 export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
   const [timeRange, setTimeRange] = useState('6months')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  
+
   const analytics = useRepairAnalytics(timeRange)
   const { refreshRepairs } = useRepairs()
 
   const COLORS = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
     '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
   ]
 
@@ -171,7 +171,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
     try {
       await refreshRepairs()
       toast.success('Datos actualizados')
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al actualizar datos')
     } finally {
       setIsRefreshing(false)
@@ -195,7 +195,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
     link.href = URL.createObjectURL(blob)
     link.download = `repair_analytics_${format(new Date(), 'yyyy-MM-dd')}.csv`
     link.click()
-    
+
     toast.success('Datos exportados exitosamente')
   }, [analytics])
 
@@ -211,7 +211,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-[150px]">
@@ -222,9 +222,9 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
               <SelectItem value="12months">Últimos 12 meses</SelectItem>
             </SelectContent>
           </Select>
-          
-          <Button 
-            variant="outline" 
+
+          <Button
+            variant="outline"
             size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -232,7 +232,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
             <RefreshCw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
             Actualizar
           </Button>
-          
+
           <Button variant="outline" size="sm" onClick={exportData}>
             <Download className="h-4 w-4 mr-2" />
             Exportar
@@ -248,7 +248,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
           icon={Wrench}
           gradient="bg-gradient-to-br from-pink-400 via-red-400 to-yellow-400"
         />
-        
+
         <MetricCard
           title="Tasa de Completado"
           value={analytics.metrics.completionRate}
@@ -256,7 +256,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
           icon={CheckCircle2}
           gradient="bg-gradient-to-br from-green-400 via-blue-500 to-purple-600"
         />
-        
+
         <MetricCard
           title="Tiempo Promedio"
           value={analytics.metrics.avgRepairTime}
@@ -264,7 +264,7 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
           icon={Clock}
           gradient="bg-gradient-to-br from-orange-400 via-pink-500 to-red-500"
         />
-        
+
         <MetricCard
           title="Ingresos Totales"
           value={analytics.metrics.totalRevenue}

@@ -1,6 +1,6 @@
 /**
  * Offline Manager - Gestión de modo offline con IndexedDB
- * 
+ *
  * Características:
  * - Cache completo de productos en IndexedDB
  * - Detección automática de conectividad
@@ -407,7 +407,7 @@ export class OfflineManager {
   /**
    * Sync single sale to server (placeholder)
    */
-  private async syncSaleToServer(sale: PendingSale): Promise<void> {
+  private async syncSaleToServer(_sale: PendingSale): Promise<void> {
     // TODO: Implement actual API call to Supabase
     // This is a placeholder that simulates the API call
 

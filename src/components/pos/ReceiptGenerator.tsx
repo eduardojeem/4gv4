@@ -92,10 +92,10 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   const { settings } = useSharedSettings()
   const { settings: websiteSettings } = useAdminWebsiteSettings()
   const logoUrl = websiteSettings?.company_info?.logoUrl
-  
+
   const companyInfo = {
-    name: settings.companyName && settings.companyName !== 'Mi Empresa' 
-      ? settings.companyName 
+    name: settings.companyName && settings.companyName !== 'Mi Empresa'
+      ? settings.companyName
       : config.company.name,
     address: settings.companyAddress || config.company.address,
     phone: settings.companyPhone || config.company.phone,
@@ -118,7 +118,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
     return labels[method as keyof typeof labels] || method
   }
 
-  const getPaymentIcon = (method: string) => {
+  const getPaymentIcon = (_method: string) => {
     return '' // Removed icons for better print compatibility
   }
 
@@ -204,7 +204,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         <h3 className="font-bold text-sm mb-3 text-center bg-muted/50 py-2 rounded print:bg-transparent print:border-y print:border-black print:rounded-none">
           DETALLE DE PRODUCTOS
         </h3>
-        {receiptData.items.map((item, index) => (
+        {receiptData.items.map((item, _index) => (
           <div key={item.id} className="mb-3 pb-3 border-b border-dashed border-border/50 print:border-black last:border-0">
             <div className="flex justify-between items-start font-medium mb-1">
               <span className="flex-1 leading-tight">

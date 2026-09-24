@@ -2,7 +2,7 @@
 
 /**
  * CustomerGridView Component
- * 
+ *
  * Vista de cuadrícula para mostrar clientes en formato de tarjetas
  * con información visual atractiva y acciones rápidas
  */
@@ -64,7 +64,7 @@ export function CustomerGridView({
   selectedCustomers,
   onCustomerSelect,
   onCustomerToggle,
-  onSelectAll,
+  onSelectAll: _onSelectAll,
   onClearSelection,
   onViewCustomer,
   onEditCustomer,
@@ -197,7 +197,7 @@ export function CustomerGridView({
                 onHoverStart={() => setHoveredCard(customer.id)}
                 onHoverEnd={() => setHoveredCard(null)}
               >
-                <Card 
+                <Card
                   className={cn(
                     "relative overflow-hidden transition-all duration-200 cursor-pointer group",
                     hoveredCard === customer.id && "shadow-lg scale-[1.02]",
@@ -237,7 +237,7 @@ export function CustomerGridView({
                           <Edit className="h-4 w-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => onDeleteCustomer(customer)}
                           className="text-red-600 dark:text-red-400"
                         >
@@ -257,7 +257,7 @@ export function CustomerGridView({
                           {getInitials(customer.name)}
                         </AvatarFallback>
                       </Avatar>
-                      
+
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
@@ -267,7 +267,7 @@ export function CustomerGridView({
                             <Star className="h-4 w-4 text-yellow-500" />
                           )}
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           <Badge className={cn("text-xs", getStatusColor(customer.status))}>
                             {customerStatusLabel(customer.status)}
@@ -297,14 +297,14 @@ export function CustomerGridView({
                           </TooltipContent>
                         </Tooltip>
                       )}
-                      
+
                       {customer.phone && (
                         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                           <Phone className="h-4 w-4 text-gray-400 shrink-0" />
                           <span>{customer.phone}</span>
                         </div>
                       )}
-                      
+
                       {customer.city && (
                         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                           <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
@@ -324,7 +324,7 @@ export function CustomerGridView({
                           {customer.total_purchases}
                         </div>
                       </div>
-                      
+
                       <div className="text-center">
                         <div className="flex items-center justify-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
                           <TrendingUp className="h-3 w-3" />

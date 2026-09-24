@@ -28,7 +28,7 @@ export function WholesaleToggle({ profileId, customerName }: WholesaleToggleProp
       if (!res.ok) throw new Error('No se pudo obtener el estado')
       const data = await res.json()
       setIsWholesale(data.isWholesale)
-    } catch (e) {
+    } catch (_e) {
       setError('Error al cargar el estado de acceso mayorista')
       setIsWholesale(false)
     } finally {

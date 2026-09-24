@@ -12,58 +12,58 @@ export const ProductSchema = z.object({
     .min(2, 'El nombre debe tener al menos 2 caracteres')
     .max(100, 'El nombre no puede exceder 100 caracteres')
     .refine(val => val.trim().length > 0, 'El nombre no puede estar vacío'),
-  
+
   sku: z.string()
     .min(3, 'SKU debe tener al menos 3 caracteres')
     .max(50, 'SKU no puede exceder 50 caracteres')
     .regex(/^[A-Z0-9-_]+$/, 'SKU solo puede contener letras mayúsculas, números, guiones y guiones bajos'),
-  
+
   category: z.string()
     .min(1, 'Categoría es requerida')
     .max(50, 'Categoría no puede exceder 50 caracteres'),
-  
+
   description: z.string()
     .max(500, 'Descripción no puede exceder 500 caracteres')
     .optional(),
-  
+
   sale_price: z.number()
     .positive('El precio de venta debe ser positivo')
     .max(999999999, 'Precio de venta demasiado alto'),
-  
+
   cost_price: z.number()
     .positive('El precio de costo debe ser positivo')
     .max(999999999, 'Precio de costo demasiado alto'),
-  
+
   stock_quantity: z.number()
     .int('La cantidad debe ser un número entero')
     .min(0, 'La cantidad no puede ser negativa'),
-  
+
   min_stock: z.number()
     .int('El stock mínimo debe ser un número entero')
     .min(0, 'El stock mínimo no puede ser negativo'),
-  
+
   status: z.enum(['active', 'inactive'], {
     message: 'Estado debe ser activo o inactivo'
   }),
-  
+
   image: z.string()
     .url('URL de imagen inválida')
     .optional()
     .or(z.literal('')),
-    
+
   image_url: z.string()
     .url('URL de imagen inválida')
     .optional()
     .or(z.literal('')),
-  
+
   supplier: z.string()
     .max(100, 'Proveedor no puede exceder 100 caracteres')
     .optional(),
-  
+
   barcode: z.string()
     .max(50, 'Código de barras no puede exceder 50 caracteres')
     .optional(),
-  
+
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional()
 }).refine(
@@ -83,10 +83,10 @@ export const ProductSchema = z.object({
 export type Product = z.infer<typeof ProductSchema>
 
 // Validaciones específicas para diferentes contextos
-export const ProductCreateSchema = ProductSchema.omit({ 
-  id: true, 
-  created_at: true, 
-  updated_at: true 
+export const ProductCreateSchema = ProductSchema.omit({
+  id: true,
+  created_at: true,
+  updated_at: true
 })
 
 export const ProductUpdateSchema = ProductSchema.partial().extend({
@@ -117,7 +117,7 @@ export class ProductValidator {
    * Valida que el SKU sea único en el sistema
    */
   static async validateUniqueSku(sku: string, existingProducts: Product[], excludeId?: string): Promise<boolean> {
-    const duplicates = existingProducts.filter(p => 
+    const duplicates = existingProducts.filter(p =>
       p.sku.toLowerCase() === sku.toLowerCase() && p.id !== excludeId
     )
     return duplicates.length === 0
@@ -127,14 +127,14 @@ export class ProductValidator {
    * Valida que el nombre del producto sea único en la misma categoría
    */
   static validateUniqueNameInCategory(
-    name: string, 
-    category: string, 
-    existingProducts: Product[], 
+    name: string,
+    category: string,
+    existingProducts: Product[],
     excludeId?: string
   ): boolean {
-    const duplicates = existingProducts.filter(p => 
-      p.name.toLowerCase() === name.toLowerCase() && 
-      p.category === category && 
+    const duplicates = existingProducts.filter(p =>
+      p.name.toLowerCase() === name.toLowerCase() &&
+      p.category === category &&
       p.id !== excludeId
     )
     return duplicates.length === 0
@@ -144,13 +144,13 @@ export class ProductValidator {
    * Valida que los precios estén dentro de rangos razonables para la categoría
    */
   static validatePriceRange(
-    salePrice: number, 
-    category: string, 
+    salePrice: number,
+    category: string,
     categoryPriceRanges: Record<string, { min: number; max: number }>
   ): boolean {
     const range = categoryPriceRanges[category]
     if (!range) return true // Si no hay rango definido, se acepta cualquier precio
-    
+
     return salePrice >= range.min && salePrice <= range.max
   }
 
@@ -161,7 +161,7 @@ export class ProductValidator {
     const updateDate = new Date(updatedAt)
     const now = new Date()
     const daysDiff = (now.getTime() - updateDate.getTime()) / (1000 * 3600 * 24)
-    
+
     return daysDiff <= maxAgeInDays
   }
 }
@@ -208,9 +208,9 @@ export class ProductDataCleaner {
    */
   static cleanImageUrl(url: string): string | null {
     if (!url || url.trim() === '') return null
-    
+
     const cleanUrl = url.trim()
-    
+
     // Validar que sea una URL válida
     try {
       new URL(cleanUrl)
@@ -237,7 +237,7 @@ export const VALIDATION_CONSTANTS = {
   MIN_MARGIN_PERCENT: 10,
   MAX_PRICE: 999999999,
   DATA_FRESHNESS_DAYS: 90,
-  
+
   // Rangos de precios por categoría (ejemplo)
   CATEGORY_PRICE_RANGES: {
     'electronics': { min: 10000, max: 50000000 },
@@ -246,7 +246,7 @@ export const VALIDATION_CONSTANTS = {
     'books': { min: 2000, max: 200000 },
     'home': { min: 5000, max: 10000000 }
   } as Record<string, { min: number; max: number }>,
-  
+
   // Categorías válidas
   VALID_CATEGORIES: [
     'electronics',
@@ -264,7 +264,7 @@ export const VALIDATION_CONSTANTS = {
 
 // Función helper para validar un producto completo
 export async function validateProduct(
-  product: Partial<Product>, 
+  product: Partial<Product>,
   existingProducts: Product[] = [],
   isUpdate: boolean = false
 ): Promise<{ isValid: boolean; errors: string[] }> {
@@ -292,8 +292,8 @@ export async function validateProduct(
 
   if (product.sku) {
     const isUniqueSku = await ProductValidator.validateUniqueSku(
-      product.sku, 
-      existingProducts, 
+      product.sku,
+      existingProducts,
       product.id
     )
     if (!isUniqueSku) {
@@ -321,16 +321,16 @@ export async function validateProduct(
 
 // Hook para validación en tiempo real
 export function useProductValidation() {
-  const validateField = (field: keyof Product, value: unknown, product: Partial<Product>) => {
+  const validateField = (field: keyof Product, value: unknown, _product: Partial<Product>) => {
     try {
       const fieldSchema = ProductSchema.shape[field]
       fieldSchema.parse(value)
       return { isValid: true, error: null }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return { 
-          isValid: false, 
-          error: (error as z.ZodError).issues[0]?.message || 'Valor inválido' 
+        return {
+          isValid: false,
+          error: (error as z.ZodError).issues[0]?.message || 'Valor inválido'
         }
       }
       return { isValid: false, error: 'Error de validación' }

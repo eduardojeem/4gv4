@@ -29,7 +29,7 @@ export function ShoppingCart({
     total,
     onUpdateQuantity,
     onRemoveItem,
-    onApplyDiscount,
+    onApplyDiscount: _onApplyDiscount,
     onClearCart
 }: ShoppingCartProps) {
     if (items.length === 0) {

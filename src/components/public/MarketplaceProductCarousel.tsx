@@ -178,7 +178,7 @@ export function MarketplaceProductCarousel({
           className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-4 pt-1 scrollbar-hide scroll-smooth sm:gap-4"
           aria-label="Pasarela de productos del marketplace"
         >
-          {normalizedProducts.map((product, idx) => {
+          {normalizedProducts.map((product, _idx) => {
             const offer = getOfferPricing(product)
             const precioOculto = hidesPublicPrice(product)
             const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)

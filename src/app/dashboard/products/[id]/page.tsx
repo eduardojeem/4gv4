@@ -397,7 +397,7 @@ export default function ProductDetailPage() {
     const inStockCount = normalizedVariants.filter(v => v.stockQuantity > (v.minStock ?? 0)).length
     const activeCount = normalizedVariants.filter(v => v.isActive).length
     const totalValuation = normalizedVariants.reduce((sum, v) => sum + (v.stockQuantity * v.salePrice), 0)
-    
+
     const prices = normalizedVariants.map(v => v.salePrice).filter(p => p > 0)
     const minPrice = prices.length ? Math.min(...prices) : (product?.sale_price ?? 0)
     const maxPrice = prices.length ? Math.max(...prices) : (product?.sale_price ?? 0)
@@ -437,7 +437,7 @@ export default function ProductDetailPage() {
         const matchesName = v.name.toLowerCase().includes(q)
         const matchesSku = v.sku.toLowerCase().includes(q)
         const matchesBarcode = v.barcode ? v.barcode.toLowerCase().includes(q) : false
-        const matchesAttrs = Object.entries(v.attributes).some(([k, val]) => 
+        const matchesAttrs = Object.entries(v.attributes).some(([k, val]) =>
           k.toLowerCase().includes(q) || val.toLowerCase().includes(q)
         )
         if (!matchesName && !matchesSku && !matchesBarcode && !matchesAttrs) {
@@ -530,7 +530,7 @@ export default function ProductDetailPage() {
       } else {
         toast.error(result.error || 'Error al cambiar el estado del producto')
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al cambiar el estado del producto')
     } finally {
       setIsTogglingActive(false)

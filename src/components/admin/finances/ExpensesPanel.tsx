@@ -208,7 +208,7 @@ export function ExpensesPanel({
     await onChanged()
   }
 
-  async function handleExpenseSaved(createdObligation?: unknown) {
+  async function handleExpenseSaved(_createdObligation?: unknown) {
     setPage(1)
     setSearchQuery('')
     if (statusFilter === 'paid' || statusFilter === 'voided') {

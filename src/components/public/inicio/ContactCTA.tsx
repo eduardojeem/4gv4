@@ -31,7 +31,7 @@ interface ContactCTAProps {
   contactHref: string
 }
 
-export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: ContactCTAProps) {
+export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref }: ContactCTAProps) {
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''

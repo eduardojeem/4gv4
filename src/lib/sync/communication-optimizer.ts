@@ -79,7 +79,7 @@ export class ConnectionPool {
     this.connections.set(key, connection)
     this.activeConnections.add(key)
     this.lastUsed.set(key, Date.now())
-    
+
     return connection
   }
 
@@ -185,7 +185,7 @@ export class DataCompressor {
 
     const baseRatio = baseRatios[algorithm as keyof typeof baseRatios] || 0.4
     const levelMultiplier = 1 - (level / 10) * 0.1 // Better compression with higher levels
-    
+
     return Math.max(0.1, baseRatio * levelMultiplier)
   }
 
@@ -201,11 +201,11 @@ export class DataCompressor {
       const parts = compressed.split(':')
       const ratio = parseFloat(parts[1])
       const truncatedData = parts.slice(2).join(':')
-      
+
       // Simular restauración de datos
       return truncatedData.padEnd(originalSize, ' ')
     }
-    
+
     return compressed
   }
 }
@@ -235,7 +235,7 @@ export class RequestCache {
 
     entry.accessCount++
     this.updateAccessOrder(key)
-    
+
     return entry.data
   }
 
@@ -243,7 +243,7 @@ export class RequestCache {
     if (!this.config.enabled) return
 
     const now = Date.now()
-    
+
     // Check cache size limit
     if (this.cache.size >= this.config.maxSize && !this.cache.has(key)) {
       this.evictLeastUsed()
@@ -315,9 +315,9 @@ export class RequestCache {
   getHitRate(): number {
     const totalRequests = Array.from(this.cache.values())
       .reduce((sum, entry) => sum + entry.accessCount, 0)
-    
+
     if (totalRequests === 0) return 0
-    
+
     const hits = this.cache.size
     return hits / totalRequests
   }
@@ -325,7 +325,7 @@ export class RequestCache {
   getStats(): { size: number; hitRate: number; totalRequests: number } {
     const totalRequests = Array.from(this.cache.values())
       .reduce((sum, entry) => sum + entry.accessCount, 0)
-    
+
     return {
       size: this.cache.size,
       hitRate: this.getHitRate(),
@@ -356,7 +356,7 @@ export class CommunicationOptimizer {
     this.config = connectionConfig
     this.compressionConfig = compressionConfig
     this.cacheConfig = cacheConfig
-    
+
     this.connectionPool = new ConnectionPool(connectionConfig)
     this.compressor = new DataCompressor(compressionConfig)
     this.cache = new RequestCache(cacheConfig)
@@ -398,11 +398,11 @@ export class CommunicationOptimizer {
       while (retryCount <= this.config.retryAttempts) {
         try {
           const connection = await this.connectionPool.getConnection()
-          
+
           try {
             result = await Promise.race([
               requestFn(),
-              new Promise<never>((_, reject) => 
+              new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error('Request timeout')), this.config.connectionTimeout)
               )
             ])
@@ -411,7 +411,7 @@ export class CommunicationOptimizer {
             if (useCompression && result) {
               const compressionResult = await this.compressor.compress(result)
               compressionRatio = compressionResult.ratio
-              
+
               // In a real implementation, you'd send the compressed data
               // For demo purposes, we'll just track the compression ratio
             }
@@ -427,11 +427,11 @@ export class CommunicationOptimizer {
           }
         } catch (error) {
           retryCount++
-          
+
           if (retryCount > this.config.retryAttempts || !retryOnFailure) {
             throw error
           }
-          
+
           // Exponential backoff
           const delay = this.config.retryDelay * Math.pow(2, retryCount - 1)
           await new Promise(resolve => setTimeout(resolve, delay))
@@ -475,13 +475,13 @@ export class CommunicationOptimizer {
 
     const startTime = performance.now()
     const results: T[] = []
-    
+
     // Process requests in batches
     for (let i = 0; i < requests.length; i += batchSize) {
       const batch = requests.slice(i, i + batchSize)
-      
+
       let batchResults: T[]
-      
+
       if (parallel) {
         batchResults = await Promise.all(
           batch.map(request => this.optimizedRequest(
@@ -503,7 +503,7 @@ export class CommunicationOptimizer {
           batchResults.push(result)
         }
       }
-      
+
       results.push(...batchResults)
     }
 
@@ -525,7 +525,7 @@ export class CommunicationOptimizer {
 
   private async recordMetrics(metrics: ProtocolMetrics): Promise<void> {
     this.metrics.push(metrics)
-    
+
     // Keep only last 1000 metrics
     if (this.metrics.length > 1000) {
       this.metrics = this.metrics.slice(-1000)
@@ -563,16 +563,16 @@ export class CommunicationOptimizer {
 
   async optimizeConfiguration(): Promise<OptimizationResult> {
     const recentMetrics = this.metrics.slice(-100) // Last 100 operations
-    
+
     if (recentMetrics.length < 10) {
       throw new Error('Insufficient metrics for optimization')
     }
 
     const previousConfig = { ...this.config }
     const newConfig = await this.calculateOptimalConfiguration(recentMetrics)
-    
+
     const improvement = this.calculateImprovement(recentMetrics, newConfig)
-    
+
     // Apply new configuration
     this.config = newConfig
     this.connectionPool = new ConnectionPool(newConfig)
@@ -665,9 +665,9 @@ export class CommunicationOptimizer {
     }
   }
 
-  private generateOptimizationRecommendations(metrics: ProtocolMetrics[], newConfig: ConnectionConfig): string[] {
+  private generateOptimizationRecommendations(metrics: ProtocolMetrics[], _newConfig: ConnectionConfig): string[] {
     const recommendations: string[] = []
-    
+
     const avgLatency = metrics.reduce((sum, m) => sum + m.latency, 0) / metrics.length
     const avgThroughput = metrics.reduce((sum, m) => sum + m.throughput, 0) / metrics.length
     const avgErrorRate = metrics.reduce((sum, m) => sum + m.errorRate, 0) / metrics.length
@@ -691,7 +691,7 @@ export class CommunicationOptimizer {
 
     const cacheHitRate = metrics
       .filter(m => m.cacheHitRate !== undefined)
-      .reduce((sum, m) => sum + (m.cacheHitRate || 0), 0) / 
+      .reduce((sum, m) => sum + (m.cacheHitRate || 0), 0) /
       metrics.filter(m => m.cacheHitRate !== undefined).length
 
     if (cacheHitRate < 0.5) {
@@ -700,7 +700,7 @@ export class CommunicationOptimizer {
 
     const avgCompressionRatio = metrics
       .filter(m => m.compressionRatio !== undefined)
-      .reduce((sum, m) => sum + (m.compressionRatio || 1), 0) / 
+      .reduce((sum, m) => sum + (m.compressionRatio || 1), 0) /
       metrics.filter(m => m.compressionRatio !== undefined).length
 
     if (avgCompressionRatio < 2) {

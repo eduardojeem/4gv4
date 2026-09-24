@@ -148,7 +148,7 @@ export function usePermissionGuard(requirements: PermissionRequirement) {
 }
 
 // Componente para mostrar información de permisos (útil para debugging)
-export function PermissionDebugger({ requirements }: { requirements: PermissionRequirement }) {
+export function PermissionDebugger({ requirements: _requirements }: { requirements: PermissionRequirement }) {
   // Componente deshabilitado - no mostrar información sensible
   return null
 }

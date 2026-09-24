@@ -413,7 +413,7 @@ export function CashMonitorGuideDialog({
           </Button>
 
           <div className="flex items-center gap-1">
-            {sectionKeys.map((k, i) => (
+            {sectionKeys.map((k, _i) => (
               <span
                 key={k}
                 onClick={() => setActiveSection(k)}

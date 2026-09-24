@@ -10,14 +10,14 @@ export interface PerformanceMetrics {
   url: string
   userAgent: string
   connectionType?: string
-  
+
   // Core Web Vitals
   lcp: number // Largest Contentful Paint
   fid: number // First Input Delay
   cls: number // Cumulative Layout Shift
   fcp: number // First Contentful Paint
   ttfb: number // Time to First Byte
-  
+
   // Métricas adicionales
   domContentLoaded: number
   loadComplete: number
@@ -25,25 +25,25 @@ export interface PerformanceMetrics {
   jsExecutionTime: number
   cssLoadTime: number
   imageLoadTime: number
-  
+
   // Métricas de red
   networkLatency: number
   downloadSpeed: number
   uploadSpeed: number
-  
+
   // Métricas de memoria
   usedJSHeapSize: number
   totalJSHeapSize: number
   jsHeapSizeLimit: number
-  
+
   // Métricas de CPU
   cpuUsage: number
   taskDuration: number
-  
+
   // Errores
   jsErrors: number
   networkErrors: number
-  
+
   // Contexto
   deviceType: 'desktop' | 'mobile' | 'tablet'
   browserName: string
@@ -51,7 +51,7 @@ export interface PerformanceMetrics {
   osName: string
   screenResolution: string
   viewportSize: string
-  
+
   // Scores calculados
   performanceScore: number
   accessibilityScore: number
@@ -193,19 +193,19 @@ class PerformanceAnalyticsEngine {
 
     // Observar Core Web Vitals
     this.observeCoreWebVitals()
-    
+
     // Observar recursos
     this.observeResourceTiming()
-    
+
     // Observar navegación
     this.observeNavigationTiming()
-    
+
     // Monitorear memoria
     this.monitorMemoryUsage()
-    
+
     // Monitorear errores
     this.monitorErrors()
-    
+
     // Enviar métricas periódicamente
     setInterval(() => {
       this.flushMetrics()
@@ -330,10 +330,10 @@ class PerformanceAnalyticsEngine {
   // Registrar métrica individual
   private recordMetric(name: string, value: number): void {
     const timestamp = new Date()
-    
+
     // Buscar o crear entrada de métricas actual
-    let currentMetrics = this.metricsBuffer.find(m => 
-      m.url === window.location.href && 
+    let currentMetrics = this.metricsBuffer.find(m =>
+      m.url === window.location.href &&
       timestamp.getTime() - m.timestamp.getTime() < 60000 // Dentro de 1 minuto
     )
 
@@ -352,21 +352,21 @@ class PerformanceAnalyticsEngine {
   // Crear métricas base
   private createBaseMetrics(): PerformanceMetrics {
     const deviceInfo = this.getDeviceInfo()
-    
+
     return {
       id: `perf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date(),
       url: window.location.href,
       userAgent: navigator.userAgent,
       connectionType: this.getConnectionType(),
-      
+
       // Core Web Vitals (valores por defecto)
       lcp: 0,
       fid: 0,
       cls: 0,
       fcp: 0,
       ttfb: 0,
-      
+
       // Métricas adicionales
       domContentLoaded: 0,
       loadComplete: 0,
@@ -374,25 +374,25 @@ class PerformanceAnalyticsEngine {
       jsExecutionTime: 0,
       cssLoadTime: 0,
       imageLoadTime: 0,
-      
+
       // Métricas de red
       networkLatency: 0,
       downloadSpeed: 0,
       uploadSpeed: 0,
-      
+
       // Métricas de memoria
       usedJSHeapSize: 0,
       totalJSHeapSize: 0,
       jsHeapSizeLimit: 0,
-      
+
       // Métricas de CPU
       cpuUsage: 0,
       taskDuration: 0,
-      
+
       // Errores
       jsErrors: 0,
       networkErrors: 0,
-      
+
       // Contexto
       deviceType: deviceInfo.type,
       browserName: deviceInfo.browser,
@@ -400,7 +400,7 @@ class PerformanceAnalyticsEngine {
       osName: deviceInfo.os,
       screenResolution: `${screen.width}x${screen.height}`,
       viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-      
+
       // Scores
       performanceScore: 0,
       accessibilityScore: 0,
@@ -413,7 +413,7 @@ class PerformanceAnalyticsEngine {
   private recordResourceTiming(entry: PerformanceResourceTiming): void {
     const resourceType = this.getResourceType(entry.name)
     const duration = entry.responseEnd - entry.startTime
-    
+
     // Actualizar métricas agregadas por tipo
     const currentMetrics = this.metricsBuffer[this.metricsBuffer.length - 1]
     if (currentMetrics) {
@@ -694,7 +694,7 @@ class PerformanceAnalyticsEngine {
       const coreWebVitalsPass = metrics.filter((m: Record<string, unknown>) =>
         (m.lcp as number) <= 2500 && (m.fid as number) <= 100 && (m.cls as number) <= 0.1
       ).length
-      
+
       const { data: alerts } = await (this.supabase as any)
         .from('performance_alerts')
         .select('*')
@@ -797,7 +797,7 @@ class PerformanceAnalyticsEngine {
   private calculateMetricSummary(values: number[]): MetricSummary {
     const sorted = values.sort((a, b) => a - b)
     const len = sorted.length
-    
+
     return {
       avg: values.reduce((sum, v) => sum + v, 0) / len,
       median: sorted[Math.floor(len / 2)],
@@ -810,7 +810,7 @@ class PerformanceAnalyticsEngine {
     }
   }
 
-  private calculateTrends(metrics: Array<Record<string, unknown>>) {
+  private calculateTrends(_metrics: Array<Record<string, unknown>>) {
     // Implementación simplificada de cálculo de tendencias
     return [
       { metric: 'Performance Score', trend: 'improving' as const, changePercent: 5.2 },
@@ -819,7 +819,7 @@ class PerformanceAnalyticsEngine {
     ]
   }
 
-  private identifyTopIssues(metrics: Array<Record<string, unknown>>) {
+  private identifyTopIssues(_metrics: Array<Record<string, unknown>>) {
     // Implementación simplificada de identificación de problemas
     return [
       { url: '/products', issue: 'High LCP', impact: 85, frequency: 45 },
@@ -828,7 +828,7 @@ class PerformanceAnalyticsEngine {
     ]
   }
 
-  private generateRecommendations(metrics: Array<Record<string, unknown>>, alerts: Array<Record<string, unknown>>) {
+  private generateRecommendations(_metrics: Array<Record<string, unknown>>, _alerts: Array<Record<string, unknown>>) {
     // Implementación simplificada de generación de recomendaciones
     return [
       {

@@ -24,13 +24,13 @@ import type {
 export function useProductFiltering(
   arg1?: Product[] | { onFiltersChange?: (filters: ProductFilters) => void; products?: Product[] },
   initialFilters: ProductFilters = {},
-  performanceConfig: PerformanceConfig = DEFAULT_PERFORMANCE_CONFIG
+  _performanceConfig: PerformanceConfig = DEFAULT_PERFORMANCE_CONFIG
 ): ProductFilteringReturn {
   const productsStable: Product[] = useMemo(
     () => (Array.isArray(arg1) ? arg1 : (arg1?.products ?? [])),
     [arg1]
   )
-  
+
   const onFiltersChange = Array.isArray(arg1) ? undefined : arg1?.onFiltersChange
   const [filters, setFilters] = useState<ProductFilters>({
     search: initialFilters.search ?? '',
@@ -169,7 +169,7 @@ export function useProductFiltering(
   const searchFilteredProducts = useMemo(() => {
     const startTime = performance.now()
     const config: SearchConfig = { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 }
-    
+
     try {
       if (!Array.isArray(productsStable)) {
         throw createProductError.invalidProductData({ products: productsStable }, ['all'])
@@ -216,15 +216,15 @@ export function useProductFiltering(
     let result = searchFilteredProducts
 
     if (filters.category) {
-      result = result.filter((product: Product) => 
-        (product as any).category_id === filters.category || 
+      result = result.filter((product: Product) =>
+        (product as any).category_id === filters.category ||
         (product.category && product.category.id === filters.category) ||
         (product as any).category === filters.category
       )
     }
 
     if (filters.supplier) {
-      result = result.filter((product: Product) => 
+      result = result.filter((product: Product) =>
         (product as any).supplier_id === filters.supplier ||
         (product.supplier && product.supplier.id === filters.supplier) ||
         (product as any).supplier === filters.supplier

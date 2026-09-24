@@ -32,7 +32,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
           const r = await onSearch({ query: normalized, filters })
           setResults(r)
           setResultsCount(r.length)
-        } catch (e) {
+        } catch (_e) {
           setResults([])
           setResultsCount(0)
         } finally {

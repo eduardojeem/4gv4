@@ -45,7 +45,7 @@ export function AnalyticsDashboard({
   mode = 'interactive',
   showPredictions = true,
   showComparisons = true,
-  compact = false,
+  compact: _compact = false,
   onExport
 }: AnalyticsDashboardProps) {
   const [activeTab, setActiveTab] = useState('overview')
@@ -119,8 +119,8 @@ export function AnalyticsDashboard({
   }
 
   const toggleMetric = (metricId: string) => {
-    setSelectedMetrics(prev => 
-      prev.includes(metricId) 
+    setSelectedMetrics(prev =>
+      prev.includes(metricId)
         ? prev.filter(id => id !== metricId)
         : [...prev, metricId]
     )
@@ -465,7 +465,7 @@ export function AnalyticsDashboard({
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {metrics.segmentDistribution.map((segment, index) => {
+                  {metrics.segmentDistribution.map((segment, _index) => {
                     const count = segment.value
                     const percentage = metrics.totalCustomers > 0 ? (count / metrics.totalCustomers) * 100 : 0
                     const revenue = metrics.totalRevenue * (percentage / 100)
@@ -531,12 +531,12 @@ export function AnalyticsDashboard({
 }
 
 // Componente para modo simple
-function SimpleAnalyticsView({ 
-  metrics, 
-  mainMetrics 
-}: { 
-  metrics: any, 
-  mainMetrics: any[] 
+function SimpleAnalyticsView({
+  metrics,
+  mainMetrics
+}: {
+  metrics: any,
+  mainMetrics: any[]
 }) {
   return (
     <div className="space-y-4">
@@ -566,12 +566,12 @@ function SimpleAnalyticsView({
 }
 
 // Componente para modo tiempo real
-function RealtimeAnalyticsView({ 
-  metrics, 
-  mainMetrics 
-}: { 
-  metrics: any, 
-  mainMetrics: any[] 
+function RealtimeAnalyticsView({
+  metrics: _metrics,
+  mainMetrics
+}: {
+  metrics: any,
+  mainMetrics: any[]
 }) {
   return (
     <div className="space-y-4">

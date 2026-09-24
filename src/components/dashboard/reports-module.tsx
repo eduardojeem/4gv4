@@ -179,14 +179,14 @@ export function useReportsData(products: any[] = []) {
 }
 
 // Componente de gráfico dinámico
-function DynamicChart({ 
-  config, 
-  data, 
-  height = 300 
-}: { 
+function DynamicChart({
+  config,
+  data,
+  height = 300
+}: {
   config: ReportConfig
   data: any[]
-  height?: number 
+  height?: number
 }) {
   const renderChart = () => {
     const commonProps = {
@@ -203,8 +203,8 @@ function DynamicChart({
             <YAxis />
             <Tooltip />
             {config.showLegend && <Legend />}
-            <Bar 
-              dataKey={config.dataKey} 
+            <Bar
+              dataKey={config.dataKey}
               fill={config.colors[0]}
               animationDuration={config.animated ? 1000 : 0}
             />
@@ -219,9 +219,9 @@ function DynamicChart({
             <YAxis />
             <Tooltip />
             {config.showLegend && <Legend />}
-            <Line 
-              type="monotone" 
-              dataKey={config.dataKey} 
+            <Line
+              type="monotone"
+              dataKey={config.dataKey}
               stroke={config.colors[0]}
               strokeWidth={2}
               animationDuration={config.animated ? 1000 : 0}
@@ -237,9 +237,9 @@ function DynamicChart({
             <YAxis />
             <Tooltip />
             {config.showLegend && <Legend />}
-            <Area 
-              type="monotone" 
-              dataKey={config.dataKey} 
+            <Area
+              type="monotone"
+              dataKey={config.dataKey}
               stroke={config.colors[0]}
               fill={config.colors[0]}
               fillOpacity={0.6}
@@ -297,7 +297,7 @@ function DynamicChart({
 }
 
 // Componente de métricas clave
-function KeyMetrics({ data }: { data: any }) {
+function KeyMetrics({ data: _data }: { data: any }) {
   const metrics = [
     {
       title: 'Ingresos Totales',
@@ -401,8 +401,8 @@ function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
                 <p className="text-sm text-gray-500">{format.description}</p>
               </div>
             </div>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => handleExport(format.id)}
             >
@@ -436,7 +436,7 @@ export default function ReportsModule({ products = [] }: { products?: any[] }) {
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period)
     const now = new Date()
-    
+
     switch (period) {
       case 'week':
         setDateRange({
@@ -571,7 +571,7 @@ export default function ReportsModule({ products = [] }: { products?: any[] }) {
 
             <div className="space-y-6">
               <ExportOptions onExport={handleExport} />
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle>Resumen del Período</CardTitle>

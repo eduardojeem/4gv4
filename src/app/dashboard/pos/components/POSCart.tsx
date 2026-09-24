@@ -100,16 +100,16 @@ const CartItemRow = memo<{
 }>(({ item, isWholesale, onUpdateQuantity, onRemoveItem, onApplyDiscount }) => {
   const WHOLESALE_DISCOUNT_RATE = 10;
   const isService = item.isService === true;
-  
+
   const unitPrice = (isWholesale && !isService)
-    ? (item.wholesalePrice ?? (item.price * (1 - WHOLESALE_DISCOUNT_RATE / 100))) 
+    ? (item.wholesalePrice ?? (item.price * (1 - WHOLESALE_DISCOUNT_RATE / 100)))
     : item.price;
-    
+
   const itemTotal = unitPrice * item.quantity;
   const itemDiscountRate = item.discount || 0;
   const itemDiscountValue = itemTotal * (itemDiscountRate / 100);
   const finalTotal = itemTotal - itemDiscountValue;
-  
+
   const [localQty, setLocalQty] = useState(item.quantity.toString());
   const imageSrc = typeof item.image === 'string' && item.image.trim().length > 0
     ? resolveProductImageUrl(item.image.trim())
@@ -122,19 +122,19 @@ const CartItemRow = memo<{
   const isLowStock = typeof item.stock === 'number' && !isService && item.stock <= 5;
 
   return (
-    <motion.div 
+    <motion.div
       layout
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20, height: 0 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "relative transition-all rounded-xl mb-2 overflow-hidden group", 
-        isService 
-          ? "bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30" 
+        "relative transition-all rounded-xl mb-2 overflow-hidden group",
+        isService
+          ? "bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30"
           : "bg-card border border-border/40 hover:border-primary/20 hover:shadow-sm"
       )}
-    > 
+    >
       <div className="grid grid-cols-[48px_1fr_auto] gap-2.5 p-2.5 items-center">
         {/* Image */}
         <div className="h-12 w-12 rounded-lg bg-muted/30 border border-border/30 overflow-hidden flex items-center justify-center shrink-0">
@@ -189,7 +189,7 @@ const CartItemRow = memo<{
                 >
                   <Minus className="h-3 w-3" />
                 </Button>
-                
+
                 <Input
                   type="number"
                   min={1}
@@ -208,7 +208,7 @@ const CartItemRow = memo<{
                   }}
                   onFocus={(e) => e.target.select()}
                 />
-                
+
                 <Button
                   variant="ghost"
                   size="icon"
@@ -230,9 +230,9 @@ const CartItemRow = memo<{
               {onApplyDiscount && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className={cn(
                         "h-6 w-6 rounded-full",
                         itemDiscountRate > 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
@@ -257,8 +257,8 @@ const CartItemRow = memo<{
                             }
                           }}
                         />
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="h-8 px-2 text-[10px]"
                           onClick={(e) => {
                             const input = e.currentTarget.previousElementSibling as HTMLInputElement;
@@ -305,10 +305,10 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   onToggleWholesale,
   discount,
   onUpdateDiscount,
-  subtotalApplied,
+  subtotalApplied: _subtotalApplied,
   subtotalNonWholesale,
-  generalDiscountAmount,
-  wholesaleDiscountAmount,
+  generalDiscountAmount: _generalDiscountAmount,
+  wholesaleDiscountAmount: _wholesaleDiscountAmount,
   totalSavings,
   cartTax,
   cartTotal,
@@ -444,7 +444,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
+                  <AlertDialogAction
                     onClick={() => {
                       onClearCart();
                       setIsClearDialogOpen(false);
@@ -480,7 +480,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
         {/* Bottom section: Controls + Totals + CTA */}
         <div className="bg-card border-t shadow-[0_-2px_8px_-3px_rgba(0,0,0,0.08)] z-10">
           <div className="max-h-[34vh] overflow-y-auto">
-          
+
             {/* Collapsible Controls: Wholesale, Discount, Promo */}
             <div className="px-4 pt-2">
               <Button
@@ -506,8 +506,8 @@ export const POSCart: React.FC<POSCartProps> = memo(({
             {showPricingOptions && (
               <div className="px-4 py-3 bg-muted/10 grid grid-cols-2 gap-3 border-b border-border/30">
                 <div className="flex items-center space-x-2">
-                  <Switch 
-                    id="wholesale-mode" 
+                  <Switch
+                    id="wholesale-mode"
                     checked={isWholesale}
                     onCheckedChange={onToggleWholesale}
                     className="scale-90"
@@ -517,7 +517,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                     Mayorista
                   </Label>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
                   <div className="relative flex-1">

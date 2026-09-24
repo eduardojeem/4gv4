@@ -66,7 +66,7 @@ export function TechnicianStatsGrid({
   techniciansWithoutLoad,
   highLoadTechnicians,
   totalActiveJobs,
-  avgJobsPerTech,
+  avgJobsPerTech: _avgJobsPerTech,
   avgCompletionTime,
   topCloserName,
 }: TechnicianStatsGridProps) {

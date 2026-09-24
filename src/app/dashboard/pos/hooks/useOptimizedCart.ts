@@ -16,26 +16,26 @@ interface CartConfig {
 
 interface UseOptimizedCartReturn {
   cart: CartItem[]
-  
+
   // Estado
   isWholesale: boolean
   setIsWholesale: (value: boolean) => void
   discount: number
   setDiscount: (value: number) => void
-  
+
   // Totals
   cartTotal: number
   cartSubtotal: number
   cartTax: number
   cartItemCount: number
-  
+
   // Desgloses
   subtotalApplied: number
   subtotalNonWholesale: number
   generalDiscountAmount: number
   wholesaleDiscountAmount: number
   totalSavings: number
-  
+
   // Acciones
   addToCart: (product: Product, quantity?: number) => void
   addVariantToCart: (variantItem: any) => void
@@ -46,7 +46,7 @@ interface UseOptimizedCartReturn {
   clearCart: (force?: boolean) => void
   replaceCart: (items: CartItem[]) => void
   getCartItemQuantity: (productId: string) => number
-  
+
   // Helpers
   checkAvailability: (productId: string, quantity: number) => boolean
 }
@@ -56,11 +56,11 @@ interface UseOptimizedCartReturn {
  * Incluye toda la lÃ³gica de negocio: mayorista, descuentos por volumen, impuestos.
  */
 export const useOptimizedCart = (
-  inventoryProducts: any[], 
+  inventoryProducts: any[],
   config: CartConfig = {}
 ): UseOptimizedCartReturn => {
-  const { 
-    taxRate = 0.19, 
+  const {
+    taxRate = 0.19,
     pricesIncludeTax = true,
     maxQuantityPerItem = 999,
     storageScope = 'anonymous:unselected',
@@ -175,7 +175,7 @@ export const useOptimizedCart = (
       } else {
         // Agregar nuevo item
         const inferredWholesale = product.wholesale_price
-        
+
         const newItem: CartItem = {
           id: product.id,
           name: product.name,
@@ -192,7 +192,7 @@ export const useOptimizedCart = (
           brand: product.brand || undefined,
           isService: isService || Boolean((product as any).isService)
         }
-        
+
         return [...prev, newItem]
       }
     })
@@ -236,13 +236,13 @@ export const useOptimizedCart = (
     }
 
     setCart(prev => {
-      const existingItem = prev.find(item => 
+      const existingItem = prev.find(item =>
         item.id === normalizedItem.id || (item.sku === normalizedItem.sku)
       )
 
       if (existingItem) {
         const newQuantity = existingItem.quantity + normalizedItem.quantity
-        return prev.map(item => 
+        return prev.map(item =>
           (item.id === normalizedItem.id || item.sku === normalizedItem.sku)
             ? { ...item, quantity: newQuantity }
             : item
@@ -304,9 +304,9 @@ export const useOptimizedCart = (
         return {
           ...item,
           discount: safeDiscount,
-          // Recalcular subtotal es opcional aquÃ­ porque se hace en el render/memo, 
+          // Recalcular subtotal es opcional aquÃ­ porque se hace en el render/memo,
           // pero mantenemos consistencia en el estado
-          // Nota: el subtotal almacenado en el item suele ser bruto * cantidad, 
+          // Nota: el subtotal almacenado en el item suele ser bruto * cantidad,
           // el descuento se aplica despuÃ©s en los cÃ¡lculos globales.
         }
       }
@@ -326,7 +326,7 @@ export const useOptimizedCart = (
   /**
    * Vaciar carrito
    */
-  const clearCart = useCallback((force: boolean = false) => {
+  const clearCart = useCallback((_force: boolean = false) => {
     // La confirmaciÃ³n debe ser manejada por la UI (Dialog)
     setCart([])
   }, [])
@@ -343,10 +343,10 @@ export const useOptimizedCart = (
     const itemsCalculation = cart.map(item => {
       const itemDiscountRate = item.discount || 0
       const unitNonWholesale = item.price
-      
+
       // Precio mayorista: explÃ­cito o calculado
       const unitWholesaleCandidate = item.wholesalePrice ?? roundToTwo(item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100)))
-      
+
       // Precio base a aplicar (segÃºn modo mayorista)
       const unitApplied = isWholesale ? unitWholesaleCandidate : unitNonWholesale
 
@@ -414,7 +414,7 @@ export const useOptimizedCart = (
 
   return {
     cart,
-    
+
     isWholesale,
     setIsWholesale,
     discount,
@@ -424,7 +424,7 @@ export const useOptimizedCart = (
     cartSubtotal: calculations.subtotalApplied,
     cartTax: calculations.tax,
     cartItemCount: cart.reduce((acc, item) => acc + item.quantity, 0),
-    
+
     subtotalApplied: calculations.subtotalApplied,
     subtotalNonWholesale: calculations.subtotalNonWholesale,
     generalDiscountAmount: calculations.generalDiscountAmount,

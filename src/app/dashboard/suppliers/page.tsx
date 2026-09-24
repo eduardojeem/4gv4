@@ -199,7 +199,7 @@ export default function SuppliersPage() {
     try {
       await deleteSupplier(deleteId)
       setDeleteId(null)
-    } catch (error) {
+    } catch (_error) {
       // Error handled in hook
     }
   }
@@ -250,7 +250,7 @@ export default function SuppliersPage() {
         setDetailSupplier(prev => (prev && prev.id === selectedSupplier.id ? { ...prev, ...supplierData } : prev))
       }
       setIsModalOpen(false)
-    } catch (error) {
+    } catch (_error) {
       // Error handled in hook
     } finally {
       setIsSaving(false)

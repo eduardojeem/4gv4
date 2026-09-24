@@ -56,9 +56,9 @@ const ICON_MAP = {
 export function SegmentationSystem({
   customers,
   mode = 'advanced',
-  showTemplates = true,
+  showTemplates: _showTemplates = true,
   showAIInsights = true,
-  onSegmentUpdate
+  onSegmentUpdate: _onSegmentUpdate
 }: SegmentationSystemProps) {
   const {
     segments,
@@ -135,7 +135,7 @@ export function SegmentationSystem({
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
@@ -186,7 +186,7 @@ export function SegmentationSystem({
         </TabsList>
 
         <TabsContent value="segments" className="space-y-4">
-          <SegmentsList 
+          <SegmentsList
             segments={segments}
             onSelect={setSelectedSegmentId}
             onEdit={(id) => {
@@ -241,12 +241,12 @@ export function SegmentationSystem({
 }
 
 // Componente para vista simple
-function SimpleSegmentationView({ 
-  segments, 
-  insights 
-}: { 
-  segments: any[], 
-  insights: any 
+function SimpleSegmentationView({
+  segments,
+  insights: _insights
+}: {
+  segments: any[],
+  insights: any
 }) {
   return (
     <div className="space-y-4">
@@ -256,14 +256,14 @@ function SimpleSegmentationView({
           <Card key={segment.id}>
             <CardContent className="p-4">
               <div className="flex items-center gap-3 mb-3">
-                <div 
-                  className="w-3 h-3 rounded-full" 
+                <div
+                  className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: segment.color }}
                 />
                 <span className="font-medium">{segment.name}</span>
-                <StatusBadge 
-                  status={segment.isActive ? 'active' : 'inactive'} 
-                  size="sm" 
+                <StatusBadge
+                  status={segment.isActive ? 'active' : 'inactive'}
+                  size="sm"
                 />
               </div>
               <div className="space-y-2">
@@ -285,13 +285,13 @@ function SimpleSegmentationView({
 }
 
 // Componente para lista de segmentos
-function SegmentsList({ 
-  segments, 
-  onSelect, 
-  onEdit, 
-  onDelete, 
-  onDuplicate, 
-  onToggle 
+function SegmentsList({
+  segments,
+  onSelect: _onSelect,
+  onEdit,
+  onDelete,
+  onDuplicate,
+  onToggle
 }: {
   segments: any[]
   onSelect: (id: string) => void
@@ -304,7 +304,7 @@ function SegmentsList({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {segments.map((segment, index) => {
         const IconComponent = ICON_MAP[segment.icon as keyof typeof ICON_MAP] || Target
-        
+
         return (
           <motion.div
             key={segment.id}
@@ -319,11 +319,11 @@ function SegmentsList({
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div 
+                    <div
                       className="p-2 rounded-lg"
-                      style={{ 
+                      style={{
                         backgroundColor: `${segment.color}20`,
-                        color: segment.color 
+                        color: segment.color
                       }}
                     >
                       <IconComponent className="h-4 w-4" />
@@ -374,7 +374,7 @@ function SegmentsList({
                 <p className="text-sm text-muted-foreground mb-4">
                   {segment.description}
                 </p>
-                
+
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <p className="text-2xl font-bold">{segment.metrics.customerCount}</p>
@@ -426,15 +426,15 @@ function SegmentsList({
 }
 
 // Componente para insights de IA
-function AIInsights({ 
-  segments, 
-  onGenerateSegments 
-}: { 
-  segments: any[], 
-  onGenerateSegments: () => void 
+function AIInsights({
+  segments,
+  onGenerateSegments
+}: {
+  segments: any[],
+  onGenerateSegments: () => void
 }) {
   const aiSegments = segments.filter(s => s.aiSuggested)
-  
+
   return (
     <div className="space-y-6">
       <Card>
@@ -483,8 +483,8 @@ function AIInsights({
               {aiSegments.map((segment) => (
                 <div key={segment.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div 
-                      className="w-4 h-4 rounded-full" 
+                    <div
+                      className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: segment.color }}
                     />
                     <div>
@@ -499,9 +499,9 @@ function AIInsights({
                         {formatters.percentage(segment.performance?.engagement || 0)} engagement
                       </p>
                     </div>
-                    <StatusBadge 
-                      status={segment.isActive ? 'active' : 'inactive'} 
-                      size="sm" 
+                    <StatusBadge
+                      status={segment.isActive ? 'active' : 'inactive'}
+                      size="sm"
                     />
                   </div>
                 </div>
@@ -567,8 +567,8 @@ function SegmentAnalytics({ segments }: { segments: any[] }) {
               <div key={segment.id} className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
+                    <div
+                      className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: segment.color }}
                     />
                     <span className="font-medium">{segment.name}</span>
@@ -588,12 +588,12 @@ function SegmentAnalytics({ segments }: { segments: any[] }) {
 }
 
 // Componente para automatización
-function SegmentAutomation({ 
-  segments, 
-  onUpdateSegment 
-}: { 
-  segments: any[], 
-  onUpdateSegment: (id: string, updates: any) => void 
+function SegmentAutomation({
+  segments,
+  onUpdateSegment
+}: {
+  segments: any[],
+  onUpdateSegment: (id: string, updates: any) => void
 }) {
   return (
     <div className="space-y-6">
@@ -606,8 +606,8 @@ function SegmentAutomation({
             {segments.map((segment) => (
               <div key={segment.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div 
-                    className="w-4 h-4 rounded-full" 
+                  <div
+                    className="w-4 h-4 rounded-full"
                     style={{ backgroundColor: segment.color }}
                   />
                   <div>
@@ -619,7 +619,7 @@ function SegmentAutomation({
                 </div>
                 <Switch
                   checked={segment.autoUpdate}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     onUpdateSegment(segment.id, { autoUpdate: checked })
                   }
                 />
@@ -669,7 +669,7 @@ function SegmentDialog({
             {segment ? 'Editar Segmento' : 'Crear Nuevo Segmento'}
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4">
           <div>
             <Label htmlFor="name">Nombre</Label>

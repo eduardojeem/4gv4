@@ -189,7 +189,7 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
                 <TableHead className="w-12">
                   <Checkbox
                     checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={(checked) => onSelectAll?.()}
+                    onCheckedChange={(_checked) => onSelectAll?.()}
                     aria-label="Seleccionar todos los productos"
                   />
                 </TableHead>

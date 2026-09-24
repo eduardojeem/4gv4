@@ -435,7 +435,7 @@ export function CategoriesClient({ categories }: Props) {
       {/* ── VISTA 2: CUADRÍCULA DIRECTA (GRID VIEW) ── */}
       {viewMode === 'grid' && filteredCategories.length > 0 && (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {filteredCategories.map((cat, i) => {
+          {filteredCategories.map((cat, _i) => {
             const branchId = classifyCategoryIntoBranch(cat.name)
             const branch = MAIN_BRANCHES.find((b) => b.id === branchId) ?? MAIN_BRANCHES[0]
             const Icon = branch.icon

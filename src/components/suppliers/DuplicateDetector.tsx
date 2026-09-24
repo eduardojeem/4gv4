@@ -62,7 +62,7 @@ export function DuplicateDetector({
                                 </div>
 
                                 <div className="space-y-2">
-                                    {duplicates.map((match, index) => (
+                                    {duplicates.map((match, _index) => (
                                         <div
                                             key={match.supplier.id}
                                             className="rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-amber-950/50 p-3"

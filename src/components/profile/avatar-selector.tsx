@@ -52,7 +52,7 @@ function AvatarSelectorContent({
   userId,
   email,
   name,
-  currentAvatar,
+  currentAvatar: _currentAvatar,
   onAvatarSelect,
   open,
   onOpenChange

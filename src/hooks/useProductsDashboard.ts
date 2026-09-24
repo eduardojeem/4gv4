@@ -30,7 +30,7 @@ interface UseProductsDashboardReturn {
   displayedProducts: Product[] // All filtered products (for export, metrics)
   paginatedProducts: Product[] // Current page products
   metrics: DashboardMetrics
-  
+
   // UI State
   viewMode: ViewMode
   setViewMode: (mode: ViewMode) => void
@@ -50,7 +50,7 @@ interface UseProductsDashboardReturn {
   setSelectedProductIds: (ids: string[]) => void
   isFilterPanelOpen: boolean
   setIsFilterPanelOpen: (open: boolean) => void
-  
+
   // Actions
   handleSearch: (query: string) => void
   handleFilterChange: (newFilters: Partial<DashboardFilters>) => void
@@ -64,9 +64,9 @@ interface UseProductsDashboardReturn {
 
 export function useProductsDashboard({
   products,
-  categories,
-  suppliers,
-  alerts,
+  categories: _categories,
+  suppliers: _suppliers,
+  alerts: _alerts,
   serverPaginated = false,
   serverTotalItems = 0,
   initialFilters,
@@ -236,7 +236,7 @@ export function useProductsDashboard({
     displayedProducts,
     paginatedProducts,
     metrics,
-    
+
     // UI State
     viewMode,
     setViewMode,
@@ -256,7 +256,7 @@ export function useProductsDashboard({
     setSelectedProductIds,
     isFilterPanelOpen,
     setIsFilterPanelOpen,
-    
+
     // Actions
     handleSearch,
     handleFilterChange,

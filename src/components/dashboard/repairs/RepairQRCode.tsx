@@ -58,7 +58,7 @@ export function RepairQRCode({
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       toast.success('QR descargado correctamente')
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al descargar el QR')
     }
   }

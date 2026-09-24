@@ -155,7 +155,7 @@ export class IntegrationMonitor {
       await this.loadMonitoringRules()
       await this.loadActiveAlerts()
       await this.startMonitoring()
-      
+
       console.log('Integration monitoring system initialized')
     } catch (error) {
       console.error('Failed to initialize integration monitoring:', error)
@@ -243,7 +243,7 @@ export class IntegrationMonitor {
       if (error) throw error
 
       // Verificar cada integración
-      const healthPromises = integrations?.map(integration => 
+      const healthPromises = integrations?.map(integration =>
         this.checkIntegrationHealth(integration)
       ) || []
 
@@ -312,7 +312,7 @@ export class IntegrationMonitor {
   // Realizar verificación específica según tipo de integración
   private async performHealthCheck(integration: any): Promise<any> {
     const config = JSON.parse(integration.config || '{}')
-    
+
     switch (integration.type) {
       case 'rest_api':
         return await this.checkRestAPI(config)
@@ -393,7 +393,7 @@ export class IntegrationMonitor {
   }
 
   // Verificar base de datos
-  private async checkDatabase(config: any): Promise<any> {
+  private async checkDatabase(_config: any): Promise<any> {
     // Implementar verificación de conexión a base de datos
     // Esto dependería del tipo específico de base de datos
     return {
@@ -411,7 +411,7 @@ export class IntegrationMonitor {
   }
 
   // Verificar sincronización de archivos
-  private async checkFileSync(config: any): Promise<any> {
+  private async checkFileSync(_config: any): Promise<any> {
     // Implementar verificación de sincronización de archivos
     return {
       success: true,
@@ -452,7 +452,7 @@ export class IntegrationMonitor {
         if (!health) continue
 
         const shouldTrigger = await this.evaluateRule(rule, health)
-        
+
         if (shouldTrigger && this.canTriggerRule(rule)) {
           await this.triggerAlert(rule, health)
         }
@@ -626,17 +626,17 @@ export class IntegrationMonitor {
   }
 
   // Métodos de utilidad para cálculos
-  private async calculateUptime(integrationId: string): Promise<number> {
+  private async calculateUptime(_integrationId: string): Promise<number> {
     // Calcular uptime basado en histórico
     return 99.5 // Placeholder
   }
 
-  private async calculateErrorRate(integrationId: string): Promise<number> {
+  private async calculateErrorRate(_integrationId: string): Promise<number> {
     // Calcular tasa de error basada en histórico
     return 2.1 // Placeholder
   }
 
-  private async getRequestsPerMinute(url: string): Promise<number> {
+  private async getRequestsPerMinute(_url: string): Promise<number> {
     // Obtener RPM basado en métricas
     return 45 // Placeholder
   }
@@ -719,7 +719,7 @@ export class IntegrationMonitor {
   // Métodos públicos para gestión
   async getDashboardData(): Promise<MonitoringDashboard> {
     const healthChecks = Array.from(this.healthChecks.values())
-    
+
     return {
       totalIntegrations: healthChecks.length,
       healthyIntegrations: healthChecks.filter(h => h.status === 'healthy').length,

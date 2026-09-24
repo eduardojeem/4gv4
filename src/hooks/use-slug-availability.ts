@@ -66,7 +66,7 @@ export function useSlugAvailability(valor: string): SlugAvailabilityState {
           mensaje: payload.message || 'Esa dirección ya está en uso.',
           sugerencia: payload.suggestion ?? null,
         })
-      } catch (error) {
+      } catch (_error) {
         if (control.signal.aborted) return
         setState({ estado: 'error', slug, mensaje: 'No pudimos verificarla. Se revisa al crear la cuenta.' })
       }

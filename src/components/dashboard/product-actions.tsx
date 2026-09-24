@@ -65,7 +65,7 @@ export function ProductActions({
   onDeleteProducts,
   onDuplicateProduct,
   onToggleFeatured,
-  onAdjustStock,
+  onAdjustStock: _onAdjustStock,
   onExportProducts,
   onImportProducts,
   onRefresh,
@@ -179,9 +179,9 @@ export function ProductActions({
       onToggleFeatured?.(product.id)
       toast.dismiss(loadingToast)
       notifyProductAction(ActionType.TOGGLE, 'success', { data: product })
-      return { 
-        productName: product.name, 
-        action: product.featured ? 'removido de' : 'marcado como' 
+      return {
+        productName: product.name,
+        action: product.featured ? 'removido de' : 'marcado como'
       }
     } catch (error) {
       toast.dismiss(loadingToast)
@@ -262,7 +262,7 @@ export function ProductActions({
             <Plus className="h-4 w-4 mr-2" />
             Agregar Producto
           </OptimizedButton>
-          
+
           <OptimizedButton
             buttonId="import-products"
             onAsyncClick={handleImport}
@@ -277,7 +277,7 @@ export function ProductActions({
             <Upload className="h-4 w-4 mr-2" />
             Importar
           </OptimizedButton>
-          
+
           <OptimizedButton
             buttonId="export-products"
             onAsyncClick={handleExport}
@@ -292,7 +292,7 @@ export function ProductActions({
             <Download className="h-4 w-4 mr-2" />
             Exportar
           </OptimizedButton>
-          
+
           <OptimizedButton
             buttonId="refresh-products"
             onAsyncClick={handleRefresh}
@@ -315,7 +315,7 @@ export function ProductActions({
             <Badge variant="secondary" className="px-3 py-1">
               {selectedCount} seleccionado{selectedCount > 1 ? 's' : ''}
             </Badge>
-            
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm" className="gap-2">
@@ -446,7 +446,7 @@ export function ProductActions({
             >
               <Edit className="h-4 w-4" />
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -455,7 +455,7 @@ export function ProductActions({
             >
               <Copy className="h-4 w-4" />
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -465,7 +465,7 @@ export function ProductActions({
             >
               <Star className={cn("h-4 w-4", product.featured && "fill-current")} />
             </Button>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -487,7 +487,7 @@ export function ProductActions({
                   {product.featured ? 'Quitar destacado' : 'Marcar destacado'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => handleDeleteProduct(product)}
                   className="text-red-600"
                 >
@@ -512,7 +512,7 @@ export function ProductActions({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDeleteProduct}
               className="bg-red-600 hover:bg-red-700"
             >
@@ -528,12 +528,12 @@ export function ProductActions({
 export default ProductActions
 
 // Export individual action components for use in other parts of the app
-export function ProductRowActions({ 
-  product, 
-  onEdit, 
-  onDelete, 
-  onDuplicate, 
-  onToggleFeatured 
+export function ProductRowActions({
+  product,
+  onEdit,
+  onDelete,
+  onDuplicate,
+  onToggleFeatured
 }: {
   product: Product
   onEdit?: (product: Product) => void
@@ -561,7 +561,7 @@ export function ProductRowActions({
       >
         <Edit className="h-4 w-4" />
       </OptimizedButton>
-      
+
       <OptimizedButton
         buttonId={`duplicate-${product.id}`}
         onAsyncClick={async () => {
@@ -580,13 +580,13 @@ export function ProductRowActions({
       >
         <Copy className="h-4 w-4" />
       </OptimizedButton>
-      
+
       <OptimizedButton
         buttonId={`toggle-featured-${product.id}`}
         onAsyncClick={async () => {
           await new Promise(resolve => setTimeout(resolve, 400))
           onToggleFeatured?.(product)
-          return { 
+          return {
             productName: product.name,
             featured: !product.featured
           }
@@ -595,8 +595,8 @@ export function ProductRowActions({
         size="icon"
         notificationMessages={{
           loading: product.featured ? "Quitando de destacados..." : "Marcando como destacado...",
-          success: (data: { productName: string; featured: boolean }) => data.featured 
-            ? `${data.productName} marcado como destacado` 
+          success: (data: { productName: string; featured: boolean }) => data.featured
+            ? `${data.productName} marcado como destacado`
             : `${data.productName} quitado de destacados`,
           error: "Error al actualizar el estado destacado"
         }}
@@ -605,7 +605,7 @@ export function ProductRowActions({
       >
         <Star className={cn("h-4 w-4", product.featured && "fill-current")} />
       </OptimizedButton>
-      
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon">

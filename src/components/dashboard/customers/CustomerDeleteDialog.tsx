@@ -113,7 +113,7 @@ export function CustomerDeleteDialog({
           active: activeCredits,
           pendingBalance
         })
-      } catch (e) {
+      } catch (_e) {
         // Fallback to customer prop
       } finally {
         setLoadingStats(false)
@@ -127,7 +127,7 @@ export function CustomerDeleteDialog({
   if (!customer) return null
 
   const initials = customer.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
-  
+
   const purchasesCount = livePurchases ?? customer.total_purchases ?? 0
   const repairsCount = liveRepairs ?? customer.total_repairs ?? 0
   const creditsCount = liveCredits?.total ?? creditSummary?.total_credits ?? (creditSummary ? 1 : 0)
@@ -178,7 +178,7 @@ export function CustomerDeleteDialog({
         {/* ─── Encabezado Visual con Gradiente de Advertencia / Bloqueo ─── */}
         <div className={cn(
           "p-6 pb-5 text-white relative overflow-hidden",
-          hasHistory 
+          hasHistory
             ? "bg-gradient-to-r from-red-700 via-rose-800 to-slate-900 dark:from-red-950 dark:via-rose-950 dark:to-slate-950"
             : "bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 dark:from-rose-950 dark:via-red-950 dark:to-rose-900"
         )}>
@@ -231,7 +231,7 @@ export function CustomerDeleteDialog({
             <Badge className={cn(
               "text-[10px] font-bold shrink-0",
               isActive
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-0" 
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-0"
                 : isSuspended
                   ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border-0"
                   : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-0"

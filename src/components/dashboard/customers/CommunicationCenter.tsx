@@ -41,7 +41,7 @@ interface CommunicationCenterProps {
   onClose?: () => void
 }
 
-export function CommunicationCenter({ customer, onClose }: CommunicationCenterProps) {
+export function CommunicationCenter({ customer, onClose: _onClose }: CommunicationCenterProps) {
   const [activeTab, setActiveTab] = useState<'whatsapp' | 'email' | 'sms'>('whatsapp')
   const [message, setMessage] = useState('')
   const [subject, setSubject] = useState('')
@@ -88,9 +88,9 @@ export function CommunicationCenter({ customer, onClose }: CommunicationCenterPr
     }
   ])
 
-  const filteredMessages = useMemo(() => 
-    messages.filter(msg => 
-      msg.type === activeTab && 
+  const filteredMessages = useMemo(() =>
+    messages.filter(msg =>
+      msg.type === activeTab &&
       msg.content.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     ), [messages, activeTab, debouncedSearchTerm]
   )
@@ -99,11 +99,11 @@ export function CommunicationCenter({ customer, onClose }: CommunicationCenterPr
     if (!message.trim()) return
 
     setSending(true)
-    
+
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
       const newMessage: Message = {
         id: Date.now().toString(),
         type: activeTab,
@@ -117,8 +117,8 @@ export function CommunicationCenter({ customer, onClose }: CommunicationCenterPr
       toast.success(`Mensaje enviado por ${activeTab.toUpperCase()}`)
       setMessage('')
       setSubject('')
-      
-    } catch (error) {
+
+    } catch (_error) {
       toast.error('Error al enviar mensaje')
     } finally {
       setSending(false)
@@ -227,8 +227,8 @@ export function CommunicationCenter({ customer, onClose }: CommunicationCenterPr
                     className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-[70%] rounded-lg p-3 ${
-                      msg.direction === 'outbound' 
-                        ? 'bg-green-500 text-white' 
+                      msg.direction === 'outbound'
+                        ? 'bg-green-500 text-white'
                         : 'bg-muted'
                     }`}>
                       <p className="text-sm">{msg.content}</p>
@@ -307,8 +307,8 @@ export function CommunicationCenter({ customer, onClose }: CommunicationCenterPr
                     className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-[70%] rounded-lg p-3 ${
-                      msg.direction === 'outbound' 
-                        ? 'bg-purple-500 text-white' 
+                      msg.direction === 'outbound'
+                        ? 'bg-purple-500 text-white'
                         : 'bg-muted'
                     }`}>
                       <p className="text-sm">{msg.content}</p>
@@ -366,7 +366,7 @@ export function CommunicationCenter({ customer, onClose }: CommunicationCenterPr
                     <span>Enviando a: {customer.phone}</span>
                   )}
                 </div>
-                <Button 
+                <Button
                   onClick={handleSendMessage}
                   disabled={!message.trim() || sending}
                   size="sm"

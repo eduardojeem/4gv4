@@ -51,9 +51,9 @@ export function CustomerActiveCreditsTab({
   creditSummaries,
   credits = [],
   installments = [],
-  onViewCustomer,
+  onViewCustomer: _onViewCustomer,
   onMarkPaid,
-  compact = false
+  compact: _compact = false
 }: CustomerActiveCreditsTabProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
@@ -126,11 +126,11 @@ export function CustomerActiveCreditsTab({
     if (digits.startsWith('0') && digits.length === 10) {
       digits = '595' + digits.slice(1)
     }
-    const amountStr = summary.next_payment?.amount 
-      ? formatCurrency(summary.next_payment.amount) 
+    const amountStr = summary.next_payment?.amount
+      ? formatCurrency(summary.next_payment.amount)
       : formatCurrency(summary.total_pending)
-    const dateStr = summary.next_payment?.due_date 
-      ? new Date(summary.next_payment.due_date).toLocaleDateString('es-PY') 
+    const dateStr = summary.next_payment?.due_date
+      ? new Date(summary.next_payment.due_date).toLocaleDateString('es-PY')
       : 'próximo vencimiento'
 
     const isOverdue = summary.next_payment?.is_overdue
@@ -375,7 +375,7 @@ export function CustomerActiveCreditsTab({
                       const whatsappReminderUrl = summary ? getWhatsAppPaymentReminder(customer, summary) : null
 
                       return (
-                        <TableRow 
+                        <TableRow
                           key={customer.id}
                           className="hover:bg-muted/40 transition-colors cursor-pointer border-b border-border/60"
                           onClick={() => setSheetCustomer(customer)}
