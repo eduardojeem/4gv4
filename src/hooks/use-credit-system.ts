@@ -150,73 +150,7 @@ export interface UseCreditSystemReturn {
 }
 
 // Datos mock para desarrollo
-const mockTransactions: CreditTransaction[] = [
-  {
-    id: 'tx-001',
-    customerId: 'customer-1',
-    type: 'sale',
-    amount: 150000,
-    description: 'Venta POS - Reparación iPhone 12',
-    date: '2024-12-20',
-    saleId: 'sale-001',
-    status: 'completed',
-    createdBy: 'user-1'
-  },
-  {
-    id: 'tx-002',
-    customerId: 'customer-1',
-    type: 'payment',
-    amount: -50000,
-    description: 'Pago parcial - Efectivo',
-    date: '2024-12-22',
-    paymentMethod: 'cash',
-    reference: 'PAY-001',
-    status: 'completed',
-    createdBy: 'user-1'
-  },
-  {
-    id: 'tx-003',
-    customerId: 'customer-1',
-    type: 'sale',
-    amount: 75000,
-    description: 'Venta POS - Accesorios',
-    date: '2024-12-25',
-    saleId: 'sale-002',
-    status: 'completed',
-    createdBy: 'user-1'
-  }
-]
 
-const mockCreditSales: CreditSale[] = [
-  {
-    id: 'cs-001',
-    customerId: 'customer-1',
-    saleId: 'sale-001',
-    amount: 150000,
-    remainingAmount: 100000,
-    dueDate: '2025-01-20',
-    status: 'partial',
-    createdAt: '2024-12-20',
-    items: [
-      { name: 'Reparación iPhone 12', quantity: 1, price: 150000 }
-    ],
-    repairIds: ['repair-001']
-  },
-  {
-    id: 'cs-002',
-    customerId: 'customer-1',
-    saleId: 'sale-002',
-    amount: 75000,
-    remainingAmount: 75000,
-    dueDate: '2025-01-25',
-    status: 'pending',
-    createdAt: '2024-12-25',
-    items: [
-      { name: 'Funda iPhone', quantity: 1, price: 45000 },
-      { name: 'Protector pantalla', quantity: 1, price: 30000 }
-    ]
-  }
-]
 
 export function useCreditSystem(): UseCreditSystemReturn {
   const { selectedBranchId } = useBranch()
@@ -232,7 +166,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
   const [creditTransactions] = useState<CreditTransaction[]>([])
   const [creditSales, _setCreditSales] = useState<CreditSale[]>([])
   
-  const supabase = useMemo(() => createClient(), [])
+  void (useMemo(() => createClient(), []));
 
   // Cargar datos de créditos desde Supabase
   const loadCreditData = useCallback(async (customerId?: string) => {

@@ -217,7 +217,7 @@ export function ContentGrid({
     filter === 'all' || item.type === filter
   )
 
-  const categories = Array.from(new Set(items.map(item => item.category)))
+  void (Array.from(new Set(items.map(item => item.category))));
 
   return (
     <section className={cn("space-y-6", className)}>

@@ -326,7 +326,7 @@ export function OnboardingClient({
   const steps = buildSteps(organization.slug).filter((step) => step.doneKey !== 'hasTeam' || isAdmin)
   const stepsCompleted = steps.filter((step) => stepProgress[step.doneKey]).length
   const progressValue = steps.length ? Math.round((stepsCompleted / steps.length) * 100) : 0
-  const nextStep = steps.find((step) => !stepProgress[step.doneKey])
+  void (steps.find((step) => !stepProgress[step.doneKey]));
   const currencyChanged = form.currency !== initialCompanyInfo.currency
   const hasChanges = JSON.stringify(form) !== JSON.stringify(initialCompanyInfo)
   const timeZoneOptions = Object.entries(getAdminSettingsText('es').regional.timeZones)

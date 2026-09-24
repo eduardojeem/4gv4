@@ -1154,7 +1154,7 @@ export function PayrollPanel({
         {runs.map((run) => {
           const runAuthorized = run.entries.reduce((sum, e) => sum + (Number(e.net_amount) || 0), 0)
           const runPaid = run.entries.reduce((sum, e) => sum + (Number(e.paid_amount) || 0), 0)
-          const runOutstanding = run.entries.reduce((sum, e) => sum + (Number(e.outstanding_amount) || 0), 0)
+          void (run.entries.reduce((sum, e) => sum + (Number(e.outstanding_amount) || 0), 0));
           const runRate = runAuthorized > 0 ? runPaid / runAuthorized : 0
           const statusConfig = payrollStatus[run.status]
 

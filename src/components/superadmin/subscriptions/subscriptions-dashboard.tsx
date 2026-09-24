@@ -144,7 +144,7 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     return subscriptions
       .filter((s) => {
         const renewalDays = daysUntil(s.current_period_ends_at)
-        const trialDays = daysUntil(s.trial_ends_at)
+        void (daysUntil(s.trial_ends_at));
 
         const matchesQuery =
           !q ||

@@ -91,7 +91,7 @@ export function StatusBadge({
 
   const config = statusConfig[normalizedKey]
   const sizeStyles = sizeConfig[size] ?? sizeConfig.md
-  const Icon = config.icon
+  void (config.icon);
 
   if (!interactive || !onStatusChange) {
     return (
@@ -138,7 +138,7 @@ export function StatusBadge({
         </div>
         
         {Object.entries(statusConfig).map(([key, statusItem]) => {
-          const StatusIcon = statusItem.icon
+          void (statusItem.icon);
           const isCurrentStatus = key === status
           
           return (
@@ -253,7 +253,7 @@ export function BulkStatusSelector({
         </div>
         
         {Object.entries(statusConfig).map(([key, statusItem]) => {
-          const StatusIcon = statusItem.icon
+          void (statusItem.icon);
           
           return (
             <DropdownMenuItem

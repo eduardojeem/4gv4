@@ -21,7 +21,7 @@ export default async function MarketplaceCategoriesPage() {
   ])
 
   const totalProducts = categories.reduce((sum, c) => sum + c.product_count, 0)
-  const totalOrganizations = new Set(categories.map((c) => c.organization_count)).size
+  void (new Set(categories.map((c) => c.organization_count)).size);
 
   return (
     <div className="min-h-screen">

@@ -14,7 +14,7 @@ import {
 import { OrganizationDetailView, type FullOrganizationDetail } from '@/components/superadmin/organizations/OrganizationDetailView'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
-const VISTA = leer('src/components/superadmin/organizations/OrganizationDetailView.tsx')
+void (leer('src/components/superadmin/organizations/OrganizationDetailView.tsx'));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/superadmin/EnterSupportButton', () => ({ EnterSupportButton: () => null }))

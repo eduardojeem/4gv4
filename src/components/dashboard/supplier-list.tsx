@@ -72,7 +72,6 @@ interface SupplierListProps {
 }
 
 // Mock data removed
-const mockSuppliers: SupplierData[] = []
 
 const supplierCategories = [
   'Todos',
@@ -159,29 +158,29 @@ export default function SupplierList({
     return filtered
   }, [suppliers, debouncedSearchTerm, selectedCategory, selectedStatus, sortBy, sortOrder])
 
-  const handleCreateSupplier = useCallback((supplierData: SupplierData) => {
+  void (useCallback((supplierData: SupplierData) => {
     onSupplierCreate?.(supplierData)
     setShowCreateDialog(false)
-  }, [onSupplierCreate])
+  }, [onSupplierCreate]));
 
-  const handleUpdateSupplier = useCallback((supplierData: SupplierData) => {
+  void (useCallback((supplierData: SupplierData) => {
     onSupplierUpdate?.(supplierData)
     setShowEditDialog(false)
     setSelectedSupplier(null)
-  }, [onSupplierUpdate])
+  }, [onSupplierUpdate]));
 
-  const handleDeleteSupplier = useCallback((supplierId: string) => {
+  void (useCallback((supplierId: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar este proveedor?')) {
       onSupplierDelete?.(supplierId)
     }
-  }, [onSupplierDelete])
+  }, [onSupplierDelete]));
 
-  const handleEditSupplier = useCallback((supplier: SupplierData) => {
+  void (useCallback((supplier: SupplierData) => {
     setSelectedSupplier(supplier)
     setShowEditDialog(true)
-  }, [])
+  }, []));
 
-  const getStatusBadge = useCallback((status: string) => {
+  void (useCallback((status: string) => {
     switch (status) {
       case 'active':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Activo</Badge>
@@ -192,9 +191,9 @@ export default function SupplierList({
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
-  }, [])
+  }, []));
 
-  const getRatingStars = useCallback((rating: number) => {
+  void (useCallback((rating: number) => {
     return (
       <div className="flex items-center">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -206,7 +205,7 @@ export default function SupplierList({
         <span className="ml-1 text-sm text-muted-foreground">({rating})</span>
       </div>
     )
-  }, [])
+  }, []));
 
 
 

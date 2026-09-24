@@ -7,16 +7,6 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Tipos locales
-type SaleRow = { id: string; total_amount?: number | null; status: 'pendiente' | 'completada' | 'cancelada'; created_at: string }
-type RepairRow = {
-  id: string
-  device_brand?: string | null
-  device_model?: string | null
-  status: 'recibido' | 'diagnostico' | 'reparacion' | 'listo' | 'entregado'
-  created_at: string
-  final_cost?: number | null
-}
-type CustomerRow = { id: string; name?: string | null; created_at: string }
 
 interface ActivityItem {
   id: string

@@ -141,7 +141,6 @@ export function CustomerDashboard() {
   // Estados para navegación
   const [currentView, setCurrentView] = useState<ViewState>('list')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [selectedCreditCustomerId, _setSelectedCreditCustomerId] = useState<string>("")
   const [creditSearchTerm, _setCreditSearchTerm] = useState("")
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false)
@@ -234,11 +233,10 @@ export function CustomerDashboard() {
   const {
     credits,
     installments,
-    payments,
     markInstallmentPaid,
   } = useCredits(hasCreditsModule && activeTab === 'credits')
 
-  const customersWithActiveCredits = useMemo(() => {
+  void (useMemo(() => {
     const term = creditSearchTerm.trim().toLowerCase()
     return insights.customers.filter((c) => {
       const summary = creditSummaries[c.id]
@@ -246,168 +244,7 @@ export function CustomerDashboard() {
       const matches = term ? (c.name?.toLowerCase().includes(term) || c.email?.toLowerCase().includes(term) || c.phone?.toLowerCase().includes(term)) : true
       return hasActive && matches
     })
-  }, [insights.customers, creditSummaries, creditSearchTerm])
-
-  const selectedCreditIds = useMemo(() => {
-    return credits.filter(c => c.customer_id === selectedCreditCustomerId).map(c => c.id)
-  }, [credits, selectedCreditCustomerId])
-
-  const selectedInstallments = useMemo(() => {
-    return installments.filter(i => selectedCreditIds.includes(i.credit_id))
-  }, [installments, selectedCreditIds])
-
-  const selectedPayments = useMemo(() => {
-    return payments.filter(p => selectedCreditIds.includes(p.credit_id))
-  }, [payments, selectedCreditIds])
-
-  const exportSelectedHistoryCSV = () => {
-    if (!selectedCreditCustomerId) return
-    const instHeader = ["Cuota", "Vence", "Monto", "Estado", "Pagado", "Método"]
-    const instRows = selectedInstallments.map(i => [
-      String(i.installment_number),
-      new Date(i.due_date).toLocaleDateString(),
-      String(i.amount),
-      i.status,
-      String(i.amount_paid || 0),
-      String(i.payment_method || "")
-    ].join(","))
-    const payHeader = ["Fecha", "Crédito", "Cuota", "Monto", "Método", "Referencia"]
-    const payRows = selectedPayments.map(p => [
-      p.created_at ? new Date(p.created_at).toLocaleDateString() : "",
-      String(p.credit_id),
-      String(p.installment_id || ""),
-      String(p.amount),
-      String(p.payment_method || ""),
-      ""
-    ].join(","))
-    const content = [
-      "INSTALMENTS",
-      instHeader.join(","),
-      ...instRows,
-      "",
-      "PAYMENTS",
-      payHeader.join(","),
-      ...payRows
-    ].join("\n")
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "historial_crediticio.csv"
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const exportSelectedHistoryExcel = () => {
-    if (!selectedCreditCustomerId) return
-    const instHeader = ["Cuota", "Vence", "Monto", "Estado", "Pagado", "Método"]
-    const instRows = selectedInstallments.map(i => [
-      String(i.installment_number),
-      new Date(i.due_date).toLocaleDateString(),
-      String(i.amount),
-      i.status,
-      String(i.amount_paid || 0),
-      String(i.payment_method || "")
-    ].join("\t"))
-    const payHeader = ["Fecha", "Crédito", "Cuota", "Monto", "Método", "Referencia"]
-    const payRows = selectedPayments.map(p => [
-      p.created_at ? new Date(p.created_at).toLocaleDateString() : "",
-      String(p.credit_id),
-      String(p.installment_id || ""),
-      String(p.amount),
-      String(p.payment_method || ""),
-      ""
-    ].join("\t"))
-    const content = [
-      "INSTALMENTS",
-      instHeader.join("\t"),
-      ...instRows,
-      "",
-      "PAYMENTS",
-      payHeader.join("\t"),
-      ...payRows
-    ].join("\n")
-    const blob = new Blob([content], { type: "application/vnd.ms-excel;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "historial_crediticio.xlsx"
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const exportSelectedHistoryPDF = () => {
-    if (!selectedCreditCustomerId) return
-    const customer = customers.find(c => c.id === selectedCreditCustomerId)
-    
-    // Sanitize values to prevent XSS when injecting into HTML
-    const esc = (val: unknown): string => {
-      const str = String(val ?? '')
-      return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;')
-    }
-    
-    const html = `
-      <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Historial Crediticio</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          h1 { text-align: center; }
-          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
-          th { background: #f5f5f5; }
-        </style>
-      </head>
-      <body>
-        <h1>Historial de ${esc(customer?.name || "Cliente")}</h1>
-        <h2>Cuotas</h2>
-        <table>
-          <thead><tr><th>Cuota</th><th>Vence</th><th>Monto</th><th>Estado</th><th>Pagado</th><th>Método</th></tr></thead>
-          <tbody>
-            ${selectedInstallments.map(i => `
-              <tr>
-                <td>${esc(i.installment_number)}</td>
-                <td>${esc(new Date(i.due_date).toLocaleDateString())}</td>
-                <td>${esc(i.amount)}</td>
-                <td>${esc(i.status)}</td>
-                <td>${esc(i.amount_paid || 0)}</td>
-                <td>${esc(i.payment_method || "")}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <h2>Pagos</h2>
-        <table>
-          <thead><tr><th>Fecha</th><th>Crédito</th><th>Cuota</th><th>Monto</th><th>Método</th><th>Referencia</th></tr></thead>
-          <tbody>
-            ${selectedPayments.map(p => `
-              <tr>
-                <td>${esc(p.created_at ? new Date(p.created_at).toLocaleDateString() : "")}</td>
-                <td>${esc(p.credit_id)}</td>
-                <td>${esc(p.installment_id || "")}</td>
-                <td>${esc(p.amount)}</td>
-                <td>${esc(p.payment_method || "")}</td>
-                <td></td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `
-    const w = window.open("", "_blank")
-    if (w) {
-      w.document.write(html)
-      w.document.close()
-      setTimeout(() => { w.print() }, 250)
-    }
-  }
+  }, [insights.customers, creditSummaries, creditSearchTerm]));
 
   const handleAddCustomer = () => {
     setShowCreateModal(true)

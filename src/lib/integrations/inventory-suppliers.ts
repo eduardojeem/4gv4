@@ -311,7 +311,7 @@ export class APISupplierIntegration extends SupplierIntegration {
   async authenticate(): Promise<boolean> {
     try {
       // Simular autenticación con API
-      const response = await fetch(`${this.baseUrl}/auth`, {
+      await fetch(`${this.baseUrl}/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -320,7 +320,7 @@ export class APISupplierIntegration extends SupplierIntegration {
           apiKey: this.config.credentials.apiKey,
           username: this.config.credentials.username
         })
-      })
+      });
 
       // Simular respuesta exitosa
       await new Promise(resolve => setTimeout(resolve, 500))

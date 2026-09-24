@@ -330,11 +330,6 @@ function UICustomizationContent() {
     saveCustomTheme(theme)
   }
 
-  const resetToDefault = () => {
-    setCustomTheme(defaultThemes[0])
-    applyCustomThemeToCSSVariables(defaultThemes[0])
-    saveCustomTheme(defaultThemes[0])
-  }
 
   const exportTheme = () => {
     const dataStr = JSON.stringify(customTheme, null, 2)

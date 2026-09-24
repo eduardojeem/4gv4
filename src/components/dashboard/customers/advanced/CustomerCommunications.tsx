@@ -62,16 +62,6 @@ interface Campaign {
   createdAt: string
 }
 
-interface CommunicationHistory {
-  id: string
-  customerId: string | null
-  customerName: string
-  type: string
-  subject: string
-  status: string
-  sentAt: string
-  toEmail?: string
-}
 
 export function CustomerCommunications({ customers }: CustomerCommunicationsProps) {
   const [activeTab, setActiveTab] = useState('campaigns')
@@ -228,7 +218,7 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
   )
 
   const CampaignCard = ({ campaign }: { campaign: Campaign }) => {
-    const template = templates.find(t => t.id === campaign.templateId)
+    void (templates.find(t => t.id === campaign.templateId));
     
     return (
       <Card className="hover:shadow-lg transition-shadow">

@@ -54,7 +54,7 @@ export function useAutoSave<T>({
       if (!saved) return null
 
       const parsed = JSON.parse(saved) as T
-      const timestamp = localStorage.getItem(`draft_${key}_timestamp`)
+      void (localStorage.getItem(`draft_${key}_timestamp`));
 
       return parsed
     } catch (error) {

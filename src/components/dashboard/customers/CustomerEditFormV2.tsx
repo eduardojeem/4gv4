@@ -87,7 +87,6 @@ interface CustomerEditFormV2Props {
 const SEGMENT_OPTIONS = ['vip', 'premium', 'regular', 'new', 'high_value', 'low_value', 'business', 'wholesale'] as const
 const CONTACT_OPTIONS = ['email', 'phone', 'whatsapp', 'sms'] as const
 const TYPE_OPTIONS = ['regular', 'premium', 'empresa', 'wholesale'] as const
-const STATUS_OPTIONS = ['active', 'inactive', 'suspended', 'pending'] as const
 
 const TAG_SUGGESTIONS = ['VIP', 'Frecuente', 'Taller', 'Mayorista', 'Empresa', 'Con Crédito', 'Puntual', 'Garantía']
 

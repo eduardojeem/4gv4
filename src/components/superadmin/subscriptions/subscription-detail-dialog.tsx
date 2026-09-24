@@ -132,9 +132,9 @@ export function SubscriptionDetailDialog({
 
   if (!sub) return null
 
-  const progress = periodProgress(sub)
+  void (periodProgress(sub));
   const renewalDays = daysUntil(sub.current_period_ends_at)
-  const trialDays = daysUntil(sub.trial_ends_at)
+  void (daysUntil(sub.trial_ends_at));
   const monthlyPrice = sub.plan_details ? formatMoney(sub.plan_details.price_monthly, sub.plan_details.currency || 'PYG') : 'Gratuito'
   const owner = sub.owner_name || sub.owner_email || sub.owner_id
 

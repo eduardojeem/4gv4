@@ -85,7 +85,6 @@ export interface User {
 }
 
 // Datos de ejemplo eliminados
-const mockUsers: User[] = []
 
 // Componente para mostrar el rol con icono
 function RoleBadge({ role }: { role: DashboardUserRole }) {

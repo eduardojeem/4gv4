@@ -40,7 +40,6 @@ import { cn } from '@/lib/utils'
 import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import { countOrganizationsWithoutSubscription, getSubscriptionTiming } from '@/lib/superadmin/organization-directory'
 import { describeLastAccess } from '@/lib/superadmin/last-access'
-import { type RobotMood } from '../MonitoringRobotMascot'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 
 // ---------------------------------------------------------------------------
@@ -1021,13 +1020,13 @@ export function OrganizationsDashboard({
   const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-foreground transition-colors'
 
   // Robot Mascot Mood & Insight
-  const robotMood: RobotMood = focusedOrganization
+  void (focusedOrganization
     ? focusedOrganization.subscription_status === 'active' ? 'healthy' : 'warning'
-    : stats.activeSubscriptions >= stats.total * 0.7 ? 'healthy' : 'warning'
+    : stats.activeSubscriptions >= stats.total * 0.7 ? 'healthy' : 'warning');
 
-  const robotMessage = focusedOrganization
+  void (focusedOrganization
     ? `Empresa: ${focusedOrganization.name} (${focusedOrganization.plan}) · ${focusedOrganization.staff_active} colaboradores activos y ${focusedOrganization.customers_total} clientes.`
-    : `Gestionando ${organizations.length} empresas en la plataforma. ${stats.paid} organizaciones en planes pagos y ${stats.activeSubscriptions} suscripciones activas.`
+    : `Gestionando ${organizations.length} empresas en la plataforma. ${stats.paid} organizaciones en planes pagos y ${stats.activeSubscriptions} suscripciones activas.`);
 
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">

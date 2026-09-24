@@ -368,7 +368,7 @@ export function RepairOperationsOverview({
             {summary.statusBreakdown.map(({ status, count }) => {
               const config = statusConfig[status]
               const isActive = statusFilter === status
-              const Icon = config.icon
+              void (config.icon);
 
               return (
                 <button

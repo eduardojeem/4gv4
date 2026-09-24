@@ -221,10 +221,10 @@ describe('useProductFiltering', () => {
     })
 
     // Productos con margen entre 30% y 50%
-    const expectedProducts = result.current.filteredProducts.filter(product => {
+    void (result.current.filteredProducts.filter(product => {
       const margin = ((product.sale_price - product.purchase_price) / product.sale_price) * 100
       return margin >= 30 && margin <= 50
-    })
+    }));
 
     expect(result.current.filteredProducts.length).toBeGreaterThanOrEqual(0)
   })

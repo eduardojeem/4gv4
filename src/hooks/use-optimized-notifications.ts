@@ -168,7 +168,7 @@ export function useOptimizedNotifications() {
       cacheKey?: string
     } = {}
   ): Promise<T> => {
-    const toastId = `${buttonId}-${Date.now()}`
+    void (`${buttonId}-${Date.now()}`);
     const cacheKey = options.cacheKey || createCacheKey('button-action', buttonId)
 
     try {

@@ -68,13 +68,6 @@ const getStockPercentage = (product: Product) => {
   return (product.stock / product.maxStock) * 100
 }
 
-const getStockColor = (product: Product) => {
-  const percentage = getStockPercentage(product)
-  if (percentage === 0) return 'bg-red-500'
-  if (percentage <= 20) return 'bg-red-400'
-  if (percentage <= 50) return 'bg-yellow-400'
-  return 'bg-green-500'
-}
 
 const AlertCard = ({
   title,

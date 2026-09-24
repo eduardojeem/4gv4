@@ -88,7 +88,7 @@ export function MarketplaceAnnouncementForm({ initial }: MarketplaceAnnouncement
   // Estado del aviso en tiempo real
   const now = useMemo(() => new Date(), [])
   const todayStamp = useMemo(() => announcementDayStamp(now), [now])
-  const live = isAnnouncementLive(form, now)
+  void (isAnnouncementLive(form, now));
 
   const statusInfo = useMemo(() => {
     if (!form.enabled) {

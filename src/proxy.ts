@@ -174,28 +174,7 @@ function sanitizeLocalRedirect(value: string | null, fallback: string): string {
   return value
 }
 
-function redirectToLogin(request: NextRequest, source: NextResponse): NextResponse {
-  const loginUrl = request.nextUrl.clone()
-  loginUrl.pathname = '/login'
-  loginUrl.search = ''
-  loginUrl.searchParams.set('redirect', `${request.nextUrl.pathname}${request.nextUrl.search}`)
 
-  return applyResponseCookies(NextResponse.redirect(loginUrl), source)
-}
-
-function rewriteForbiddenResponse(
-  request: NextRequest,
-  source: NextResponse,
-  reason: 'admin' | 'dashboard'
-): NextResponse {
-  const url = request.nextUrl.clone()
-  url.pathname = '/forbidden'
-  url.search = ''
-  url.searchParams.set('reason', reason)
-  url.searchParams.set('from', `${request.nextUrl.pathname}${request.nextUrl.search}`)
-
-  return applyResponseCookies(NextResponse.rewrite(url), source)
-}
 
 export async function proxy(request: NextRequest) {
   const legacyPublicRedirect = redirectLegacyPublicPath(request)

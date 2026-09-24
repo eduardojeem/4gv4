@@ -48,7 +48,7 @@ export function ProductCardOptimized({
   const [isHovered, setIsHovered] = useState(false)
   
   const stockStatus = getStockStatus(product.stock_quantity, product.min_stock)
-  const marginStatus = getMarginStatus(product.sale_price, product.purchase_price)
+  void (getMarginStatus(product.sale_price, product.purchase_price));
   const isOutOfStock = product.stock_quantity === 0
 
   return (

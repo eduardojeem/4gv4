@@ -421,7 +421,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
   }
 
   // 3. Análisis de comportamiento de compra
-  const frequentBuyers = customers.filter(c => c.purchase_frequency === 'high')
+  void (customers.filter(c => c.purchase_frequency === 'high'));
   const recentBigSpenders = customers.filter(c => 
     c.last_purchase_amount > 1000000 && 
     new Date(c.last_visit) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -1009,67 +1009,13 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
   }, [])
 
   // Funciones de utilidad mejoradas
-  const getTypeIcon = (type: Notification['type'], size: 'sm' | 'md' | 'lg' = 'md') => {
-    const sizeClass = size === 'sm' ? 'h-3 w-3' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'
-    const config = notificationTypes[type]
-    return config ? React.cloneElement(config.icon, { className: `${sizeClass} ${config.color}` }) : 
-           <Bell className={`${sizeClass} text-gray-500`} />
-  }
 
-  const getCategoryIcon = (category: Notification['category'], size: 'sm' | 'md' | 'lg' = 'md') => {
-    const sizeClass = size === 'sm' ? 'h-3 w-3' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'
-    const config = notificationConfig[category]
-    return config ? React.cloneElement(config.icon, { className: `${sizeClass} text-white` }) : 
-           <Bell className={`${sizeClass} text-white`} />
-  }
 
-  const getPriorityColor = (priority: Notification['priority']) => {
-    switch (priority) {
-      case 'critical': return 'border-l-red-500 bg-red-50 dark:bg-red-950 ring-2 ring-red-200 dark:ring-red-800'
-      case 'high': return 'border-l-orange-500 bg-orange-50 dark:bg-orange-950 ring-1 ring-orange-200 dark:ring-orange-800'
-      case 'medium': return 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950'
-      case 'low': return 'border-l-gray-500 bg-gray-50 dark:bg-gray-950'
-      default: return 'border-l-gray-300'
-    }
-  }
 
-  const getPriorityBadge = (priority: Notification['priority']) => {
-    switch (priority) {
-      case 'critical': return <Badge variant="destructive" className="text-xs">Crítica</Badge>
-      case 'high': return <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800">Alta</Badge>
-      case 'medium': return <Badge variant="outline" className="text-xs">Media</Badge>
-      case 'low': return <Badge variant="outline" className="text-xs text-gray-500">Baja</Badge>
-      default: return null
-    }
-  }
 
-  const formatTimeAgo = (timestamp: string) => {
-    const now = new Date()
-    const time = new Date(timestamp)
-    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60))
-    
-    if (diffInMinutes < 1) return 'Ahora'
-    if (diffInMinutes < 60) return `${diffInMinutes}m`
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`
-    if (diffInMinutes < 10080) return `${Math.floor(diffInMinutes / 1440)}d`
-    return time.toLocaleDateString('es-PY', { month: 'short', day: 'numeric' })
-  }
 
-  const getNotificationAge = (timestamp: string) => {
-    const hours = (Date.now() - new Date(timestamp).getTime()) / (1000 * 60 * 60)
-    if (hours < 1) return 'new'
-    if (hours < 24) return 'recent'
-    if (hours < 168) return 'week'
-    return 'old'
-  }
 
-  const isOverdue = (notification: Notification) => {
-    return notification.dueDate && new Date(notification.dueDate) < new Date()
-  }
 
-  const isSnoozed = (notification: Notification) => {
-    return notification.snoozeUntil && new Date(notification.snoozeUntil) > new Date()
-  }
 
   return (
     <TooltipProvider>

@@ -173,13 +173,6 @@ export function ImageUploader({
     toast.success('Imagen eliminada')
   }
 
-  const moveImage = (fromIndex: number, toIndex: number) => {
-    if (disabled) return
-    const newImages = [...images]
-    const [removed] = newImages.splice(fromIndex, 1)
-    newImages.splice(toIndex, 0, removed)
-    onChange(newImages)
-  }
 
   const addImageFromUrl = async () => {
     if (!imageUrl.trim()) {

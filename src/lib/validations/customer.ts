@@ -11,11 +11,11 @@ import { z } from "zod"
 const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/
 
 // Email validation with redacted filter
-const emailSchema = z.string()
+void (z.string()
   .refine(val => !val.includes('[REDACTED]'), "Email contiene datos censurados")
   .email("Email inválido")
   .or(z.literal(''))
-  .optional()
+  .optional());
 
 // Required email for creation
 const requiredEmailSchema = z.string()

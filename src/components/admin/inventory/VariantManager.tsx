@@ -71,12 +71,12 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
     [products, productId]
   )
 
-  const availableAttributes = useMemo(() => 
+  void (useMemo(() =>
     currentProduct ? attributes.filter(attr => 
       currentProduct.variant_attributes.includes(attr.id)
     ) : attributes,
     [attributes, currentProduct]
-  )
+  ));
 
   const [createAttrError, setCreateAttrError] = useState<string | null>(null)
 

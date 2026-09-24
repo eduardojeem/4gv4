@@ -113,10 +113,10 @@ export function useProductManagement(
   }, [products])
 
   // Estado de carga combinado
-  const loadingState: LoadingState = useMemo(() => ({
+  void (useMemo(() => ({
     loading: loading || bulkOperationLoading || isProcessing,
     error
-  }), [loading, bulkOperationLoading, isProcessing, error])
+  }), [loading, bulkOperationLoading, isProcessing, error]));
 
   // Productos filtrados y ordenados
   useEffect(() => {

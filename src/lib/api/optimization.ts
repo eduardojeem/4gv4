@@ -162,7 +162,7 @@ export class CacheManager {
 
   private calculateHitRate(): number {
     const hits = Array.from(this.cache.values()).reduce((sum, entry) => sum + entry.accessCount, 0);
-    const misses = 0; // En esta implementación básica no estamos contando misses reales
+ // En esta implementación básica no estamos contando misses reales
     // Para un cálculo real, necesitaríamos un contador separado de requests totales
     // Retornamos un valor basado en los accesos actuales como proxy
     return hits > 0 ? 0.85 + (Math.min(hits, 100) / 1000) : 0.85

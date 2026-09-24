@@ -149,7 +149,6 @@ export function calculateRepairTotal(input: RepairCalculationInput): RepairCalcu
     }
 
     const subtotalBeforeDiscount = laborSubtotal + partsSubtotal
-    const totalTaxBeforeDiscount = laborTax + partsTax
 
     // Manejar caso de subtotal cero
     if (subtotalBeforeDiscount === 0) {

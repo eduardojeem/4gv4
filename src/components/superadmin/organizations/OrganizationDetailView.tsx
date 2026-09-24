@@ -1009,24 +1009,6 @@ const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
  * afirmacion: el plan puede no tener ningun limite cargado, y entonces el
  * sistema aplica los del plan Free sin que la pantalla lo diga.
  */
-function LimitRow({ label, used, limit }: { label: string; used: number | null; limit: unknown }) {
-  const max = typeof limit === 'number' ? limit : Number(limit)
-  const tiene = Number.isFinite(max) && max > 0
-  const definido = limit !== null && limit !== undefined
-
-  return (
-    <div className="flex justify-between border-b border-border pb-2.5">
-      <span className="font-medium text-muted-foreground">{label}</span>
-      <span className="font-bold tabular-nums text-foreground">
-        {used === null ? '—' : used.toLocaleString('es-PY')}
-        {' / '}
-        <span className={cn(!tiene && 'font-medium text-muted-foreground')}>
-          {tiene ? max.toLocaleString('es-PY') : definido ? 'Sin tope' : 'No definido'}
-        </span>
-      </span>
-    </div>
-  )
-}
 
 const MODULE_STATE_STYLES: Record<ModuleState, string> = {
   on: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',

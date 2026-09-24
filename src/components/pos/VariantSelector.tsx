@@ -192,7 +192,7 @@ function VariantSelectorContent({
   }, [onClose])
 
   // Obtener variantes que coinciden con los atributos actualmente seleccionados
-  const availableVariants = useMemo(() => {
+  void (useMemo(() => {
     if (!product.variants) return []
 
     return product.variants.filter(variant => {
@@ -201,7 +201,7 @@ function VariantSelectorContent({
         return !selectedValue || selectedValue === (av.option_id || av.value)
       })
     })
-  }, [product.variants, selectedAttributes])
+  }, [product.variants, selectedAttributes]));
 
   // Obtener la variante exacta seleccionada (cuando todos los atributos tienen valor)
   const selectedVariant = useMemo(() => {

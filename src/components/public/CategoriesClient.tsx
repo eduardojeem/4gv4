@@ -214,9 +214,9 @@ export function CategoriesClient({ categories }: Props) {
     return Array.from(map.values()).filter((g) => g.categories.length > 0)
   }, [filteredCategories])
 
-  const totalProductsCount = useMemo(() => {
+  void (useMemo(() => {
     return categories.reduce((acc, c) => acc + c.product_count, 0)
-  }, [categories])
+  }, [categories]));
 
   return (
     <div className="space-y-8">

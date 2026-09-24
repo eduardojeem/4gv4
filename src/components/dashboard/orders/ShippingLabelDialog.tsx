@@ -40,12 +40,12 @@ export function ShippingLabelDialog({
   if (!order) return null
 
   const isDelivery = order.fulfillment_type === 'DELIVERY'
-  const paymentMeta = PAYMENT_STATUS_META[order.payment_status] ?? { label: order.payment_status, className: '' }
+  void (PAYMENT_STATUS_META[order.payment_status] ?? { label: order.payment_status, className: '' });
   const paymentMethodLabel = PAYMENT_METHOD_META[order.payment_method]?.label ?? order.payment_method
-  const cleanPhone = order.customer_phone?.replace(/\D/g, '') || ''
-  const googleMapsUrl = isDelivery && order.customer_address
+  void (order.customer_phone?.replace(/\D/g, '') || '');
+  void (isDelivery && order.customer_address
     ? `https://maps.google.com/?q=${encodeURIComponent(order.customer_address)}`
-    : null
+    : null);
 
   const handlePrint = () => {
     window.print()

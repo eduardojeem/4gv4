@@ -32,7 +32,6 @@ import {
   Plus,
   AlertTriangle
 } from 'lucide-react'
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
 
 interface StockMovement {
   id: string
@@ -69,7 +68,7 @@ export default function ProductDetailPageModern() {
     return products.find(p => p.id === productId)
   }, [products, productId])
 
-  const supabaseClient = useMemo(() => createClient(), [])
+  void (useMemo(() => createClient(), []));
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return '/placeholder-product.jpg'
     if (url.startsWith('http')) return url

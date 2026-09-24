@@ -116,7 +116,7 @@ export function PublicFavorites() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [metadata, setMetadata] = useState<Record<string, ProductMeta>>({})
-  const [completedMetadataKey, setCompletedMetadataKey] = useState<string | null>(null)
+  const [_completedMetadataKey, setCompletedMetadataKey] = useState<string | null>(null)
   const [viewScope, setViewScope] = useState<'store' | 'all'>('store')
 
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -162,7 +162,6 @@ export function PublicFavorites() {
   }, [])
 
   const metadataKey = JSON.stringify(state.items.map(item => item.productId).filter(Boolean))
-  const loadingMeta = open && metadataKey !== '[]' && completedMetadataKey !== metadataKey
   // Fetch metadata when modal opens
   useEffect(() => {
     if (!open || state.items.length === 0) return

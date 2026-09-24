@@ -409,7 +409,6 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
     useEffect(() => {
         if (!pathname.startsWith('/dashboard/products')) return
 
-        let active = true
         const channel = supabase
             .channel('products_changes')
             .on(
@@ -488,7 +487,6 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
             .subscribe()
 
         return () => {
-            active = false
             void supabase.removeChannel(channel)
         }
     }, [supabase, pathname])

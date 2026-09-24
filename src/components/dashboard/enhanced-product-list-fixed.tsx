@@ -94,14 +94,6 @@ const getMarginInfo = (product: Product) => {
   }
 }
 
-const formatDate = (dateString?: string) => {
-  if (!dateString) return 'N/A'
-  return new Date(dateString).toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
 
 // Componentes auxiliares
 const ProductActions = ({ product, onEdit, onDelete, onView, onDuplicate: _onDuplicate }: {

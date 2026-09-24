@@ -25,7 +25,6 @@ import {
 } from '@/components/dashboard/products-modern'
 import { exportProductsToCSV, downloadCSV } from '@/lib/products-dashboard-utils'
 import type { Database } from '@/lib/supabase/types'
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
 
 export default function ModernProductsPage() {
   const {

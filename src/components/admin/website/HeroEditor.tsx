@@ -236,7 +236,7 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
   const hasIncompatibleRepairCopy = !capabilities.hasRepairs &&
     /reparaci|servicio técnico|soporte técnico|diagnóstico|repuestos?|técnicos?/i.test(currentHeroCopy)
 
-  const brand = getBrandTheme(settings?.company_info?.brandColor)
+  void (getBrandTheme(settings?.company_info?.brandColor));
   const customBrandColor = settings?.company_info?.customBrandColor
   const hasValidCustomBrand =
     settings?.company_info?.brandColor === 'custom' && isValidBrandHexColor(customBrandColor)

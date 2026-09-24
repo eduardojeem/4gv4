@@ -615,7 +615,7 @@ class BackupVersioning {
   // Crear chunks de bloque fijo
   private async createFixedBlockChunks(sourceData: Record<string, unknown>, settings: DeduplicationSettings): Promise<BackupChunk[]> {
     const chunks: BackupChunk[] = []
-    const blockSize = settings.blockSize * 1024 // Convertir KB a bytes
+    void (settings.blockSize * 1024); // Convertir KB a bytes
 
     // Implementar chunking de bloque fijo
     return chunks

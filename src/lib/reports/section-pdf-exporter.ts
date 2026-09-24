@@ -324,7 +324,7 @@ export async function exportSalesSectionPDF(params: {
 }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
-  const pageHeight = doc.internal.pageSize.getHeight()
+  void (doc.internal.pageSize.getHeight());
   const margin = 32
   const contentWidth = pageWidth - (margin * 2)
   const now = new Date()

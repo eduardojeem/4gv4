@@ -372,7 +372,7 @@ export function ProductModal({
   const offerPrice = watch('offer_price')
   const hasOffer = watch('has_offer')
   const installmentsEnabled = watch('installments_enabled')
-  const installmentsPublic = watch('installments_public')
+  void (watch('installments_public'));
   const installmentsPlans = watch('installments_plans')
   const { fields: installmentFields, append: appendInstallment, remove: removeInstallment } = useFieldArray({
     control: form.control,
@@ -446,9 +446,9 @@ export function ProductModal({
   const returnWindowDays = watch('return_window_days')
   const exchangeWindowDays = watch('exchange_window_days')
   const stockQuantity = watch('stock_quantity')
-  const minStock = watch('min_stock')
-  const maxStock = watch('max_stock')
-  const unitMeasure = watch('unit_measure')
+  void (watch('min_stock'));
+  void (watch('max_stock'));
+  void (watch('unit_measure'));
   const sku = watch('sku')
   const watchedName = watch('name')
   const watchedCategoryId = watch('category_id')
@@ -492,7 +492,7 @@ export function ProductModal({
     }
   }, [errors])
 
-  const barcode = watch('barcode')
+  void (watch('barcode'));
 
   useEffect(() => {
     setLocalCategories(categories ?? [])

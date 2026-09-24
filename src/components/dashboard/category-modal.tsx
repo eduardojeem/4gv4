@@ -34,10 +34,6 @@ const PREDEFINED_COLORS = [
   '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1'
 ]
 
-const CATEGORY_ICONS = [
-  'Tag', 'Package', 'Smartphone', 'Tablet', 'Laptop', 'Headphones',
-  'Camera', 'Battery', 'Wrench', 'Shield', 'Star', 'Heart'
-]
 
 export function CategoryModal({
   isOpen,

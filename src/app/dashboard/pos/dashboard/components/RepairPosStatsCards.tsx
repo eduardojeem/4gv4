@@ -157,7 +157,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                         {repairStats.deliveredRepairs.map((r) => {
                                             const totalBilled = Number(r.final_cost ?? r.estimated_cost ?? r.paid_amount ?? 0)
                                             const partsCost = Number(r.parts_cost ?? 0)
-                                            const laborCost = Number(r.labor_cost ?? 0)
+                                            void (Number(r.labor_cost ?? 0));
                                             const net = totalBilled - partsCost
                                             
                                             // Normalizar status de pago

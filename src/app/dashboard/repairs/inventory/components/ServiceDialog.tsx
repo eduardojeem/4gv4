@@ -106,7 +106,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
   const laborNum = parseFloat(formData.labor || '0')
   const clientPriceNum = parseFloat(formData.price || '0')
   const wholesalePriceNum = parseFloat(formData.wholesalePrice || '0')
-  const wholesaleLaborNum = parseFloat(formData.wholesaleLabor || '0')
+  void (parseFloat(formData.wholesaleLabor || '0'));
 
   // Manejador: Cambia el Costo Base del Repuesto
   const handleCostChange = (val: string) => {

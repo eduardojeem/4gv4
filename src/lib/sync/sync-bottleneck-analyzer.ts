@@ -106,7 +106,7 @@ export class SyncBottleneckAnalyzer {
     const endTime = new Date()
     const startTime = new Date(endTime.getTime() - timeWindow)
 
-    const report = await this.performanceMonitor.generatePerformanceReport(startTime, endTime)
+    await this.performanceMonitor.generatePerformanceReport(startTime, endTime);
     const recentMetrics = this.performanceMonitor.getRecentMetrics(100)
 
     const bottlenecks = await this.identifyBottlenecks(recentMetrics)
@@ -185,7 +185,7 @@ export class SyncBottleneckAnalyzer {
     if (metrics.length === 0) return null
 
     const averageLatency = metrics.reduce((sum, m) => sum + m.latency, 0) / metrics.length
-    const p95Latency = this.calculatePercentile(metrics.map(m => m.latency), 95)
+    void (this.calculatePercentile(metrics.map(m => m.latency), 95));
 
     const threshold = baseline.expectedLatency * 1.5 // 50% sobre la línea base
 
@@ -413,7 +413,7 @@ export class SyncBottleneckAnalyzer {
 
     if (dbOperations.length === 0) return null
 
-    const avgRecordsPerOp = dbOperations.reduce((sum, m) => sum + m.recordsProcessed, 0) / dbOperations.length
+    void (dbOperations.reduce((sum, m) => sum + m.recordsProcessed, 0) / dbOperations.length);
     const avgDurationPerRecord = dbOperations.reduce((sum, m) => sum + (m.duration / m.recordsProcessed), 0) / dbOperations.length
 
     // Si toma más de 100ms por registro, puede indicar problemas de DB

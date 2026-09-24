@@ -295,7 +295,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .lte('resolved_at', to)
 
             // 9. Fetch Sale Items (for calculating costs)
-            const saleItemsPromise = supabase
+            void (supabase
                 .from('sale_items')
                 .select(`
                     id,
@@ -310,7 +310,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 `)
                 .eq('organization_id', organizationId)
                 .gte('created_at', from)
-                .lte('created_at', to)
+                .lte('created_at', to));
 
             // Execute parallel primary queries
             const [

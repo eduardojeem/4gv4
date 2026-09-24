@@ -22,7 +22,6 @@ interface CustomerSelectorProps {
     onAddRepairToCart?: (repair: CustomerRepair) => void
 }
 
-const MOCK_CUSTOMERS: Customer[] = []
 
 export function CustomerSelector({
     selectedCustomer,

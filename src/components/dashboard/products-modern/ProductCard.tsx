@@ -112,7 +112,7 @@ export const ProductCard = React.memo(function ProductCard({
   }, [isPubliclyVisible])
 
   const variants = getNormalizedVariants(product)
-  const hasVariants = variants.length > 0 || Boolean((product as any).has_variants)
+  void (variants.length > 0 || Boolean((product as any).has_variants));
   const totalVariantStock = variants.length > 0
     ? variants.reduce((acc, v) => acc + v.stockQuantity, 0)
     : product.stock_quantity

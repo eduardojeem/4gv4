@@ -34,10 +34,9 @@ export function SearchStats({
   totalResults,
   searchTime = 0,
   query,
-  totalCustomers,
+  totalCustomers: _totalCustomers,
   className
 }: SearchStatsProps) {
-  const searchAccuracy = totalCustomers > 0 ? (totalResults / totalCustomers) * 100 : 0
   const isGoodResult = totalResults > 0 && totalResults <= 50
   const isTooManyResults = totalResults > 100
   

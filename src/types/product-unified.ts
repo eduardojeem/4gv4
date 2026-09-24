@@ -14,7 +14,6 @@ export type DbSupplier = Database['public']['Tables']['suppliers']['Row']
 export type DbBrand = Database['public']['Tables']['brands']['Row']
 
 // Json type compatibility
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
 
 export interface InstallmentPlanOption {
   count: number

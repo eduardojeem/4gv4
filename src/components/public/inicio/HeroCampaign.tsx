@@ -79,7 +79,7 @@ export function HeroCampaign({
   const { data, isLoading } = useSWR(newestProductsKey(tenantSlug), fetchPublicProducts, NEWEST_PRODUCTS_SWR_OPTIONS)
   const loadingPhotos = !mounted || (isLoading && !data)
   const photos = mounted ? pickCampaignProducts(data ?? [], failedImageIds) : []
-  const radius = STOREFRONT_RADIUS_CLASS[style]
+  void (STOREFRONT_RADIUS_CLASS[style]);
   const isSport = style === 'sport'
 
   const handleSearchSubmit = (event: React.FormEvent) => {

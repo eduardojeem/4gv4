@@ -2277,32 +2277,6 @@ export default function OperationalReports() {
   )
 }
 
-function CustomerAccessMetric({
-  label,
-  value,
-  description,
-  tone,
-}: {
-  label: string
-  value: number
-  description: string
-  tone: 'slate' | 'blue' | 'emerald' | 'amber'
-}) {
-  const tones = {
-    slate: 'border-slate-200 bg-slate-50 text-slate-900 dark:border-slate-800 dark:bg-slate-900/50 dark:text-white',
-    blue: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300',
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
-    amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
-  }
-
-  return (
-    <div className={`rounded-xl border p-3.5 sm:p-4 ${tones[tone]}`}>
-      <p className="text-[11px] font-bold uppercase tracking-wide opacity-75">{label}</p>
-      <p className="mt-1 font-mono text-2xl font-extrabold sm:text-3xl">{value}</p>
-      <p className="mt-1 text-[11px] leading-snug opacity-75">{description}</p>
-    </div>
-  )
-}
 
 // Estado vacío para un gráfico sin datos en el rango elegido — antes
 // Recharts simplemente pintaba los ejes sin ninguna línea/barra, que se ve

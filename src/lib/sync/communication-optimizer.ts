@@ -199,7 +199,7 @@ export class DataCompressor {
     // Simulación simple: extraer datos originales
     if (compressed.startsWith('COMPRESSED:')) {
       const parts = compressed.split(':')
-      const ratio = parseFloat(parts[1])
+      void (parseFloat(parts[1]));
       const truncatedData = parts.slice(2).join(':')
 
       // Simular restauración de datos
@@ -397,7 +397,7 @@ export class CommunicationOptimizer {
       // Execute request with retries
       while (retryCount <= this.config.retryAttempts) {
         try {
-          const connection = await this.connectionPool.getConnection()
+          await this.connectionPool.getConnection();
 
           try {
             result = await Promise.race([
@@ -642,8 +642,8 @@ export class CommunicationOptimizer {
     throughput: number
     errorRate: number
   } {
-    const avgLatency = metrics.reduce((sum, m) => sum + m.latency, 0) / metrics.length
-    const avgThroughput = metrics.reduce((sum, m) => sum + m.throughput, 0) / metrics.length
+    void (metrics.reduce((sum, m) => sum + m.latency, 0) / metrics.length);
+    void (metrics.reduce((sum, m) => sum + m.throughput, 0) / metrics.length);
     const avgErrorRate = metrics.reduce((sum, m) => sum + m.errorRate, 0) / metrics.length
 
     // Estimate improvements based on configuration changes

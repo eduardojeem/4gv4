@@ -88,7 +88,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   onShare,
   formatCurrency
 }) => {
-  const componentRef = useRef<HTMLDivElement>(null)
+  void (useRef<HTMLDivElement>(null));
   const { settings } = useSharedSettings()
   const { settings: websiteSettings } = useAdminWebsiteSettings()
   const logoUrl = websiteSettings?.company_info?.logoUrl
@@ -118,9 +118,6 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
     return labels[method as keyof typeof labels] || method
   }
 
-  const getPaymentIcon = (_method: string) => {
-    return '' // Removed icons for better print compatibility
-  }
 
   return (
     <div id="receipt-content" className="max-w-md mx-auto bg-card text-foreground rounded-lg shadow-lg border border-border print:max-w-full print:shadow-none print:border-none print:rounded-none print:mx-0 print:bg-transparent print:text-black">

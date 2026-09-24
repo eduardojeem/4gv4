@@ -28,7 +28,7 @@ export function RepairHeader({
   onOpenReceiptSettings,
   isLoading,
   totalRepairs,
-  activeRepairs,
+  activeRepairs: _activeRepairs,
   urgentRepairs,
   readyRepairs,
   unassignedRepairs = 0,
@@ -37,11 +37,6 @@ export function RepairHeader({
   onStatusFilterSelect,
   selectedBranchName,
 }: RepairHeaderProps) {
-  const quickStats = [
-    { label: 'En proceso', value: activeRepairs, tone: 'bg-white/[0.08] text-white' },
-    { label: 'Urgentes', value: urgentRepairs, tone: urgentRepairs > 0 ? 'bg-red-500/25 text-red-100 font-bold border border-red-400/30' : 'bg-white/[0.06] text-white/70' },
-    { label: 'Listas', value: readyRepairs, tone: readyRepairs > 0 ? 'bg-emerald-500/25 text-emerald-100 font-bold border border-emerald-400/30' : 'bg-white/[0.06] text-white/70' },
-  ] as const
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-950 text-white shadow-xs dark:border-slate-800 p-3 sm:px-4 sm:py-3 transition-all">

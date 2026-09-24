@@ -116,22 +116,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
     return `${value.toFixed(1)}${unit}`
   }
 
-  const getMetricIcon = (metricName: string) => {
-    switch (metricName) {
-      case 'cart-operation':
-        return <ShoppingCart className="h-4 w-4" />
-      case 'product-search':
-        return <Search className="h-4 w-4" />
-      case 'sale-processing':
-        return <Activity className="h-4 w-4" />
-      case 'database-query':
-        return <Database className="h-4 w-4" />
-      case 'render-time':
-        return <Eye className="h-4 w-4" />
-      default:
-        return <Gauge className="h-4 w-4" />
-    }
-  }
 
   if (!isMonitoring) {
     return (

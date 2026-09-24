@@ -80,13 +80,13 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails: _onViewDe
   }
 
   // Prepare chart data (last 7 closures from filtered list)
-  const chartData = useMemo(() => {
+  void (useMemo(() => {
     return filteredHistory.slice(0, 7).reverse().map(closure => ({
       date: new Date(closure.date).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit' }),
       sales: closure.totalSales,
       discrepancy: Math.abs(closure.discrepancy)
     }))
-  }, [filteredHistory])
+  }, [filteredHistory]));
 
   const exportHistoryCSV = () => {
     if (!checkPermission('canExportData')) {

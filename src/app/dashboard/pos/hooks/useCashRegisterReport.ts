@@ -22,13 +22,6 @@ function toDateTimeLocalInput(date: Date): string {
     return `${y}-${m}-${d}T${h}:${min}`
 }
 
-function getTodayRange() {
-    const start = new Date()
-    start.setHours(0, 0, 0, 0)
-    const end = new Date()
-    end.setHours(23, 59, 59, 999)
-    return { start, end }
-}
 
 function getWeekRange() {
     const end = new Date()

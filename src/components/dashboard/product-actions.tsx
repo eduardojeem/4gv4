@@ -73,7 +73,7 @@ export function ProductActions({
 }: ProductActionsProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
-  const notifications = useOptimizedNotifications()
+  void (useOptimizedNotifications());
   const { notifyProductAction, notifyImportExport } = useContextualNotifications()
 
   const hasSelectedProducts = selectedProducts.length > 0

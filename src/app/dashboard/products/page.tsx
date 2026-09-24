@@ -105,8 +105,8 @@ export default function ProductsPage() {
   // Permissions check
   const canViewCost = hasPermission('cost_prices.read')
   const canCreateProducts = hasPermission('products.create') || hasPermission('products.manage')
-  const canEditProducts = hasPermission('products.update') || hasPermission('products.manage')
-  const canDeleteProducts = hasPermission('products.delete') || hasPermission('products.manage')
+  void (hasPermission('products.update') || hasPermission('products.manage'));
+  void (hasPermission('products.delete') || hasPermission('products.manage'));
 
   const {
     products,
@@ -860,9 +860,6 @@ export default function ProductsPage() {
   };
 
   // Export principal (por defecto a Excel)
-  const handleExport = () => {
-    handleExportExcel();
-  };
 
   const handleExportPdf = async () => {
     const result = await exportToPDF(mappedServerFilters);

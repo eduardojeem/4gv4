@@ -59,15 +59,6 @@ interface AlertItem {
 }
 
 // Datos simplificados para el gráfico principal
-const salesData = [
-  { name: 'Ene', ventas: 4000 },
-  { name: 'Feb', ventas: 3000 },
-  { name: 'Mar', ventas: 2000 },
-  { name: 'Abr', ventas: 2780 },
-  { name: 'May', ventas: 1890 },
-  { name: 'Jun', ventas: 2390 },
-  { name: 'Jul', ventas: 3490 }
-]
 
 // Actividades críticas únicamente
 const criticalActivities = [

@@ -63,60 +63,6 @@ interface SystemEvent {
 }
 
 // Datos mock para logs de auditoría
-const generateMockAuditLogs = (): AuditLog[] => {
-  const actions = [
-    { action: 'login', description: 'Usuario inició sesión', category: 'auth' as const, level: 'info' as const },
-    { action: 'logout', description: 'Usuario cerró sesión', category: 'auth' as const, level: 'info' as const },
-    { action: 'create_user', description: 'Nuevo usuario creado', category: 'user' as const, level: 'info' as const },
-    { action: 'update_user', description: 'Usuario actualizado', category: 'user' as const, level: 'info' as const },
-    { action: 'delete_user', description: 'Usuario eliminado', category: 'user' as const, level: 'warning' as const },
-    { action: 'failed_login', description: 'Intento de login fallido', category: 'security' as const, level: 'warning' as const },
-    { action: 'password_change', description: 'Contraseña cambiada', category: 'security' as const, level: 'info' as const },
-    { action: 'data_export', description: 'Datos exportados', category: 'data' as const, level: 'info' as const },
-    { action: 'system_backup', description: 'Backup del sistema', category: 'system' as const, level: 'info' as const },
-    { action: 'config_change', description: 'Configuración modificada', category: 'system' as const, level: 'warning' as const },
-    { action: 'api_call', description: 'Llamada a API', category: 'api' as const, level: 'info' as const },
-    { action: 'unauthorized_access', description: 'Acceso no autorizado detectado', category: 'security' as const, level: 'error' as const }
-  ]
-
-  const users = [
-    { id: '1', name: 'Juan Pérez', email: 'juan@empresa.com', role: 'Admin' },
-    { id: '2', name: 'María García', email: 'maria@empresa.com', role: 'Manager' },
-    { id: '3', name: 'Carlos López', email: 'carlos@empresa.com', role: 'User' },
-    { id: '4', name: 'Ana Martínez', email: 'ana@empresa.com', role: 'Auditor' }
-  ]
-
-  const ips = ['192.168.1.100', '192.168.1.101', '10.0.0.50', '172.16.0.25', '203.0.113.45']
-  const userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-  ]
-
-  return Array.from({ length: 50 }, (_, i) => {
-    const action = actions[Math.floor(Math.random() * actions.length)]
-    const user = users[Math.floor(Math.random() * users.length)]
-    const timestamp = new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000)
-    
-    return {
-      id: `log-${i + 1}`,
-      timestamp,
-      level: action.level,
-      category: action.category,
-      action: action.action,
-      description: action.description,
-      user: Math.random() > 0.1 ? user : undefined,
-      resource: Math.random() > 0.5 ? `/api/users/${Math.floor(Math.random() * 100)}` : undefined,
-      ip: ips[Math.floor(Math.random() * ips.length)],
-      userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
-      status: (Math.random() > 0.1 ? 'success' : (Math.random() > 0.5 ? 'failed' : 'pending')) as AuditLog['status'],
-      details: {
-        sessionId: `sess_${Math.random().toString(36).substr(2, 9)}`,
-        requestId: `req_${Math.random().toString(36).substr(2, 9)}`
-      }
-    }
-  }).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-}
 
 const mockSecurityEvents: SecurityEvent[] = [
   {

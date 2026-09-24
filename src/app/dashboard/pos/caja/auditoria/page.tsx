@@ -700,19 +700,6 @@ function SessionCard({ session, typeFilter, isOpen, registers = [], currentUserD
 
 // ─── KPI CARD ───────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, icon, color }: { label: string; value: string | number; icon?: React.ReactNode; color?: string }) {
-  return (
-    <Card className={cn("border shadow-sm rounded-2xl overflow-hidden", color || "border-border/60 bg-card")}>
-      <CardContent className="p-4 sm:p-5 space-y-1">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
-          {icon}
-        </div>
-        <p className="text-2xl font-bold tracking-tight tabular-nums text-foreground">{value}</p>
-      </CardContent>
-    </Card>
-  )
-}
 
 // ─── MODAL DE AYUDA / GUÍA DE AUDITORÍA CON EJEMPLOS ─────────────────────────
 

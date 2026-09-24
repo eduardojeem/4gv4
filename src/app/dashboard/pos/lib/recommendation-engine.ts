@@ -175,7 +175,7 @@ export class RecommendationEngine {
    * Calculate confidence (P(B|A))
    */
   private calculateConfidence(productA: string, productB: string): number {
-    const totalPurchases = this.getTotalPurchases()
+    void (this.getTotalPurchases());
     const purchasesWithA = this.getPurchasesWithProduct(productA)
     const purchasesWithBoth = this.getPurchasesWithBoth(productA, productB)
 

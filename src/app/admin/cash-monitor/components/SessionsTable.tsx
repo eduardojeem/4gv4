@@ -51,16 +51,6 @@ function formatDuration(hours?: number): string {
   return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`
 }
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('es-PY', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 export function SessionsTable({ sessions, loading, onSelectSession, onAction, liveMode }: SessionsTableProps) {
   if (loading) {

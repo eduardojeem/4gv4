@@ -352,7 +352,7 @@ export function ProductTable({
                     const isSelected = selectedProductIds.includes(product.id)
 
                     const variants = getNormalizedVariants(product)
-                    const hasVariants = variants.length > 0 || Boolean((product as any).has_variants)
+                    void (variants.length > 0 || Boolean((product as any).has_variants));
                     const isExpanded = expandedIds.has(product.id)
 
                     // Stock calculation
@@ -392,7 +392,7 @@ export function ProductTable({
 
                     // Visibility in Storefront: public, wholesale, hidden
                     const isPublicVisibility = (product as any).visibility === 'public' || !(product as any).visibility
-                    const isHiddenVisibility = (product as any).visibility === 'hidden'
+                    void ((product as any).visibility === 'hidden');
                     const isWholesaleVisibility = (product as any).visibility === 'wholesale'
 
                     // Offer price

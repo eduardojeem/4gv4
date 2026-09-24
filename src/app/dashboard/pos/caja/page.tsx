@@ -92,10 +92,10 @@ export default function CashRegisterPage() {
     }
   }, [registers, activeRegisterId, setActiveRegisterId])
 
-  const parsedMovementAmount = useMemo(() => {
+  void (useMemo(() => {
     const n = Number(movementAmount)
     return Number.isFinite(n) && n > 0 ? n : 0
-  }, [movementAmount])
+  }, [movementAmount]));
 
   const [closingCountedAmount, setClosingCountedAmount] = useState('')
 

@@ -57,9 +57,9 @@ export default function IntegrationsDashboard() {
   const [showConfigDialog, setShowConfigDialog] = React.useState(false)
   const [configType, setConfigType] = React.useState<'payment' | 'accounting' | 'supplier'>('payment')
   
-  const paymentSystem = usePaymentSystem()
-  const accountingSystem = useAccountingSystem()
-  const supplierSystem = useSupplierSystem()
+  void (usePaymentSystem());
+  void (useAccountingSystem());
+  void (useSupplierSystem());
 
   // Mock data para demostración
   const [integrations, setIntegrations] = React.useState<IntegrationStatus[]>(() => [

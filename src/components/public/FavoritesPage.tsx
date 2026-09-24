@@ -544,7 +544,7 @@ export function FavoritesPage({
     return [...map.values()]
   }, [filtered])
 
-  const hasActiveFilters = Boolean(query || (store && store !== (scopedStoreSlug || '')) || sortBy !== 'store_asc')
+  void (Boolean(query || (store && store !== (scopedStoreSlug || '')) || sortBy !== 'store_asc'));
 
   const resetFilters = () => {
     setQuery('')

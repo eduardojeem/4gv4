@@ -33,12 +33,6 @@ interface MetricData {
   target?: number
 }
 
-interface ChartDataPoint {
-  name: string
-  value: number
-  date?: string
-  [key: string]: string | number | undefined
-}
 
 const MetricCard = ({ title, metric, unit = '', icon: Icon }: {
   title: string

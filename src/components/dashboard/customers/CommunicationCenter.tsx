@@ -104,14 +104,14 @@ export function CommunicationCenter({ customer, onClose: _onClose }: Communicati
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000))
 
-      const newMessage: Message = {
+      void ({
         id: Date.now().toString(),
         type: activeTab,
         direction: 'outbound',
         content: message,
         timestamp: new Date().toISOString(),
         status: 'sent'
-      }
+      });
 
       // In a real app, this would update the messages state
       toast.success(`Mensaje enviado por ${activeTab.toUpperCase()}`)

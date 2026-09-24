@@ -94,7 +94,7 @@ export function useSmartSearch({
     products.forEach(product => {
       const lowerName = (typeof product.name === 'string' ? product.name : '').toLowerCase()
       const lowerSku = (typeof product.sku === 'string' ? product.sku : '').toLowerCase()
-      const lowerDescription = (typeof product.description === 'string' ? product.description : '').toLowerCase()
+      void ((typeof product.description === 'string' ? product.description : '').toLowerCase());
       
       // Coincidencia exacta en nombre
       if (lowerName === lowerQuery && lowerName) {

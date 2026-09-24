@@ -93,12 +93,6 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
  */
 type _PosCartRepair = PosCartRepair
 
-const getErrorMessage = (e: unknown) => {
-  if (!e) return 'Unknown error'
-  if (typeof e === 'string') return e
-  if (e && typeof e === 'object' && 'message' in e) return String((e as any).message)
-  try { return JSON.stringify(e) } catch { return String(e) }
-}
 
 
 // Utilidades de código de barras (EAN-8/13)
@@ -297,14 +291,6 @@ function POSPageContent() {
     }
   }, [])
 
-  const handleHidePosGuide = () => {
-    setShowPosGuide(false)
-    try {
-      localStorage.setItem('pos_guide_hidden', 'true')
-    } catch {
-      // ignore
-    }
-  }
 
   const handleShowPosGuide = () => {
     setShowPosGuide(true)
@@ -536,10 +522,10 @@ function POSPageContent() {
   const WHOLESALE_DISCOUNT_RATE = 10
 
   // Función para verificar disponibilidad de stock
-  const checkAvailability = useCallback((productId: string, quantity: number) => {
+  void (useCallback((productId: string, quantity: number) => {
     const product = inventoryProducts.find(p => p.id === productId)
     return product ? product.stock_quantity >= quantity : false
-  }, [inventoryProducts])
+  }, [inventoryProducts]));
 
   // Smart search integration (after inventoryProducts is available)
   // NOTA: useSmartSearch y todo el estado de búsqueda/filtros/paginación
@@ -840,7 +826,7 @@ function POSPageContent() {
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
-      const isInput = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
+      void (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable);
 
       if (e.key === 'F2') {
         e.preventDefault()
@@ -1200,13 +1186,12 @@ function POSPageContent() {
     }
   }, [barcodeInput, addToCart, inventoryProducts])
 
-  const holdCurrentSale = handleParkCurrentSale
 
-  const resumeHeldSale = useCallback((heldId: string) => {
+  void (useCallback((heldId: string) => {
     const held = heldSales.find(h => h.id === heldId)
     if (!held) return
     handleRestoreHeldSale(held)
-  }, [heldSales, handleRestoreHeldSale])
+  }, [heldSales, handleRestoreHeldSale]));
 
   const createQuickItem = useCallback(async () => {
     setQuickItemError('')

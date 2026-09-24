@@ -204,7 +204,7 @@ export function AnnouncementsManager({
   const now = useMemo(() => new Date(), [])
   const liveCount = items.filter((item) => isAnnouncementLive(item, now)).length
   const dirty = JSON.stringify(items.map(contentOf)) !== JSON.stringify(saved.map(contentOf))
-  const editing = items.find((item) => item.id === editingId) ?? null
+  void (items.find((item) => item.id === editingId) ?? null);
 
   const update = (id: string, patch: Partial<Announcement>) =>
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))

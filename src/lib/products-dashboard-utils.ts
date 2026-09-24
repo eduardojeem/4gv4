@@ -460,31 +460,6 @@ export function exportProductsToInventoryCSV(products: Product[]): string {
     return ''
   }
 
-  const headers = [
-    'SKU',
-    'Nombre',
-    'Descripción',
-    'Categoría',
-    'Marca',
-    'Proveedor',
-    'Precio Compra',
-    'Precio Venta',
-    'Precio Mayoreo',
-    'Stock',
-    'Stock Mínimo',
-    'Stock Máximo',
-    'Unidad',
-    'Código Barras',
-    'Ubicación',
-    'Activo',
-    'Destacado',
-    'Valor Stock',
-    'Margen %',
-    'Estado Stock',
-    'Fecha Creación',
-    'Fecha Actualización',
-    'ID',
-  ]
 
   const exportHeaders = [
     'SKU',

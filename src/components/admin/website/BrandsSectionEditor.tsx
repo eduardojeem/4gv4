@@ -62,7 +62,7 @@ export function BrandsSectionEditor() {
   // Estado para editar logo de marca existente
   const [editingLogoIndex, setEditingLogoIndex] = useState<number | null>(null)
   const [uploadingItemIndex, setUploadingItemIndex] = useState<number | null>(null)
-  const itemFileInputRef = useRef<HTMLInputElement>(null)
+  void (useRef<HTMLInputElement>(null));
   const [brandMediaOpen, setBrandMediaOpen] = useState(false)
   const [editingBrandIndexForMedia, setEditingBrandIndexForMedia] = useState<number | null>(null)
 

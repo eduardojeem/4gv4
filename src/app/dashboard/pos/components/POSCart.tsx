@@ -119,7 +119,7 @@ const CartItemRow = memo<{
     setLocalQty(item.quantity.toString());
   }, [item.quantity]);
 
-  const isLowStock = typeof item.stock === 'number' && !isService && item.stock <= 5;
+  void (typeof item.stock === 'number' && !isService && item.stock <= 5);
 
   return (
     <motion.div
