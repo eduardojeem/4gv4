@@ -90,10 +90,10 @@ export function useProductFiltering(
   const categories: Category[] = useMemo(() => {
     const map = new Map<string, Category>()
     for (const p of productsStable) {
-      const cat = (p as any).category
-      const catId = (p as any).category_id || (cat && (cat as any).id)
+      const cat = p.category
+      const catId = p.category_id || cat?.id
       if (catId) {
-        const name = cat ? (cat as any).name : ''
+        const name = cat?.name ?? ''
         map.set(catId, { ...(cat || {}), id: catId, name } as Category)
       }
     }
@@ -103,10 +103,10 @@ export function useProductFiltering(
   const suppliers: Supplier[] = useMemo(() => {
     const map = new Map<string, Supplier>()
     for (const p of productsStable) {
-      const sup = (p as any).supplier
-      const supId = (p as any).supplier_id || (sup && (sup as any).id)
+      const sup = p.supplier
+      const supId = p.supplier_id || sup?.id
       if (supId) {
-        const name = sup ? (sup as any).name : ''
+        const name = sup?.name ?? ''
         map.set(supId, { ...(sup || {}), id: supId, name } as Supplier)
       }
     }
@@ -217,17 +217,17 @@ export function useProductFiltering(
 
     if (filters.category) {
       result = result.filter((product: Product) =>
-        (product as any).category_id === filters.category ||
-        (product.category && product.category.id === filters.category) ||
-        (product as any).category === filters.category
+        product.category_id === filters.category ||
+        product.category?.id === filters.category ||
+        (product.category as unknown) === filters.category
       )
     }
 
     if (filters.supplier) {
       result = result.filter((product: Product) =>
-        (product as any).supplier_id === filters.supplier ||
-        (product.supplier && product.supplier.id === filters.supplier) ||
-        (product as any).supplier === filters.supplier
+        product.supplier_id === filters.supplier ||
+        product.supplier?.id === filters.supplier ||
+        (product.supplier as unknown) === filters.supplier
       )
     }
 
@@ -427,7 +427,7 @@ export function useProductFiltering(
   ), [filters])
 
   // Funciones de control con validación
-  const updateFilter = useCallback((key: keyof ProductFilters, value: any) => {
+  const updateFilter = useCallback((key: keyof ProductFilters, value: ProductFilters[keyof ProductFilters]) => {
     try {
       // Validar el valor según el tipo de filtro
       if (key === 'search' && typeof value !== 'string') {
@@ -450,12 +450,13 @@ export function useProductFiltering(
     }
   }, [handleProductError, onFiltersChange])
 
-  const updateAdvancedFilter = useCallback((key: string, value: any) => {
+  const updateAdvancedFilter = useCallback((key: string, value: unknown) => {
     try {
       // Validar rangos
       if (key.includes('Range') && value && typeof value === 'object') {
-        if (value.min !== undefined && value.max !== undefined && value.min > value.max) {
-          throw createProductError.filterRangeError(key, value.min, value.max)
+        const rangeValue = value as { min?: number; max?: number }
+        if (rangeValue.min !== undefined && rangeValue.max !== undefined && rangeValue.min > rangeValue.max) {
+          throw createProductError.filterRangeError(key, rangeValue.min, rangeValue.max)
         }
       }
 

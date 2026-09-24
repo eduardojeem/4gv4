@@ -214,7 +214,7 @@ export function useProductOperations() {
 
       // Preparar datos para exportación
       const exportData = products.map((product, index) => {
-        const data: any = {}
+        const data: Record<string, unknown> = {}
 
         options.fields.forEach(field => {
           switch (field) {
@@ -371,28 +371,29 @@ function parseCSV(content: string): Partial<Product>[] {
 
   return lines.slice(1).map(line => {
     const values = line.split(',').map(v => v.trim())
-    const product: any = {}
+    const product: Record<string, unknown> = {}
 
     headers.forEach((header, index) => {
       product[header] = values[index]
     })
 
-    return product
+    return product as Partial<Product>
   })
 }
 
-function generateCSV(data: any[]): string {
+function generateCSV(data: Record<string, unknown>[]): string {
   if (data.length === 0) return ''
 
   const headers = Object.keys(data[0])
   const csvContent = [
     headers.join(','),
     ...data.map(row =>
-      headers.map(header =>
-        typeof row[header] === 'string' && row[header].includes(',')
-          ? `"${row[header]}"`
-          : row[header]
-      ).join(',')
+      headers.map(header => {
+        const val = row[header]
+        return typeof val === 'string' && val.includes(',')
+          ? `"${val}"`
+          : String(val ?? '')
+      }).join(',')
     )
   ].join('\n')
 

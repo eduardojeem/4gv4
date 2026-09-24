@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
+import type { Segment, AIInsight } from '@/hooks/use-segmentation'
 
 interface ServiceResult<T> {
   success: boolean
@@ -10,7 +11,7 @@ interface ServiceResult<T> {
 const supabase = createClient()
 
 export const segmentationService = {
-  async getSegments(): Promise<ServiceResult<any[]>> {
+  async getSegments(): Promise<ServiceResult<Segment[]>> {
     try {
       const { data, error } = await supabase
         .from('customer_segments')
@@ -21,17 +22,17 @@ export const segmentationService = {
         return { success: false, error: error.message }
       }
 
-      return { success: true, data: data || [] }
+      return { success: true, data: (data || []) as unknown as Segment[] }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Error loading segments' }
     }
   },
 
-  async getAIInsights(): Promise<ServiceResult<any[]>> {
+  async getAIInsights(): Promise<ServiceResult<AIInsight[]>> {
     return { success: true, data: [] }
   },
 
-  async createSegment(payload: Record<string, unknown>): Promise<ServiceResult<any>> {
+  async createSegment(payload: Record<string, unknown>): Promise<ServiceResult<Segment>> {
     try {
       const { data, error } = await supabase
         .from('customer_segments')
@@ -43,13 +44,13 @@ export const segmentationService = {
         return { success: false, error: error.message }
       }
 
-      return { success: true, data }
+      return { success: true, data: data as unknown as Segment }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Error creating segment' }
     }
   },
 
-  async updateSegment(id: string, payload: Record<string, unknown>): Promise<ServiceResult<any>> {
+  async updateSegment(id: string, payload: Record<string, unknown>): Promise<ServiceResult<Segment>> {
     try {
       const { data, error } = await supabase
         .from('customer_segments')
@@ -62,7 +63,7 @@ export const segmentationService = {
         return { success: false, error: error.message }
       }
 
-      return { success: true, data }
+      return { success: true, data: data as unknown as Segment }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Error updating segment' }
     }

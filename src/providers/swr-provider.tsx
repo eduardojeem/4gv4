@@ -1,12 +1,12 @@
 "use client"
 
-import { SWRConfig } from 'swr'
+import { SWRConfig, type Middleware } from 'swr'
 import { ReactNode } from 'react'
 
 import { clearPersistentCacheInBackground } from '@/lib/cache/background-cache-refresh'
 
 // Cache persistente mejorado
-class PersistentCache extends Map {
+class PersistentCache extends Map<string, unknown> {
   private readonly STORAGE_KEY = 'swr_cache_v1'
   private readonly MAX_AGE = 1000 * 60 * 30 // 30 minutos
   private readonly MAX_SIZE = 1000
@@ -50,7 +50,7 @@ class PersistentCache extends Map {
     }
   }
 
-  set(key: string, value: any) {
+  set(key: string, value: unknown) {
     // Implementar LRU: eliminar el más antiguo si excede el tamaño
     if (this.size >= this.MAX_SIZE) {
       const firstKey = this.keys().next().value
@@ -86,6 +86,45 @@ class PersistentCache extends Map {
   }
 }
 
+// Middlewares de SWR
+const debugMiddleware: Middleware = (useSWRNext) => {
+  const inFlightKeys = new Set<string>()
+  return (key, fetcher, config) => {
+    const swr = useSWRNext(key, fetcher, config)
+    const keyStr = JSON.stringify(key)
+
+    if (swr.isLoading && !inFlightKeys.has(keyStr)) {
+      inFlightKeys.add(keyStr)
+      console.debug(`[SWR Cache MISS] ${keyStr}`)
+    } else if (!swr.isLoading && inFlightKeys.has(keyStr)) {
+      inFlightKeys.delete(keyStr)
+      if (swr.data) {
+        console.debug(`[SWR Cache HIT] ${keyStr}`)
+      }
+    }
+
+    return swr
+  }
+}
+
+const metricsMiddleware: Middleware = (useSWRNext) => (key, fetcher, config) => {
+  const startTime = performance.now()
+  const swr = useSWRNext(key, fetcher, config)
+  
+  // Medir tiempo de respuesta
+  if (swr.data && !swr.isLoading) {
+    const endTime = performance.now()
+    const duration = endTime - startTime
+    
+    // Reportar métricas si es muy lento
+    if (duration > 1000) {
+      console.warn(`[SWR Slow Query] ${JSON.stringify(key)}: ${duration.toFixed(2)}ms`)
+    }
+  }
+  
+  return swr
+}
+
 // Configuración optimizada de SWR
 const swrConfig = {
   // Cache más agresivo para mejor hit ratio
@@ -105,10 +144,13 @@ const swrConfig = {
   provider: () => new PersistentCache(),
   
   // Configuración de errores
-  shouldRetryOnError: (error: any) => {
+  shouldRetryOnError: (error: unknown) => {
     // No reintentar errores 4xx (excepto 408, 429)
-    if (error?.status >= 400 && error?.status < 500) {
-      return error.status === 408 || error.status === 429
+    const status = typeof error === 'object' && error !== null && 'status' in error
+      ? Number((error as { status: unknown }).status)
+      : undefined
+    if (status && status >= 400 && status < 500) {
+      return status === 408 || status === 429
     }
     return true
   },
@@ -116,7 +158,7 @@ const swrConfig = {
   
   // Optimizaciones de rendimiento
   keepPreviousData: true,            // Mantener datos previos durante carga
-  compare: (a: any, b: any) => {
+  compare: (a: unknown, b: unknown) => {
     // Comparación optimizada para evitar re-renders innecesarios
     if (a === b) return true
     if (!a || !b) return false
@@ -142,49 +184,8 @@ const swrConfig = {
   
   // Configuración de middleware
   use: [
-    // Middleware para logging en desarrollo.
-    // Usa un Set global para deduplicar: solo loguea la primera vez que una
-    // clave va a red, no una vez por cada componente que comparte la misma key.
-    ...(process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_SWR === 'true' ? [
-      (useSWRNext: any) => {
-        const inFlightKeys = new Set<string>()
-        return (key: any, fetcher: any, config: any) => {
-          const swr = useSWRNext(key, fetcher, config)
-          const keyStr = JSON.stringify(key)
-
-          if (swr.isLoading && !inFlightKeys.has(keyStr)) {
-            inFlightKeys.add(keyStr)
-            console.debug(`[SWR Cache MISS] ${keyStr}`)
-          } else if (!swr.isLoading && inFlightKeys.has(keyStr)) {
-            inFlightKeys.delete(keyStr)
-            if (swr.data) {
-              console.debug(`[SWR Cache HIT] ${keyStr}`)
-            }
-          }
-
-          return swr
-        }
-      }
-    ] : []),
-    
-    // Middleware para métricas de performance
-    (useSWRNext: any) => (key: any, fetcher: any, config: any) => {
-      const startTime = performance.now()
-      const swr = useSWRNext(key, fetcher, config)
-      
-      // Medir tiempo de respuesta
-      if (swr.data && !swr.isLoading) {
-        const endTime = performance.now()
-        const duration = endTime - startTime
-        
-        // Reportar métricas si es muy lento
-        if (duration > 1000) {
-          console.warn(`[SWR Slow Query] ${JSON.stringify(key)}: ${duration.toFixed(2)}ms`)
-        }
-      }
-      
-      return swr
-    }
+    ...(process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_SWR === 'true' ? [debugMiddleware] : []),
+    metricsMiddleware
   ]
 }
 
@@ -223,7 +224,7 @@ export const cacheUtils = {
   },
   
   // Prefetch data
-  prefetch: async (key: string, fetcher: () => Promise<any>) => {
+  async prefetch<T>(key: string, fetcher: () => Promise<T>): Promise<T | null> {
     try {
       const { mutate } = await import('swr')
       const data = await fetcher()

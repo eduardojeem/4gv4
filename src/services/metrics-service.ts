@@ -179,7 +179,7 @@ class MetricsService {
         todayRevenue: Math.floor(Math.random() * 5000000) + 1000000,
         pendingSupport: Math.floor(Math.random() * 10) + 2,
         activePromotions: Math.floor(Math.random() * 5) + 1,
-        systemHealth: ['excellent', 'good', 'warning', 'critical'][Math.floor(Math.random() * 4)] as any,
+        systemHealth: (['excellent', 'good', 'warning', 'critical'] as const)[Math.floor(Math.random() * 4)] || 'good',
         lastUpdated: new Date().toISOString()
       }
 

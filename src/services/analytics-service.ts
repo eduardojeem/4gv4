@@ -44,6 +44,13 @@ export interface TrendData {
   trend: 'up' | 'down' | 'stable'
 }
 
+export interface MetricComparison {
+  current: number
+  previous: number
+  change: number
+  changePercentage: number
+}
+
 export interface PredictionData {
   revenue: number[]
   customers: number[]
@@ -113,7 +120,7 @@ class AnalyticsService {
   }
 
   // Obtener comparaciones temporales
-  async getComparisons(customers: Customer[], _period: string): Promise<{ success: boolean; data?: Record<string, any>; error?: string }> {
+  async getComparisons(customers: Customer[], _period: string): Promise<{ success: boolean; data?: Record<string, MetricComparison>; error?: string }> {
     try {
       const currentMetrics = this.calculateMetrics(customers)
 

@@ -243,7 +243,7 @@ class SearchService {
   private scoreCustomer(
     customer: Customer, 
     query: string, 
-    patterns: any, 
+    patterns: ReturnType<typeof this.detectPatterns>, 
     weights: Record<string, number>,
     threshold: number
   ): SearchResult {

@@ -218,7 +218,7 @@ export function useProductAnalytics(
 
       // Cargar alertas si está habilitado
       if (stableConfig.includeAlerts) {
-        const generatedAlerts: ProductAlert[] = ((products as any[]).flatMap((product: any): any[] => {
+        const generatedAlerts: ProductAlert[] = products.flatMap((product: Product): ProductAlert[] => {
           const currentStock = Number(product.stock_quantity || 0)
           const minStock = Number(product.min_stock || 0)
           const createdAt = new Date().toISOString()
@@ -266,7 +266,7 @@ export function useProductAnalytics(
           }
 
           return []
-        }) as ProductAlert[])
+        })
 
         promises.push(
           Promise.resolve({ type: 'alerts' as const, data: generatedAlerts })

@@ -149,7 +149,7 @@ const ProductFilteringDemo = () => {
           {['all', 'low_stock', 'out_of_stock', 'best_sellers', 'new_products', 'high_margin'].map(preset => (
             <button
               key={preset}
-              onClick={() => setPreset(preset as any)}
+              onClick={() => (setPreset as (name: string) => void)?.(preset)}
               className={`px-3 py-1 rounded text-sm ${
                 activePreset === preset 
                   ? 'bg-blue-500 text-white' 
@@ -274,7 +274,7 @@ const ProductAnalyticsDemo = () => {
         {['7d', '30d', '90d', '1y'].map(range => (
           <button
             key={range}
-            onClick={() => setTimeRange(range as any)}
+            onClick={() => (setTimeRange as (range: string) => void)?.(range)}
             className={`px-3 py-1 rounded text-sm ${
               timeRange === range 
                 ? 'bg-blue-500 text-white' 

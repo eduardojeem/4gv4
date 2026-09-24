@@ -168,7 +168,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       }
 
       return customers
-    } catch (error: any) {
+    } catch (error: unknown) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
         "Error al actualizar clientes",
@@ -201,7 +201,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.success("Cliente creado exitosamente")
       if (onRefresh) void onRefresh()
       return { success: true, customer }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
         "Error al crear cliente",
@@ -234,7 +234,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
       logger.info('Customer updated successfully', { customerId: id })
       return { success: true, data: customer, customer }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
         "Error al actualizar cliente",
@@ -260,7 +260,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
       toast.success("Cliente eliminado exitosamente")
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // El servidor explica por que no se puede borrar (creditos, reparaciones):
       // ese mensaje es el util, no uno generico.
       const serverMessage = error instanceof Error ? error.message : ''
@@ -304,8 +304,9 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       }
 
       return result
-    } catch (error: any) {
-      toast.error("Error al exportar clientes: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al exportar clientes: " + message)
       return { success: false, error }
     }
   }, [])
@@ -348,8 +349,9 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       await refreshCustomers()
       toast.success(`${customerIds.length} cliente(s) actualizado(s)`)
       return { success: true, updated: customerIds.length }
-    } catch (error: any) {
-      toast.error("Error en actualizacion masiva: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error en actualizacion masiva: " + message)
       return { success: false, error }
     }
   }, [refreshCustomers])
@@ -365,25 +367,29 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       await refreshCustomers()
       toast.success(`${deleted} cliente(s) eliminado(s)`)
       return { success: true, deleted }
-    } catch (error: any) {
-      toast.error('No se pudieron eliminar los clientes', { description: error?.message })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error('No se pudieron eliminar los clientes', { description: message })
       return { success: false, error }
     }
   }, [refreshCustomers])
 
+  type CustomerNoteTagRecord = { id?: string; notes?: string; tags?: string[] }
+
   const addNote = useCallback(async (customerId: string, note: string) => {
     try {
       const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
-      const customersList = Array.isArray(result.data) ? result.data : []
-      const raw = customersList.find((customer: any) => customer.id === customerId)
+      const customersList = Array.isArray(result.data) ? (result.data as CustomerNoteTagRecord[]) : []
+      const raw = customersList.find((customer) => customer.id === customerId)
       const currentNotes = raw?.notes || ''
       const timestamp = new Date().toISOString()
       const notes = currentNotes ? `${currentNotes}\n\n[${timestamp}] ${note}` : `[${timestamp}] ${note}`
       await updateCustomer(customerId, { notes })
       toast.success("Nota agregada exitosamente")
       return { success: true }
-    } catch (error: any) {
-      toast.error("Error al agregar nota: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al agregar nota: " + message)
       return { success: false, error }
     }
   }, [updateCustomer])
@@ -391,14 +397,15 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   const addTag = useCallback(async (customerId: string, tag: string) => {
     try {
       const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
-      const customersList = Array.isArray(result.data) ? result.data : []
-      const raw = customersList.find((customer: any) => customer.id === customerId)
+      const customersList = Array.isArray(result.data) ? (result.data as CustomerNoteTagRecord[]) : []
+      const raw = customersList.find((customer) => customer.id === customerId)
       const tags = Array.from(new Set([...(raw?.tags || []), tag]))
       await updateCustomer(customerId, { tags })
       toast.success("Etiqueta agregada exitosamente")
       return { success: true }
-    } catch (error: any) {
-      toast.error("Error al agregar etiqueta: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al agregar etiqueta: " + message)
       return { success: false, error }
     }
   }, [updateCustomer])
@@ -406,14 +413,15 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   const removeTag = useCallback(async (customerId: string, tag: string) => {
     try {
       const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
-      const customersList = Array.isArray(result.data) ? result.data : []
-      const raw = customersList.find((customer: any) => customer.id === customerId)
+      const customersList = Array.isArray(result.data) ? (result.data as CustomerNoteTagRecord[]) : []
+      const raw = customersList.find((customer) => customer.id === customerId)
       const tags = (raw?.tags || []).filter((item: string) => item !== tag)
       await updateCustomer(customerId, { tags })
       toast.success("Etiqueta eliminada exitosamente")
       return { success: true }
-    } catch (error: any) {
-      toast.error("Error al eliminar etiqueta: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al eliminar etiqueta: " + message)
       return { success: false, error }
     }
   }, [updateCustomer])
