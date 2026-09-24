@@ -12,6 +12,7 @@
     "build:production": "NODE_ENV=production npm run build",
     "start": "next start",
     "lint": "eslint --ext .ts,.tsx src",
+    "lint:inventory": "node scripts/lint-inventory.mjs",
     "lint:fix": "eslint --ext .ts,.tsx src --fix",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "typecheck:fast": "tsc --noEmit --skipLibCheck --incremental",
