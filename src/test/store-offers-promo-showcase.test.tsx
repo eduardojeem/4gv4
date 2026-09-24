@@ -200,6 +200,24 @@ describe('StoreOffersPromoShowcase', () => {
     expect(screen.getByRole('button', { name: 'Ir a oferta 1' })).toBeInTheDocument()
   })
 
+  it('reinicia el carrusel al elegir otra categoría', () => {
+    render(
+      <StoreOffersPromoShowcase
+        companyInfo={{ name: '4G Celulares' }}
+        tenantPrefix="/4g-celulares"
+        tenantSlug="4g-celulares"
+        phoneClean="595983123456"
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente oferta' }))
+    expect(screen.getByTitle('Funda Silicona MagSafe')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Repuestos & Baterías/ }))
+
+    expect(screen.getByTestId('active-offer-name')).toHaveTextContent('Batería iPhone 13 Original')
+  })
+
   it('oculta el precio y muestra "Precio a consultar" en productos con hide_price', () => {
     render(
       <StoreOffersPromoShowcase

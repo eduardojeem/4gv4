@@ -8,12 +8,10 @@ import { useHydrated } from '@/hooks/use-hydrated'
 import {
   ArrowRight,
   BadgeCheck,
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
   Eye,
-  MapPin,
   MessageCircle,
   Package,
   Phone,
@@ -173,6 +171,10 @@ export function StoreOffersPromoShowcase({
   // Mini carrusel interactivo en la tarjeta publicitaria
   const [carouselIndex, setCarouselIndex] = useState(0)
   const [isCarouselPaused, setIsCarouselPaused] = useState(false)
+  const handleCategoryChange = useCallback((categoryId: string) => {
+    setSelectedCategory(categoryId)
+    setCarouselIndex(0)
+  }, [])
 
   // Ofertas que alimentan el carrusel (si se filtra por categoría, se enfoca en esa categoría)
   const carouselOffers = useMemo(() => {
@@ -182,11 +184,6 @@ export function StoreOffersPromoShowcase({
     }
     return validOffers
   }, [validOffers, selectedCategory])
-
-  // Resetear índice al cambiar categoría
-  useEffect(() => {
-    setCarouselIndex(0)
-  }, [selectedCategory])
 
   // Auto-play cada 4 segundos si hay más de 1 oferta y el usuario no está pausando con el mouse
   useEffect(() => {
@@ -368,7 +365,7 @@ export function StoreOffersPromoShowcase({
           <div className="mb-7 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
             <button
               type="button"
-              onClick={() => setSelectedCategory('all')}
+              onClick={() => handleCategoryChange('all')}
               className={cn(
                 'flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200 active:scale-95 shrink-0',
                 selectedCategory === 'all'
@@ -395,7 +392,7 @@ export function StoreOffersPromoShowcase({
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setSelectedCategory(cat.id)}
+                  onClick={() => handleCategoryChange(cat.id)}
                   className={cn(
                     'flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200 active:scale-95 shrink-0',
                     isSelected
@@ -654,6 +651,7 @@ export function StoreOffersPromoShowcase({
                         )}
 
                         <h4
+                          data-testid="active-offer-name"
                           role="button"
                           tabIndex={0}
                           onClick={() => setSelectedProduct(createModalProduct(activeOffer))}
@@ -1102,7 +1100,7 @@ export function StoreOffersPromoShowcase({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setSelectedCategory('all')}
+                  onClick={() => handleCategoryChange('all')}
                   className="mt-4 rounded-xl text-xs font-bold"
                 >
                   Ver todas las ofertas
