@@ -93,7 +93,7 @@ export function useAccessibility() {
     } else {
       root.classList.remove('color-blind-friendly')
     }
-  }, [state.settings])
+  }, [state])
 
   // Actualizar una configuración específica
   const updateSetting = useCallback((key: keyof AccessibilitySettings, value: any) => {

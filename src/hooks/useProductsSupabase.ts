@@ -1301,7 +1301,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       hasNextPage: pagination.page < Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
       hasPreviousPage: pagination.page > 1
     }
-  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount, pagination.page, pagination.limit])
+  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount, resultTruncated, pagination.page, pagination.limit])
 
   return {
     ...memoizedValues,

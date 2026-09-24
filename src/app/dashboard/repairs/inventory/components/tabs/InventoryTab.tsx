@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -74,7 +74,7 @@ export function InventoryTab() {
     return filteredInventory.slice(0, page * itemsPerPage)
   }, [filteredInventory, page, itemsPerPage])
 
-  useMemo(() => {
+  useEffect(() => {
     setPage(1)
   }, [searchTerm, categoryFilter, stockFilter])
 

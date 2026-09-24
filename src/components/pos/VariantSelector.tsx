@@ -236,7 +236,7 @@ function VariantSelectorContent({
       maxPrice: Math.max(...prices),
       totalStock: stocks.reduce((acc, curr) => acc + curr, 0),
     }
-  }, [allVariants, product.base_price, product])
+  }, [allVariants, product])
 
   // Imagen activa a mostrar (si la variante seleccionada tiene imagen, priorizarla)
   const activeImageSrc = useMemo(() => {

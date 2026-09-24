@@ -61,7 +61,7 @@ export function LowStockAlert() {
     }
 
     fetchLowStockItems()
-  }, [])
+  }, [supabase])
 
   if (loading) {
     return (

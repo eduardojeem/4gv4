@@ -84,7 +84,7 @@ export function ImageUploader({
     }
   }
 
-  const uploadImage = async (file: File): Promise<string> => {
+  const uploadImage = useCallback(async (file: File): Promise<string> => {
     if (onUploadFiles) {
       const urls = await onUploadFiles([file])
       return urls[0]
@@ -96,7 +96,7 @@ export function ImageUploader({
       }
       reader.readAsDataURL(file)
     })
-  }
+  }, [onUploadFiles])
 
   const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: any[]) => {
     if (disabled) return
@@ -152,7 +152,7 @@ export function ImageUploader({
       onUploadingChange?.(false)
       setUploadProgress({})
     }
-  }, [images, onChange, maxImages, maxSize, disabled, onUploadingChange])
+  }, [disabled, images, maxImages, maxSize, onChange, onUploadingChange, uploadImage])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {

@@ -163,7 +163,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
       }
     }
     loadData()
-  }, [])
+  }, [supabase])
 
   // Calcular márgenes automáticamente
   useEffect(() => {

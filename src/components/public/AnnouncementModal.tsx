@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
 import { ArrowRight, ChevronLeft, ChevronRight, Clock, Columns2, Layers, Pause, Play, Sparkles, X } from 'lucide-react'
@@ -295,7 +295,7 @@ function AnnouncementModalContent({
     return () => window.clearInterval(timer)
   }, [open, images.length, paused, userPaused, viewMode, carouselIntervalSeconds])
 
-  const close = () => {
+  const close = useCallback(() => {
     setInternalOpen(false)
     setTimeLeft(null)
     onClose?.()
@@ -311,7 +311,7 @@ function AnnouncementModalContent({
     } catch {
       // Sin almacenamiento volvera a aparecer; no es motivo para fallar.
     }
-  }
+  }, [announcement, isPreview, onClose, scope])
 
   // Temporizador de auto-cierre del cartel (pausado con el mouse)
   useEffect(() => {
@@ -327,7 +327,7 @@ function AnnouncementModalContent({
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [open, timeLeft, paused])
+  }, [close, open, paused, timeLeft])
 
   if (!announcement) return null
 

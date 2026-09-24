@@ -99,7 +99,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -172,7 +172,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
     }
 
     fetchData()
-  }, [])
+  }, [supabase])
 
   
 

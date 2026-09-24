@@ -351,7 +351,7 @@ export default function UserManagement() {
     }
 
     fetchUsers()
-  }, [])
+  }, [supabase])
 
   // Filtrar usuarios
   const filteredUsers = useMemo(() => {

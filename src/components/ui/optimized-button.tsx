@@ -94,24 +94,19 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
       message
     } = useButtonNotifications(buttonId || 'optimized-button')
 
-    // Iconos por defecto
-    const defaultLoadingIcon = <Loader2 className="h-4 w-4 animate-spin" />
-    const defaultSuccessIcon = <Check className="h-4 w-4" />
-    const defaultErrorIcon = <AlertTriangle className="h-4 w-4" />
-
     // Determinar el icono actual
     const getCurrentIcon = useCallback(() => {
       switch (buttonState) {
         case 'loading':
-          return loadingIcon || defaultLoadingIcon
+          return loadingIcon || <Loader2 className="h-4 w-4 animate-spin" />
         case 'success':
-          return successIcon || defaultSuccessIcon
+          return successIcon || <Check className="h-4 w-4" />
         case 'error':
-          return errorIcon || defaultErrorIcon
+          return errorIcon || <AlertTriangle className="h-4 w-4" />
         default:
           return null
       }
-    }, [buttonState, loadingIcon, successIcon, errorIcon])
+    }, [buttonState, errorIcon, loadingIcon, successIcon])
 
     // Determinar el texto actual
     const getCurrentText = useCallback(() => {
@@ -252,7 +247,7 @@ export interface ConfirmationButtonProps extends OptimizedButtonProps {
 export const ConfirmationButton = forwardRef<HTMLButtonElement, ConfirmationButtonProps>(
   ({
     confirmationMessage = '¿Estás seguro de que quieres realizar esta acción?',
-    confirmationTitle = 'Confirmar acci�n',
+    confirmationTitle = 'Confirmar acci�n',
     confirmationDescription,
     confirmButtonText,
     cancelButtonText,

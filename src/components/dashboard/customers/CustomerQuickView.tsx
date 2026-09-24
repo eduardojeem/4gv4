@@ -335,7 +335,7 @@ export function CustomerQuickView({ customer, open, onClose, onViewDetail, onEdi
     fetchCredits()
     fetchStoreCredit()
     return () => controller.abort()
-  }, [open, customer])
+  }, [customer, open, tieneTaller])
 
   if (!customer) return null
 

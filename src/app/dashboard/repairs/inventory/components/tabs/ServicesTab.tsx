@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -88,7 +88,7 @@ export function ServicesTab() {
   }, [filteredServices, page, itemsPerPage])
 
   // Reset page when searching or changing view mode
-  useMemo(() => {
+  useEffect(() => {
     setPage(1)
   }, [searchTerm, viewMode])
 

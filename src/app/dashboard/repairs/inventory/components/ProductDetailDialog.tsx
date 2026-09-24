@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -57,13 +57,7 @@ export function ProductDetailDialog({
   const [movements, setMovements] = useState<ProductMovement[]>([])
   const [loadingMovements, setLoadingMovements] = useState(false)
 
-  useEffect(() => {
-    if (product && open) {
-      loadMovements()
-    }
-  }, [product, open])
-
-  const loadMovements = async () => {
+  const loadMovements = useCallback(async () => {
     if (!product) return
     setLoadingMovements(true)
     try {
@@ -75,7 +69,13 @@ export function ProductDetailDialog({
     } finally {
       setLoadingMovements(false)
     }
-  }
+  }, [getProductMovements, product])
+
+  useEffect(() => {
+    if (product && open) {
+      loadMovements()
+    }
+  }, [loadMovements, open, product])
 
   if (!product) return null
 

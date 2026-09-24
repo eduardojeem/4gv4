@@ -126,7 +126,8 @@ export function EditUserForm({
 
   const role = useWatch({ control: form.control, name: 'role' })
   const status = useWatch({ control: form.control, name: 'status' })
-  const specificPermissions = useWatch({ control: form.control, name: 'permissions' }) || []
+  const watchedPermissions = useWatch({ control: form.control, name: 'permissions' })
+  const specificPermissions = useMemo(() => watchedPermissions || [], [watchedPermissions])
 
   const roleEffective = useMemo(() => {
     const roleConfig = ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS]
