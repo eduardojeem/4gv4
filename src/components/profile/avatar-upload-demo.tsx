@@ -4,12 +4,10 @@ import { useState } from 'react'
 import { AvatarUpload } from './avatar-upload'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { 
   Zap, 
-  Image, 
+  Image as ImageIcon,
   Crop, 
-  RotateCw, 
   Minimize2,
   CheckCircle,
   Clock,
@@ -26,7 +24,7 @@ export function AvatarUploadDemo() {
       description: 'No bloquea la interfaz durante el procesamiento'
     },
     {
-      icon: <Image className="h-5 w-5 text-blue-500" />,
+      icon: <ImageIcon aria-hidden="true" className="h-5 w-5 text-blue-500" />,
       title: 'Preview Instantáneo',
       description: 'Vista previa inmediata antes de procesar'
     },

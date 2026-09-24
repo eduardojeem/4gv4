@@ -147,7 +147,11 @@ export default function CategoriesPage() {
       let successCount = 0, failCount = 0
       for (const id of selectedIds) {
         const res = await deleteCategory(id)
-        res.success ? successCount++ : failCount++
+        if (res.success) {
+          successCount += 1
+        } else {
+          failCount += 1
+        }
       }
       if (successCount > 0) { toast.success(`${successCount} categorías eliminadas`); setSelectedIds([]) }
       if (failCount > 0) toast.error(`No se pudieron eliminar ${failCount} categorías`)
@@ -177,7 +181,11 @@ export default function CategoriesPage() {
     let successCount = 0, failCount = 0
     for (const id of selectedIds) {
       const res = await updateCategory(id, { is_active: active })
-      res.success ? successCount++ : failCount++
+      if (res.success) {
+        successCount += 1
+      } else {
+        failCount += 1
+      }
     }
     if (successCount > 0) { toast.success(`${successCount} categorías actualizadas`); setSelectedIds([]) }
     if (failCount > 0) toast.error(`No se pudieron actualizar ${failCount} categorías`)

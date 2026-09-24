@@ -117,12 +117,14 @@ function SortableHeader({
 }) {
   const active = sort.column === column
   return (
-    <th className="p-0 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+    <th
+      aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className="p-0 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+    >
       <button
         type="button"
         onClick={() => onSort(column)}
         aria-label={`Ordenar por ${label}`}
-        aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
         className="flex w-full items-center gap-1 p-3.5 text-left transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-slate-200"
       >
         {label}
