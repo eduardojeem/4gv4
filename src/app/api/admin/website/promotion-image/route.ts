@@ -40,7 +40,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   const admin = createAdminSupabase()
 
   // Verificar cuota de 20 imágenes
-  const { getWebsiteMediaLibrary, addWebsiteMediaItem, deleteWebsiteMediaItem, MAX_WEBSITE_MEDIA_COUNT } = await import('@/lib/website/website-media')
+  const { getWebsiteMediaLibrary, addWebsiteMediaItem, deleteWebsiteMediaItem: _deleteWebsiteMediaItem, MAX_WEBSITE_MEDIA_COUNT } = await import('@/lib/website/website-media')
   const currentItems = await getWebsiteMediaLibrary(organizationId, admin)
   if (currentItems.length >= MAX_WEBSITE_MEDIA_COUNT) {
     return NextResponse.json(

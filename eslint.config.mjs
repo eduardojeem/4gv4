@@ -14,6 +14,8 @@ const eslintConfig = [
         argsIgnorePattern: "^_",
         caughtErrors: "all",
         caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
       }],
     },
   },

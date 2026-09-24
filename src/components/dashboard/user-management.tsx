@@ -285,7 +285,7 @@ function RolePermissions({ role }: { role: DashboardUserRole }) {
 export default function UserManagement() {
   const supabase = createClient()
   const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const [_loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearch = useDeferredValue(searchTerm)
   const [roleFilter, setRoleFilter] = useState<DashboardUserRole | 'all'>('all')

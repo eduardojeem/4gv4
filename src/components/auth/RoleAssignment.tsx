@@ -65,7 +65,7 @@ const ROLE_OPTIONS: RoleOption[] = [
 ]
 
 export function RoleAssignment() {
-  const { user, updateUserRole } = useAuth()
+  const { user, updateUserRole: _updateUserRole } = useAuth()
   const [loading, setLoading] = useState<UserRole | null>(null)
   const [assigned, setAssigned] = useState(false)
 

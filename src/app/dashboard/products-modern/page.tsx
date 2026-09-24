@@ -91,7 +91,7 @@ export default function ModernProductsPage() {
   const handleProductDuplicate = async (product: Product) => {
     // Exclude system fields and relations that shouldn't be duplicated
      
-    const { id, created_at, updated_at, category, supplier, ...rest } = product as any
+    const { id: _id, created_at: _created_at, updated_at: _updated_at, category: _category, supplier: _supplier, ...rest } = product as any
 
     const duplicatedData = {
       ...rest,

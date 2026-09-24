@@ -387,7 +387,7 @@ export function ServicesManager({
   orgSlug?: string | null
   servicesModuleEnabled?: boolean
 }) {
-  const { settings, isLoading, error, isSaving, updateSetting, updateSettings } = useAdminWebsiteSettings()
+  const { settings, isLoading, error, isSaving, updateSetting: _updateSetting, updateSettings } = useAdminWebsiteSettings()
   const [servicesDraft, setServicesDraft] = useState<Service[] | null>(null)
   const [sectionDraft, setSectionDraft] = useState<ServicesSectionSettings | null>(null)
 

@@ -57,7 +57,7 @@ export function CatalogManager({
     createCategory,
     updateCategory,
     deleteCategory,
-    loading: isLoadingCategories
+    loading: _isLoadingCategories
   } = useCategories()
 
   // Transformar categorías de DB a UI
@@ -95,7 +95,7 @@ export function CatalogManager({
     createSupplier,
     updateSupplier,
     deleteSupplier,
-    loading: isLoadingSuppliers
+    loading: _isLoadingSuppliers
   } = useSuppliers()
 
   const suppliers: Supplier[] = useMemo(() => {

@@ -50,7 +50,7 @@ export function CustomerDeleteDialog({
   const [liveRepairs, setLiveRepairs] = useState<number | null>(null)
   const [liveSpent, setLiveSpent] = useState<number | null>(null)
   const [liveCredits, setLiveCredits] = useState<{ total: number; active: number; pendingBalance: number } | null>(null)
-  const [loadingStats, setLoadingStats] = useState(false)
+  const [_loadingStats, setLoadingStats] = useState(false)
 
   // Fetch real-time purchases, repairs and credits on dialog open
   React.useEffect(() => {

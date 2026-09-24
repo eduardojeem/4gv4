@@ -81,7 +81,7 @@ export default function CashRegisterPage() {
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
   const [movementType, setMovementType] = useState<'in' | 'out'>('in')
   const [movementAmount, setMovementAmount] = useState('')
-  const [movementNote, setMovementNote] = useState('')
+  const [_movementNote, setMovementNote] = useState('')
 
   const [isCashCountModalOpen, setIsCashCountModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)

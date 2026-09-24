@@ -20,7 +20,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
   const [filters, setFilters] = useState<any>({ type: 'todos', status: 'todos' })
   const [results, setResults] = useState<Array<{ title: string; subtitle?: string; href: string }>>([])
   const [resultsCount, setResultsCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(false)
+  const [_isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return

@@ -62,7 +62,7 @@ export function ImageUploader({
 }: ImageUploaderProps) {
   const listaDeConsejos = tips ?? CONSEJOS_POR_DEFECTO
   const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  const [_uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [loadingUrl, setLoadingUrl] = useState(false)

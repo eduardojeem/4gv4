@@ -62,7 +62,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onSuppliersChan
     createSupplier,
     updateSupplier,
     deleteSupplier,
-    refreshSuppliers
+    refreshSuppliers: _refreshSuppliers
   } = useInventory({ loadProducts: false, loadStats: false })
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)

@@ -68,7 +68,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key`
 
 export default function SupabaseSetup() {
-  const [currentStep, setCurrentStep] = useState(0)
+  const [_currentStep, _setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
   const copyToClipboard = async (text: string, label: string) => {
     try {

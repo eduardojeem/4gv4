@@ -61,10 +61,10 @@ export function ImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Opciones de procesado
-  const [quality, setQuality] = useState<number>(0.8)
-  const [maxWidth, setMaxWidth] = useState<number>(1280)
-  const [outputFormat, setOutputFormat] = useState<'image/webp' | 'image/jpeg' | 'image/png'>('image/webp')
-  const [defaultCropSquare, setDefaultCropSquare] = useState<boolean>(false)
+  const [quality, _setQuality] = useState<number>(0.8)
+  const [maxWidth, _setMaxWidth] = useState<number>(1280)
+  const [outputFormat, _setOutputFormat] = useState<'image/webp' | 'image/jpeg' | 'image/png'>('image/webp')
+  const [defaultCropSquare, _setDefaultCropSquare] = useState<boolean>(false)
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes'

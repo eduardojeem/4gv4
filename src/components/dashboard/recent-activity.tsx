@@ -54,7 +54,7 @@ export function RecentActivity() {
             console.warn('RPC get_recent_activity_feed failed, falling back to legacy fetch', error)
             // Fallback to legacy logic if RPC fails (e.g. migration not applied yet in dev)
             const from = (table: string) => supabase.from(table)
-            const [{ data: sales }, { data: repairs }, { data: customers }] = await Promise.all([
+            const [{ data: _sales }, { data: _repairs }, { data: _customers }] = await Promise.all([
               from('sales').select('id,total_amount,status,created_at').order('created_at', { ascending: false }).limit(5),
               from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').order('created_at', { ascending: false }).limit(5),
               from('customers').select('id,name,created_at').order('created_at', { ascending: false }).limit(5)

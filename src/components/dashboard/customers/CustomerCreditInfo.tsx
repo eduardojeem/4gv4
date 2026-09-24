@@ -35,7 +35,7 @@ interface CustomerCreditInfoProps {
 }
 
 export function CustomerCreditInfo({ customer, compact: _compact = false, showActions = true, onOpenPayment, onEditCustomer }: CustomerCreditInfoProps) {
-  const { loading, error, creditSummary, credits, installments, payments, refresh } = useCustomerCredits(customer.id, customer)
+  const { loading, error, creditSummary, credits, installments: _installments, payments, refresh } = useCustomerCredits(customer.id, customer)
   const [activeTab, setActiveTab] = useState('resumen')
 
   if (loading) {

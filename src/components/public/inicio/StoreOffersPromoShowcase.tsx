@@ -108,7 +108,7 @@ export function StoreOffersPromoShowcase({
     tenantSlug
   )
 
-  const { data: rawProducts, isLoading } = useSWR(
+  const { data: rawProducts, isLoading: _isLoading } = useSWR(
     offersQueryUrl,
     fetchPublicProducts,
     NEWEST_PRODUCTS_SWR_OPTIONS

@@ -62,7 +62,7 @@ export const useOptimizedCart = (
   const {
     taxRate = 0.19,
     pricesIncludeTax = true,
-    maxQuantityPerItem = 999,
+    maxQuantityPerItem: _maxQuantityPerItem = 999,
     storageScope = 'anonymous:unselected',
   } = config
   const storageKey = `pos.cart:${storageScope}`

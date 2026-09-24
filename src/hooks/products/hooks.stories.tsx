@@ -17,19 +17,19 @@ const ProductManagementDemo = () => {
     error,
     totalCount,
     selectedProducts,
-    sortConfig,
-    pagination,
+    sortConfig: _sortConfig,
+    pagination: _pagination,
     selectProduct,
     selectAllProducts,
     clearSelection,
-    setSortConfig,
-    setPagination,
+    setSortConfig: _setSortConfig,
+    setPagination: _setPagination,
     refreshProducts,
-    createProduct,
-    updateProduct,
-    deleteProduct,
+    createProduct: _createProduct,
+    updateProduct: _updateProduct,
+    deleteProduct: _deleteProduct,
     bulkDelete,
-    bulkUpdate
+    bulkUpdate: _bulkUpdate
   } = useProductManagement()
 
   return (
@@ -118,8 +118,8 @@ const ProductFilteringDemo = () => {
   const {
     filters,
     activePreset,
-    availableCategories,
-    availableSuppliers,
+    availableCategories: _availableCategories,
+    availableSuppliers: _availableSuppliers,
     priceRange,
     stockRange,
     marginRange,
@@ -127,7 +127,7 @@ const ProductFilteringDemo = () => {
     setPreset,
     clearFilters,
     exportFilters,
-    importFilters
+    importFilters: _importFilters
   } = useProductFiltering()
 
   return (
@@ -257,9 +257,9 @@ const ProductFilteringDemo = () => {
 const ProductAnalyticsDemo = () => {
   const {
     dashboardStats,
-    trends,
-    categoryAnalysis,
-    supplierAnalysis,
+    trends: _trends,
+    categoryAnalysis: _categoryAnalysis,
+    supplierAnalysis: _supplierAnalysis,
     inventoryAlerts,
     loading,
     error,

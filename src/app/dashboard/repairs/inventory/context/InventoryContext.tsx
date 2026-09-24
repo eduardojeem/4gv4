@@ -68,7 +68,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     suppliers,
     loading,
     error,
-    filters: supabaseFilters,
+    filters: _supabaseFilters,
     setFilters: setSupabaseFilters,
     refreshData,
     createProduct,

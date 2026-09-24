@@ -76,7 +76,7 @@ export function CustomerCardView({
   onToggleFavorite,
   loading = false
 }: CustomerCardViewProps) {
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
+  const [_hoveredCard, setHoveredCard] = useState<string | null>(null)
 
   const getStatusColor = (status: Customer['status']) => {
     switch (status) {

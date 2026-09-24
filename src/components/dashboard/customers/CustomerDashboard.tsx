@@ -81,7 +81,7 @@ export function CustomerDashboard() {
   const [activeTab, setActiveTab] = useState("customers")
   const { 
     customers, 
-    filteredCustomers, 
+    filteredCustomers: _filteredCustomers,
     paginatedCustomers, 
     filters, 
     viewMode,
@@ -141,15 +141,15 @@ export function CustomerDashboard() {
   // Estados para navegación
   const [currentView, setCurrentView] = useState<ViewState>('list')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState<string>("")
-  const [creditSearchTerm, setCreditSearchTerm] = useState("")
+  const [selectedCreditCustomerId, _setSelectedCreditCustomerId] = useState<string>("")
+  const [creditSearchTerm, _setCreditSearchTerm] = useState("")
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   
   // Quick view modal
   const [quickViewCustomer, setQuickViewCustomer] = useState<Customer | null>(null)
-  const [showGuide, setShowGuide] = useState(true)
+  const [_showGuide, _setShowGuide] = useState(true)
 
   const handlePageChange = useCallback((page: number) => {
     setPage(page)

@@ -26,7 +26,7 @@ export default function CheckUserPage() {
       // 2. Check user_roles table
       let roleData = null
       if (profile) {
-        const { data: roles, error: roleError } = await (supabase as any)
+        const { data: roles, error: _roleError } = await (supabase as any)
           .from('user_roles')
           .select('*')
           .eq('user_id', profile.id)

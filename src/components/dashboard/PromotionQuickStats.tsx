@@ -12,7 +12,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useMemo } from 'react'
 
 export function PromotionQuickStats() {
-  const { promotions, stats } = usePromotions()
+  const { promotions, stats: _stats } = usePromotions()
 
   const quickStats = useMemo(() => {
     const activePromotions = promotions.filter(p => p.is_active)

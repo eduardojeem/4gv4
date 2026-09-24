@@ -78,7 +78,7 @@ export default function CategoriesPage() {
   const [initialParentId, setInitialParentId] = useState<string | null>(null)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [searchValue, setSearchValue] = useState('')
-  const [showGuide, setShowGuide] = useState(true)
+  const [_showGuide, _setShowGuide] = useState(true)
 
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean; id: string | null; isBulk: boolean

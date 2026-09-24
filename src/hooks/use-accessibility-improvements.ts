@@ -478,7 +478,7 @@ export const useAccessibilityEnhancements = (options?: {
   const {
     enableFocusManagement = true,
     enableLiveRegion = true,
-    enableKeyboardNavigation = true,
+    enableKeyboardNavigation: _enableKeyboardNavigation = true,
     enableValidation = true
   } = options || {}
 

@@ -23,7 +23,7 @@ interface Point {
 export function PatternDrawer({ value, onChange, disabled, minimal = false }: PatternDrawerProps) {
   const [isDrawing, setIsDrawing] = useState(false)
   const [selectedPoints, setSelectedPoints] = useState<Point[]>([])
-  const [currentPath, setCurrentPath] = useState<string>('')
+  const [_currentPath, setCurrentPath] = useState<string>('')
   const [incompleteHint, setIncompleteHint] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)

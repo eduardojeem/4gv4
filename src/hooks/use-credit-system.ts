@@ -230,7 +230,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
   
   // Legacy data (convertido desde datos reales)
   const [creditTransactions] = useState<CreditTransaction[]>([])
-  const [creditSales, setCreditSales] = useState<CreditSale[]>([])
+  const [creditSales, _setCreditSales] = useState<CreditSale[]>([])
   
   const supabase = useMemo(() => createClient(), [])
 

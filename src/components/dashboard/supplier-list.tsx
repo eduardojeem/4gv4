@@ -110,10 +110,10 @@ export default function SupplierList({
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'createdAt'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
-  const [selectedSupplier, setSelectedSupplier] = useState<SupplierData | null>(null)
-  const [showFilters, setShowFilters] = useState(false)
+  const [_showCreateDialog, setShowCreateDialog] = useState(false)
+  const [_showEditDialog, setShowEditDialog] = useState(false)
+  const [_selectedSupplier, setSelectedSupplier] = useState<SupplierData | null>(null)
+  const [_showFilters, _setShowFilters] = useState(false)
 
   const filteredAndSortedSuppliers = useMemo(() => {
     const filtered = suppliers.filter(supplier => {

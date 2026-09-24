@@ -19,7 +19,7 @@ export default function DebugPage() {
   const testConnection = useCallback(async () => {
     try {
       // Test basic connection
-      const { data, error } = await supabase.from('profiles').select('count').limit(1)
+      const { data: _data, error } = await supabase.from('profiles').select('count').limit(1)
       addLog('🔍 Testing Supabase connection...')
       if (error) {
         addLog(`❌ Connection test failed: ${error.message}`)

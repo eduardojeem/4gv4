@@ -262,11 +262,11 @@ export default function OperationalReports() {
   const [categoryTopCount, setCategoryTopCount] = useState(5)
   const [categoryMetricBy, setCategoryMetricBy] = useState<'sales' | 'quantity'>('sales')
   const [categoryChartType, setCategoryChartType] = useState<'pie' | 'bar'>('pie')
-  const [categoryDateRange, setCategoryDateRange] = useState<{ from: Date; to: Date }>({
+  const [categoryDateRange, _setCategoryDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date()
   })
-  const [categoryMinSales, setCategoryMinSales] = useState<number>(0)
+  const [categoryMinSales, _setCategoryMinSales] = useState<number>(0)
   const [saleItemsAll, setSaleItemsAll] = useState<SaleItemRow[]>([])
   const [totalProfit, setTotalProfit] = useState(0)
   const [profitCoverage, setProfitCoverage] = useState({ coveredItems: 0, totalItems: 0, coveredRevenue: 0 })

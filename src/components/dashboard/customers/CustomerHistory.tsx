@@ -330,7 +330,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail: _onViewDetail,
   // reparaciones: eran un «0 reparaciones» permanente en un negocio sin taller.
   const { effectiveModules } = useSubscriptionStatus()
   const tieneTaller = effectiveModules.includes('repairs')
-  const { user } = useAuth()
+  const { user: _user } = useAuth()
   const [activeTab, setActiveTab] = useState("overview")
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -350,7 +350,7 @@ export function CustomerHistory({ customer, onBack, onViewDetail: _onViewDetail,
 
   // Datos desde hooks con fallback a mock
   const { data: purchasesData } = useCustomerPurchases(customer.id)
-  const { repairs, loading: loadingRepairs, fetchRepairs } = useCustomerRepairs()
+  const { repairs, loading: _loadingRepairs, fetchRepairs } = useCustomerRepairs()
 
   // Fetch repairs when component mounts
   React.useEffect(() => {

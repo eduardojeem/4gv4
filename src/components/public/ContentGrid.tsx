@@ -41,7 +41,7 @@ interface ContentGridProps {
 }
 
 function ContentCard({ item, showStats }: { item: ContentItem; showStats: boolean }) {
-  const [isHovered, setIsHovered] = useState(false)
+  const [_isHovered, setIsHovered] = useState(false)
   
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {

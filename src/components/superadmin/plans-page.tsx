@@ -606,7 +606,7 @@ export function PlansPageContent() {
     },
   ]
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, _setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'popular'>('all')
 
   const filteredPlans = plans.filter((p) => {

@@ -418,7 +418,7 @@ function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
 // Componente principal del módulo de reportes
 export default function ReportsModule({ products = [] }: { products?: any[] }) {
   const [selectedPeriod, setSelectedPeriod] = useState('month')
-  const [dateRange, setDateRange] = useState({
+  const [_dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date())
   })

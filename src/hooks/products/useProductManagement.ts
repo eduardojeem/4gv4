@@ -45,7 +45,7 @@ export function useProductManagement(
 
   // Hooks de manejo de errores
   const { handleProductError } = useProductErrorHandler()
-  const { handleAsyncError } = useErrorHandler()
+  const { handleAsyncError: _handleAsyncError } = useErrorHandler()
 
   // Usar el hook principal de productos
   const {

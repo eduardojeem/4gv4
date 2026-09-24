@@ -217,7 +217,7 @@ function UICustomizationContent() {
   const [customTheme, setCustomTheme] = useState<ThemeConfig>(readCustomTheme)
   const [activeTab, setActiveTab] = useState('themes')
   const [previewMode, setPreviewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
-  const [isDarkMode, setIsDarkMode] = useState(false)
+  const [_isDarkMode, _setIsDarkMode] = useState(false)
   const { setTheme, isDark } = useTheme()
 
   const [colorErrors, setColorErrors] = useState<Record<string, string>>({})

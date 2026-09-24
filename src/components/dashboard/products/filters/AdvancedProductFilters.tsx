@@ -130,7 +130,7 @@ export const AdvancedProductFilters = ({
     activeFiltersCount,
     priceRange,
     stockRange,
-    marginRange,
+    marginRange: _marginRange,
     categories = [],
     suppliers = []
   } = useProductFiltering({

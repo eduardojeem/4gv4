@@ -27,7 +27,7 @@ export function AlertsBanner({
   className
 }: AlertsBannerProps) {
   const [isDismissed, setIsDismissed] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, _setIsExpanded] = useState(false)
 
   // Only show active (unresolved and unread) alerts
   const activeAlerts = alerts.filter(alert => !alert.is_resolved && !alert.read)

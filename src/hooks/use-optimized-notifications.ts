@@ -356,7 +356,7 @@ export function useButtonNotifications(buttonId: string) {
   })
 
   // Integrar manejo de errores
-  const { handleError, handleAsyncError } = useErrorHandler()
+  const { handleError: _handleError, handleAsyncError } = useErrorHandler()
 
   // Throttle state updates para evitar renders excesivos
   const throttledSetState = useThrottle(setButtonState, PERFORMANCE_CONFIG.THROTTLE_DELAYS.RESIZE)

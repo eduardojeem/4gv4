@@ -230,7 +230,7 @@ export class SyncPerformanceMonitor {
     const startTime = performance.now()
     
     try {
-      const { data, error } = await this.supabase
+      const { data: _data, error } = await this.supabase
         .from('products')
         .select('id')
         .limit(1)

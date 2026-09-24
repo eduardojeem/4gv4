@@ -121,7 +121,7 @@ export default function ProductsPage() {
     updateProduct,
     deleteProduct,
     refreshData,
-    exportToCSV,
+    exportToCSV: _exportToCSV,
     exportToPDF,
     setFilters: setServerFilters,
     setSort: setServerSort,
@@ -285,7 +285,7 @@ export default function ProductsPage() {
   // Null: nadie pidio etiquetas. Con contenido: los productos a etiquetar,
   // sean los seleccionados o uno solo desde la vista rapida.
   const [labelsTarget, setLabelsTarget] = useState<LabelDialogProduct[] | null>(null);
-  const [showGuide, setShowGuide] = useState(true);
+  const [_showGuide, _setShowGuide] = useState(true);
 
   const normalizedAlerts = useMemo(() => {
     return alerts
@@ -544,7 +544,7 @@ export default function ProductsPage() {
 
     // Exclude system fields and relations that shouldn't be duplicated
 
-    const { id, created_at, updated_at, category, supplier, ...rest } =
+    const { id: _id, created_at: _created_at, updated_at: _updated_at, category: _category, supplier: _supplier, ...rest } =
       product as any;
 
     const parseDimensions = (value: unknown): Json => {

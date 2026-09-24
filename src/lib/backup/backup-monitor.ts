@@ -301,7 +301,7 @@ class BackupMonitor {
   // Realizar verificaciones de monitoreo
   private async performMonitoringChecks(): Promise<void> {
     try {
-      for (const [ruleId, rule] of this.monitoringRules) {
+      for (const [_ruleId, rule] of this.monitoringRules) {
         if (!rule.enabled) continue
 
         const shouldTrigger = await this.evaluateRule(rule)

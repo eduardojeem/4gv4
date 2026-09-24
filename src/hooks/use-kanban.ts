@@ -15,7 +15,7 @@ export function useKanban(
         cancelado: []
     })
     const [draggedRepairId, setDraggedRepairId] = useState<string | null>(null)
-    const [dragOverTarget, setDragOverTarget] = useState<{ id: string | null, status: RepairStatus } | null>(null)
+    const [_dragOverTarget, setDragOverTarget] = useState<{ id: string | null, status: RepairStatus } | null>(null)
 
     // Initialize Kanban Order
     useEffect(() => {

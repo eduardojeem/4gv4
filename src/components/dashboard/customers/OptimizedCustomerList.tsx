@@ -197,7 +197,7 @@ export const OptimizedCustomerList = memo(({
 
   const {
     virtualItems,
-    totalHeight,
+    totalHeight: _totalHeight,
     scrollToIndex,
     containerProps,
     innerProps

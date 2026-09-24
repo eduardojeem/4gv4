@@ -24,19 +24,19 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
   const {
     attributes,
     products,
-    loading,
+    loading: _loading,
     createAttribute,
     updateAttribute,
     deleteAttribute,
-    addAttributeOption,
+    addAttributeOption: _addAttributeOption,
     createProductVariant,
-    updateProductVariant,
+    updateProductVariant: _updateProductVariant,
     deleteProductVariant
   } = useProductVariants()
 
   const [activeTab, setActiveTab] = useState('attributes')
   const [editingAttribute, setEditingAttribute] = useState<VariantAttribute | null>(null)
-  const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null)
+  const [_editingVariant, setEditingVariant] = useState<ProductVariant | null>(null)
   const [showCreateAttribute, setShowCreateAttribute] = useState(false)
   const [showCreateVariant, setShowCreateVariant] = useState(false)
 

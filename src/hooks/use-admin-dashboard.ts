@@ -166,7 +166,7 @@ export function useAdminDashboard() {
     errorRate: 0,
     responseTime: 0
   })
-  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
+  const [securityLogs, _setSecurityLogs] = useState<SecurityLog[]>([])
   const [settings, setSettings] = useState<SystemSettings>({
     companyName: process.env.NEXT_PUBLIC_COMPANY_NAME || '4G celulares',
     companyEmail: 'info@4gcelulares.com',

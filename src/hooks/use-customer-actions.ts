@@ -43,15 +43,15 @@ async function readApiResponse(response: Response) {
 
 function toCustomerPayload(customerData: Partial<Customer>) {
   const {
-    id,
-    customerCode,
-    registration_date,
-    created_at,
-    last_visit,
-    last_activity,
-    repairs_history,
-    sales_history,
-    activity_timeline,
+    id: _id,
+    customerCode: _customerCode,
+    registration_date: _registration_date,
+    created_at: _created_at,
+    last_visit: _last_visit,
+    last_activity: _last_activity,
+    repairs_history: _repairs_history,
+    sales_history: _sales_history,
+    activity_timeline: _activity_timeline,
     ...payload
   } = customerData
 

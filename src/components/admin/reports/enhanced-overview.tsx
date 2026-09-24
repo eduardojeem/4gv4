@@ -88,8 +88,8 @@ function EnhancedOverviewComponent({ metrics, users: _users, securityLogs: _secu
   const [currentTime, setCurrentTime] = useState(() => new Date())
   const isClient = useHydrated()
   const [salesData, setSalesData] = useState<ChartData[]>([])
-  const [activities, setActivities] = useState<ActivityItem[]>([])
-  const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const [_activities, setActivities] = useState<ActivityItem[]>([])
+  const [_alerts, setAlerts] = useState<AlertItem[]>([])
   const supabase = createClient()
 
   useEffect(() => {

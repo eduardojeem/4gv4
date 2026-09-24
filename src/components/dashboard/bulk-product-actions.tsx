@@ -69,9 +69,9 @@ export function BulkProductActions({
 }: BulkProductActionsProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
-  const [isPriceUpdateDialogOpen, setIsPriceUpdateDialogOpen] = useState(false)
-  const [isStockUpdateDialogOpen, setIsStockUpdateDialogOpen] = useState(false)
-  const [isCategoryUpdateDialogOpen, setIsCategoryUpdateDialogOpen] = useState(false)
+  const [_isPriceUpdateDialogOpen, _setIsPriceUpdateDialogOpen] = useState(false)
+  const [_isStockUpdateDialogOpen, _setIsStockUpdateDialogOpen] = useState(false)
+  const [_isCategoryUpdateDialogOpen, _setIsCategoryUpdateDialogOpen] = useState(false)
 
   // Estados para edición masiva
   const [bulkEditData, setBulkEditData] = useState({

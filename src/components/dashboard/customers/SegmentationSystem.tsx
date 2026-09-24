@@ -82,7 +82,7 @@ export function SegmentationSystem({
   })
 
   const [activeTab, setActiveTab] = useState('segments')
-  const [newSegment, setNewSegment] = useState<Partial<Segment>>({
+  const [_newSegment, _setNewSegment] = useState<Partial<Segment>>({
     name: '',
     description: '',
     color: SEGMENT_COLORS[0],

@@ -1064,7 +1064,7 @@ class BackupManager {
   }
 
   private async scheduleBackups(): Promise<void> {
-    for (const [id, config] of this.configurations) {
+    for (const [_id, config] of this.configurations) {
       if (config.active && config.schedule.enabled) {
         this.scheduleBackup(config)
       }

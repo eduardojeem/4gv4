@@ -49,15 +49,15 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
     generateReport,
     refreshReport,
     setMonitoring,
-    getStatus
+    getStatus: _getStatus
   } = usePerformanceMonitor()
 
   const {
     alerts,
     criticalAlerts,
-    warningAlerts,
+    warningAlerts: _warningAlerts,
     hasCriticalAlerts,
-    hasWarnings,
+    hasWarnings: _hasWarnings,
     clearAlerts
   } = usePerformanceAlerts()
 

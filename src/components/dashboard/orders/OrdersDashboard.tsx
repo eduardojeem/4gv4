@@ -1435,7 +1435,7 @@ export function OrdersDashboard() {
   const [detailOrder, setDetailOrder] = useState<CustomerOrder | null>(null)
   const [collectionOrder, setCollectionOrder] = useState<CustomerOrder | null>(null)
   const [deliveryOrder, setDeliveryOrder] = useState<CustomerOrder | null>(null)
-  const [showGuide, setShowGuide] = useState(true)
+  const [_showGuide, _setShowGuide] = useState(true)
 
   // Derived metrics (org-wide values come from the API `stats`/`meta`, not the page)
   const needsAction = (stats['PENDING'] ?? 0) + (stats['READY'] ?? 0)

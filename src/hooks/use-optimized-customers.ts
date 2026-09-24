@@ -26,7 +26,7 @@ export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}
     segment,
     status = 'all',
     prefetchRelated = true,
-    enableRealtime = false
+    enableRealtime: _enableRealtime = false
   } = options
 
   // Generar clave de cache dinámica

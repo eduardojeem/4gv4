@@ -114,7 +114,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
   const [saveSearchName, setSaveSearchName] = useState('')
   const [saveSearchCategory, setSaveSearchCategory] = useState('')
   const [searchHistory, setSearchHistory] = useState<string[]>([])
-  const [quickFilters, setQuickFilters] = useState<string[]>([])
+  const [_quickFilters, _setQuickFilters] = useState<string[]>([])
 
   // Sin listas de respaldo. Cuando no llegaban categorias o proveedores —porque
   // la empresa no cargo ninguno, o porque la peticion fallo en silencio— este

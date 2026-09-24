@@ -234,8 +234,8 @@ export const VirtualizedProductGrid = memo(({
 
   const {
     virtualItems,
-    totalHeight,
-    scrollToIndex,
+    totalHeight: _totalHeight,
+    scrollToIndex: _scrollToIndex,
     containerProps,
     innerProps
   } = useVirtualScroll({

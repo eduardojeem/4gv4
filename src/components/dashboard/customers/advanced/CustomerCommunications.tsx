@@ -75,7 +75,7 @@ interface CommunicationHistory {
 
 export function CustomerCommunications({ customers }: CustomerCommunicationsProps) {
   const [activeTab, setActiveTab] = useState('campaigns')
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [_selectedTemplate, _setSelectedTemplate] = useState<string | null>(null)
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')

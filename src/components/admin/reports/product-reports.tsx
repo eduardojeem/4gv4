@@ -63,7 +63,7 @@ export default function ProductReports() {
   // que sí respeta la sucursal seleccionada en todas sus consultas.
   const { selectedBranchId } = useBranch()
   const { organization } = useActiveOrganization()
-  const [loading, setLoading] = useState(true)
+  const [_loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 

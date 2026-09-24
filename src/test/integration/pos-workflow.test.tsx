@@ -330,7 +330,7 @@ describe('POS Workflow Integration', () => {
       const mockProcessPayment = vi.fn().mockRejectedValue(new Error('Payment failed'))
 
       const MockPOSWithError = () => {
-        const [cart, setCart] = React.useState([
+        const [_cart, _setCart] = React.useState([
           {
             id: '1',
             product: createMockProduct({ id: '1', price: 100 }),

@@ -54,7 +54,7 @@ export function useSegmentationUnified(
   customers: Customer[], 
   options: UseSegmentationOptions = {}
 ) {
-  const { enableAI = true, autoUpdate = true, maxSegments = 20 } = options
+  const { enableAI = true, autoUpdate: _autoUpdate = true, maxSegments = 20 } = options
 
   // Estado de segmentos (persistidos en customer_segments vía /api/customer-segments)
   const [segments, setSegments] = useState<Segment[]>([])

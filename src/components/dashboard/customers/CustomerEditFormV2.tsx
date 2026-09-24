@@ -144,7 +144,7 @@ export function CustomerEditFormV2({
     }
   })
 
-  const { watch, setValue, getValues, reset, handleSubmit } = form
+  const { watch, setValue, getValues: _getValues, reset, handleSubmit } = form
 
   // Aviso anticipado de que el telefono, el correo o el RUC ya estan cargados en
   // otro cliente. Quien decide es el servidor, que rechaza el guardado con 409.

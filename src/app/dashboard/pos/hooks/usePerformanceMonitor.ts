@@ -225,7 +225,7 @@ export const useRenderTimeMonitor = (componentName: string) => {
 
 // Hook para medir performance de operaciones específicas
 export const useOperationPerformance = () => {
-  const { measureOperation, isMonitoring } = usePerformanceMonitor()
+  const { measureOperation: _measureOperation, isMonitoring } = usePerformanceMonitor()
 
   const measureAsync = useCallback(async <T>(
     operationName: string,

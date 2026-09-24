@@ -321,7 +321,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 { data: repairsDeliveredData, error: repairsDeliveredError },
                 { data: repairsReadyData },
                 { count: repairsActiveCount },
-                { data: afterSalesData, error: afterSalesError }
+                { data: afterSalesData, error: _afterSalesError }
             ] = await Promise.all([
                 salesPromise,
                 creditsPromise,

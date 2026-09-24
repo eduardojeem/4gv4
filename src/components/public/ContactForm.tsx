@@ -123,7 +123,7 @@ export function ContactForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty, isValid }
+    formState: { errors, isDirty: _isDirty, isValid }
   } = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     mode: 'onChange'

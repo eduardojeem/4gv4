@@ -196,7 +196,7 @@ export function AfterSalesDashboard() {
         open: number; approved: number; completed: number; rejected: number
         refunds: number; quarantined: number
     } | null>(null)
-    const [totalCases, setTotalCases] = useState(0)
+    const [_totalCases, setTotalCases] = useState(0)
     const [confirming, setConfirming] = useState<{ item: AfterSalesCase; status: CaseStatus; label: string } | null>(null)
     const [selectedCase, setSelectedCase] = useState<AfterSalesCase | null>(null)
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)

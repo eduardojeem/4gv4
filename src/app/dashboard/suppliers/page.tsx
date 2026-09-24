@@ -96,7 +96,7 @@ export default function SuppliersPage() {
   const { user, isAdmin, loading: authLoading } = useAuth()
   const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
 
-  const { suppliers, loading, stats, statsLoading, createSupplier, updateSupplier, deleteSupplier, bulkDeleteSuppliers, bulkUpdateStatus, refresh, pagination, setPage, setPageSize } = useSuppliers()
+  const { suppliers, loading, stats, statsLoading, createSupplier, updateSupplier, deleteSupplier, bulkDeleteSuppliers, bulkUpdateStatus, refresh, pagination, setPage, setPageSize: _setPageSize } = useSuppliers()
   const { loading: sysLoading, suppliers: availableIntegrations, syncAllSuppliers } = useSupplierSystem()
 
   // Command Palette

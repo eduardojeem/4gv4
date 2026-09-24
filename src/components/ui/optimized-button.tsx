@@ -80,18 +80,18 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     ariaDescription,
     ...props
   }, ref) => {
-    const [buttonState, setButtonState] = useState<ButtonState>('idle')
+    const [buttonState, _setButtonState] = useState<ButtonState>('idle')
     const [isClicked, setIsClicked] = useState(false)
 
     const {
-      buttonState: hookButtonState,
+      buttonState: _hookButtonState,
       executeAction,
       quickNotify,
-      clearButtonCache,
-      getPerformanceStats,
+      clearButtonCache: _clearButtonCache,
+      getPerformanceStats: _getPerformanceStats,
       isLoading: hookIsLoading,
-      status,
-      message
+      status: _status,
+      message: _message
     } = useButtonNotifications(buttonId || 'optimized-button')
 
     // Determinar el icono actual

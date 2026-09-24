@@ -25,7 +25,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
     const {
         initialFilters = {},
         pageSize = 50,
-        enableCache = true,
+        enableCache: _enableCache = true,
         autoRefresh = false
     } = options
 

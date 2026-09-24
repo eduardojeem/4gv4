@@ -230,7 +230,7 @@ export function RepairDetailDialog({
     relationship?: string | null
     is_active?: boolean
   }>>([])
-  const [loadingAuthorized, setLoadingAuthorized] = useState(false)
+  const [_loadingAuthorized, setLoadingAuthorized] = useState(false)
 
   // Cargar personas autorizadas vinculadas al cliente de la orden
   React.useEffect(() => {

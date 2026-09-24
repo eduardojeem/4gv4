@@ -160,12 +160,12 @@ function POSPageContent() {
   // Monitoreo de performance y errores
   const {
     measureCartOperation,
-    measureProductSearch,
+    measureProductSearch: _measureProductSearch,
     measureSaleProcessing,
-    performanceScore
+    performanceScore: _performanceScore
   } = usePerformanceMonitor()
 
-  const { withErrorHandling } = useErrorHandler()
+  const { withErrorHandling: _withErrorHandling } = useErrorHandler()
 
   // Monitoreo de tiempo de renderizado
   useRenderTimeMonitor('POSPage')
@@ -179,41 +179,41 @@ function POSPageContent() {
     setSelectedCustomer, 
     activeCustomer,
     customers, 
-    setNewCustomerOpen
+    setNewCustomerOpen: _setNewCustomerOpen
   } = usePOSCustomer()
 
   // Use centralized checkout state
   const {
     isCheckoutOpen,
     setIsCheckoutOpen,
-    paymentStatus,
+    paymentStatus: _paymentStatus,
     setPaymentStatus,
-    paymentError,
+    paymentError: _paymentError,
     setPaymentError,
     paymentMethod,
     setPaymentMethod,
-    isMixedPayment,
-    setIsMixedPayment,
+    isMixedPayment: _isMixedPayment,
+    setIsMixedPayment: _setIsMixedPayment,
     cashReceived,
-    setCashReceived,
+    setCashReceived: _setCashReceived,
     cardNumber,
-    setCardNumber,
+    setCardNumber: _setCardNumber,
     transferReference,
-    setTransferReference,
+    setTransferReference: _setTransferReference,
     electronicProvider,
     electronicInstitution,
     electronicChannel,
     terminalId,
-    splitAmount,
-    setSplitAmount,
+    splitAmount: _splitAmount,
+    setSplitAmount: _setSplitAmount,
     notes,
-    setNotes,
+    setNotes: _setNotes,
     creditTerms,
     applyProductCreditSuggestion,
     paymentSplit,
-    setPaymentSplit,
-    addPaymentSplit,
-    removePaymentSplit,
+    setPaymentSplit: _setPaymentSplit,
+    addPaymentSplit: _addPaymentSplit,
+    removePaymentSplit: _removePaymentSplit,
     resetCheckoutState,
     storeCreditApplied,
   } = useCheckout()
@@ -229,8 +229,8 @@ function POSPageContent() {
   const {
     customerRepairs,
     setCustomerRepairs,
-    manualRepairs,
-    setManualRepairs,
+    manualRepairs: _manualRepairs,
+    setManualRepairs: _setManualRepairs,
     selectedRepairIds,
     setSelectedRepairIds,
     selectedRepairs,
@@ -270,10 +270,10 @@ function POSPageContent() {
 
   // ── Procesador de ventas (extraído a usePOSSaleProcessor) ─────────────────
   const {
-    paymentAttempts,
-    addPaymentAttempt,
+    paymentAttempts: _paymentAttempts,
+    addPaymentAttempt: _addPaymentAttempt,
     clearPaymentAttempts,
-    normalizePaymentError,
+    normalizePaymentError: _normalizePaymentError,
     processSale: processSaleBase,
     processMixedPayment: processMixedPaymentBase,
   } = usePOSSaleProcessor()
@@ -285,7 +285,7 @@ function POSPageContent() {
       setPaymentError('')
     }
   }, [isCheckoutOpen, setPaymentError, setPaymentStatus])
-  const [showPosGuide, setShowPosGuide] = useState(true)
+  const [_showPosGuide, setShowPosGuide] = useState(true)
 
   useEffect(() => {
     try {
@@ -329,7 +329,7 @@ function POSPageContent() {
     entregado: 'Entregado',
   }
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, _setSidebarCollapsed] = useState(false)
   const [showCartDialog, setShowCartDialog] = useState(false)
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
@@ -359,7 +359,7 @@ function POSPageContent() {
 
   // Hooks para variantes y promociones
   const { getProductWithVariants, convertVariantToCartItem } = useProductVariants()
-  const { applyPromotionByCode, calculateCartSummary } = usePromotionEngine()
+  const { applyPromotionByCode, calculateCartSummary: _calculateCartSummary } = usePromotionEngine()
   const { allPromotions } = usePromotions()
 
   // Descuento automático para clientes VIP
@@ -473,9 +473,9 @@ function POSPageContent() {
   // Movement Dialog State
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
   const [movementType, setMovementType] = useState<'in' | 'out'>('out')
-  const [movementAmount, setMovementAmount] = useState('')
-  const [movementNote, setMovementNote] = useState('')
-  const [movementSaving, setMovementSaving] = useState(false)
+  const [_movementAmount, setMovementAmount] = useState('')
+  const [_movementNote, setMovementNote] = useState('')
+  const [_movementSaving, _setMovementSaving] = useState(false)
 
   // Estados para múltiples métodos de pago
   // Eliminados estados locales que ahora están en CheckoutContext
@@ -483,7 +483,7 @@ function POSPageContent() {
   // Estados para sistema de tickets
   const [showReceiptModal, setShowReceiptModal] = useState(false)
   const [currentReceipt, setCurrentReceipt] = useState<any>(null)
-  const [lastSaleData, setLastSaleData] = useState<any>(null)
+  const [_lastSaleData, setLastSaleData] = useState<any>(null)
 
   // Estados para sistema de inventario usando el hook de Supabase
   const {
@@ -503,7 +503,7 @@ function POSPageContent() {
     discount: generalDiscount,
     setDiscount: setGeneralDiscount,
     cartTotal,
-    cartSubtotal,
+    cartSubtotal: _cartSubtotal,
     cartTax,
     cartItemCount,
     subtotalApplied,
@@ -518,8 +518,8 @@ function POSPageContent() {
     updateItemDiscount,
     updateItemPromoCode,
     clearCart,
-    replaceCart,
-    checkAvailability: checkCartAvailability
+    replaceCart: _replaceCart,
+    checkAvailability: _checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
     taxRate,
     pricesIncludeTax: config.pricesIncludeTax,
@@ -547,10 +547,10 @@ function POSPageContent() {
   const posSearch = usePOSSearch({ products: inventoryProducts as Product[] })
   const {
     catalogView, setCatalogView, catalogCounts, otherViewMatches,
-    searchTerm, setSearchTerm, handleSearchChange, handleSearchKeyDown,
-    debouncedSearchTerm,
+    searchTerm, setSearchTerm: _setSearchTerm, handleSearchChange, handleSearchKeyDown,
+    debouncedSearchTerm: _debouncedSearchTerm,
     showSuggestions, setShowSuggestions, searchSuggestions,
-    selectedSuggestionIndex, setSelectedSuggestionIndex, selectSuggestion, recentSearches,
+    selectedSuggestionIndex, setSelectedSuggestionIndex, selectSuggestion, recentSearches: _recentSearches,
     selectedCategory, setSelectedCategory,
     showFeatured, setShowFeatured,
     sortBy, setSortBy, sortOrder, setSortOrder,
@@ -561,10 +561,10 @@ function POSPageContent() {
     creditSort, setCreditSort,
     activeFiltersCount, handleResetFilters,
     currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages,
-    categories, priceRangeLimits, financedProductsCount,
+    categories, priceRangeLimits: _priceRangeLimits, financedProductsCount,
     filteredProducts, paginatedProducts,
-    viewportWidth, viewportHeight, virtualizationThreshold,
-    smartSearchResults, isSmartSearching,
+    viewportWidth: _viewportWidth, viewportHeight, virtualizationThreshold,
+    smartSearchResults: _smartSearchResults, isSmartSearching: _isSmartSearching,
   } = posSearch
 
   // Mantener compatibilidad con el inventoryManager existente
