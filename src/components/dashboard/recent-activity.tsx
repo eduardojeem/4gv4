@@ -1,12 +1,23 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { Badge } from '@/components/ui/badge'
 import { Activity, ShoppingCart, Wrench, Users, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Tipos locales
+
+interface FeedItem {
+  id: string
+  type: 'sale' | 'repair' | 'customer'
+  amount?: number | string | null
+  info_1?: string | null
+  info_2?: string | null
+  status?: string | null
+  created_at: string
+}
 
 interface ActivityItem {
   id: string
@@ -56,7 +67,7 @@ export function RecentActivity() {
             return
         }
 
-        const mappedItems: ActivityItem[] = (data || []).map((item: any) => {
+        const mappedItems: ActivityItem[] = ((data as FeedItem[] | null) || []).map((item) => {
             let description = ''
             let icon = <Activity className="h-4 w-4" />
             const formattedAmount = item.amount ? formatCurrency(Number(item.amount)) : undefined
@@ -75,7 +86,7 @@ export function RecentActivity() {
 
             return {
                 id: `${item.type}-${item.id}`,
-                type: item.type as any,
+                type: item.type,
                 description,
                 amount: formattedAmount,
                 timestamp: item.created_at,
@@ -101,7 +112,7 @@ export function RecentActivity() {
     load()
 
     // Suscripción a cambios en tiempo real
-    let channel: any = null
+    let channel: RealtimeChannel | null = null
     const setupRealtime = async () => {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()

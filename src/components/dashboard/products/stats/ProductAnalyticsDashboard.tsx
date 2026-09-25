@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ElementType } from 'react'
+import type { ProductAlert } from '@/types/products'
 import { motion } from '../../../ui/motion'
 import {
   TrendingUp,
@@ -49,7 +50,7 @@ const MetricCard = ({
   title: string
   value: string | number
   change?: number
-  icon: any
+  icon: ElementType
   trend?: 'up' | 'down' | 'neutral'
   loading?: boolean
 }) => {
@@ -129,7 +130,14 @@ const MetricCard = ({
   )
 }
 
-const CategoryChart = ({ data, loading }: { data: any[], loading: boolean }) => {
+interface CategoryChartItem {
+  id?: string
+  name?: string
+  productCount?: number
+  count?: number
+}
+
+const CategoryChart = ({ data, loading }: { data: CategoryChartItem[], loading: boolean }) => {
   if (loading) {
     return (
       <div className="space-y-4">
@@ -181,7 +189,7 @@ const CategoryChart = ({ data, loading }: { data: any[], loading: boolean }) => 
   )
 }
 
-const InventoryAlertsPanel = ({ alerts, loading }: { alerts: any[], loading: boolean }) => {
+const InventoryAlertsPanel = ({ alerts, loading }: { alerts: Array<ProductAlert | { id: string; severity?: string; product_name?: string; message?: string }>, loading: boolean }) => {
   if (loading) {
     return (
       <div className="space-y-3">

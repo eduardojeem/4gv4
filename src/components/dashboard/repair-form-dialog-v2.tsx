@@ -1773,11 +1773,11 @@ export function RepairFormDialogV2({
                               <div className="space-y-1">
                                 <span className="text-[11px] font-medium text-muted-foreground">Enciende:</span>
                                 <div className="flex gap-1">
-                                  {[
+                                  {([
                                     { value: 'yes', label: '✅ Sí' },
                                     { value: 'no', label: '❌ No' },
                                     { value: 'unknown', label: '⚠️ Apagado' }
-                                  ].map((opt) => {
+                                  ] as const).map((opt) => {
                                     const active = (checklists[index]?.powersOn || 'yes') === opt.value
                                     return (
                                       <button
@@ -1785,7 +1785,7 @@ export function RepairFormDialogV2({
                                         type="button"
                                         onClick={() => setChecklists(prev => ({
                                           ...prev,
-                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), powersOn: opt.value as any }
+                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), powersOn: opt.value }
                                         }))}
                                         className={cn(
                                           "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
@@ -1803,11 +1803,11 @@ export function RepairFormDialogV2({
                               <div className="space-y-1">
                                 <span className="text-[11px] font-medium text-muted-foreground">Pantalla:</span>
                                 <div className="flex gap-1">
-                                  {[
+                                  {([
                                     { value: 'intact', label: '✨ Intacta' },
                                     { value: 'scratched', label: '⚠️ Rayada' },
                                     { value: 'broken', label: '💥 Rota' }
-                                  ].map((opt) => {
+                                  ] as const).map((opt) => {
                                     const active = (checklists[index]?.screen || 'intact') === opt.value
                                     return (
                                       <button
@@ -1815,7 +1815,7 @@ export function RepairFormDialogV2({
                                         type="button"
                                         onClick={() => setChecklists(prev => ({
                                           ...prev,
-                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), screen: opt.value as any }
+                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), screen: opt.value }
                                         }))}
                                         className={cn(
                                           "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
@@ -1833,11 +1833,11 @@ export function RepairFormDialogV2({
                               <div className="space-y-1">
                                 <span className="text-[11px] font-medium text-muted-foreground">Carcasa / Tapa:</span>
                                 <div className="flex gap-1">
-                                  {[
+                                  {([
                                     { value: 'good', label: '✨ Impecable' },
                                     { value: 'scratched', label: '🔄 Desgaste' },
                                     { value: 'dented_broken', label: '💥 Golpeada' }
-                                  ].map((opt) => {
+                                  ] as const).map((opt) => {
                                     const active = (checklists[index]?.body || 'good') === opt.value
                                     return (
                                       <button
@@ -1845,7 +1845,7 @@ export function RepairFormDialogV2({
                                         type="button"
                                         onClick={() => setChecklists(prev => ({
                                           ...prev,
-                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), body: opt.value as any }
+                                          [index]: { ...(prev[index] || { powersOn: 'yes', screen: 'intact', body: 'good', simCard: 'no_sim', wet: 'no' }), body: opt.value }
                                         }))}
                                         className={cn(
                                           "px-2 py-0.5 rounded text-[11px] border font-medium transition-colors",
