@@ -6,10 +6,10 @@ import {
   Clock, FileText
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import { normalizeCashMovementType } from '../types'
+import { normalizeCashMovementType, type CashMovement } from '../types'
 
 interface CashMovementTimelineProps {
-  movements: any[]
+  movements: CashMovement[]
 }
 
 export function CashMovementTimeline({ movements }: CashMovementTimelineProps) {
@@ -63,7 +63,7 @@ export function CashMovementTimeline({ movements }: CashMovementTimelineProps) {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   <span>
-                    {new Date((movement as any).timestamp || (movement as any).created_at).toLocaleTimeString()}
+                    {new Date(movement.timestamp || movement.created_at || '').toLocaleTimeString()}
                   </span>
                   {(movement.note || movement.reason) && (
                     <>

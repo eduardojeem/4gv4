@@ -36,6 +36,7 @@ export interface Customer {
   total_repairs: number
   registration_date: string
   created_at?: string  // Agregado para compatibilidad con metrics-service
+  updated_at?: string
   last_visit: string
   last_activity: string
   address: string

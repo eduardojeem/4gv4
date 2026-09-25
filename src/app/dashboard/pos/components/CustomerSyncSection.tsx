@@ -1,8 +1,26 @@
 import React, { useEffect, useRef } from 'react'
 import { useCustomers } from '@/contexts/CustomerContext'
+import type { Customer } from '@/hooks/use-customer-state'
+
+export interface SyncedPosCustomer {
+  id: string
+  name: string
+  email: string
+  phone: string
+  type: string
+  address: string
+  city: string
+  loyalty_points: number
+  total_purchases: number
+  total_repairs: number
+  current_balance: number
+  credit_limit: number
+  last_visit: string | null
+  updated_at?: string
+}
 
 interface CustomerSyncSectionProps {
-  onSync: (rows: any[], fromSupabase: boolean) => void
+  onSync: (rows: SyncedPosCustomer[], fromSupabase: boolean) => void
   onCount: (n: number) => void
 }
 
@@ -11,7 +29,7 @@ export const CustomerSyncSection: React.FC<CustomerSyncSectionProps> = ({ onSync
   const lastDigestRef = useRef<string>('')
 
   useEffect(() => {
-    const mapped = (customers || []).map((c: any) => ({
+    const mapped: SyncedPosCustomer[] = (customers || []).map((c: Customer) => ({
       id: c.id,
       name: c.name || '',
       email: c.email || '',
@@ -28,7 +46,7 @@ export const CustomerSyncSection: React.FC<CustomerSyncSectionProps> = ({ onSync
       updated_at: c.updated_at || c.last_activity
     }))
     
-    const digest = mapped.map((m: any) => m.id).join('|')
+    const digest = mapped.map((m) => m.id).join('|')
     
     if (digest !== lastDigestRef.current) {
       lastDigestRef.current = digest
