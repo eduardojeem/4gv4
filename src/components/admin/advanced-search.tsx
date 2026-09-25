@@ -228,15 +228,15 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
     return filters.filter(filter => {
       switch (filter.type) {
         case 'text':
-          return filter.value && filter.value.trim() !== ''
+          return typeof filter.value === 'string' && filter.value.trim() !== ''
         case 'select':
-          return filter.value && filter.value !== ''
+          return typeof filter.value === 'string' && filter.value !== ''
         case 'multiselect':
           return Array.isArray(filter.value) && filter.value.length > 0
         case 'range':
           return Array.isArray(filter.value) && (filter.value[0] !== filter.min || filter.value[1] !== filter.max)
         case 'date':
-          return filter.value && filter.value !== ''
+          return typeof filter.value === 'string' && filter.value !== ''
         case 'checkbox':
           return filter.value === true
         default:
@@ -250,8 +250,9 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
     onSearch(activeFilters)
     
     // Agregar a historial
-    const searchTerm = filters.find(f => f.id === 'search')?.value
-    if (searchTerm && searchTerm.trim() !== '') {
+    const searchFilter = filters.find(f => f.id === 'search')
+    const searchTerm = typeof searchFilter?.value === 'string' ? searchFilter.value : ''
+    if (searchTerm.trim() !== '') {
       setSearchHistory(prev => {
         const newHistory = [searchTerm, ...prev.filter(term => term !== searchTerm)]
         return newHistory.slice(0, 10) // Mantener solo los últimos 10
@@ -311,12 +312,12 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
         return option?.label || 'Sin selección'
       case 'multiselect':
         if (!Array.isArray(filter.value) || filter.value.length === 0) return 'Sin selección'
-        const selectedOptions = filter.options?.filter(o => filter.value.includes(o.value))
+        const selectedOptions = filter.options?.filter(o => (filter.value as string[]).includes(o.value))
         return selectedOptions?.map(o => o.label).join(', ') || 'Sin selección'
       case 'range':
         return Array.isArray(filter.value) ? `${filter.value[0]} - ${filter.value[1]}` : 'Sin rango'
       case 'date':
-        return filter.value || 'Sin fecha'
+        return (typeof filter.value === 'string' && filter.value) || 'Sin fecha'
       case 'checkbox':
         return filter.value ? 'Sí' : 'No'
       default:
@@ -389,8 +390,8 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
               className="w-full"
             />
             <div className="flex justify-between text-sm tabular-nums text-gray-600 dark:text-gray-400">
-              <span>{formatRangeBound(filter, Array.isArray(filter.value) ? filter.value[0] : filter.min)}</span>
-              <span>{formatRangeBound(filter, Array.isArray(filter.value) ? filter.value[1] : filter.max)}</span>
+              <span>{formatRangeBound(filter, Array.isArray(filter.value) ? Number(filter.value[0]) : filter.min)}</span>
+              <span>{formatRangeBound(filter, Array.isArray(filter.value) ? Number(filter.value[1]) : filter.max)}</span>
             </div>
           </div>
         )
