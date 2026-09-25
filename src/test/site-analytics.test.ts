@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifySitePage, parseSiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
+import { classifySitePage, normalizeSearchTerm, parseSiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
 import { getCountryFromHeaders, getDeviceFromUserAgent, isBotUserAgent } from '@/lib/site-analytics/server'
 
 describe('classifySitePage', () => {
@@ -43,6 +43,20 @@ describe('classifySitePage', () => {
     expect(classifySitePage('/api/public/analytics/track')).toBeNull()
     expect(classifySitePage('/marketplace/otra-cosa')).toBeNull()
     expect(classifySitePage('/Mi_Tienda/inicio')).toBeNull()
+  })
+})
+
+describe('normalizeSearchTerm', () => {
+  it('normaliza mayúsculas y espacios', () => {
+    expect(normalizeSearchTerm('  Samsung   A55 ')).toBe('samsung a55')
+  })
+
+  it('descarta términos muy cortos o con datos personales', () => {
+    expect(normalizeSearchTerm('a')).toBeNull()
+    expect(normalizeSearchTerm('cliente@correo.com')).toBeNull()
+    expect(normalizeSearchTerm('0981-123-456')).toBeNull()
+    expect(normalizeSearchTerm('4.567.890')).toBeNull()
+    expect(normalizeSearchTerm('iphone 15 pro 256gb')).toBe('iphone 15 pro 256gb')
   })
 })
 

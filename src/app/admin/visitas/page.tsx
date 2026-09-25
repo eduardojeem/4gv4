@@ -15,6 +15,9 @@ export default function WebsiteVisitsPage() {
               Cuántas personas visitan tu tienda online, qué páginas y productos miran, desde dónde llegan y
               cuántas terminan escribiéndote por WhatsApp o haciendo un pedido.
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              No se cuentan las visitas de tu equipo mientras tengan la sesión iniciada.
+            </p>
           </div>
         </div>
       </section>

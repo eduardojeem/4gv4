@@ -13,14 +13,19 @@ import {
   Loader2,
   MessageCircle,
   MousePointerClick,
+  Percent,
   Phone,
+  Receipt,
   RefreshCw,
+  Search,
+  SearchX,
   ShoppingBag,
   ShoppingCart,
   Smartphone,
   Tablet,
   Timer,
   Users,
+  Wallet,
   X,
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -28,6 +33,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import {
   DEFAULT_SITE_ANALYTICS_RANGE_DAYS,
   SITE_ANALYTICS_RANGE_DAYS,
@@ -442,6 +448,54 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
             </div>
           </SectionCard>
 
+          {/* Ventas */}
+          <SectionCard
+            title="Ventas desde la web"
+            description="Pedidos enviados desde el carrito del sitio. El monto se toma del pedido registrado."
+            icon={Wallet}
+          >
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                {
+                  label: 'Pedidos',
+                  icon: ShoppingBag,
+                  value: formatNumber(summary.sales.orders),
+                  trend: percentChange(summary.sales.orders, summary.previous.orders),
+                },
+                {
+                  label: 'Ingresos',
+                  icon: Wallet,
+                  value: formatCurrency(summary.sales.revenue),
+                  trend: percentChange(summary.sales.revenue, summary.previous.revenue),
+                },
+                { label: 'Ticket promedio', icon: Receipt, value: formatCurrency(summary.sales.average_order_value) },
+                {
+                  label: 'Conversión',
+                  icon: Percent,
+                  value: `${Number(summary.sales.conversion_rate).toLocaleString('es-PY', { maximumFractionDigits: 2 })}%`,
+                  hint: 'Sesiones que terminaron en pedido',
+                },
+              ].map(({ label, icon: Icon, value, trend, hint }) => (
+                <div key={label} className="min-w-0 rounded-lg border p-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                    <p className="text-xl font-bold tabular-nums">{value}</p>
+                    {trend != null && (
+                      <span className={cn('text-xs font-semibold', trend >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                        {trend > 0 ? '+' : ''}
+                        {trend}%
+                      </span>
+                    )}
+                  </div>
+                  {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
           {/* Interacciones + embudo */}
           <div className="grid gap-4 lg:grid-cols-2">
             <SectionCard title="Interacciones" description="Acciones de los visitantes en el sitio" icon={MousePointerClick}>
@@ -529,13 +583,22 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
 
           {/* Origen del tráfico */}
           <div className="grid gap-4 lg:grid-cols-3">
-            <SectionCard title="Fuentes de tráfico" description="Por sesión" icon={Globe}>
+            <SectionCard title="Fuentes de tráfico" description="Sesiones, pedidos e ingresos por origen" icon={Globe}>
               <BarList
                 emptyText="Sin datos"
                 items={summary.sources.map((source) => ({
                   key: source.source,
                   value: source.sessions,
-                  label: source.source === 'directo' ? 'Directo / sin referencia' : source.source,
+                  label: (
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">{source.source === 'directo' ? 'Directo / sin referencia' : source.source}</span>
+                      {source.orders > 0 && (
+                        <span className="truncate text-[11px] text-emerald-700 dark:text-emerald-400">
+                          {formatNumber(source.orders)} {source.orders === 1 ? 'pedido' : 'pedidos'} · {formatCurrency(source.revenue)}
+                        </span>
+                      )}
+                    </span>
+                  ),
                 }))}
               />
             </SectionCard>
@@ -568,6 +631,48 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
                   key: country.country,
                   value: country.visitors,
                   label: countryName(country.country),
+                }))}
+              />
+            </SectionCard>
+          </div>
+
+          {/* Búsquedas */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SectionCard
+              title="Lo más buscado"
+              description={`${formatNumber(summary.searches.total)} búsquedas · ${share(summary.searches.without_results, summary.searches.total)}% sin resultados`}
+              icon={Search}
+            >
+              <BarList
+                emptyText="Sin búsquedas en este período"
+                items={summary.searches.top_terms.map((term) => ({
+                  key: term.term,
+                  value: term.searches,
+                  label: (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{term.term}</span>
+                      {Number(term.avg_results) === 0 && (
+                        <Badge variant="outline" className="shrink-0 border-amber-300 px-1.5 py-0 text-[10px] text-amber-700 dark:border-amber-800 dark:text-amber-400">
+                          sin resultados
+                        </Badge>
+                      )}
+                    </span>
+                  ),
+                }))}
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Búsquedas sin resultados"
+              description="Productos que te piden y no encontraron: oportunidades de stock"
+              icon={SearchX}
+            >
+              <BarList
+                emptyText="Todas las búsquedas encontraron resultados"
+                items={summary.searches.without_results_terms.map((term) => ({
+                  key: term.term,
+                  value: term.searches,
+                  label: term.term,
                 }))}
               />
             </SectionCard>
@@ -620,7 +725,9 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
                         <th className="py-2 pr-3 font-semibold">Organización</th>
                         <th className="py-2 pr-3 text-right font-semibold">Visitas</th>
                         <th className="py-2 pr-3 text-right font-semibold">Visitantes</th>
-                        <th className="py-2 text-right font-semibold">En marketplace</th>
+                        <th className="py-2 pr-3 text-right font-semibold">En marketplace</th>
+                        <th className="py-2 pr-3 text-right font-semibold">Pedidos</th>
+                        <th className="py-2 text-right font-semibold">Ingresos</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -636,7 +743,9 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(org.page_views)}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(org.visitors)}</td>
-                          <td className="py-2 text-right tabular-nums">{formatNumber(org.marketplace_views)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(org.marketplace_views)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(org.orders)}</td>
+                          <td className="whitespace-nowrap py-2 text-right tabular-nums">{formatCurrency(org.revenue)}</td>
                         </tr>
                       ))}
                     </tbody>

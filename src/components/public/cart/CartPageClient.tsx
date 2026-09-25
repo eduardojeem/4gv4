@@ -583,7 +583,7 @@ export function CartPageClient({
         }
       }
 
-      trackSiteEvent('order_placed')
+      trackSiteEvent('order_placed', { entityId: typeof payload.data?.id === 'string' ? payload.data.id : null })
       clear()
       setCreatedOrderNumber(payload.data.order_number as string)
       checkoutAttemptId.current = crypto.randomUUID()

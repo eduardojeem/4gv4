@@ -30,6 +30,7 @@ import {
 } from './components'
 import { Search } from 'lucide-react'
 import { PRODUCTS_MAX_PRICE, PRODUCTS_PER_PAGE } from '@/lib/constants/products'
+import { SiteSearchTracker } from '@/components/analytics/SiteSearchTracker'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 import { FASHION_AUDIENCES, type FashionAudience } from '@/lib/products/fashion-filters'
 
@@ -154,6 +155,7 @@ export default async function ProductsPage(props: {
 
   return (
     <div className="min-h-screen bg-background">
+      {query && page === 1 && <SiteSearchTracker term={query} resultsCount={total} />}
       <PaginationLinks
         currentPage={page}
         totalPages={totalPages}

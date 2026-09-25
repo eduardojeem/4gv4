@@ -6,6 +6,7 @@ export const SITE_ANALYTICS_EVENT_TYPES = [
   'phone_click',
   'add_to_cart',
   'order_placed',
+  'search',
 ] as const
 
 export type SiteAnalyticsEventType = (typeof SITE_ANALYTICS_EVENT_TYPES)[number]
@@ -83,6 +84,16 @@ export function isSafeEntityId(value: string) {
   return SAFE_ENTITY_RE.test(value)
 }
 
+const SEARCH_TERM_MAX_LENGTH = 80
+// Emails y secuencias largas de dígitos (teléfonos, cédulas) no se guardan.
+const SEARCH_TERM_PII_RE = /@|\d{6,}/
+
+export function normalizeSearchTerm(value: string | null | undefined): string | null {
+  const term = (value ?? '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, SEARCH_TERM_MAX_LENGTH).trim()
+  if (term.length < 2 || SEARCH_TERM_PII_RE.test(term.replace(/[\s.-]/g, ''))) return null
+  return term
+}
+
 export function parseSiteAnalyticsRangeDays(value: string | null | undefined): SiteAnalyticsRangeDays {
   const days = Number(value)
   return (SITE_ANALYTICS_RANGE_DAYS as readonly number[]).includes(days)
@@ -99,8 +110,15 @@ export type SiteAnalyticsSummary = {
     bounce_rate: number
     pages_per_session: number
   }
-  previous: { page_views: number; visitors: number }
+  previous: { page_views: number; visitors: number; orders: number; revenue: number }
   active_now: number
+  sales: {
+    orders: number
+    revenue: number
+    average_order_value: number
+    /** % de sesiones que terminaron en un pedido. */
+    conversion_rate: number
+  }
   daily: Array<{ date: string; page_views: number; visitors: number }>
   top_pages: Array<{
     path: string
@@ -110,10 +128,16 @@ export type SiteAnalyticsSummary = {
     visitors: number
   }>
   top_products: Array<{ product_id: string; name: string | null; views: number; add_to_cart: number }>
-  sources: Array<{ source: string; sessions: number }>
+  sources: Array<{ source: string; sessions: number; orders: number; revenue: number }>
   devices: Array<{ device: 'mobile' | 'tablet' | 'desktop'; sessions: number }>
   countries: Array<{ country: string; visitors: number }>
-  interactions: Record<Exclude<SiteAnalyticsEventType, 'page_view'>, number>
+  searches: {
+    total: number
+    without_results: number
+    top_terms: Array<{ term: string; searches: number; sessions: number; avg_results: number }>
+    without_results_terms: Array<{ term: string; searches: number }>
+  }
+  interactions: Record<Exclude<SiteAnalyticsEventType, 'page_view' | 'search'>, number>
   funnel: {
     sessions: number
     viewed_product: number
@@ -128,5 +152,7 @@ export type SiteAnalyticsSummary = {
     page_views: number
     visitors: number
     marketplace_views: number
+    orders: number
+    revenue: number
   }>
 }

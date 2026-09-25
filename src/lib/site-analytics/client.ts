@@ -1,6 +1,7 @@
 import {
   SITE_ANALYTICS_ENDPOINT,
   classifySitePage,
+  normalizeSearchTerm,
   type SiteAnalyticsEventType,
 } from '@/lib/site-analytics/shared'
 
@@ -79,7 +80,13 @@ function send(payload: Record<string, unknown>) {
   }
 }
 
-function track(type: SiteAnalyticsEventType, pathname: string, entityId?: string | null) {
+type TrackExtras = {
+  entityId?: string | null
+  searchTerm?: string | null
+  resultsCount?: number | null
+}
+
+function track(type: SiteAnalyticsEventType, pathname: string, extras: TrackExtras = {}) {
   if (typeof window === 'undefined') return
   const page = classifySitePage(pathname)
   if (!page) return
@@ -88,7 +95,9 @@ function track(type: SiteAnalyticsEventType, pathname: string, entityId?: string
   send({
     type,
     path: page.path,
-    entityId: entityId ?? null,
+    entityId: extras.entityId ?? null,
+    searchTerm: extras.searchTerm ?? null,
+    resultsCount: extras.resultsCount ?? null,
     visitorId: getVisitorId(),
     sessionId: getSessionId(now),
     referrerHost: type === 'page_view' ? getExternalReferrerHost() : null,
@@ -107,9 +116,28 @@ export function trackSitePageView(pathname: string) {
 
 /** Registra una interacción en la página pública actual; no hace nada fuera de tienda/marketplace. */
 export function trackSiteEvent(
-  type: Exclude<SiteAnalyticsEventType, 'page_view'>,
+  type: Exclude<SiteAnalyticsEventType, 'page_view' | 'search'>,
   options: { entityId?: string | null } = {}
 ) {
   if (typeof window === 'undefined') return
-  track(type, window.location.pathname, options.entityId)
+  track(type, window.location.pathname, { entityId: options.entityId })
+}
+
+const DUPLICATE_SEARCH_MS = 60 * 1000
+let lastSearch: { key: string; at: number } | null = null
+
+export function trackSiteSearch(term: string, resultsCount: number) {
+  if (typeof window === 'undefined') return
+  const searchTerm = normalizeSearchTerm(term)
+  if (!searchTerm) return
+
+  const now = Date.now()
+  const key = `${window.location.pathname}|${searchTerm}`
+  if (lastSearch && lastSearch.key === key && now - lastSearch.at < DUPLICATE_SEARCH_MS) return
+  lastSearch = { key, at: now }
+
+  track('search', window.location.pathname, {
+    searchTerm,
+    resultsCount: Math.max(0, Math.floor(resultsCount)),
+  })
 }
