@@ -17,7 +17,7 @@ interface VirtualizedProductListProps {
   itemHeight?: number
   showStock?: boolean
   showBarcode?: boolean
-  inventoryManager?: any
+  inventoryManager?: unknown
   isWholesale?: boolean
   wholesaleDiscountRate?: number
   onViewDetail?: (product: Product, tab?: string) => void
@@ -31,7 +31,7 @@ interface ItemData {
   viewMode: 'grid' | 'list'
   showStock: boolean
   showBarcode: boolean
-  inventoryManager?: any
+  inventoryManager?: unknown
   isWholesale?: boolean
   wholesaleDiscountRate?: number
   onViewDetail?: (product: Product, tab?: string) => void

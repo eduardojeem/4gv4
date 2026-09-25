@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { SupplierModal } from '@/components/dashboard/supplier-modal'
 import { SupplierDetailModal } from '@/components/suppliers/SupplierDetailModal'
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
+import type { SupplierProduct } from '@/components/suppliers/SupplierProductsList'
 import { SearchBar } from '@/components/suppliers/SearchBar'
 import { FilterTags, type FilterTag } from '@/components/suppliers/FilterTags'
 import { SupplierGrid } from '@/components/suppliers/SupplierGrid'
@@ -116,7 +117,7 @@ export default function SuppliersPage() {
 
   // Create Order Modal state
   const [orderSupplier, setOrderSupplier] = useState<UISupplier | null>(null)
-  const [orderSeedProduct, setOrderSeedProduct] = useState<any | null>(null)
+  const [orderSeedProduct, setOrderSeedProduct] = useState<SupplierProduct | null>(null)
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false)
 
   // Filter state
@@ -223,7 +224,7 @@ export default function SuppliersPage() {
     setIsDetailModalOpen(true)
   }, [])
 
-  const handleCreateOrder = useCallback((supplier: UISupplier, product?: any | null) => {
+  const handleCreateOrder = useCallback((supplier: UISupplier, product?: SupplierProduct | null) => {
     setOrderSupplier(supplier)
     setOrderSeedProduct(product || null)
     setIsCreateOrderOpen(true)
@@ -746,7 +747,17 @@ export default function SuppliersPage() {
           }}
           supplierId={orderSupplier.id}
           supplierName={orderSupplier.name}
-          initialProduct={orderSeedProduct}
+          initialProduct={orderSeedProduct ? {
+            id: orderSeedProduct.id,
+            name: orderSeedProduct.name,
+            suppliersku: orderSeedProduct.sku || '',
+            unitprice: orderSeedProduct.purchasePrice,
+            currency: 'PYG',
+            stock: orderSeedProduct.stock,
+            minStock: orderSeedProduct.minStock,
+            imageUrl: orderSeedProduct.imageUrl,
+            source: 'own',
+          } : null}
           onOrderCreated={handleOrderCreated}
         />
       )}

@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import Link from 'next/link'
 import { Wrench, PackageCheck, CheckCircle2, ArrowRight, DollarSign, TrendingUp, Search, ExternalLink, Banknote, User, Clock } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import type { PosStats } from "../hooks/usePosStats"
+import type { PosStats, PosDeliveredRepairRecord, PosCreditRecord } from "../hooks/usePosStats"
 import { format, parseISO } from 'date-fns'
 
 interface RepairPosStatsCardsProps {
@@ -17,7 +17,7 @@ interface RepairPosStatsCardsProps {
 
 export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
     const { repairStats } = stats
-    const [selectedRepair, setSelectedRepair] = useState<any | null>(null)
+    const [selectedRepair, setSelectedRepair] = useState<PosDeliveredRepairRecord | null>(null)
 
     return (
         <div className="space-y-4 mt-6">
@@ -252,7 +252,7 @@ export function RepairPosStatsCards({ stats }: RepairPosStatsCardsProps) {
                                             </td>
                                         </tr>
                                     ) : (
-                                        stats.allRepairCredits.map((credit: any) => {
+                                        stats.allRepairCredits.map((credit: PosCreditRecord) => {
                                             const total = Number(credit.totalDebt) || 0
                                             const pending = Number(credit.pendingDebt) || 0
                                             const paid = total - pending

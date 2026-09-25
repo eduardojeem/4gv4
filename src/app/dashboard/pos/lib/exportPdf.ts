@@ -208,7 +208,8 @@ export async function downloadPdfReport({
       },
       didDrawPage: (_data) => {
         // Pie de página profesional
-        const pageNumber = (doc as any).internal.getNumberOfPages()
+        const docWithInternal = doc as unknown as { internal: { getNumberOfPages: () => number } }
+        const pageNumber = docWithInternal.internal.getNumberOfPages()
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(7)
         doc.setTextColor(148, 163, 184)
@@ -230,7 +231,8 @@ export async function downloadPdfReport({
       }
     })
 
-    currentY = (doc as any).lastAutoTable.finalY + 18
+    const docWithTable = doc as unknown as { lastAutoTable?: { finalY: number } }
+    currentY = (docWithTable.lastAutoTable?.finalY ?? currentY) + 18
   })
 
   // Guardar documento

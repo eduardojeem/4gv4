@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import type { UISupplier } from '@/lib/types/supplier-ui'
-import { SupplierProductsList } from '@/components/suppliers/SupplierProductsList'
+import { SupplierProductsList, type SupplierProduct } from '@/components/suppliers/SupplierProductsList'
 import { SupplierNotes } from '@/components/suppliers/SupplierNotes'
 import { SupplierOrdersList } from '@/components/suppliers/SupplierOrdersList'
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
@@ -70,7 +70,7 @@ export default function SupplierDetailPage() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false)
-    const [orderSeedProduct, setOrderSeedProduct] = useState<any | null>(null)
+    const [orderSeedProduct, setOrderSeedProduct] = useState<SupplierProduct | null>(null)
 
     const supabase = createClient()
 
@@ -449,7 +449,7 @@ export default function SupplierDetailPage() {
             </div>
 
             {/* Pestañas de Gestión */}
-            <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full space-y-4">
+            <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as typeof activeTab)} className="w-full space-y-4">
                 <TabsList className="grid w-full grid-cols-4 h-11 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
                     <TabsTrigger value="info" className="text-xs font-semibold rounded-lg">
                         Información

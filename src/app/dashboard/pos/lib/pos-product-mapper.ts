@@ -1,4 +1,4 @@
-import type { InstallmentPlanOption, Product } from '@/types/product-unified'
+import type { InstallmentPlanOption, Product, ProductVariantRecord } from '@/types/product-unified'
 
 export type PosProductRow = {
   id: string
@@ -41,10 +41,13 @@ function mapInstallmentPlans(value: unknown): InstallmentPlanOption[] {
 
 export function mapProductForPOS(row: PosProductRow): Product {
   const category = Array.isArray(row.categories) ? row.categories[0] : row.categories
-  const rawVariants = Array.isArray(row.variants) ? row.variants : []
+  const rawVariants = Array.isArray(row.variants) ? (row.variants as ProductVariantRecord[]) : []
   const hasVariants = Boolean(row.has_variants || rawVariants.length > 0)
   const variantStock = hasVariants && rawVariants.length > 0
-    ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+    ? (rawVariants as Array<{ is_active?: boolean | null; stock_quantity?: number | null }>).reduce(
+        (sum: number, v) => (v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum),
+        0
+      )
     : null
   const stockQuantity = hasVariants && variantStock !== null && Number(row.stock_quantity || 0) === 0
     ? variantStock
@@ -74,6 +77,6 @@ export function mapProductForPOS(row: PosProductRow): Product {
     installments_public: Boolean(row.installments_public),
     installments_plans: mapInstallmentPlans(row.installments_plans),
     has_variants: hasVariants,
-    variants: rawVariants as any,
+    variants: rawVariants,
   } as Product
 }
