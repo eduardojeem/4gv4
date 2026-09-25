@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { logger } from '@/lib/logger'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
@@ -115,7 +115,7 @@ export default function PostsPage() {
       if (error) throw error
 
       if (data) {
-        const mappedPosts: Post[] = data.map((item: any) => ({
+        const mappedPosts: Post[] = data.map((item) => ({
           id: item.id,
           title: item.title,
           content: item.content,
@@ -188,7 +188,8 @@ export default function PostsPage() {
 
     // Ordenamiento
     filtered.sort((a, b) => {
-      let aValue: any, bValue: any
+      let aValue: string | number
+      let bValue: string | number
       
       switch (sortBy) {
         case 'title':
@@ -196,8 +197,8 @@ export default function PostsPage() {
           bValue = b.title.toLowerCase()
           break
         case 'publishedAt':
-          aValue = new Date(a.publishedAt || a.updatedAt)
-          bValue = new Date(b.publishedAt || b.updatedAt)
+          aValue = new Date(a.publishedAt || a.updatedAt).getTime()
+          bValue = new Date(b.publishedAt || b.updatedAt).getTime()
           break
         case 'views':
           aValue = a.metrics.views

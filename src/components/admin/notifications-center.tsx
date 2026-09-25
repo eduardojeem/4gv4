@@ -101,15 +101,19 @@ export default function NotificationsCenter() {
   // Simular notificaciones en tiempo real
   useEffect(() => {
     const interval = setInterval(() => {
+      const types: Notification['type'][] = ['info', 'success', 'warning', 'error']
+      const categories: Notification['category'][] = ['system', 'sales', 'users', 'security', 'inventory']
+      const priorities: Notification['priority'][] = ['low', 'medium', 'high']
+
       const newNotification: Notification = {
         id: Date.now().toString(),
-        type: ['info', 'success', 'warning', 'error'][Math.floor(Math.random() * 4)] as any,
+        type: types[Math.floor(Math.random() * types.length)] || 'info',
         title: 'Nueva Notificación',
         message: `Notificación automática generada a las ${format(new Date(), 'HH:mm:ss')}`,
         timestamp: new Date(),
         read: false,
-        category: ['system', 'sales', 'users', 'security', 'inventory'][Math.floor(Math.random() * 5)] as any,
-        priority: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)] as any
+        category: categories[Math.floor(Math.random() * categories.length)] || 'system',
+        priority: priorities[Math.floor(Math.random() * priorities.length)] || 'medium'
       }
       
       setNotifications(prev => [newNotification, ...prev])

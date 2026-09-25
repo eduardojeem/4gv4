@@ -33,8 +33,8 @@ import {
 
 interface EnhancedOverviewProps {
   metrics: SystemMetrics
-  users: any[]
-  securityLogs: any[]
+  users: unknown[]
+  securityLogs: unknown[]
 }
 
 interface ChartData {
@@ -125,7 +125,7 @@ function EnhancedOverviewComponent({ metrics, users: _users, securityLogs: _secu
           const newActivities: ActivityItem[] = recentSales.map(sale => ({
             id: sale.id,
             user: (() => {
-              const clientData = (sale as any)?.client
+              const clientData = (sale as { client?: { name?: string } | Array<{ name?: string }> }).client
               if (Array.isArray(clientData)) return clientData[0]?.name || 'Cliente Casual'
               return clientData?.name || 'Cliente Casual'
             })(),

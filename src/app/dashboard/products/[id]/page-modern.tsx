@@ -88,48 +88,6 @@ export default function ProductDetailPageModern() {
     return `Gs. ${formatted}`
   }
 
-  const normalizedCategories = useMemo(() => {
-    return (categories || []).map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description || null,
-      parent_id: null,
-      is_active: c.is_active,
-      created_at: c.created_at,
-      updated_at: c.updated_at
-    }))
-  }, [categories])
-
-  const normalizedSuppliers = useMemo(() => {
-    return (suppliers || []).map(s => ({
-      id: s.id,
-      name: s.name,
-      contact_name: s.contact_name || null,
-      contact_email: s.email || null,
-      phone: s.phone || null,
-      address: s.address || null,
-      tax_id: s.tax_id || null,
-      is_active: s.is_active,
-      created_at: s.created_at,
-      updated_at: s.updated_at
-    }))
-  }, [suppliers])
-
-  const normalizedBrands = useMemo(() => {
-    return (brands || []).map(b => ({
-      id: b.id,
-      name: b.name,
-      description: b.description || '',
-      country: b.country || null,
-      founded_year: b.founded_year || 0,
-      logo_url: b.logo_url || null,
-      website: b.website || null,
-      is_active: b.is_active,
-      created_at: b.created_at,
-      updated_at: b.updated_at
-    }))
-  }, [brands])
-
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   type PriceHistoryEntry = {
     id: string
@@ -626,9 +584,9 @@ export default function ProductDetailPageModern() {
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
             product={product ?? null}
-            categories={normalizedCategories as any[]}
-            brands={normalizedBrands as any[]}
-            suppliers={normalizedSuppliers as any[]}
+            categories={categories}
+            brands={brands}
+            suppliers={suppliers}
             onSave={async (data) => {
               try {
                 // Transform dimensions to ensure compatibility
