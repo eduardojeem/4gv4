@@ -273,5 +273,5 @@ export const getPerformanceReport = () =>
 
 // Exponer en window para debugging en desarrollo
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  (window as any).__performanceTracker = performanceTracker
+  (window as Window & { __performanceTracker?: unknown }).__performanceTracker = performanceTracker
 }

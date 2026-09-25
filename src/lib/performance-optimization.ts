@@ -23,6 +23,22 @@ export interface PerformanceConfig {
   }
 }
 
+interface PerformanceMemory {
+  usedJSHeapSize?: number
+  totalJSHeapSize?: number
+  jsHeapSizeLimit?: number
+}
+
+interface NetworkInformation {
+  effectiveType?: string
+  saveData?: boolean
+  downlink?: number
+  rtt?: number
+}
+
+type PerformanceWithMemory = Performance & { memory?: PerformanceMemory }
+type NavigatorWithHardware = Navigator & { deviceMemory?: number; connection?: NetworkInformation }
+
 export const DEFAULT_PERFORMANCE_CONFIG: PerformanceConfig = {
   enableMemoization: true,
   enableDebouncing: true,
@@ -118,13 +134,13 @@ export function usePerformanceMetrics() {
     itemCount?: number
   ): T => {
     const startTime = performance.now()
-    const startMemory = (performance as any).memory?.usedJSHeapSize
+    const startMemory = (performance as PerformanceWithMemory).memory?.usedJSHeapSize
 
     try {
       const result = operation()
 
       const endTime = performance.now()
-      const endMemory = (performance as any).memory?.usedJSHeapSize
+      const endMemory = (performance as PerformanceWithMemory).memory?.usedJSHeapSize
 
       recordMetric({
         operationName,
@@ -186,7 +202,7 @@ export function usePerformanceMetrics() {
 export function useAdvancedMemoization<T>(
   factoryOrFn: () => T,
   deps: React.DependencyList,
-  _config: { ttl?: number; key?: string; keyGenerator?: (...args: any[]) => string } = {}
+  _config: { ttl?: number; key?: string; keyGenerator?: (...args: unknown[]) => string } = {}
 ): T {
   const [inputs, setInputs] = useState(() => ({ deps, factory: factoryOrFn }))
   if (deps.length !== inputs.deps.length || deps.some((dep, i) => !Object.is(dep, inputs.deps[i]))) {
@@ -357,7 +373,7 @@ export function useLazyLoading<T>(
 
 // Utilidades de optimización
 export const PerformanceUtils = {
-  createMemoizedFunction: <Args extends any[], Return>(
+  createMemoizedFunction: <Args extends unknown[], Return>(
     fn: (...args: Args) => Return,
     keyGenerator?: (...args: Args) => string,
     ttl?: number
@@ -410,11 +426,12 @@ export const PerformanceUtils = {
   },
 
   isLowEndDevice: (): boolean => {
-    const memory = (navigator as any).deviceMemory
+    const nav = typeof navigator !== 'undefined' ? (navigator as NavigatorWithHardware) : undefined
+    const memory = nav?.deviceMemory
     if (memory && memory < 4) return true
-    const cores = navigator.hardwareConcurrency
+    const cores = nav?.hardwareConcurrency
     if (cores && cores < 4) return true
-    const connection = (navigator as any).connection
+    const connection = nav?.connection
     if (connection && (connection.effectiveType === 'slow-2g' || connection.effectiveType === '2g')) {
       return true
     }
@@ -435,6 +452,6 @@ export const PerformanceUtils = {
   },
 
   getMemoryUsage: () => {
-    return (performance as any).memory?.usedJSHeapSize || 0
+    return typeof performance !== 'undefined' ? (performance as PerformanceWithMemory).memory?.usedJSHeapSize || 0 : 0
   }
 }

@@ -48,7 +48,7 @@ export interface OptimizationCondition {
 export interface OptimizationAction {
   id: string
   type: 'scale_up' | 'scale_down' | 'cache_clear' | 'restart_service' | 'optimize_query' | 'compress_data' | 'cleanup_temp' | 'adjust_config' | 'notify_admin'
-  parameters: Record<string, any>
+  parameters: Record<string, unknown>
   timeout: number // seconds
   retryAttempts: number
   rollbackOnFailure: boolean
@@ -126,7 +126,7 @@ export interface RollbackStep {
   id: string
   description: string
   action: string
-  parameters: Record<string, any>
+  parameters: Record<string, unknown>
   order: number
 }
 
@@ -751,48 +751,48 @@ export class PerformanceOptimizer {
   }
 
   // Implementaciones de acciones específicas
-  private async executeScaleUp(parameters: Record<string, any>): Promise<void> {
+  private async executeScaleUp(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing scale up:', parameters)
     // Simular escalado
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
 
-  private async executeScaleDown(parameters: Record<string, any>): Promise<void> {
+  private async executeScaleDown(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing scale down:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1500))
   }
 
-  private async executeCacheClear(parameters: Record<string, any>): Promise<void> {
+  private async executeCacheClear(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing cache clear:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
 
-  private async executeServiceRestart(parameters: Record<string, any>): Promise<void> {
+  private async executeServiceRestart(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing service restart:', parameters)
     await new Promise(resolve => setTimeout(resolve, 3000))
   }
 
-  private async executeQueryOptimization(parameters: Record<string, any>): Promise<void> {
+  private async executeQueryOptimization(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing query optimization:', parameters)
     await new Promise(resolve => setTimeout(resolve, 2500))
   }
 
-  private async executeDataCompression(parameters: Record<string, any>): Promise<void> {
+  private async executeDataCompression(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing data compression:', parameters)
     await new Promise(resolve => setTimeout(resolve, 4000))
   }
 
-  private async executeTempCleanup(parameters: Record<string, any>): Promise<void> {
+  private async executeTempCleanup(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing temp cleanup:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1500))
   }
 
-  private async executeConfigAdjustment(parameters: Record<string, any>): Promise<void> {
+  private async executeConfigAdjustment(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing config adjustment:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
 
-  private async executeAdminNotification(parameters: Record<string, any>): Promise<void> {
+  private async executeAdminNotification(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing admin notification:', parameters)
     await new Promise(resolve => setTimeout(resolve, 500))
   }

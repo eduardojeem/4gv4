@@ -219,7 +219,7 @@ class PerformanceAnalyticsEngine {
     // LCP (Largest Contentful Paint)
     new PerformanceObserver((list) => {
       const entries = list.getEntries()
-      const lastEntry = entries[entries.length - 1] as any
+      const lastEntry = entries[entries.length - 1] as PerformanceEntry & { startTime: number }
       this.recordMetric('lcp', lastEntry.startTime)
     }).observe({ entryTypes: ['largest-contentful-paint'] })
 
@@ -227,7 +227,8 @@ class PerformanceAnalyticsEngine {
     new PerformanceObserver((list) => {
       const entries = list.getEntries()
       entries.forEach((entry: PerformanceEntry) => {
-        this.recordMetric('fid', (entry as any).processingStart - entry.startTime)
+        const fidEntry = entry as PerformanceEntry & { processingStart: number }
+        this.recordMetric('fid', fidEntry.processingStart - entry.startTime)
       })
     }).observe({ entryTypes: ['first-input'] })
 
@@ -236,8 +237,9 @@ class PerformanceAnalyticsEngine {
     new PerformanceObserver((list) => {
       const entries = list.getEntries()
       entries.forEach((entry: PerformanceEntry) => {
-        if (!(entry as any).hadRecentInput) {
-          clsValue += (entry as any).value
+        const clsEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number }
+        if (!clsEntry.hadRecentInput) {
+          clsValue += clsEntry.value ?? 0
           this.recordMetric('cls', clsValue)
         }
       })
@@ -283,10 +285,13 @@ class PerformanceAnalyticsEngine {
     if (!('memory' in performance)) return
 
     setInterval(() => {
-      const memory = (performance as any).memory
-      this.recordMetric('usedJSHeapSize', memory.usedJSHeapSize)
-      this.recordMetric('totalJSHeapSize', memory.totalJSHeapSize)
-      this.recordMetric('jsHeapSizeLimit', memory.jsHeapSizeLimit)
+      const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } }
+      const memory = perf.memory
+      if (memory) {
+        this.recordMetric('usedJSHeapSize', memory.usedJSHeapSize)
+        this.recordMetric('totalJSHeapSize', memory.totalJSHeapSize)
+        this.recordMetric('jsHeapSizeLimit', memory.jsHeapSizeLimit)
+      }
     }, 10000) // Cada 10 segundos
   }
 
@@ -342,8 +347,10 @@ class PerformanceAnalyticsEngine {
       this.metricsBuffer.push(currentMetrics)
     }
 
-    // Actualizar métrica específica
-    (currentMetrics as any)[name] = value
+    // Actualizar métrica específica — cast through unknown since PerformanceMetrics has no index signature
+    if (name in currentMetrics) {
+      (currentMetrics as unknown as Record<string, unknown>)[name] = value
+    }
 
     // Recalcular score de rendimiento
     currentMetrics.performanceScore = this.calculatePerformanceScore(currentMetrics)
@@ -474,7 +481,7 @@ class PerformanceAnalyticsEngine {
       responseStart: entry.responseStart,
       responseEnd: entry.responseEnd,
       // domLoading no está disponible en PerformanceNavigationTiming; usar PerformanceTiming si existe
-      domLoading: (performance as any)?.timing?.domLoading,
+      domLoading: (performance as Performance & { timing?: { domLoading?: number } }).timing?.domLoading,
       domInteractive: entry.domInteractive,
       domContentLoadedEventStart: entry.domContentLoadedEventStart,
       domContentLoadedEventEnd: entry.domContentLoadedEventEnd,
@@ -486,7 +493,9 @@ class PerformanceAnalyticsEngine {
 
   // Registrar error
   private recordError(type: string, message: string, filename: string, lineno: number): void {
-    (this.supabase as any)
+    // performance_errors is not in the typed Supabase schema; use a structural cast
+    type UnscheduledClient = { from: (table: string) => { insert: (data: unknown) => { then: (fn: () => void) => { catch: (fn: (e: unknown) => void) => void } } } }
+    ;(this.supabase as unknown as UnscheduledClient)
       .from('performance_errors')
       .insert({
         type,
@@ -672,17 +681,18 @@ class PerformanceAnalyticsEngine {
   // Generar reporte de rendimiento
   async generatePerformanceReport(startDate: Date, endDate: Date, url?: string): Promise<PerformanceReport> {
     try {
+      // performance_metrics / performance_alerts are not in the typed Supabase schema
+      type UnscheduledClient = { from: (t: string) => Record<string, unknown> }
+      const unsafeClient = this.supabase as unknown as UnscheduledClient
       // Construir consulta base para evitar inferencias de tipos profundas en TypeScript
-      const baseQuery = (this.supabase as any)
-        .from('performance_metrics')
-        .select('*')
-        .gte('timestamp', startDate.toISOString())
-        .lte('timestamp', endDate.toISOString())
+      const baseQuery = (unsafeClient.from('performance_metrics') as Record<string, unknown> & {
+        select: (q: string) => { gte: (...a: unknown[]) => { lte: (...a: unknown[]) => { eq: (...a: unknown[]) => unknown } } }
+      }).select('*').gte('timestamp', startDate.toISOString()).lte('timestamp', endDate.toISOString())
 
       // Aplicar filtro opcional de URL
-      const query = url ? baseQuery.eq('url', url) : baseQuery
+      const query = url ? (baseQuery as { eq: (k: string, v: string) => unknown }).eq('url', url) : baseQuery
 
-      const { data: metrics } = await query
+      const { data: metrics } = await (query as Promise<{ data: Array<Record<string, unknown>> | null }>)
 
       if (!metrics || metrics.length === 0) {
         throw new Error('No performance data found for the specified period')
@@ -695,11 +705,9 @@ class PerformanceAnalyticsEngine {
         (m.lcp as number) <= 2500 && (m.fid as number) <= 100 && (m.cls as number) <= 0.1
       ).length
 
-      const { data: alerts } = await (this.supabase as any)
-        .from('performance_alerts')
-        .select('*')
-        .gte('timestamp', startDate.toISOString())
-        .lte('timestamp', endDate.toISOString())
+      const { data: alerts } = await (unsafeClient.from('performance_alerts') as Record<string, unknown> & {
+        select: (q: string) => { gte: (...a: unknown[]) => { lte: (...a: unknown[]) => Promise<{ data: Array<Record<string, unknown>> | null }> } }
+      }).select('*').gte('timestamp', startDate.toISOString()).lte('timestamp', endDate.toISOString())
 
       const alertsTriggered = alerts?.length || 0
 
@@ -777,8 +785,8 @@ class PerformanceAnalyticsEngine {
   }
 
   private getConnectionType(): string {
-    const connection = (navigator as any).connection
-    return connection?.effectiveType || 'unknown'
+    const nav = navigator as Navigator & { connection?: { effectiveType?: string } }
+    return nav.connection?.effectiveType ?? 'unknown'
   }
 
   private getResourceType(url: string): ResourceTiming['type'] {

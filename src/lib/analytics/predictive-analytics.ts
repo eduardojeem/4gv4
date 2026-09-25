@@ -9,7 +9,7 @@ export interface PredictiveModel {
   type: 'sales_forecast' | 'demand_prediction' | 'churn_prediction' | 'price_optimization'
   accuracy: number
   lastTrained: Date
-  parameters: Record<string, any>
+  parameters: Record<string, unknown>
 }
 
 export interface SalesForecast {
@@ -731,12 +731,12 @@ class PredictiveAnalyticsEngine {
   }
 
   // Método para entrenar modelos (placeholder para futuras implementaciones)
-  async trainModel(modelType: string, _trainingData: Array<Record<string, unknown>>): Promise<PredictiveModel> {
+  async trainModel(modelType: PredictiveModel['type'], _trainingData: Array<Record<string, unknown>>): Promise<PredictiveModel> {
     // Implementación futura con bibliotecas de ML
     return {
       id: `model_${Date.now()}`,
       name: `${modelType}_model`,
-      type: modelType as any,
+      type: modelType,
       accuracy: 0.75 + Math.random() * 0.2,
       lastTrained: new Date(),
       parameters: {}

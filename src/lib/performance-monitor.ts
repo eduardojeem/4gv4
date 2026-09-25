@@ -116,8 +116,9 @@ class PerformanceMonitor {
       let clsValue = 0;
       const clsObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          if (!(entry as any).hadRecentInput) {
-            clsValue += (entry as any).value;
+          const shiftEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number }
+          if (!shiftEntry.hadRecentInput && typeof shiftEntry.value === 'number') {
+            clsValue += shiftEntry.value;
             this.recordMetric('cumulative_layout_shift', clsValue, 'gauge');
           }
         }

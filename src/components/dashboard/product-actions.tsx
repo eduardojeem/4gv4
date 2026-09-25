@@ -107,7 +107,7 @@ export function ProductActions({
       await simulateAsyncOperation(500)
       onEditProduct?.(product)
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.UPDATE, 'success', { data: product })
+      notifyProductAction(ActionType.UPDATE, 'success', { data: { ...product } })
       return { product: product.name }
     } catch (error) {
       toast.dismiss(loadingToast)
@@ -128,7 +128,7 @@ export function ProductActions({
         await simulateAsyncOperation(1200)
         onDeleteProduct?.(productToDelete.id)
         toast.dismiss(loadingToast)
-        notifyProductAction(ActionType.DELETE, 'success', { data: productToDelete })
+        notifyProductAction(ActionType.DELETE, 'success', { data: { ...productToDelete } })
         setProductToDelete(null)
         setIsDeleteDialogOpen(false)
         return { productName: productToDelete.name }
@@ -163,7 +163,7 @@ export function ProductActions({
       await simulateAsyncOperation(1000)
       onDuplicateProduct?.(product)
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.DUPLICATE, 'success', { data: product })
+      notifyProductAction(ActionType.DUPLICATE, 'success', { data: { ...product } })
       return { productName: product.name }
     } catch (error) {
       toast.dismiss(loadingToast)
@@ -178,7 +178,7 @@ export function ProductActions({
       await simulateAsyncOperation(600)
       onToggleFeatured?.(product.id)
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.TOGGLE, 'success', { data: product })
+      notifyProductAction(ActionType.TOGGLE, 'success', { data: { ...product } })
       return {
         productName: product.name,
         action: product.featured ? 'removido de' : 'marcado como'
