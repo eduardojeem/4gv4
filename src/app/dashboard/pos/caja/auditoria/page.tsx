@@ -54,7 +54,7 @@ import { CashRegisterState } from '../../types'
 import { cn } from '@/lib/utils'
 import { formatRegisterName, formatUserLabel, formatEventConcept } from '@/app/dashboard/pos/lib/formatters'
 import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
-import { downloadPdfReport } from '@/app/dashboard/pos/lib/exportPdf'
+import { downloadPdfReport, type PdfSection } from '@/app/dashboard/pos/lib/exportPdf'
 
 // ─── UTILS DE FECHA Y FORMATO ───────────────────────────────────────────────
 
@@ -848,18 +848,18 @@ function openSessionToRecord(reg: CashRegisterState, currentUserName?: string): 
   const movCashIn = movs.filter(m => m.type === 'cash_in' || (m.type as string) === 'ingreso').reduce((s, m) => s + (Number(m.amount) || 0), 0)
   const movCashOut = movs.filter(m => m.type === 'cash_out' || (m.type as string) === 'egreso').reduce((s, m) => s + (Number(m.amount) || 0), 0)
 
-  const openingBal = (reg as any).opening_balance ?? (reg.movements.find(m => m.type === 'opening' || (m.type as string) === 'apertura')?.amount ?? 0)
-  const totalSales = (reg as any).total_sales ?? (movTotalSales > 0 ? movTotalSales : (salesByCash + salesByCard + salesByTransfer + salesByMixed))
-  const totalCashIn = (reg as any).total_cash_in ?? movCashIn
-  const totalCashOut = (reg as any).total_cash_out ?? movCashOut
-  const currentBalance = (reg as any).balance ?? (Number(openingBal) + Number(totalSales) + Number(totalCashIn) - Number(totalCashOut))
+  const openingBal = reg.opening_balance ?? (reg.movements.find(m => m.type === 'opening' || (m.type as string) === 'apertura')?.amount ?? 0)
+  const totalSales = reg.total_sales ?? (movTotalSales > 0 ? movTotalSales : (salesByCash + salesByCard + salesByTransfer + salesByMixed))
+  const totalCashIn = reg.total_cash_in ?? movCashIn
+  const totalCashOut = reg.total_cash_out ?? movCashOut
+  const currentBalance = reg.balance ?? (Number(openingBal) + Number(totalSales) + Number(totalCashIn) - Number(totalCashOut))
 
   return {
     id: 'current',
-    registerId: (reg as any).register_id || 'Caja actual',
+    registerId: reg.register_id || 'Caja actual',
     date: new Date().toISOString().split('T')[0],
-    openedAt: (reg as any).opened_at || reg.movements.find(m => m.type === 'opening')?.created_at || new Date().toISOString(),
-    openedBy: (reg as any).opened_by || currentUserName || 'Operador en turno',
+    openedAt: reg.opened_at || reg.movements.find(m => m.type === 'opening')?.created_at || new Date().toISOString(),
+    openedBy: reg.opened_by || currentUserName || 'Operador en turno',
     openingBalance: Number(openingBal) || 0,
     closedAt: new Date().toISOString(),
     closedBy: 'En curso',
@@ -1197,7 +1197,7 @@ export default function CashRegisterAuditPage() {
       const openSessions = filteredSessions.filter(s => s.id === 'current')
       const closedSessions = filteredSessions.filter(s => s.id !== 'current')
 
-      const sections: any[] = []
+      const sections: PdfSection[] = []
 
       // 1. SECCIÓN DE CAJAS ABIERTAS (SI EXISTEN)
       if (openSessions.length > 0) {
@@ -1613,7 +1613,7 @@ export default function CashRegisterAuditPage() {
           </div>
 
           {/* Filtro de período */}
-          <Select value={period} onValueChange={(v: any) => setPeriod(v)}>
+          <Select value={period} onValueChange={(v) => setPeriod(v as 'all' | 'today' | 'week' | 'month' | 'year')}>
             <SelectTrigger className="h-9 text-xs rounded-xl bg-card">
               <Clock className="h-3.5 w-3.5 text-muted-foreground mr-1.5" />
               <SelectValue placeholder="Período" />
@@ -1645,7 +1645,7 @@ export default function CashRegisterAuditPage() {
 
           {/* Filtro específico de discrepancia (solo en sesiones) */}
           {activeTab === 'sessions' ? (
-            <Select value={discrepancyFilter} onValueChange={(v: any) => setDiscrepancyFilter(v)}>
+            <Select value={discrepancyFilter} onValueChange={(v) => setDiscrepancyFilter(v as 'all' | 'perfect' | 'discrepancy' | 'open')}>
               <SelectTrigger className="h-9 text-xs rounded-xl bg-card">
                 <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground mr-1.5" />
                 <SelectValue placeholder="Cuadre" />

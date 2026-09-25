@@ -49,7 +49,19 @@ const LABOR_MARGIN_PRESETS = [
 export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProps) {
   const { createService, updateService } = useInventory()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    cost: string
+    labor: string
+    price: string
+    wholesaleLabor: string
+    wholesalePrice: string
+    description: string
+    visibility: 'hidden' | 'public' | 'wholesale'
+    deviceType: string
+    brand: string
+    model: string
+  }>({
     name: '',
     cost: '',
     labor: '',
@@ -79,7 +91,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         wholesaleLabor: initialWholesaleLabor > 0 ? String(initialWholesaleLabor) : '',
         wholesalePrice: wholesalePriceNum > 0 ? String(wholesalePriceNum) : '',
         description: service.description || '',
-        visibility: service.visibility || 'public',
+        visibility: (service.visibility as 'hidden' | 'public' | 'wholesale') || 'public',
         deviceType: service.tags?.find(t => t.startsWith('deviceType:'))?.split(':')[1] || '',
         brand: service.brand || '',
         model: service.tags?.find(t => t.startsWith('model:'))?.split(':')[1] || ''
@@ -244,7 +256,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
       if (formData.deviceType) tags.push(`deviceType:${formData.deviceType}`)
       if (formData.model) tags.push(`model:${formData.model}`)
 
-      const serviceData: any = {
+      const serviceData: Partial<Product> = {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         sale_price: parseFloat(formData.price),
@@ -322,7 +334,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
               </Label>
               <Select
                 value={formData.visibility}
-                onValueChange={(value) => setFormData({ ...formData, visibility: value })}
+                onValueChange={(value) => setFormData({ ...formData, visibility: value as 'hidden' | 'public' | 'wholesale' })}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="text-xs rounded-xl">

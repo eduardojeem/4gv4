@@ -314,8 +314,8 @@ export function InventoryTable({
   // Lista ordenada de repuestos
   const sortedProducts = useMemo(() => {
     return [...products].sort((a, b) => {
-      let valueA: any = ''
-      let valueB: any = ''
+      let valueA: string | number = ''
+      let valueB: string | number = ''
 
       switch (sortColumn) {
         case 'name':
@@ -340,9 +340,11 @@ export function InventoryTable({
           break
       }
 
-      if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1
-      if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1
-      return 0
+      if (typeof valueA === 'string' || typeof valueB === 'string') {
+        const cmp = String(valueA).localeCompare(String(valueB))
+        return sortDirection === 'asc' ? cmp : -cmp
+      }
+      return sortDirection === 'asc' ? (valueA - valueB) : (valueB - valueA)
     })
   }, [products, sortColumn, sortDirection])
 

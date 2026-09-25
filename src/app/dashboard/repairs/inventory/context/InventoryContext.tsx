@@ -6,7 +6,7 @@ import { createContext, useContext, useCallback, useMemo, ReactNode, useState, u
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { toast } from 'sonner'
 import { formatPrice } from '@/lib/utils'
-import type { Product, ProductMovement } from '@/types/product-unified'
+import type { Product, ProductMovement, Category, Supplier } from '@/types/product-unified'
 
 interface InventoryFilters {
   search: string
@@ -19,8 +19,8 @@ interface InventoryContextValue {
   products: Product[]
   services: Product[]
   inventory: Product[]
-  categories: any[]
-  suppliers: any[]
+  categories: Category[]
+  suppliers: Supplier[]
   movements: ProductMovement[]
 
   // Estados
@@ -35,9 +35,9 @@ interface InventoryContextValue {
   loadMovements: () => Promise<void>
   
   // CRUD con optimistic updates
-  createService: (data: any) => Promise<void>
-  updateService: (id: string, data: any) => Promise<void>
-  updateInventoryProduct: (id: string, data: any) => Promise<void>
+  createService: (data: Partial<Product> | Record<string, unknown>) => Promise<void>
+  updateService: (id: string, data: Partial<Product> | Record<string, unknown>) => Promise<void>
+  updateInventoryProduct: (id: string, data: Partial<Product> | Record<string, unknown>) => Promise<void>
   deleteItem: (id: string) => Promise<void>
   updateStock: (id: string, quantity: number, reason?: string) => Promise<void>
   
@@ -174,7 +174,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
   }, [setSupabaseFilters])
 
   // CRUD con optimistic updates
-  const createService = useCallback(async (serviceData: any) => {
+  const createService = useCallback(async (serviceData: Partial<Product> | Record<string, unknown>) => {
     try {
       // Asegurar que existe categoría de servicios
       let targetCategoryId = serviceCategoryId
@@ -194,7 +194,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         min_stock: 0,
         unit_measure: 'servicio',
         is_active: true
-      })
+      } as Parameters<typeof createProduct>[0])
 
       if (result.success) {
         toast.success("Servicio creado exitosamente")
@@ -209,9 +209,9 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     }
   }, [serviceCategoryId, createProduct, createCategory, refreshData])
 
-  const updateService = useCallback(async (id: string, serviceData: any) => {
+  const updateService = useCallback(async (id: string, serviceData: Partial<Product> | Record<string, unknown>) => {
     try {
-      const result = await updateProduct(id, serviceData)
+      const result = await updateProduct(id, serviceData as Parameters<typeof updateProduct>[1])
       
       if (result.success) {
         toast.success("Servicio actualizado")
@@ -226,9 +226,9 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     }
   }, [updateProduct, refreshData])
 
-  const updateInventoryProduct = useCallback(async (id: string, productData: any) => {
+  const updateInventoryProduct = useCallback(async (id: string, productData: Partial<Product> | Record<string, unknown>) => {
     try {
-      const result = await updateProduct(id, productData)
+      const result = await updateProduct(id, productData as Parameters<typeof updateProduct>[1])
 
       if (result.success) {
         toast.success("Producto actualizado exitosamente")
@@ -281,9 +281,9 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error)
         throw new Error(errorMsg)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Error updating stock', { error })
-      const message = error?.message || 'Error al actualizar stock'
+      const message = error instanceof Error ? error.message : 'Error al actualizar stock'
       toast.error(message)
       throw error
     }
@@ -320,7 +320,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         headStyles: { fillColor: [37, 99, 235] },
       })
 
-      const servicesY = ((doc as any).lastAutoTable?.finalY ?? 34) + 10
+      const servicesY = ((doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 34) + 10
       doc.setFontSize(12)
       doc.text(`Servicios (${services.length})`, 14, servicesY)
       autoTable(doc, {

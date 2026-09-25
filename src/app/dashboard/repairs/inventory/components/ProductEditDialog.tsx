@@ -3,6 +3,7 @@
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { useInventory } from '../context/InventoryContext'
 import type { Product } from '@/types/product-unified'
+import type { ProductFormData } from '@/types/products'
 
 interface ProductEditDialogProps {
   product: Product | null
@@ -19,7 +20,7 @@ export function ProductEditDialog({
 }: ProductEditDialogProps) {
   const { categories, suppliers, updateInventoryProduct, refresh } = useInventory()
 
-  const handleSave = async (formData: any) => {
+  const handleSave = async (formData: ProductFormData) => {
     if (!product) return
     await updateInventoryProduct(product.id, formData)
     onSuccess?.()
