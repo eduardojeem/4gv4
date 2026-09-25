@@ -217,13 +217,13 @@ export async function parseImportFile(file: File): Promise<ParseImportResult> {
       if (field === 'sale_price' || field === 'purchase_price' || field === 'stock_quantity' || field === 'min_stock') {
         const num = parseSmartNumber(val)
         if (num !== undefined) {
-          (mapped as any)[field] = num
+          (mapped as Record<string, unknown>)[field] = num
         }
       } else if (field === 'is_active') {
         const s = String(val).toLowerCase().trim()
         mapped.is_active = !(s === 'no' || s === 'false' || s === 'inactivo' || s === '0' || s.startsWith('inactiv'))
       } else {
-        (mapped as any)[field] = String(val).trim()
+        (mapped as Record<string, unknown>)[field] = String(val).trim()
       }
     }
 

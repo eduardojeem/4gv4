@@ -56,7 +56,7 @@ export class ProductError extends NotificationError {
     type: ErrorType = ErrorType.CLIENT,
     options?: {
       code?: string;
-      context?: Record<string, any>;
+      context?: Record<string, unknown>;
       retryable?: boolean;
       cause?: Error;
       affectedProducts?: string[];

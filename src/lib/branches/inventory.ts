@@ -141,10 +141,15 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
   thresholdMap?: Map<string, { minStock: number | null; maxStock: number | null }>
 ): Array<T & { branch_stock_quantity?: number }> {
   return products.map((product) => {
-    const rawVariants = Array.isArray((product as any).variants) ? (product as any).variants : []
-    const hasVariants = Boolean((product as any).has_variants || rawVariants.length > 0)
+    interface ProductWithVariants {
+      has_variants?: boolean
+      variants?: Array<{ is_active?: boolean; stock_quantity?: number | null }>
+    }
+    const productRecord = product as T & ProductWithVariants
+    const rawVariants = Array.isArray(productRecord.variants) ? productRecord.variants : []
+    const hasVariants = Boolean(productRecord.has_variants || rawVariants.length > 0)
     const variantStock = hasVariants && rawVariants.length > 0
-      ? rawVariants.reduce((sum: number, v: any) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+      ? rawVariants.reduce((sum: number, v) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
       : null
 
     if (stockMap.has(product.id)) {

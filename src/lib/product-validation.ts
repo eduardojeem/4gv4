@@ -279,7 +279,7 @@ export async function validateProduct(
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      errors.push(...(error as z.ZodError).issues.map((e: any) => `${e.path.join('.')}: ${e.message}`))
+      errors.push(...error.issues.map((e) => `${e.path.join('.')}: ${e.message}`))
     }
   }
 

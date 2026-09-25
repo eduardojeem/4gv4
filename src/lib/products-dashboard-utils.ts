@@ -140,9 +140,9 @@ export function getMinStockThreshold(product: Pick<StockShape, 'min_stock'>): nu
   return Number(product.min_stock ?? 0)
 }
 
-export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { variants?: any[] }): boolean {
+export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { variants?: Array<{ stock_quantity?: number | null; stockQuantity?: number | null }> }): boolean {
   if (product.variants && product.variants.length > 0) {
-    const totalVariantStock = product.variants.reduce((acc: number, v: any) => {
+    const totalVariantStock = product.variants.reduce((acc: number, v) => {
       const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
       return acc + (Number.isFinite(qty) ? qty : 0)
     }, 0)
@@ -151,9 +151,9 @@ export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { var
   return Number(product.stock_quantity ?? 0) <= 0
 }
 
-export function isLowStock(product: StockShape & { variants?: any[] }): boolean {
+export function isLowStock(product: StockShape & { variants?: Array<{ stock_quantity?: number | null; stockQuantity?: number | null }> }): boolean {
   const stock = (product.variants && product.variants.length > 0)
-    ? product.variants.reduce((acc: number, v: any) => {
+    ? product.variants.reduce((acc: number, v) => {
         const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
         return acc + (Number.isFinite(qty) ? qty : 0)
       }, 0)
@@ -181,8 +181,8 @@ export function sortProducts(products: Product[], sortConfig: SortConfig): Produ
   const sorted = [...products]
 
   sorted.sort((a, b) => {
-    let aValue: any
-    let bValue: any
+    let aValue: string | number = ''
+    let bValue: string | number = ''
 
     switch (sortConfig.field) {
       case 'name':

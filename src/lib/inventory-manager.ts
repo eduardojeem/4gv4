@@ -437,7 +437,7 @@ export class InventoryManager {
   }
 
   // Importar datos desde respaldo
-  importData(data: any) {
+  importData(data: { products?: Product[]; movements?: StockMovement[]; alerts?: InventoryAlert[] }) {
     if (data.products) {
       this.initializeProducts(data.products)
     }
