@@ -11,6 +11,11 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
+import type { Product } from '@/lib/types/product'
+
+export type ProductWithExpiry = Product & {
+  expiry_date?: string | null
+}
 
 // Tipos de alertas
 export type AlertType = 
@@ -33,7 +38,7 @@ export interface AlertRule {
   threshold: number
   frequency: 'immediate' | 'hourly' | 'daily' | 'weekly'
   lastTriggered?: Date
-  conditions: Record<string, any>
+  conditions: Record<string, unknown>
 }
 
 export interface Alert {
@@ -44,7 +49,7 @@ export interface Alert {
   severity: 'low' | 'medium' | 'high' | 'critical'
   timestamp: Date
   read: boolean
-  data?: any
+  data?: Record<string, unknown>
   actionable: boolean
   action?: {
     label: string
@@ -127,7 +132,7 @@ const defaultAlertRules: AlertRule[] = [
 ]
 
 // Hook para gestión de alertas automáticas
-export function useAutomaticAlerts(products: any[] = []) {
+export function useAutomaticAlerts(products: ProductWithExpiry[] = []) {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [alertRules, setAlertRules] = useState<AlertRule[]>(defaultAlertRules)
   const [isEnabled, setIsEnabled] = useState(true)
@@ -167,7 +172,7 @@ export function useAutomaticAlerts(products: any[] = []) {
     title: string,
     message: string,
     severity: Alert['severity'],
-    data?: any,
+    data?: Record<string, unknown>,
     actionable: boolean = false,
     action?: Alert['action']
   ): Alert => {
@@ -508,7 +513,7 @@ export function AlertConfiguration({
 }
 
 // Componente principal de alertas automáticas
-export default function AutomaticAlerts({ products = [] }: { products?: any[] }) {
+export default function AutomaticAlerts({ products = [] }: { products?: ProductWithExpiry[] }) {
   const {
     alerts,
     alertRules,

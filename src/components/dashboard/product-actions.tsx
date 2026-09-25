@@ -36,6 +36,7 @@ import { toast } from 'sonner'
 import { OptimizedButton, ConfirmationButton } from '@/components/ui/optimized-button'
 import { useOptimizedNotifications } from '@/hooks/use-optimized-notifications'
 import { useContextualNotifications, ActionType } from '@/lib/contextual-notifications'
+import { ErrorClassifier } from '@/lib/error-handling'
 import type { Product } from '@/lib/types/product'
 
 interface ProductActionsProps {
@@ -96,7 +97,7 @@ export function ProductActions({
       return { success: true, data: newProduct }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.CREATE, 'error', { error: error as any })
+      notifyProductAction(ActionType.CREATE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al abrir el formulario')
     }
   }
@@ -111,7 +112,7 @@ export function ProductActions({
       return { product: product.name }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.UPDATE, 'error', { error: error as any })
+      notifyProductAction(ActionType.UPDATE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al abrir el editor')
     }
   }
@@ -134,7 +135,7 @@ export function ProductActions({
         return { productName: productToDelete.name }
       } catch (error) {
         toast.dismiss(loadingToast)
-        notifyProductAction(ActionType.DELETE, 'error', { error: error as any })
+        notifyProductAction(ActionType.DELETE, 'error', { error: ErrorClassifier.classify(error) })
         throw new Error('Error al eliminar el producto')
       }
     }
@@ -151,7 +152,7 @@ export function ProductActions({
         return { count: selectedProducts.length }
       } catch (error) {
         toast.dismiss(loadingToast)
-        notifyProductAction(ActionType.DELETE, 'error', { error: error as any })
+        notifyProductAction(ActionType.DELETE, 'error', { error: ErrorClassifier.classify(error) })
         throw new Error('Error al eliminar los productos seleccionados')
       }
     }
@@ -167,7 +168,7 @@ export function ProductActions({
       return { productName: product.name }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.DUPLICATE, 'error', { error: error as any })
+      notifyProductAction(ActionType.DUPLICATE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al duplicar el producto')
     }
   }
@@ -185,7 +186,7 @@ export function ProductActions({
       }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.TOGGLE, 'error', { error: error as any })
+      notifyProductAction(ActionType.TOGGLE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al cambiar el estado destacado')
     }
   }
@@ -200,7 +201,7 @@ export function ProductActions({
       return { count: products.length }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyImportExport(ActionType.EXPORT, 'error', { error: error as any })
+      notifyImportExport(ActionType.EXPORT, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al exportar los productos')
     }
   }
@@ -215,7 +216,7 @@ export function ProductActions({
       return { success: true }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyImportExport(ActionType.IMPORT, 'error', { error: error as any })
+      notifyImportExport(ActionType.IMPORT, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al abrir el importador')
     }
   }
@@ -230,7 +231,7 @@ export function ProductActions({
       return { count: products.length }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.REFRESH, 'error', { error: error as any })
+      notifyProductAction(ActionType.REFRESH, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al actualizar los datos')
     }
   }

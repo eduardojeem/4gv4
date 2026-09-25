@@ -33,9 +33,30 @@ export interface ProductCardProps {
   className?: string
 }
 
+type RawVariantItem = Record<string, unknown> & {
+  id?: string
+  variant_name?: string | null
+  name?: string | null
+  attributes?: Record<string, unknown> | Array<Record<string, unknown>>
+  sale_price?: number | null
+  salePrice?: number | null
+  purchase_price?: number | null
+  purchasePrice?: number | null
+  wholesale_price?: number | null
+  wholesalePrice?: number | null
+  stock_quantity?: number | null
+  stockQuantity?: number | null
+  min_stock?: number | null
+  minStock?: number | null
+  is_active?: boolean | null
+  isActive?: boolean | null
+  sku?: string | null
+  barcode?: string | null
+}
+
 function getNormalizedVariants(product: Product) {
-  const rawVariants = Array.isArray((product as any).variants) ? (product as any).variants : []
-  return rawVariants.map((v: any, index: number) => {
+  const rawVariants = Array.isArray(product.variants) ? (product.variants as RawVariantItem[]) : []
+  return rawVariants.map((v: RawVariantItem, index: number) => {
     const attributes: Record<string, string> = {}
     if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
       for (const [k, val] of Object.entries(v.attributes)) {
@@ -101,7 +122,7 @@ export const ProductCard = React.memo(function ProductCard({
   const [isHovered, setIsHovered] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [showVariantsDrawer, setShowVariantsDrawer] = useState(false)
-  const isPubliclyVisible = product.is_active && (product as any).visibility !== 'hidden'
+  const isPubliclyVisible = product.is_active && product.visibility !== 'hidden'
   const [localActive, setLocalActive] = useState(isPubliclyVisible)
   const [togglingActive, setTogglingActive] = useState(false)
   const canViewCost = useCanViewCost()
@@ -112,7 +133,7 @@ export const ProductCard = React.memo(function ProductCard({
   }, [isPubliclyVisible])
 
   const variants = getNormalizedVariants(product)
-  void (variants.length > 0 || Boolean((product as any).has_variants));
+  void (variants.length > 0 || Boolean(product.has_variants));
   const totalVariantStock = variants.length > 0
     ? variants.reduce((acc, v) => acc + v.stockQuantity, 0)
     : product.stock_quantity
@@ -173,14 +194,15 @@ export const ProductCard = React.memo(function ProductCard({
   const firstLetter = product.name.charAt(0).toUpperCase()
 
   // Resolve usable image URL
+  const productImages = Array.isArray(product.images) ? product.images : null
   const imageUrl: string | undefined =
-    ((product as any).images as string[] | null | undefined)?.[0] ||
+    productImages?.[0] ||
     product.image ||
-    (product as any).image_url ||
+    product.image_url ||
     undefined
 
   // Images count for the indicator
-  const imagesCount: number = ((product as any).images as string[] | null | undefined)?.length ?? (imageUrl ? 1 : 0)
+  const imagesCount: number = productImages?.length ?? (imageUrl ? 1 : 0)
 
   // Validate image URL
   const isValidImage = imageUrl && (
@@ -190,7 +212,11 @@ export const ProductCard = React.memo(function ProductCard({
   )
 
   // Category label
-  const categoryLabel = (product as any).category?.name || (product as any).category || null
+  const categoryLabel = typeof product.category === 'object' && product.category !== null
+    ? product.category.name
+    : typeof product.category === 'string'
+      ? product.category
+      : null
 
   return (
     <Card
@@ -549,9 +575,9 @@ export const ProductCard = React.memo(function ProductCard({
                     <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
                       {!product.is_active ? (
                         <span className="text-slate-400">Inactivo</span>
-                      ) : (product as any).visibility === 'hidden' ? (
+                      ) : product.visibility === 'hidden' ? (
                         <span className="text-slate-500">Oculto</span>
-                      ) : (product as any).visibility === 'wholesale' ? (
+                      ) : product.visibility === 'wholesale' ? (
                         <span className="text-blue-600 dark:text-blue-400">Mayorista</span>
                       ) : (
                         <span className="text-emerald-600 dark:text-emerald-400">Visible</span>
@@ -586,8 +612,8 @@ export const ProductCard = React.memo(function ProductCard({
     prevProps.product.image === nextProps.product.image &&
     prevProps.product.is_active === nextProps.product.is_active &&
     prevProps.product.purchase_price === nextProps.product.purchase_price &&
-    (prevProps.product as any).visibility === (nextProps.product as any).visibility &&
-    JSON.stringify((prevProps.product as any).variants) === JSON.stringify((nextProps.product as any).variants) &&
-    JSON.stringify((prevProps.product as any).images) === JSON.stringify((nextProps.product as any).images)
+    prevProps.product.visibility === nextProps.product.visibility &&
+    JSON.stringify(prevProps.product.variants) === JSON.stringify(nextProps.product.variants) &&
+    JSON.stringify(prevProps.product.images) === JSON.stringify(nextProps.product.images)
   )
 })

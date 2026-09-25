@@ -274,7 +274,14 @@ export function CatalogManager({
     toast.success('Estado de marca actualizado')
   }
 
-  const handleBrandSave = async (brandData: any) => {
+  const handleBrandSave = async (brandData: {
+    name: string
+    description?: string | null
+    website?: string | null
+    is_active?: boolean | null
+    country?: string | null
+    founded_year?: number | null
+  }) => {
     let updatedBrands: Brand[]
 
     const brand: Brand = {
@@ -285,7 +292,7 @@ export function CatalogManager({
       isActive: brandData.is_active ?? true,
       productCount: 0,
       country: brandData.country || '',
-      foundedYear: brandData.founded_year,
+      foundedYear: brandData.founded_year ?? undefined,
       createdAt: brandModal.brand?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -320,11 +327,11 @@ export function CatalogManager({
     }
   }
 
-  const handleSupplierSave = async (supplier: any) => {
+  const handleSupplierSave = async (supplier: Partial<Supplier> & { contact_person?: string; status?: string }) => {
     try {
       if (supplierModal.mode === 'add') {
         const res = await createSupplier({
-          name: supplier.name,
+          name: supplier.name || '',
           contact_name: supplier.contact_name || supplier.contact_person,
           email: supplier.email,
           phone: supplier.phone,
@@ -338,7 +345,7 @@ export function CatalogManager({
         } else {
           toast.error(res.error || 'Error al crear proveedor')
         }
-      } else {
+      } else if (supplier.id) {
         const res = await updateSupplier(supplier.id, {
           name: supplier.name,
           contact_name: supplier.contact_name || supplier.contact_person,
@@ -362,7 +369,7 @@ export function CatalogManager({
 
   // Funciones de filtrado
   const getFilteredItems = () => {
-    let items: any[] = []
+    let items: Array<Category | Brand | Supplier> = []
 
     switch (activeTab) {
       case 'categories':
@@ -378,45 +385,49 @@ export function CatalogManager({
 
     // Filtrar por término de búsqueda
     if (searchTerm) {
-      items = items.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
+      items = items.filter(item => {
+        const desc = 'description' in item ? (item.description ?? '') : ''
+        return item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          Boolean(desc && desc.toLowerCase().includes(searchTerm.toLowerCase()))
+      })
     }
 
     // Filtrar por estado
     if (filters.status !== 'all') {
       if (activeTab === 'suppliers') {
-        items = items.filter(item => item.status === filters.status)
+        items = items.filter(item => (item as Supplier).status === filters.status)
       } else {
         items = items.filter(item =>
-          filters.status === 'active' ? item.isActive : !item.isActive
+          filters.status === 'active' ? (item as Category | Brand).isActive : !(item as Category | Brand).isActive
         )
       }
     }
 
     // Ordenar
     items.sort((a, b) => {
-      let aValue = a[filters.sortBy]
-      let bValue = b[filters.sortBy]
-
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase()
-        bValue = bValue.toLowerCase()
-      }
+      const aVal = (a as unknown as Record<string, unknown>)[filters.sortBy]
+      const bVal = (b as unknown as Record<string, unknown>)[filters.sortBy]
+      const aStr = typeof aVal === 'string' ? aVal.toLowerCase() : typeof aVal === 'number' ? aVal : ''
+      const bStr = typeof bVal === 'string' ? bVal.toLowerCase() : typeof bVal === 'number' ? bVal : ''
 
       if (filters.sortOrder === 'asc') {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0
       } else {
-        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+        return aStr > bStr ? -1 : aStr < bStr ? 1 : 0
       }
     })
 
     return items
   }
 
-  const renderItemCard = (item: any, type: CatalogItemType) => {
-    const isActive = type === 'suppliers' ? item.status === 'active' : item.isActive
+  const renderItemCard = (item: Category | Brand | Supplier, type: CatalogItemType) => {
+    const isSupplier = type === 'suppliers'
+    const isCategory = type === 'categories'
+    const isBrand = type === 'brands'
+    const supplierItem = isSupplier ? (item as Supplier) : null
+    const brandItem = isBrand ? (item as Brand) : null
+    const categoryItem = isCategory ? (item as Category) : null
+    const isActive = isSupplier ? supplierItem?.status === 'active' : (item as Category | Brand).isActive
 
     return (
       <Card key={item.id} className={cn(
@@ -432,7 +443,7 @@ export function CatalogManager({
               <div>
                 <CardTitle className="text-lg">{item.name}</CardTitle>
                 <CardDescription className="line-clamp-2">
-                  {item.description || (type === 'suppliers' ? item.email : 'Sin descripción')}
+                  {('description' in item && item.description) || (isSupplier ? supplierItem?.email : 'Sin descripción')}
                 </CardDescription>
               </div>
             </div>
@@ -450,9 +461,9 @@ export function CatalogManager({
                   <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => {
-                    if (type === 'categories') handleCategoryEdit(item)
-                    else if (type === 'brands') handleBrandEdit(item)
-                    else handleSupplierEdit(item)
+                    if (isCategory && categoryItem) handleCategoryEdit(categoryItem)
+                    else if (isBrand && brandItem) handleBrandEdit(brandItem)
+                    else if (supplierItem) handleSupplierEdit(supplierItem)
                   }}>
                     <Edit className="w-4 h-4 mr-2" />
                     Editar
@@ -483,35 +494,35 @@ export function CatalogManager({
             </div>
           </div>
         </CardHeader>
-        {(type === 'categories' && item.subcategories?.length > 0) && (
+        {isCategory && categoryItem && categoryItem.subcategories && categoryItem.subcategories.length > 0 && (
           <CardContent className="pt-0">
             <div className="flex flex-wrap gap-1">
-              {item.subcategories.slice(0, 3).map((sub: string, index: number) => (
+              {categoryItem.subcategories.slice(0, 3).map((sub, index) => (
                 <Badge key={index} variant="outline" className="text-xs">
                   {sub}
                 </Badge>
               ))}
-              {item.subcategories.length > 3 && (
+              {categoryItem.subcategories.length > 3 && (
                 <Badge variant="outline" className="text-xs">
-                  +{item.subcategories.length - 3} más
+                  +{categoryItem.subcategories.length - 3} más
                 </Badge>
               )}
             </div>
           </CardContent>
         )}
-        {type === 'brands' && item.country && (
+        {isBrand && brandItem && brandItem.country && (
           <CardContent className="pt-0">
             <p className="text-sm text-muted-foreground">
-              📍 {item.country} {item.foundedYear && `• Fundada en ${item.foundedYear}`}
+              📍 {brandItem.country} {brandItem.foundedYear && `• Fundada en ${brandItem.foundedYear}`}
             </p>
           </CardContent>
         )}
-        {type === 'suppliers' && (
+        {isSupplier && supplierItem && (
           <CardContent className="pt-0">
             <div className="space-y-1 text-sm text-muted-foreground">
-              <p>📧 {item.email}</p>
-              <p>📞 {item.phone}</p>
-              <p>🏢 {item.category}</p>
+              <p>📧 {supplierItem.email}</p>
+              <p>📞 {supplierItem.phone}</p>
+              <p>🏢 {supplierItem.categories?.join(', ') || ''}</p>
             </div>
           </CardContent>
         )}
@@ -633,7 +644,7 @@ export function CatalogManager({
       <BrandModal
         isOpen={brandModal.isOpen}
         onClose={() => setBrandModal({ isOpen: false, mode: 'add' })}
-        brand={brandModal.brand as any}
+        brand={brandModal.brand}
         onSave={handleBrandSave}
       />
 

@@ -88,9 +88,30 @@ const STOCK_CONFIG = {
   },
 }
 
+type RawVariantItem = Record<string, unknown> & {
+  id?: string
+  variant_name?: string | null
+  name?: string | null
+  attributes?: Record<string, unknown> | Array<Record<string, unknown>>
+  sale_price?: number | null
+  salePrice?: number | null
+  purchase_price?: number | null
+  purchasePrice?: number | null
+  wholesale_price?: number | null
+  wholesalePrice?: number | null
+  stock_quantity?: number | null
+  stockQuantity?: number | null
+  min_stock?: number | null
+  minStock?: number | null
+  is_active?: boolean | null
+  isActive?: boolean | null
+  sku?: string | null
+  barcode?: string | null
+}
+
 function getNormalizedVariants(product: Product) {
-  const rawVariants = Array.isArray((product as any).variants) ? (product as any).variants : []
-  return rawVariants.map((v: any, index: number) => {
+  const rawVariants = Array.isArray(product.variants) ? (product.variants as RawVariantItem[]) : []
+  return rawVariants.map((v: RawVariantItem, index: number) => {
     const attributes: Record<string, string> = {}
     if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
       for (const [k, val] of Object.entries(v.attributes)) {
@@ -352,7 +373,7 @@ export function ProductTable({
                     const isSelected = selectedProductIds.includes(product.id)
 
                     const variants = getNormalizedVariants(product)
-                    void (variants.length > 0 || Boolean((product as any).has_variants));
+                    void (variants.length > 0 || Boolean(product.has_variants));
                     const isExpanded = expandedIds.has(product.id)
 
                     // Stock calculation
@@ -391,9 +412,9 @@ export function ProductTable({
                     )
 
                     // Visibility in Storefront: public, wholesale, hidden
-                    const isPublicVisibility = (product as any).visibility === 'public' || !(product as any).visibility
-                    void ((product as any).visibility === 'hidden');
-                    const isWholesaleVisibility = (product as any).visibility === 'wholesale'
+                    const isPublicVisibility = product.visibility === 'public' || !product.visibility
+                    void (product.visibility === 'hidden');
+                    const isWholesaleVisibility = product.visibility === 'wholesale'
 
                     // Offer price
                     const hasActiveOffer = Boolean(product.has_offer && product.offer_price && product.offer_price > 0 && product.offer_price < product.sale_price)

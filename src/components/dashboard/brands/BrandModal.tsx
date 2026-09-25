@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState, useEffect } from 'react'
 import { Building2, Globe, Save, X, AlertCircle, BadgeCheck, Loader2, Plus, Search } from 'lucide-react'
@@ -38,10 +38,12 @@ type CatalogBrand = {
   website?: string | null
 }
 
+export type BrandModalBrand = Brand | (Partial<Brand> & { isActive?: boolean })
+
 interface BrandModalProps {
   isOpen: boolean
   onClose: () => void
-  brand?: Brand
+  brand?: BrandModalBrand
   /**
    * El nombre que el usuario ya escribió antes de abrir el alta. Llega desde
    * el buscador de marcas del formulario de producto: escribirlo de nuevo acá
@@ -134,12 +136,12 @@ export function BrandModal({
 
     if (brand) {
       setFormData({
-        name: brand.name,
+        name: brand.name ?? '',
         description: brand.description || '',
         website: brand.website || '',
         country: brand.country || '',
         founded_year: brand.founded_year,
-        is_active: brand.is_active
+        is_active: ('is_active' in brand ? brand.is_active : undefined) ?? ('isActive' in brand ? brand.isActive : undefined) ?? true
       })
     } else {
       setFormData({
