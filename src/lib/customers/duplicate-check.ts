@@ -99,7 +99,17 @@ type CustomerRow = {
  * deep»). El cuerpo de la funcion es corto y esta cubierto por pruebas.
  */
 export type DuplicateQueryClient = {
-  from: (table: string) => any
+  from: (table: string) => unknown
+}
+
+interface DuplicateQueryChain {
+  select: (columns: string) => {
+    eq: (col1: string, val1: unknown) => {
+      eq: (col2: string, val2: unknown) => {
+        limit: (count: number) => PromiseLike<{ data?: unknown; error?: unknown }>
+      }
+    }
+  }
 }
 
 /**
@@ -136,8 +146,7 @@ export async function findCustomerDuplicates(
 
   const results = await Promise.all(checks.map(async (check): Promise<CustomerDuplicate | null> => {
     const run = (column: string, value: string) =>
-      supabase
-        .from('customers')
+      (supabase.from('customers') as DuplicateQueryChain)
         .select('id, name, phone, alternate_phone, alternate_phone_label, email, ruc, customer_code, customer_type, address, city')
         .eq('organization_id', organizationId)
         .eq(column, value)
@@ -153,8 +162,7 @@ export async function findCustomerDuplicates(
       if (error) {
         // Respaldo minimo por si alguna columna extendida no existiera
         const minimalRun = (column: string, value: string) =>
-          supabase
-            .from('customers')
+          (supabase.from('customers') as DuplicateQueryChain)
             .select('id, name')
             .eq('organization_id', organizationId)
             .eq(column, value)

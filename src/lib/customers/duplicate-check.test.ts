@@ -24,7 +24,13 @@ function fakeClient() {
     from() {
       let columna = ''
       let valor: unknown = null
-      const builder: any = {
+      interface FakeBuilder {
+        select: () => FakeBuilder
+        limit: () => FakeBuilder
+        eq: (col: string, val: unknown) => FakeBuilder
+        then: <TResult1 = unknown>(onFulfilled: (v: unknown) => TResult1) => Promise<TResult1>
+      }
+      const builder: FakeBuilder = {
         select: () => builder,
         limit: () => builder,
         eq(col: string, val: unknown) {

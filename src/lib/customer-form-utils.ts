@@ -75,29 +75,19 @@ export const generateUsernameSuggestions = (name: string): string[] => {
 }
 
 // Data transformation helpers
-export const transformFormDataToCustomer = (formData: any) => {
+export const transformFormDataToCustomer = <T extends Record<string, unknown>>(formData: T): T => {
   return {
-    name: formData.name?.trim(),
-    email: formData.email?.toLowerCase().trim(),
-    phone: formData.phone?.replace(/\D/g, ''),
-    whatsapp: formData.whatsapp?.replace(/\D/g, ''),
-    address: formData.address?.trim(),
-    city: formData.city?.trim(),
-    company: formData.company?.trim(),
-    position: formData.position?.trim(),
-    ruc: formData.ruc?.replace(/\W/g, '').toUpperCase(),
-    customer_type: formData.customer_type,
-    segment: formData.segment,
-    status: formData.status,
-    credit_limit: Number(formData.credit_limit) || 0,
-    discount_percentage: Number(formData.discount_percentage) || 0,
-    payment_terms: formData.payment_terms,
-    preferred_contact: formData.preferred_contact,
-    tags: formData.tags || [],
-    notes: formData.notes?.trim(),
-    birthday: formData.birthday ? formData.birthday.toISOString().split('T')[0] : null,
-    notifications: formData.notifications,
-    privacy: formData.privacy
+    ...formData,
+    name: typeof formData.name === 'string' ? formData.name.trim() : formData.name,
+    email: typeof formData.email === 'string' ? formData.email.toLowerCase().trim() : formData.email,
+    phone: typeof formData.phone === 'string' ? formData.phone.replace(/\D/g, '') : formData.phone,
+    whatsapp: typeof formData.whatsapp === 'string' ? formData.whatsapp.replace(/\D/g, '') : formData.whatsapp,
+    address: typeof formData.address === 'string' ? formData.address.trim() : formData.address,
+    city: typeof formData.city === 'string' ? formData.city.trim() : formData.city,
+    company: typeof formData.company === 'string' ? formData.company.trim() : formData.company,
+    position: typeof formData.position === 'string' ? formData.position.trim() : formData.position,
+    ruc: typeof formData.ruc === 'string' ? formData.ruc.replace(/\W/g, '').toUpperCase() : formData.ruc,
+    notes: typeof formData.notes === 'string' ? formData.notes.trim() : formData.notes,
   }
 }
 
@@ -140,17 +130,21 @@ export const createCustomerValidationSchema = () => {
 }
 
 // Form step validation
-export const validateFormStep = (stepId: string, formData: any): { isValid: boolean; errors: string[] } => {
+export const validateFormStep = (stepId: string, formData: Record<string, unknown>): { isValid: boolean; errors: string[] } => {
   const errors: string[] = []
 
   switch (stepId) {
-    case 'basic':
-      if (!formData.name?.trim()) errors.push('El nombre es requerido')
-      if (!formData.email?.trim()) errors.push('El email es requerido')
-      if (!formData.phone?.trim()) errors.push('El teléfono es requerido')
-      if (formData.email && !validateEmail(formData.email)) errors.push('Email inválido')
-      if (formData.phone && !validatePhone(formData.phone)) errors.push('Teléfono inválido')
+    case 'basic': {
+      const name = typeof formData.name === 'string' ? formData.name.trim() : ''
+      const email = typeof formData.email === 'string' ? formData.email.trim() : ''
+      const phone = typeof formData.phone === 'string' ? formData.phone.trim() : ''
+      if (!name) errors.push('El nombre es requerido')
+      if (!email) errors.push('El email es requerido')
+      if (!phone) errors.push('El teléfono es requerido')
+      if (email && !validateEmail(email)) errors.push('Email inválido')
+      if (phone && !validatePhone(phone)) errors.push('Teléfono inválido')
       break
+    }
 
     case 'contact':
       // Validaciones opcionales para información de contacto
@@ -162,12 +156,15 @@ export const validateFormStep = (stepId: string, formData: any): { isValid: bool
       if (!formData.status) errors.push('El estado es requerido')
       break
 
-    case 'financial':
-      if (formData.credit_limit < 0) errors.push('El límite de crédito no puede ser negativo')
-      if (formData.discount_percentage < 0 || formData.discount_percentage > 100) {
+    case 'financial': {
+      const creditLimit = Number(formData.credit_limit) || 0
+      const discountPercentage = Number(formData.discount_percentage) || 0
+      if (creditLimit < 0) errors.push('El límite de crédito no puede ser negativo')
+      if (discountPercentage < 0 || discountPercentage > 100) {
         errors.push('El descuento debe estar entre 0% y 100%')
       }
       break
+    }
 
     case 'preferences':
       if (!formData.preferred_contact) errors.push('El método de contacto preferido es requerido')
@@ -185,7 +182,7 @@ export const validateFormStep = (stepId: string, formData: any): { isValid: bool
 }
 
 // Progress calculation
-export const calculateFormProgress = (formData: any): number => {
+export const calculateFormProgress = (formData: Record<string, unknown>): number => {
   const requiredFields = [
     'name', 'email', 'phone', 'customer_type', 'segment', 'status', 'preferred_contact'
   ]
@@ -211,7 +208,7 @@ export const calculateFormProgress = (formData: any): number => {
 }
 
 // Auto-save helpers
-export const shouldAutoSave = (formData: any, lastSavedData: any): boolean => {
+export const shouldAutoSave = (formData: Record<string, unknown>, lastSavedData: Record<string, unknown> | null | undefined): boolean => {
   if (!lastSavedData) return true
 
   // Compare relevant fields for changes
@@ -226,11 +223,11 @@ export const shouldAutoSave = (formData: any, lastSavedData: any): boolean => {
 }
 
 // Export utilities
-export const exportFormDataAsJSON = (formData: any): string => {
+export const exportFormDataAsJSON = (formData: Record<string, unknown>): string => {
   return JSON.stringify(transformFormDataToCustomer(formData), null, 2)
 }
 
-export const importFormDataFromJSON = (jsonString: string): any => {
+export const importFormDataFromJSON = (jsonString: string): unknown => {
   try {
     return JSON.parse(jsonString)
   } catch (_error) {

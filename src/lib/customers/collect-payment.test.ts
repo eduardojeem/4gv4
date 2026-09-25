@@ -124,7 +124,14 @@ function baseFalsa(tablas: Record<string, { data?: unknown[]; error?: unknown }>
       const registro = { tabla, filtros: [] as Array<[string, unknown]> }
       consultas.push(registro)
       const respuesta = tablas[tabla] ?? { data: [] }
-      const builder: any = {
+      interface FakeQueryBuilder {
+        select: () => FakeQueryBuilder
+        eq: (col: string, val: unknown) => FakeQueryBuilder
+        in: (col: string, val: unknown) => FakeQueryBuilder
+        order: () => FakeQueryBuilder
+        then: (resolve: (v: unknown) => unknown) => unknown
+      }
+      const builder: FakeQueryBuilder = {
         select: () => builder,
         eq: (col: string, val: unknown) => { registro.filtros.push([col, val]); return builder },
         in: (col: string, val: unknown) => { registro.filtros.push([col, val]); return builder },

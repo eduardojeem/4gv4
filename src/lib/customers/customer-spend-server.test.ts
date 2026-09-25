@@ -13,7 +13,15 @@ function baseFalsa(filas: Record<string, Array<Record<string, unknown>>>, opcion
     from(tabla: string) {
       const pedido: Pedido = { tabla, filtros: [], rango: null }
       pedidos.push(pedido)
-      const builder: any = {
+      interface FakeQueryBuilder {
+        select: () => FakeQueryBuilder
+        eq: (col: string, val: unknown) => FakeQueryBuilder
+        in: (col: string, val: unknown) => FakeQueryBuilder
+        order: () => FakeQueryBuilder
+        range: (from: number, to: number) => FakeQueryBuilder
+        then: (resolve: (v: unknown) => unknown) => unknown
+      }
+      const builder: FakeQueryBuilder = {
         select: () => builder,
         eq: (col: string, val: unknown) => { pedido.filtros.push([col, val]); return builder },
         in: (col: string, val: unknown) => { pedido.filtros.push([col, val]); return builder },
