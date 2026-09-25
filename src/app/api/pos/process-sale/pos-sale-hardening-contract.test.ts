@@ -30,4 +30,14 @@ describe('endurecimiento de venta POS', () => {
     expect(validationAt).toBeLessThan(saleAt)
     expect(route).toContain('REPAIR_QUALITY_CHECK_REQUIRED')
   })
+
+  it('rechaza una reparación cuyo cliente no coincide antes de invocar el RPC', () => {
+    const customerValidationAt = route.indexOf("code: 'REPAIR_CUSTOMER_MISMATCH'")
+    const saleAt = route.indexOf("supabase.rpc('process_pos_sale_atomic_v5'")
+
+    expect(customerValidationAt).toBeGreaterThan(-1)
+    expect(customerValidationAt).toBeLessThan(saleAt)
+    expect(route).toContain("repair.customer_id !== customerId")
+    expect(route).toContain(".select('id, customer_id, status, qualityCheck:")
+  })
 })

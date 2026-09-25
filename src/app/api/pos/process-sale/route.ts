@@ -260,7 +260,9 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
     ['STORE_CREDIT_EXCEEDS_SALE_TOTAL', 'El saldo a favor no puede superar el total de la venta.', 400],
     ['STORE_CREDIT_SALE_CUSTOMER_MISMATCH', 'El saldo a favor no pertenece al cliente seleccionado.', 409],
     ['REPAIR_NOT_IN_POS_SCOPE', 'Una de las reparaciones no pertenece a la sucursal activa.', 400],
+    ['REPAIR_CUSTOMER_MISMATCH', 'La reparación seleccionada pertenece a otro cliente.', 409],
     ['REPAIR_ALREADY_PAID', 'Una de las reparaciones seleccionadas ya fue cobrada previamente.', 409],
+    ['REPAIR_QUALITY_CHECK_REQUIRED', 'La reparación necesita un control técnico aprobado antes de entregarse.', 409],
     // Sin estos dos la venta fallaba con un 500 y el codigo crudo en pantalla,
     // cuando en realidad son situaciones previsibles del mostrador.
     ['REPAIR_DELIVERY_INVALID_STATE', 'Solo se puede entregar una reparación que esté en estado "Listo para entrega". Cobrala sin marcar la entrega, o cambiá el estado primero.', 422],
@@ -365,40 +367,57 @@ export const POST = withTenantAuth(
     }
 
     const supabase = createAdminSupabase()
-    if (body.p_mark_repairs_delivered === true && repairIds.length > 0) {
-      const deliveryOutcome = typeof body.p_delivery_outcome === 'string'
-        ? body.p_delivery_outcome as RepairDeliveryOutcome
-        : null
-      if (!deliveryOutcome || !['repaired', 'withdrawn', 'unrepairable'].includes(deliveryOutcome)) {
-        return NextResponse.json({ success: false, error: 'Seleccioná un resultado de entrega válido.' }, { status: 400 })
-      }
-
-      const { data: repairRows, error: qualityError } = await supabase
+    if (repairIds.length > 0) {
+      const { data: repairRows, error: repairScopeError } = await supabase
         .from('repairs')
-        .select('id, qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(result)')
+        .select('id, customer_id, status, qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(result)')
         .in('id', repairIds)
         .eq('organization_id', organization.id)
         .eq('branch_id', branchScope.branchId)
 
-      if (qualityError) {
+      if (repairScopeError) {
         return NextResponse.json({
           success: false,
-          code: 'REPAIR_QUALITY_CHECK_REQUIRED',
-          error: 'No se pudo comprobar la verificación técnica. Revisá que la migración de control de calidad esté aplicada.',
+          code: 'REPAIR_PREFLIGHT_UNAVAILABLE',
+          error: 'No se pudieron verificar las reparaciones seleccionadas. No se procesó la venta.',
         }, { status: 503 })
       }
       if ((repairRows ?? []).length !== repairIds.length) {
-        return NextResponse.json({ success: false, error: 'Una de las reparaciones no pertenece a la sucursal activa.' }, { status: 400 })
+        return NextResponse.json({
+          success: false,
+          code: 'REPAIR_NOT_IN_POS_SCOPE',
+          error: 'Una de las reparaciones no pertenece a la sucursal activa.',
+        }, { status: 400 })
       }
 
-      for (const repair of repairRows ?? []) {
-        const joined = Array.isArray(repair.qualityCheck) ? repair.qualityCheck[0] : repair.qualityCheck
-        const validation = validateDeliveryQualityCheck(
-          joined?.result as RepairQualityCheckResult | null | undefined,
-          deliveryOutcome,
-        )
-        if ('code' in validation) {
-          return NextResponse.json({ success: false, code: validation.code, error: validation.message }, { status: 409 })
+      const customerMismatch = (repairRows ?? []).find((repair) => (
+        Boolean(repair.customer_id) && repair.customer_id !== customerId
+      ))
+      if (customerMismatch) {
+        return NextResponse.json({
+          success: false,
+          code: 'REPAIR_CUSTOMER_MISMATCH',
+          error: 'La reparación seleccionada pertenece a otro cliente.',
+        }, { status: 409 })
+      }
+
+      if (body.p_mark_repairs_delivered === true) {
+        const deliveryOutcome = typeof body.p_delivery_outcome === 'string'
+          ? body.p_delivery_outcome as RepairDeliveryOutcome
+          : null
+        if (!deliveryOutcome || !['repaired', 'withdrawn', 'unrepairable'].includes(deliveryOutcome)) {
+          return NextResponse.json({ success: false, error: 'Seleccioná un resultado de entrega válido.' }, { status: 400 })
+        }
+
+        for (const repair of repairRows ?? []) {
+          const joined = Array.isArray(repair.qualityCheck) ? repair.qualityCheck[0] : repair.qualityCheck
+          const validation = validateDeliveryQualityCheck(
+            joined?.result as RepairQualityCheckResult | null | undefined,
+            deliveryOutcome,
+          )
+          if ('code' in validation) {
+            return NextResponse.json({ success: false, code: validation.code, error: validation.message }, { status: 409 })
+          }
         }
       }
     }
