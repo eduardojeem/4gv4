@@ -29,9 +29,19 @@ import { formatters, formatValue } from '@/lib/formatters'
 import { ChartWrapper, RevenueChart, CustomerGrowthChart, SegmentDistributionChart, DebtDistributionChart } from '@/components/charts/ChartWrapper'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 
+export interface MainMetricItem {
+  id: string
+  title: string
+  value: number
+  format: 'number' | 'currency' | 'percentage'
+  icon: React.ReactNode
+  change: number
+  color: string
+}
+
 interface AnalyticsDashboardProps {
   customers: Customer[]
-  creditSummaries?: Record<string, any>
+  creditSummaries?: Record<string, { total_pending?: number; current_balance?: number }>
   mode?: 'interactive' | 'simple' | 'realtime'
   showPredictions?: boolean
   showComparisons?: boolean
@@ -150,7 +160,7 @@ export function AnalyticsDashboard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
+          <Select value={timeRange} onValueChange={(value) => setTimeRange(value as '3months' | '6months' | '12months')}>
             <SelectTrigger className="w-44 h-9 text-xs bg-white dark:bg-[#0d1117] border-slate-200 dark:border-white/10">
               <Calendar className="h-3.5 w-3.5 mr-2 text-slate-400" />
               <SelectValue />
@@ -535,8 +545,8 @@ function SimpleAnalyticsView({
   metrics,
   mainMetrics
 }: {
-  metrics: any,
-  mainMetrics: any[]
+  metrics: ReturnType<typeof useCustomerMetrics>
+  mainMetrics: MainMetricItem[]
 }) {
   return (
     <div className="space-y-4">
@@ -570,8 +580,8 @@ function RealtimeAnalyticsView({
   metrics: _metrics,
   mainMetrics
 }: {
-  metrics: any,
-  mainMetrics: any[]
+  metrics: ReturnType<typeof useCustomerMetrics>
+  mainMetrics: MainMetricItem[]
 }) {
   return (
     <div className="space-y-4">

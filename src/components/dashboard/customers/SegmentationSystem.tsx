@@ -26,7 +26,7 @@ import {
   UserX
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
-import { useSegmentationUnified, Segment } from '@/hooks/use-segmentation-unified'
+import { useSegmentationUnified, Segment, SegmentWithMetrics, SegmentationInsights } from '@/hooks/use-segmentation-unified'
 import { formatters, SEGMENT_COLORS } from '@/lib/formatters'
 import { ChartWrapper } from '@/components/charts/ChartWrapper'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -229,7 +229,12 @@ export function SegmentationSystem({
           if (isEditing && selectedSegmentId) {
             updateSegment(selectedSegmentId, segmentData)
           } else {
-            createSegment(segmentData)
+            createSegment({
+              ...segmentData,
+              rules: [],
+              priority: 0,
+              tags: []
+            })
           }
           setIsCreating(false)
           setIsEditing(false)
@@ -245,8 +250,8 @@ function SimpleSegmentationView({
   segments,
   insights: _insights
 }: {
-  segments: any[],
-  insights: any
+  segments: SegmentWithMetrics[]
+  insights: SegmentationInsights
 }) {
   return (
     <div className="space-y-4">
@@ -293,7 +298,7 @@ function SegmentsList({
   onDuplicate,
   onToggle
 }: {
-  segments: any[]
+  segments: SegmentWithMetrics[]
   onSelect: (id: string) => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
@@ -430,7 +435,7 @@ function AIInsights({
   segments,
   onGenerateSegments
 }: {
-  segments: any[],
+  segments: SegmentWithMetrics[],
   onGenerateSegments: () => void
 }) {
   const aiSegments = segments.filter(s => s.aiSuggested)
@@ -515,7 +520,7 @@ function AIInsights({
 }
 
 // Componente para analíticas de segmentos
-function SegmentAnalytics({ segments }: { segments: any[] }) {
+function SegmentAnalytics({ segments }: { segments: SegmentWithMetrics[] }) {
   const chartData = segments.map(segment => ({
     name: segment.name,
     customers: segment.metrics.customerCount,
@@ -592,8 +597,8 @@ function SegmentAutomation({
   segments,
   onUpdateSegment
 }: {
-  segments: any[],
-  onUpdateSegment: (id: string, updates: any) => void
+  segments: SegmentWithMetrics[],
+  onUpdateSegment: (id: string, updates: Partial<Segment>) => void
 }) {
   return (
     <div className="space-y-6">
@@ -632,6 +637,14 @@ function SegmentAutomation({
   )
 }
 
+interface SegmentFormData {
+  name: string
+  description: string
+  color: string
+  isActive: boolean
+  autoUpdate: boolean
+}
+
 // Dialog para crear/editar segmento
 function SegmentDialog({
   isOpen,
@@ -642,7 +655,7 @@ function SegmentDialog({
   isOpen: boolean
   onClose: () => void
   segment?: Segment
-  onSave: (segmentData: any) => void
+  onSave: (segmentData: SegmentFormData) => void
 }) {
   const [formData, setFormData] = useState({
     name: segment?.name || '',

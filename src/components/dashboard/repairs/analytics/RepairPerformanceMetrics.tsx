@@ -26,7 +26,17 @@ import {
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useRepairs } from '@/contexts/RepairsContext'
+import type { Repair } from '@/types/repairs'
 import { format, subDays, isWithinInterval, differenceInDays } from 'date-fns'
+
+interface TechnicianStats {
+  name: string
+  totalRepairs: number
+  completedRepairs: number
+  avgTime: number
+  totalTime: number
+  efficiency: number
+}
 
 interface RepairPerformanceMetricsProps {
   className?: string
@@ -49,8 +59,8 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     const currentRange = ranges[timeFrame as keyof typeof ranges]
     
     // Optimizar filtrado con Map para mejor rendimiento
-    const currentPeriodRepairs: any[] = []
-    const previousPeriodRepairs: any[] = []
+    const currentPeriodRepairs: Repair[] = []
+    const previousPeriodRepairs: Repair[] = []
     
     // Período anterior para comparación
     const previousRange = {
@@ -86,7 +96,7 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     }
 
     // Calcular métricas actuales en una sola iteración
-    currentPeriodRepairs.forEach((r: any) => {
+    currentPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado') currentMetrics.completedRepairs++
       if (['recibido', 'diagnostico', 'reparacion', 'pausado'].includes(r.dbStatus || '')) {
         currentMetrics.inProgressRepairs++
@@ -96,16 +106,16 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     })
 
     // Calcular métricas del período anterior
-    previousPeriodRepairs.forEach((r: any) => {
+    previousPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado') previousMetrics.completedRepairs++
       previousMetrics.revenue += (r.finalCost || r.estimatedCost || 0)
     })
 
     // Calcular tiempo promedio de reparación y entregas a tiempo en una iteración
-    const completedWithTime: any[] = []
+    const completedWithTime: Repair[] = []
     let totalRepairTime = 0
     
-    currentPeriodRepairs.forEach((r: any) => {
+    currentPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado' && r.completedAt && r.createdAt) {
         const repairTime = differenceInDays(new Date(r.completedAt), new Date(r.createdAt))
         completedWithTime.push(r)
@@ -177,16 +187,16 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
       }
       
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, TechnicianStats>)
 
     // Calcular eficiencia por técnico
-    Object.values(technicianPerformance).forEach((tech: any) => {
+    Object.values(technicianPerformance).forEach((tech) => {
       tech.avgTime = tech.completedRepairs > 0 ? tech.totalTime / tech.completedRepairs : 0
       tech.efficiency = tech.totalRepairs > 0 ? (tech.completedRepairs / tech.totalRepairs) * 100 : 0
     })
 
     const topTechnicians = Object.values(technicianPerformance)
-      .sort((a: any, b: any) => b.efficiency - a.efficiency)
+      .sort((a, b) => b.efficiency - a.efficiency)
       .slice(0, 5)
 
     return {
@@ -554,7 +564,7 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {performanceMetrics.topTechnicians.map((tech: any, index) => {
+            {performanceMetrics.topTechnicians.map((tech, index) => {
               const gradients = [
                 'from-yellow-400 via-orange-500 to-red-500', // 1st place - gold
                 'from-slate-300 via-slate-400 to-slate-500',   // 2nd place - silver

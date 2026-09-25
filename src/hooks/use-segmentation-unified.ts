@@ -44,6 +44,21 @@ export interface SegmentMetrics {
   satisfactionScore: number
 }
 
+export interface SegmentWithMetrics extends Segment {
+  metrics: SegmentMetrics
+  customers: Customer[]
+}
+
+export interface SegmentationInsights {
+  totalSegments: number
+  activeSegments: number
+  coverageRate: number
+  unsegmentedCustomers: number
+  topSegment: string
+  topSegmentValue: number
+  avgSegmentSize: number
+}
+
 export interface UseSegmentationOptions {
   enableAI?: boolean
   autoUpdate?: boolean

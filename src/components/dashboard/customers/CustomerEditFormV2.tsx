@@ -161,27 +161,28 @@ export function CustomerEditFormV2({
     ;(async () => {
       const res = await customerService.getCustomer(customer.id)
       if (mounted && res.success && res.data) {
+        const d = res.data as Partial<Customer> & Record<string, unknown>
         reset({
-          name: res.data.name || '',
-          email: res.data.email || '',
-          phone: res.data.phone || '',
-          whatsapp: (res.data as any).whatsapp || '',
-          address: res.data.address || '',
-          city: res.data.city || '',
-          company: (res.data as any).company || '',
-          company_name: (res.data as any).company_name || (res.data as any).company || '',
-          position: (res.data as any).position || '',
-          ruc: (res.data as any).ruc || '',
-          customer_type: safeType(res.data.customer_type as any),
-          segment: safeSegment(res.data.segment as any),
-          status: safeStatus(res.data.status as any),
-          credit_limit: res.data.credit_limit || 0,
-          discount_percentage: res.data.discount_percentage || 0,
-          payment_terms: res.data.payment_terms || '',
-          preferred_contact: safeContact(res.data.preferred_contact as any),
-          tags: res.data.tags || [],
-          notes: (res.data as any).notes || '',
-          birthday: (res.data as any).birthday || '',
+          name: d.name || '',
+          email: d.email || '',
+          phone: d.phone || '',
+          whatsapp: typeof d.whatsapp === 'string' ? d.whatsapp : '',
+          address: d.address || '',
+          city: d.city || '',
+          company: typeof d.company === 'string' ? d.company : '',
+          company_name: typeof d.company_name === 'string' ? d.company_name : typeof d.company === 'string' ? d.company : '',
+          position: typeof d.position === 'string' ? d.position : '',
+          ruc: typeof d.ruc === 'string' ? d.ruc : '',
+          customer_type: safeType(typeof d.customer_type === 'string' ? d.customer_type : undefined),
+          segment: safeSegment(typeof d.segment === 'string' ? d.segment : undefined),
+          status: safeStatus(typeof d.status === 'string' ? d.status : undefined),
+          credit_limit: d.credit_limit || 0,
+          discount_percentage: d.discount_percentage || 0,
+          payment_terms: d.payment_terms || '',
+          preferred_contact: safeContact(typeof d.preferred_contact === 'string' ? d.preferred_contact : undefined),
+          tags: d.tags || [],
+          notes: typeof d.notes === 'string' ? d.notes : '',
+          birthday: typeof d.birthday === 'string' ? d.birthday : '',
         })
       }
     })()

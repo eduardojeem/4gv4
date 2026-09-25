@@ -50,7 +50,92 @@ import { withBranchFilter } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
-// Datos mock eliminados
+export interface FormattedReportProduct {
+  id: string
+  name: string
+  category: string
+  sku: string
+  stock_quantity: number
+  min_stock: number
+  sale_price: number
+  purchase_price: number
+  total_sales: number
+  revenue: number
+  profit: number
+  margin: number
+  last_sale: string | null
+  supplier: string
+  status: 'active' | 'inactive'
+}
+
+interface ProductAggItem {
+  id: string
+  name: string
+  sku: string
+  stock_quantity: number
+  min_stock: number
+  sale_price: number
+  purchase_price: number
+  total_sales: number
+  revenue: number
+  profit: number
+  margin: number
+  last_sale: string | null
+  category: string
+  supplier: string
+  status: string
+}
+
+interface SalesTrendItem {
+  month: string
+  sales: number
+  revenue: number
+}
+
+interface CategoryReportItem {
+  name: string
+  value: number
+  color: string
+}
+
+interface TopProductItem {
+  name: string
+  revenue: number
+  sales: number
+}
+
+interface SaleItemWithDetails {
+  product_id: string
+  quantity: number | null
+  unit_price: number | null
+  subtotal: number | null
+  product: {
+    name?: string | null
+    category?: { name?: string | null } | null
+    sale_price?: number | null
+    purchase_price?: number | null
+    supplier?: { name?: string | null } | null
+  } | null
+  sale: {
+    created_at?: string | null
+    status?: string | null
+    branch_id?: string | null
+  } | null
+}
+
+interface ProductRowWithRelations {
+  id: string
+  name: string
+  sku?: string | null
+  stock_quantity?: number | null
+  min_stock?: number | null
+  sale_price?: number | null
+  purchase_price?: number | null
+  is_active?: boolean | null
+  category?: { name?: string | null } | null
+  supplier?: { name?: string | null } | null
+  [key: string]: unknown
+}
 
 export default function ProductReports() {
   const { planCode, organizationName } = useSubscriptionStatus()
@@ -64,13 +149,13 @@ export default function ProductReports() {
   const { selectedBranchId } = useBranch()
   const { organization } = useActiveOrganization()
   const [_loading, setLoading] = useState(true)
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<FormattedReportProduct[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Datos para gráficas
-  const [salesTrendData, setSalesTrendData] = useState<any[]>([])
-  const [categoryData, setCategoryData] = useState<any[]>([])
-  const [topProductsData, setTopProductsData] = useState<any[]>([])
+  const [salesTrendData, setSalesTrendData] = useState<SalesTrendItem[]>([])
+  const [categoryData, setCategoryData] = useState<CategoryReportItem[]>([])
+  const [topProductsData, setTopProductsData] = useState<TopProductItem[]>([])
 
   // Estados de filtros - deben declararse antes del useEffect
   const [dateRange, setDateRange] = useState({
@@ -132,23 +217,24 @@ export default function ProductReports() {
 
         if (itemsError) throw itemsError
 
-        const inRangeCompleted = (itemsData ?? []).filter((i: any) => {
+        const rawItems = (itemsData ?? []) as unknown as SaleItemWithDetails[]
+        const inRangeCompleted = rawItems.filter(i => {
           const d = i?.sale?.created_at ? new Date(i.sale.created_at) : null
           const s = i?.sale?.status
           return d && d >= dateRange.from && d <= dateRange.to && isCompletedSaleStatus(s)
         })
 
-        const productAgg: Record<string, any> = {}
+        const productAgg: Record<string, ProductAggItem> = {}
         const categoryAgg: Record<string, number> = {}
         const trendAgg: Record<string, { sales: number; revenue: number }> = {}
 
-        inRangeCompleted.forEach((item: any) => {
+        inRangeCompleted.forEach(item => {
           const pid = item.product_id
           const p = item.product
           const qty = Number(item.quantity) || 0
           const total = Number(item.subtotal ?? qty * Number(item.unit_price ?? 0)) || 0
           const cat = p?.category?.name || 'Sin categoría'
-          const saleDate = new Date(item.sale.created_at)
+          const saleDate = item.sale?.created_at ? new Date(item.sale.created_at) : new Date()
           const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth()+1).padStart(2,'0')}`
 
           if (!productAgg[pid]) {
@@ -158,8 +244,8 @@ export default function ProductReports() {
               sku: '',
               stock_quantity: 0,
               min_stock: 0,
-              sale_price: p?.sale_price || 0,
-              purchase_price: p?.purchase_price || 0,
+              sale_price: Number(p?.sale_price) || 0,
+              purchase_price: Number(p?.purchase_price) || 0,
               total_sales: 0,
               revenue: 0,
               profit: 0,
@@ -183,22 +269,22 @@ export default function ProductReports() {
           trendAgg[monthKey].revenue += total
         })
 
-        const formattedProducts = (productsData ?? []).map((p: any) => {
-          const agg = productAgg[p.id] || {}
+        const formattedProducts: FormattedReportProduct[] = ((productsData ?? []) as unknown as ProductRowWithRelations[]).map(p => {
+          const agg = productAgg[p.id]
           return {
             id: p.id,
             name: p.name,
             category: p.category?.name || 'Sin categoría',
-            sku: p.sku,
-            stock_quantity: p.stock_quantity,
+            sku: p.sku || '',
+            stock_quantity: p.stock_quantity ?? 0,
             min_stock: p.min_stock || 0,
-            sale_price: p.sale_price,
+            sale_price: p.sale_price ?? 0,
             purchase_price: p.purchase_price || 0,
-            total_sales: agg.total_sales || 0,
-            revenue: agg.revenue || 0,
-            profit: agg.profit || 0,
-            margin: agg.margin || 0,
-            last_sale: agg.last_sale || null,
+            total_sales: agg?.total_sales || 0,
+            revenue: agg?.revenue || 0,
+            profit: agg?.profit || 0,
+            margin: agg?.margin || 0,
+            last_sale: agg?.last_sale || null,
             supplier: p.supplier?.name || '',
             status: p.is_active ? 'active' : 'inactive'
           }

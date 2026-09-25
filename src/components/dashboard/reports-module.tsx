@@ -38,12 +38,22 @@ import { toast } from 'sonner';
 import { subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 
 // Tipos para reportes
+export interface ReportProductInput {
+  id?: string
+  name?: string
+  stock_quantity?: number | null
+  min_stock?: number | null
+  price?: number | null
+  sale_price?: number | null
+  [key: string]: unknown
+}
+
 export interface ReportData {
   id: string
   name: string
   description: string
   type: 'sales' | 'inventory' | 'financial' | 'performance' | 'custom'
-  data: any[]
+  data: Record<string, unknown>[]
   generatedAt: Date
   period: {
     start: Date
@@ -114,7 +124,7 @@ const reportConfigs: ReportConfig[] = [
 ]
 
 // Hook para generar datos de reportes
-export function useReportsData(products: any[] = []) {
+export function useReportsData(products: ReportProductInput[] = []) {
   const generateSalesData = useCallback(() => {
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
     return months.map(month => ({
@@ -185,7 +195,7 @@ function DynamicChart({
   height = 300
 }: {
   config: ReportConfig
-  data: any[]
+  data: Record<string, unknown>[]
   height?: number
 }) {
   const renderChart = () => {
@@ -297,7 +307,7 @@ function DynamicChart({
 }
 
 // Componente de métricas clave
-function KeyMetrics({ data: _data }: { data: any }) {
+function KeyMetrics({ data: _data }: { data?: unknown }) {
   const metrics = [
     {
       title: 'Ingresos Totales',
@@ -416,7 +426,7 @@ function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
 }
 
 // Componente principal del módulo de reportes
-export default function ReportsModule({ products = [] }: { products?: any[] }) {
+export default function ReportsModule({ products = [] }: { products?: ReportProductInput[] }) {
   const [selectedPeriod, setSelectedPeriod] = useState('month')
   const [_dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
