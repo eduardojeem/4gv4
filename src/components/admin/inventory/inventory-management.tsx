@@ -973,23 +973,23 @@ export default function InventoryManagement() {
 
       {/* Dialogs: Create/Edit Product - Sincronizado con ProductModal completo de Dashboard */}
       <ProductModal
-        product={(selectedProduct as any) || null}
+        product={(selectedProduct as unknown as import('@/types/products').Product) || null}
         isOpen={isAddDialogOpen || isEditDialogOpen}
         onClose={() => {
           setIsAddDialogOpen(false)
           setIsEditDialogOpen(false)
           setSelectedProduct(null)
         }}
-        categories={categories as any}
+        categories={categories as unknown as import('@/types/products').Category[]}
         brands={[]}
-        suppliers={suppliers as any}
+        suppliers={suppliers as unknown as import('@/types/products').Supplier[]}
         onSave={async (productData) => {
           if (isEditDialogOpen && selectedProduct) {
-            const result = await updateProduct(selectedProduct.id, productData as any)
+            const result = await updateProduct(selectedProduct.id, productData as unknown as Parameters<typeof updateProduct>[1])
             if (!result.success) throw new Error(result.error || 'No fue posible actualizar el producto')
             setSuccessMessage('Producto actualizado correctamente')
           } else {
-            const result = await createProduct(productData as any)
+            const result = await createProduct(productData as unknown as Parameters<typeof createProduct>[0])
             if (!result.success) throw new Error(result.error || 'No fue posible crear el producto')
             setSuccessMessage('Producto creado correctamente')
           }

@@ -164,7 +164,7 @@ export function ProductCharts({
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }: any) => `${name} ${((percent as number) * 100).toFixed(0)}%`}
+                  label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -174,9 +174,9 @@ export function ProductCharts({
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(value: any, name: any, props: any) => [
-                    formatCurrency(value),
-                    `${props.payload.products} productos`
+                  formatter={(value: unknown, _name: unknown, props: { payload?: { products?: number } }) => [
+                    formatCurrency(Number(value) || 0),
+                    `${props.payload?.products ?? 0} productos`
                   ]}
                 />
               </PieChart>
@@ -242,8 +242,8 @@ export function ProductCharts({
                     borderRadius: '8px'
                   }}
                   labelFormatter={(label) => `Fecha: ${label}`}
-                  formatter={(value: any, name: any) => [
-                    value,
+                  formatter={(value: unknown, name: unknown) => [
+                    value as string | number,
                     name === 'entries' ? 'Entradas' : 
                     name === 'exits' ? 'Salidas' : 'Neto'
                   ]}

@@ -187,7 +187,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
 
   // Componente de gráfico de área
   const AreaChartComponent = ({ data, title, dataKey, color = '#3b82f6' }: {
-    data: any[]
+    data: Array<Record<string, unknown>>
     title: string
     dataKey: string
     color?: string
@@ -218,7 +218,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
 
   // Componente de gráfico de barras
   const BarChartComponent = ({ data, title, dataKey, color = '#3b82f6' }: {
-    data: any[]
+    data: Array<Record<string, unknown>>
     title: string
     dataKey: string
     color?: string
@@ -243,7 +243,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
 
   // Componente de gráfico circular
   const PieChartComponent = ({ data, title }: {
-    data: any[]
+    data: Array<Record<string, unknown>>
     title: string
   }) => (
     <Card>
@@ -275,7 +275,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   )
 
   // Componente de tabla de top productos
-  const TopProductsTable = ({ products }: { products: any[] }) => (
+  const TopProductsTable = ({ products }: { products: Array<Record<string, unknown>> }) => (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Top Productos</CardTitle>
@@ -283,20 +283,20 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
       <CardContent>
         <div className="space-y-4">
           {products.slice(0, 5).map((product, index) => (
-            <div key={product.productId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div key={String(product.productId || index)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-sm font-semibold text-blue-600">{index + 1}</span>
                 </div>
                 <div>
-                  <p className="font-medium">{product.productName}</p>
-                  <p className="text-sm text-gray-600">{product.quantity} unidades</p>
+                  <p className="font-medium">{String(product.productName || 'Producto')}</p>
+                  <p className="text-sm text-gray-600">{Number(product.quantity) || 0} unidades</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-semibold">{formatCurrency(product.revenue)}</p>
-                <p className={`text-sm ${product.growth > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {product.growth > 0 ? '+' : ''}{product.growth.toFixed(1)}%
+                <p className="font-semibold">{formatCurrency(Number(product.revenue) || 0)}</p>
+                <p className={`text-sm ${Number(product.growth || 0) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {Number(product.growth || 0) > 0 ? '+' : ''}{(Number(product.growth) || 0).toFixed(1)}%
                 </p>
               </div>
             </div>
@@ -307,7 +307,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   )
 
   // Componente de alertas
-  const AlertsComponent = ({ alerts }: { alerts: any[] }) => (
+  const AlertsComponent = ({ alerts }: { alerts: Array<Record<string, unknown>> }) => (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center">
@@ -325,8 +325,8 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
                   alert.severity === 'low' ? 'bg-yellow-500' : 'bg-gray-500'
                 }`} />
                 <div>
-                  <p className="font-medium">{alert.productName}</p>
-                  <p className="text-sm text-gray-600">Stock: {alert.currentStock}</p>
+                  <p className="font-medium">{String(alert.productName || 'Producto')}</p>
+                  <p className="text-sm text-gray-600">Stock: {Number(alert.currentStock) || 0}</p>
                 </div>
               </div>
               <Badge variant={alert.severity === 'critical' ? 'destructive' : 'secondary'}>

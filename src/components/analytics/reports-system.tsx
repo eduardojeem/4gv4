@@ -66,7 +66,7 @@ interface ReportSection {
   id: string
   name: string
   type: 'chart' | 'table' | 'metric' | 'text'
-  config: any
+  config: Record<string, unknown>
 }
 
 // Componente principal del sistema de reportes
@@ -282,7 +282,7 @@ export function ReportsSystem() {
           </div>
           <div>
             <Label htmlFor="type">Tipo de Reporte</Label>
-            <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as any })}>
+            <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as Report['type'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -310,7 +310,7 @@ export function ReportsSystem() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <Label htmlFor="schedule">Frecuencia</Label>
-            <Select value={formData.schedule} onValueChange={(value) => setFormData({ ...formData, schedule: value as any })}>
+            <Select value={formData.schedule} onValueChange={(value) => setFormData({ ...formData, schedule: value as Report['schedule'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -324,7 +324,7 @@ export function ReportsSystem() {
           </div>
           <div>
             <Label htmlFor="format">Formato</Label>
-            <Select value={formData.format} onValueChange={(value) => setFormData({ ...formData, format: value as any })}>
+            <Select value={formData.format} onValueChange={(value) => setFormData({ ...formData, format: value as Report['format'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -338,7 +338,7 @@ export function ReportsSystem() {
           </div>
           <div>
             <Label htmlFor="status">Estado</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as any })}>
+            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as Report['status'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
