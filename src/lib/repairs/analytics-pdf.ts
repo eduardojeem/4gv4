@@ -3,7 +3,30 @@ import autoTable, { type Table } from 'jspdf-autotable'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-export function generateAnalyticsPDF(analyticsData: any, organizationName: string = 'Taller') {
+export interface RepairAnalyticsData {
+  metrics?: {
+    totalRepairs?: number
+    completedRepairs?: number
+    inProgressRepairs?: number
+    avgRepairTime?: number
+    completionRate?: number
+    onTimeRate?: number
+    urgentRepairs?: number
+    totalRevenue?: number
+  }
+  statusAnalysis?: Array<{
+    name: string
+    count: number | string
+  }>
+  technicianAnalysis?: Array<{
+    name: string
+    completedRepairs: number | string
+    efficiency: number
+    avgTime: number
+  }>
+}
+
+export function generateAnalyticsPDF(analyticsData: RepairAnalyticsData, organizationName: string = 'Taller') {
   const doc: jsPDF & { lastAutoTable?: Table } = new jsPDF()
   
   // Encabezado
@@ -48,7 +71,7 @@ export function generateAnalyticsPDF(analyticsData: any, organizationName: strin
   doc.setFontSize(14)
   doc.text('Distribución por Estado', 14, finalY1 + 15)
   
-  const statusBody = (analyticsData.statusAnalysis || []).map((item: any) => [
+  const statusBody = (analyticsData.statusAnalysis || []).map((item) => [
     item.name, 
     String(item.count)
   ])
@@ -74,7 +97,7 @@ export function generateAnalyticsPDF(analyticsData: any, organizationName: strin
   doc.setFontSize(14)
   doc.text('Top Técnicos por Eficiencia', 14, finalY2)
 
-  const techBody = (analyticsData.technicianAnalysis || []).map((tech: any, index: number) => [
+  const techBody = (analyticsData.technicianAnalysis || []).map((tech, index: number) => [
     String(index + 1),
     tech.name,
     String(tech.completedRepairs),

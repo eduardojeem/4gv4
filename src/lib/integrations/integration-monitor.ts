@@ -1,4 +1,200 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+
+export type IntegrationDatabase = {
+  public: {
+    Tables: {
+      integration_monitoring_rules: {
+        Row: {
+          id: string
+          integration_id: string
+          name: string
+          description: string
+          type: 'response_time' | 'error_rate' | 'uptime' | 'data_quality' | 'rate_limit'
+          condition: string
+          actions: string
+          severity: 'low' | 'medium' | 'high' | 'critical'
+          enabled: boolean
+          cooldown_period: number
+          last_triggered?: string | null
+        }
+        Insert: {
+          id?: string
+          integration_id?: string
+          name?: string
+          description?: string
+          type?: string
+          condition?: string
+          actions?: string
+          severity?: string
+          enabled?: boolean
+          cooldown_period?: number
+          last_triggered?: string | null
+        }
+        Update: {
+          id?: string
+          integration_id?: string
+          name?: string
+          description?: string
+          type?: string
+          condition?: string
+          actions?: string
+          severity?: string
+          enabled?: boolean
+          cooldown_period?: number
+          last_triggered?: string | null
+        }
+        Relationships: []
+      }
+      integration_alerts: {
+        Row: {
+          id: string
+          integration_id: string
+          rule_id: string
+          severity: 'low' | 'medium' | 'high' | 'critical'
+          title: string
+          message: string
+          timestamp: string
+          status: 'active' | 'acknowledged' | 'resolved'
+          metadata?: string | null
+          acknowledged_by?: string | null
+          acknowledged_at?: string | null
+          resolved_at?: string | null
+        }
+        Insert: {
+          id?: string
+          integration_id: string
+          rule_id: string
+          severity: string
+          title: string
+          message: string
+          timestamp: string
+          status: string
+          metadata?: string | null
+          acknowledged_by?: string | null
+          acknowledged_at?: string | null
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          integration_id?: string
+          rule_id?: string
+          severity?: string
+          title?: string
+          message?: string
+          timestamp?: string
+          status?: string
+          metadata?: string | null
+          acknowledged_by?: string | null
+          acknowledged_at?: string | null
+          resolved_at?: string | null
+        }
+        Relationships: []
+      }
+      external_integrations: {
+        Row: {
+          id: string
+          name: string
+          type: string
+          status: string
+          config?: string | null
+        }
+        Insert: {
+          id?: string
+          name?: string
+          type?: string
+          status?: string
+          config?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          type?: string
+          status?: string
+          config?: string | null
+        }
+        Relationships: []
+      }
+      integration_metrics: {
+        Row: {
+          id?: string
+          timestamp: string
+          integrations_count: number
+          average_response_time: number
+          average_uptime: number
+          average_error_rate: number
+          active_alerts: number
+        }
+        Insert: {
+          id?: string
+          timestamp: string
+          integrations_count: number
+          average_response_time: number
+          average_uptime: number
+          average_error_rate: number
+          active_alerts: number
+        }
+        Update: {
+          id?: string
+          timestamp?: string
+          integrations_count?: number
+          average_response_time?: number
+          average_uptime?: number
+          average_error_rate?: number
+          active_alerts?: number
+        }
+        Relationships: []
+      }
+      integration_health_checks: {
+        Row: {
+          id?: string
+          integration_id: string
+          status: string
+          last_check: string
+          response_time: number
+          uptime: number
+          error_rate: number
+          last_error?: string
+          metrics: string
+        }
+        Insert: {
+          id?: string
+          integration_id: string
+          status: string
+          last_check: string
+          response_time: number
+          uptime: number
+          error_rate: number
+          last_error?: string
+          metrics: string
+        }
+        Update: {
+          id?: string
+          integration_id?: string
+          status?: string
+          last_check?: string
+          response_time?: number
+          uptime?: number
+          error_rate?: number
+          last_error?: string
+          metrics?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
 
 // Interfaces para el monitoreo de integraciones
 export interface IntegrationHealth {
@@ -58,7 +254,35 @@ export interface AlertActionConfig {
   retryAttempts?: number
   failoverIntegrationId?: string
   template?: string
-  [key: string]: any
+  [key: string]: unknown
+}
+
+export interface IntegrationRecord {
+  id: string
+  name: string
+  type: string
+  status: string
+  config?: string | Record<string, unknown> | null
+  [key: string]: unknown
+}
+
+export interface HealthCheckResult {
+  success: boolean
+  status?: number
+  error?: string | null
+  metrics: HealthMetrics & { errorRate?: number }
+}
+
+export interface RestApiConfig {
+  baseUrl?: string
+  healthCheckUrl?: string
+  headers?: Record<string, string>
+  [key: string]: unknown
+}
+
+export interface WebhookConfig {
+  url?: string
+  [key: string]: unknown
 }
 
 export interface Alert {
@@ -73,7 +297,7 @@ export interface Alert {
   acknowledgedBy?: string
   acknowledgedAt?: Date
   resolvedAt?: Date
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface IntegrationIncident {
@@ -136,14 +360,14 @@ export interface SLAMetrics {
 
 // Clase principal para el monitoreo de integraciones
 export class IntegrationMonitor {
-  private supabase: any
+  private supabase: SupabaseClient<IntegrationDatabase>
   private monitoringInterval: NodeJS.Timeout | null = null
   private healthChecks: Map<string, IntegrationHealth> = new Map()
   private rules: Map<string, MonitoringRule> = new Map()
   private activeAlerts: Map<string, Alert> = new Map()
 
   constructor() {
-    this.supabase = createClient(
+    this.supabase = createClient<IntegrationDatabase>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
@@ -177,6 +401,8 @@ export class IntegrationMonitor {
       rules?.forEach(rule => {
         this.rules.set(rule.id, {
           ...rule,
+          integrationId: rule.integration_id,
+          cooldownPeriod: rule.cooldown_period,
           condition: JSON.parse(rule.condition),
           actions: JSON.parse(rule.actions),
           lastTriggered: rule.last_triggered ? new Date(rule.last_triggered) : undefined
@@ -202,6 +428,8 @@ export class IntegrationMonitor {
       alerts?.forEach(alert => {
         this.activeAlerts.set(alert.id, {
           ...alert,
+          integrationId: alert.integration_id,
+          ruleId: alert.rule_id,
           timestamp: new Date(alert.timestamp),
           acknowledgedAt: alert.acknowledged_at ? new Date(alert.acknowledged_at) : undefined,
           resolvedAt: alert.resolved_at ? new Date(alert.resolved_at) : undefined,
@@ -254,7 +482,7 @@ export class IntegrationMonitor {
   }
 
   // Verificar salud de una integración específica
-  private async checkIntegrationHealth(integration: any): Promise<void> {
+  private async checkIntegrationHealth(integration: IntegrationRecord): Promise<void> {
     const startTime = Date.now()
     let health: IntegrationHealth
 
@@ -310,33 +538,53 @@ export class IntegrationMonitor {
   }
 
   // Realizar verificación específica según tipo de integración
-  private async performHealthCheck(integration: any): Promise<any> {
-    const config = JSON.parse(integration.config || '{}')
+  private async performHealthCheck(integration: IntegrationRecord): Promise<HealthCheckResult> {
+    const rawConfig = typeof integration.config === 'string'
+      ? (JSON.parse(integration.config || '{}') as Record<string, unknown>)
+      : (integration.config as Record<string, unknown> | null) ?? {}
 
     switch (integration.type) {
       case 'rest_api':
-        return await this.checkRestAPI(config)
+        return await this.checkRestAPI(rawConfig as RestApiConfig)
       case 'webhook':
-        return await this.checkWebhook(config)
+        return await this.checkWebhook(rawConfig as WebhookConfig)
       case 'database':
-        return await this.checkDatabase(config)
+        return await this.checkDatabase(rawConfig)
       case 'file_sync':
-        return await this.checkFileSync(config)
+        return await this.checkFileSync(rawConfig)
       default:
         throw new Error(`Unsupported integration type: ${integration.type}`)
     }
   }
 
   // Verificar API REST
-  private async checkRestAPI(config: any): Promise<any> {
-    const response = await fetch(config.healthCheckUrl || config.baseUrl, {
+  private async checkRestAPI(config: RestApiConfig): Promise<HealthCheckResult> {
+    const url = config.healthCheckUrl || config.baseUrl
+    if (!url) {
+      return {
+        success: false,
+        status: 400,
+        error: 'Missing healthCheckUrl or baseUrl',
+        metrics: {
+          requestsPerMinute: 0,
+          successRate: 0,
+          averageResponseTime: 0,
+          errorCount: 1,
+          timeoutCount: 0,
+          rateLimitHits: 0,
+          dataQuality: 0
+        }
+      }
+    }
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: config.headers || {},
       signal: AbortSignal.timeout(10000)
     })
 
     const metrics: HealthMetrics = {
-      requestsPerMinute: await this.getRequestsPerMinute(config.baseUrl),
+      requestsPerMinute: config.baseUrl ? await this.getRequestsPerMinute(config.baseUrl) : 0,
       successRate: response.ok ? 100 : 0,
       averageResponseTime: 0, // Se calculará después
       errorCount: response.ok ? 0 : 1,
@@ -354,8 +602,24 @@ export class IntegrationMonitor {
   }
 
   // Verificar webhook
-  private async checkWebhook(config: any): Promise<any> {
+  private async checkWebhook(config: WebhookConfig): Promise<HealthCheckResult> {
     // Para webhooks, verificamos la conectividad del endpoint
+    if (!config.url) {
+      return {
+        success: false,
+        error: 'Missing webhook url',
+        metrics: {
+          requestsPerMinute: 0,
+          successRate: 0,
+          averageResponseTime: 0,
+          errorCount: 1,
+          timeoutCount: 0,
+          rateLimitHits: 0,
+          dataQuality: 0
+        }
+      }
+    }
+
     try {
       const response = await fetch(config.url, {
         method: 'HEAD',
@@ -393,7 +657,7 @@ export class IntegrationMonitor {
   }
 
   // Verificar base de datos
-  private async checkDatabase(_config: any): Promise<any> {
+  private async checkDatabase(_config: Record<string, unknown>): Promise<HealthCheckResult> {
     // Implementar verificación de conexión a base de datos
     // Esto dependería del tipo específico de base de datos
     return {
@@ -411,7 +675,7 @@ export class IntegrationMonitor {
   }
 
   // Verificar sincronización de archivos
-  private async checkFileSync(_config: any): Promise<any> {
+  private async checkFileSync(_config: Record<string, unknown>): Promise<HealthCheckResult> {
     // Implementar verificación de sincronización de archivos
     return {
       success: true,
@@ -428,16 +692,18 @@ export class IntegrationMonitor {
   }
 
   // Determinar estado de salud basado en resultados
-  private determineHealthStatus(result: any, responseTime: number): 'healthy' | 'warning' | 'critical' | 'offline' {
+  private determineHealthStatus(result: HealthCheckResult, responseTime: number): 'healthy' | 'warning' | 'critical' | 'offline' {
     if (!result.success) {
       return 'offline'
     }
 
-    if (responseTime > 5000 || result.metrics.errorRate > 10) {
+    const errorRate = result.metrics.errorRate ?? 0
+
+    if (responseTime > 5000 || errorRate > 10) {
       return 'critical'
     }
 
-    if (responseTime > 2000 || result.metrics.errorRate > 5) {
+    if (responseTime > 2000 || errorRate > 5) {
       return 'warning'
     }
 

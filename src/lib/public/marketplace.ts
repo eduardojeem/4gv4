@@ -436,7 +436,16 @@ async function getMarketplaceOrganizationsUncached(
     productsByOrganization.set(product.organization_id, rows)
   })
 
-  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
+  const settingsByOrganization = new Map<
+    string,
+    {
+      city?: string | null
+      company_address?: string | null
+      company_phone?: string | null
+      company_email?: string | null
+      company_ruc?: string | null
+    }
+  >()
   ;(orgSettings ?? []).forEach((s) => {
     settingsByOrganization.set(s.organization_id, s)
   })
@@ -487,14 +496,14 @@ async function getMarketplaceOrganizationsUncached(
     const description = rawDescription || slogan || null
     const brandColor = typeof companyInfo?.brandColor === 'string' ? companyInfo.brandColor : null
     const customBrandColor = typeof companyInfo?.customBrandColor === 'string' ? companyInfo.customBrandColor : null
-    const phone = typeof companyInfo?.phone === 'string' ? companyInfo.phone : (orgSetting as any)?.company_phone || null
-    const email = typeof companyInfo?.email === 'string' ? companyInfo.email : (orgSetting as any)?.company_email || null
+    const phone = typeof companyInfo?.phone === 'string' ? companyInfo.phone : orgSetting?.company_phone || null
+    const email = typeof companyInfo?.email === 'string' ? companyInfo.email : orgSetting?.company_email || null
     const whatsapp = typeof companyInfo?.whatsapp === 'string' ? companyInfo.whatsapp : null
     const instagram = typeof companyInfo?.instagram === 'string' ? companyInfo.instagram : null
     const facebook = typeof companyInfo?.facebook === 'string' ? companyInfo.facebook : null
     const tiktok = typeof companyInfo?.tiktok === 'string' ? companyInfo.tiktok : null
     const hours = (companyInfo?.hours && typeof companyInfo.hours === 'object') ? (companyInfo.hours as { weekdays?: string; saturday?: string; sunday?: string }) : null
-    const ruc = typeof companyInfo?.ruc === 'string' ? companyInfo.ruc : (orgSetting as any)?.company_ruc || null
+    const ruc = typeof companyInfo?.ruc === 'string' ? companyInfo.ruc : orgSetting?.company_ruc || null
     const businessType = typeof companyInfo?.businessType === 'string' ? companyInfo.businessType : null
 
     const city = orgSetting?.city?.trim() || defaultBranch?.city?.trim() || null

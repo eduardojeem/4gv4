@@ -5,7 +5,9 @@ export function getWebsiteDefaultsForVertical(
   vertical: BusinessVertical = 'general',
   operatingModel: OperatingModel = 'retail',
   legacyBusinessType?: string
-): Partial<WebsiteSettings> {
+): Partial<Omit<WebsiteSettings, 'company_info'>> & {
+  company_info?: Partial<WebsiteSettings['company_info']>
+} {
   const isRepairOrTech =
     vertical === 'electronics' ||
     operatingModel === 'repair' ||
@@ -20,7 +22,7 @@ export function getWebsiteDefaultsForVertical(
         servicesPageEnabled: false,
         repairTrackingEnabled: false,
         processSectionEnabled: true,
-      } as any,
+      },
       hero_content: {
         enabled: true,
         badge: 'Nueva Colección & Tendencias',
@@ -54,9 +56,8 @@ export function getWebsiteDefaultsForVertical(
         servicesPageEnabled: false,
         repairTrackingEnabled: false,
         processSectionEnabled: true,
-      } as any,
+      },
       hero_content: {
-        enabled: true,
         badge: 'Cuidado & Belleza',
         title: 'Realzá tu belleza con productos de confianza',
         subtitle: 'Cosmética y cuidado personal con asesoramiento para elegir lo ideal.',
@@ -88,7 +89,7 @@ export function getWebsiteDefaultsForVertical(
         servicesPageEnabled: false,
         repairTrackingEnabled: false,
         processSectionEnabled: true,
-      } as any,
+      },
       hero_content: {
         enabled: true,
         badge: 'Sabores Únicos & Frescos',
@@ -122,7 +123,7 @@ export function getWebsiteDefaultsForVertical(
         servicesPageEnabled: false,
         repairTrackingEnabled: false,
         processSectionEnabled: true,
-      } as any,
+      },
       hero_content: {
         enabled: true,
         badge: 'Herramientas & Materiales',
@@ -156,7 +157,7 @@ export function getWebsiteDefaultsForVertical(
         servicesPageEnabled: true,
         repairTrackingEnabled: true,
         processSectionEnabled: true,
-      } as any,
+      },
       hero_content: {
         enabled: true,
         badge: 'Servicio Técnico & Tecnología',
@@ -190,7 +191,7 @@ export function getWebsiteDefaultsForVertical(
         servicesPageEnabled: true,
         repairTrackingEnabled: false,
         processSectionEnabled: true,
-      } as any,
+      },
       hero_content: {
         enabled: true,
         badge: 'Atención Profesional',
@@ -224,7 +225,7 @@ export function getWebsiteDefaultsForVertical(
       servicesPageEnabled: false,
       repairTrackingEnabled: false,
       processSectionEnabled: true,
-    } as any,
+    },
     hero_content: {
       enabled: true,
       badge: 'Catálogo Oficial',

@@ -29,7 +29,7 @@ export interface AccountingTransaction {
   currency: string
   entries: AccountingEntry[]
   attachments?: string[]
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   externalId?: string
   syncStatus: 'pending' | 'synced' | 'error'
   lastSyncAt?: Date
@@ -244,7 +244,7 @@ export abstract class AccountingSystem {
 
   async updateSyncStatus(recordType: string, recordId: string, status: 'pending' | 'synced' | 'error', error?: string): Promise<void> {
     const table = `accounting_${recordType}`
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       syncStatus: status,
       lastSyncAt: new Date(),
       updatedAt: new Date()
