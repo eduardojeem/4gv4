@@ -3,23 +3,27 @@
 import React, { memo } from 'react'
 import { useVirtualList } from '@/hooks/use-virtual-list'
 
-interface VirtualizedProductGridProps {
-  products: any[]
-  renderProduct: (product: any, index: number) => React.ReactNode
+export interface IdentifiableItem {
+  id?: string | number
+}
+
+interface VirtualizedProductGridProps<T extends IdentifiableItem = IdentifiableItem> {
+  products: T[]
+  renderProduct: (product: T, index: number) => React.ReactNode
   itemHeight: number
   containerHeight: number
   className?: string
   viewMode: 'grid' | 'list'
 }
 
-const VirtualizedProductGrid = memo(({
+function VirtualizedProductGridInner<T extends IdentifiableItem = IdentifiableItem>({
   products,
   renderProduct,
   itemHeight,
   containerHeight,
   className = '',
   viewMode
-}: VirtualizedProductGridProps) => {
+}: VirtualizedProductGridProps<T>) {
   // Solo usar virtualización si hay más de 50 productos
   const shouldVirtualize = products.length > 50
 
@@ -66,8 +70,8 @@ const VirtualizedProductGrid = memo(({
             ? 'grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4'
             : 'space-y-2'
           }>
-            {virtualItems.map(({ item: product, index }: { item: any, index: number }) => (
-              <div key={`${product.id}-${index}`}>
+            {virtualItems.map(({ item: product, index }) => (
+              <div key={`${product.id ?? index}-${index}`}>
                 {renderProduct(product, index)}
               </div>
             ))}
@@ -76,8 +80,8 @@ const VirtualizedProductGrid = memo(({
       </div>
     </div>
   )
-})
+}
 
-VirtualizedProductGrid.displayName = 'VirtualizedProductGrid'
+const VirtualizedProductGrid = memo(VirtualizedProductGridInner) as typeof VirtualizedProductGridInner
 
 export { VirtualizedProductGrid }

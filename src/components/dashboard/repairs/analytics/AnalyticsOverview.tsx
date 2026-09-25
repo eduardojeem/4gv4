@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useState, useCallback, memo } from 'react'
+import { useState, useCallback, memo, type ElementType } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -48,7 +48,7 @@ const MetricCard = memo(({
   title: string
   value: number | string
   change?: number
-  icon: any
+  icon: ElementType
   format?: 'number' | 'currency' | 'percentage' | 'days'
   gradient: string
   trend?: 'up' | 'down' | 'neutral'
@@ -118,16 +118,27 @@ const MetricCard = memo(({
   )
 })
 
-MetricCard.displayName = 'MetricCard'
+interface TooltipPayloadEntry {
+  color?: string
+  name: string
+  value: number | string
+  [key: string]: unknown
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: TooltipPayloadEntry[]
+  label?: string
+}
 
 // Tooltip personalizado optimizado
-const CustomTooltip = memo(({ active, payload, label }: any) => {
+const CustomTooltip = memo(({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload || !payload.length) return null
 
   return (
     <div className="bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3">
       <div className="font-medium text-sm mb-1">{label}</div>
-      {payload.map((entry: any, index: number) => (
+      {payload.map((entry, index: number) => (
         <div key={index} className="text-sm flex items-center gap-2" style={{ color: entry.color }}>
           <div
             className="w-3 h-3 rounded-full flex-shrink-0"

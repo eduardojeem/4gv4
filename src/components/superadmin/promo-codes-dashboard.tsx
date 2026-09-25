@@ -452,8 +452,9 @@ export function PromoCodesDashboard() {
         current.map((item) => (item.id === code.id ? { ...item, is_active: data.code.is_active } : item))
       )
       toast.success(data.code.is_active ? `Código ${code.code} activado.` : `Código ${code.code} pausado.`)
-    } catch (err: any) {
-      toast.error(err.message || 'No se pudo cambiar el estado del código.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo cambiar el estado del código.'
+      toast.error(message)
     }
   }
 
@@ -749,7 +750,14 @@ export function PromoCodesDashboard() {
               {/* Filtros Dropdown y Selector de Vista */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Filtro de Estado */}
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(v) => {
+                    if (v === 'all' || v === 'active' || v === 'inactive' || v === 'expired' || v === 'exhausted') {
+                      setStatusFilter(v)
+                    }
+                  }}
+                >
                   <SelectTrigger className="h-9 w-38 text-xs">
                     <SelectValue placeholder="Estado" />
                   </SelectTrigger>
@@ -780,7 +788,14 @@ export function PromoCodesDashboard() {
                 </Select>
 
                 {/* Ordenamiento */}
-                <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                <Select
+                  value={sortBy}
+                  onValueChange={(v) => {
+                    if (v === 'recent' || v === 'redemptions' || v === 'expiring' || v === 'alphabetical') {
+                      setSortBy(v)
+                    }
+                  }}
+                >
                   <SelectTrigger className="h-9 w-40 text-xs">
                     <ArrowUpDown className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
                     <SelectValue placeholder="Ordenar" />

@@ -12,14 +12,14 @@ export interface OptimizedButtonProps extends Omit<ButtonProps, 'onClick'> {
   // Configuración de notificaciones
   notificationMessages?: {
     loading?: string
-    success?: string | ((data: any) => string)
-    error?: string | ((error: any) => string)
+    success?: string | ((data: unknown) => string)
+    error?: string | ((error: Error) => string)
   }
   notificationOptions?: NotificationOptions
 
   // Configuración de comportamiento
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>
-  onAsyncClick?: () => Promise<any>
+  onAsyncClick?: () => Promise<unknown>
   preventDoubleClick?: boolean
   showLoadingState?: boolean
   showSuccessState?: boolean
