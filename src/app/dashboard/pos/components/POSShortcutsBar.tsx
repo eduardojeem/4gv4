@@ -12,6 +12,7 @@ import {
   Wrench
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { CheckoutEligibility } from '../lib/checkout-eligibility'
 
 interface POSShortcutsBarProps {
   onFocusSearch: () => void
@@ -25,7 +26,7 @@ interface POSShortcutsBarProps {
   onClearCart: () => void
   /** Sin módulo de taller no se pasa y el atajo no aparece. */
   onOpenRepairModal?: () => void
-  canCheckout: boolean
+  checkoutEligibility: CheckoutEligibility
   cartItemCount: number
   className?: string
 }
@@ -41,10 +42,11 @@ export function POSShortcutsBar({
   isWholesale,
   onClearCart,
   onOpenRepairModal,
-  canCheckout,
+  checkoutEligibility,
   cartItemCount,
   className
 }: POSShortcutsBarProps) {
+  const canCheckout = checkoutEligibility.canConfirm
   return (
     <footer
       className={cn(
@@ -92,11 +94,14 @@ export function POSShortcutsBar({
               ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold"
               : "opacity-50 cursor-not-allowed bg-muted/40 text-muted-foreground border-border/40"
           )}
-          title="Cobrar venta actual (F4)"
+          title={checkoutEligibility.reason || 'Cobrar venta actual (F4)'}
         >
           <kbd className="px-1 py-0.5 rounded bg-background border font-mono text-[10px] font-bold text-emerald-600 dark:text-emerald-400">F4</kbd>
           <CreditCard className="h-3 w-3 text-emerald-500" />
           <span>Cobrar ({cartItemCount})</span>
+          {!canCheckout && checkoutEligibility.reason && (
+            <span className="sr-only">{checkoutEligibility.reason}</span>
+          )}
         </button>
 
         {/* F8: Pausar / En Espera */}

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import type { CheckoutEligibility } from '../lib/checkout-eligibility';
 import { resolveProductImageUrl } from '@/lib/images';
 import {
   AlertDialog,
@@ -87,8 +88,7 @@ interface POSCartProps {
   // UI State
   isProcessing?: boolean;
   taxRate?: number;
-  canCheckout?: boolean;
-  checkoutDisabledReason?: string;
+  checkoutEligibility: CheckoutEligibility;
 }
 
 const CartItemRow = memo<{
@@ -319,9 +319,10 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   onOpenRepairModal,
   isProcessing = false,
   taxRate = 0.19,
-  canCheckout = true,
-  checkoutDisabledReason
+  checkoutEligibility
 }) => {
+  const canCheckout = checkoutEligibility.canConfirm;
+  const checkoutDisabledReason = checkoutEligibility.reason;
 
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [showPricingOptions, setShowPricingOptions] = useState(false);

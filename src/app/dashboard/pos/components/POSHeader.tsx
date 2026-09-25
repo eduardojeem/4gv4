@@ -46,6 +46,7 @@ interface POSHeaderProps {
   children?: React.ReactNode;
   className?: string;
   onOpenCart?: () => void;
+  cartExpanded?: boolean;
   cartItemCount?: number;
   mobileCompact?: boolean;
 }
@@ -64,6 +65,7 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
   children,
   className,
   onOpenCart,
+  cartExpanded = false,
   cartItemCount,
   mobileCompact = false
 }) => {
@@ -152,6 +154,9 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
               mobileCompact ? "w-8 px-0" : "px-2.5"
             )}
             onClick={onOpenCart}
+            aria-label="Abrir carrito"
+            aria-expanded={cartExpanded}
+            aria-controls="pos-cart-panel"
             title="Ver productos agregados al carrito"
           >
             <ShoppingCart className="h-3.5 w-3.5" />

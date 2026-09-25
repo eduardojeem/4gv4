@@ -60,6 +60,7 @@ import { POSHeader } from './components/POSHeader'
 import { POSCart } from './components/POSCart'
 import { CheckoutModal } from './components/CheckoutModal'
 import { getCartProductCreditPlans } from './lib/cart-credit-plans'
+import { getCheckoutEligibility } from './lib/checkout-eligibility'
 import { OpenCashRegisterDialog } from './components/OpenCashRegisterDialog'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
@@ -199,7 +200,7 @@ function POSPageContent() {
   const {
     isCheckoutOpen,
     setIsCheckoutOpen,
-    paymentStatus: _paymentStatus,
+    paymentStatus,
     setPaymentStatus,
     paymentError: _paymentError,
     setPaymentError,
@@ -761,7 +762,21 @@ function POSPageContent() {
     })
     return [...enrichedCart, ...repairItems]
   }, [cart, selectedRepairs, inventoryProducts])
-  const canCheckout = combinedCartItems.length > 0
+  const checkoutEligibility = useMemo(() => getCheckoutEligibility({
+    itemCount: combinedCartItems.length,
+    hasOpenCashSession: getCurrentRegister.isOpen,
+    isProcessing: paymentStatus === 'processing',
+    customerRequired: selectedRepairIds.length > 0,
+    customerSelected: Boolean(selectedCustomer),
+  }), [combinedCartItems.length, getCurrentRegister.isOpen, paymentStatus, selectedCustomer, selectedRepairIds.length])
+  const canCheckout = checkoutEligibility.canConfirm
+  const handleOpenCheckout = useCallback(() => {
+    if (!checkoutEligibility.canConfirm) {
+      toast.error(checkoutEligibility.reason || 'No se puede cobrar esta venta todavía')
+      return
+    }
+    setIsCheckoutOpen(true)
+  }, [checkoutEligibility, setIsCheckoutOpen])
   const checkoutProductCreditPlans = useMemo(() => getCartProductCreditPlans(
     combinedCartItems.map(item => {
       const retailUnitPrice = Number(item.price || 0)
@@ -784,7 +799,6 @@ function POSPageContent() {
       installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
     })),
   ), [combinedCartItems, inventoryProducts, isWholesale])
-  const checkoutDisabledReason = canCheckout ? undefined : 'Agrega productos o vincula una reparacion para cobrar.'
 
   // Unified Remove Handler
   const handleRemoveItem = useCallback((id: string) => {
@@ -877,7 +891,7 @@ function POSPageContent() {
       } else if (e.key === 'F4') {
         e.preventDefault()
         if (canCheckout) {
-          setIsCheckoutOpen(true)
+          handleOpenCheckout()
         }
       } else if (e.key === 'F8') {
         e.preventDefault()
@@ -894,7 +908,7 @@ function POSPageContent() {
 
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [canCheckout, combinedCartItems.length, handleParkCurrentSale, isWholesale, handleWholesaleToggle, setIsCheckoutOpen])
+  }, [canCheckout, combinedCartItems.length, handleOpenCheckout, handleParkCurrentSale, isWholesale, handleWholesaleToggle])
 
   const applyPromoCode = useCallback((code: string) => {
     const cartItems = combinedCartItems
@@ -1103,7 +1117,7 @@ function POSPageContent() {
           case 'Enter':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
-              setIsCheckoutOpen(true)
+              handleOpenCheckout()
             } else {
               toast.error('Carrito vacío y sin reparaciones')
             }
@@ -1124,7 +1138,7 @@ function POSPageContent() {
           case 'p':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
-              setIsCheckoutOpen(true)
+              handleOpenCheckout()
             }
             break
           case 'g':
@@ -1197,7 +1211,7 @@ function POSPageContent() {
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [addToCart, cart.length, clearCart, combinedCartItems.length, filteredProducts, isCheckoutOpen, isFullscreen, setIsCheckoutOpen, setSelectedCustomer, setShowFeatured, showAccessibilitySettings, showAdvancedFilters, showFeatured, showKeyboardShortcuts, viewMode])
+  }, [addToCart, cart.length, clearCart, combinedCartItems.length, filteredProducts, handleOpenCheckout, isCheckoutOpen, isFullscreen, setIsCheckoutOpen, setSelectedCustomer, setShowFeatured, showAccessibilitySettings, showAdvancedFilters, showFeatured, showKeyboardShortcuts, viewMode])
 
   // Búsqueda por código de barras
   useEffect(() => {
@@ -1311,7 +1325,8 @@ function POSPageContent() {
     canManageRegisters={canManageRegisters}
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-    onOpenCart={() => setShowCartDialog(true)}
+    onOpenCart={() => document.getElementById('pos-cart-panel')?.focus()}
+    cartExpanded
     cartItemCount={cartItemCount}
   >
             {/* Branding */}
@@ -1358,6 +1373,7 @@ function POSPageContent() {
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
     onOpenCart={() => setShowCartDialog(true)}
+    cartExpanded={showCartDialog}
     cartItemCount={cartItemCount}
     mobileCompact
   >
@@ -1439,7 +1455,7 @@ function POSPageContent() {
           </div>
           <div className="flex gap-2 sm:justify-end">
             <Button variant="outline" onClick={() => setShowCartDialog(false)}>Cerrar</Button>
-            <Button className="pos-button-primary pos-button-confirm-sale" onClick={() => { setShowCartDialog(false); setIsCheckoutOpen(true) }}>
+            <Button className="pos-button-primary pos-button-confirm-sale" disabled={!checkoutEligibility.canConfirm} title={checkoutEligibility.reason} onClick={() => { setShowCartDialog(false); handleOpenCheckout() }}>
               Cobrar
             </Button>
           </div>
@@ -2257,13 +2273,13 @@ function POSPageContent() {
             </div>
 
             {/* Carrito lateral mejorado - responsive */}
-            <div className="hidden md:flex min-h-0 flex-col w-72 lg:w-80 xl:w-[22rem] h-full transition-all duration-300 z-20 p-1.5">
+            <div id="pos-cart-panel" tabIndex={-1} className="hidden md:flex min-h-0 flex-col w-72 lg:w-80 xl:w-[22rem] h-full transition-all duration-300 z-20 p-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40">
               <POSCart
                 items={combinedCartItems}
                 onUpdateQuantity={updateQuantity}
                 onRemoveItem={handleRemoveItem}
                 onApplyDiscount={updateItemDiscount}
-                onCheckout={() => setIsCheckoutOpen(true)}
+                onCheckout={handleOpenCheckout}
                 onClearCart={() => clearCart()}
                 onApplyPromoCode={applyPromoCode}
                 isWholesale={isWholesale}
@@ -2279,8 +2295,7 @@ function POSPageContent() {
                 cartTotal={unifiedCalculations.total}
                 cartItemCount={unifiedCalculations.totalItemCount}
                 taxRate={taxRate}
-                canCheckout={canCheckout}
-                checkoutDisabledReason={checkoutDisabledReason}
+                checkoutEligibility={checkoutEligibility}
                 onHoldSale={handleParkCurrentSale}
                 onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
                 heldSalesCount={heldSalesCount}
@@ -2299,7 +2314,7 @@ function POSPageContent() {
           el?.select()
         }}
         onOpenCustomer={() => setIsQuickCustomerOpen(true)}
-        onCheckout={() => setIsCheckoutOpen(true)}
+        onCheckout={handleOpenCheckout}
         onHoldSale={handleParkCurrentSale}
         onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
         heldSalesCount={heldSalesCount}
@@ -2307,30 +2322,21 @@ function POSPageContent() {
         isWholesale={isWholesale}
         onClearCart={() => clearCart()}
         onOpenRepairModal={repairsEnabled ? () => setIsRepairModalOpen(true) : undefined}
-        canCheckout={canCheckout}
+        checkoutEligibility={checkoutEligibility}
         cartItemCount={unifiedCalculations.totalItemCount}
       />
-
-      {/* Desktop floating checkout button — always visible when cart has items */}
-      {canCheckout && (
-        <div className="hidden md:block fixed bottom-14 right-6 z-50">
-          <Button
-            onClick={() => setIsCheckoutOpen(true)}
-            size="lg"
-            className="h-14 px-6 text-base font-bold rounded-2xl shadow-2xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all hover:scale-105 hover:shadow-[0_8px_30px_rgba(16,185,129,0.4)] active:scale-95 animate-in slide-in-from-bottom-4 duration-300"
-          >
-            <CreditCard className="mr-2 h-5 w-5" />
-            Cobrar {formatCurrency(unifiedCalculations.total)}
-          </Button>
-        </div>
-      )}
 
       {/* Mobile Cart Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t-2 border-primary/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-50">
         <div className="grid grid-cols-[1fr_auto] gap-2 items-stretch">
           <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
             <SheetTrigger asChild>
-              <div className="flex flex-col justify-center cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors border border-border/60 relative">
+              <button
+                type="button"
+                aria-label="Abrir carrito"
+                aria-expanded={isMobileCartOpen}
+                className="flex flex-col justify-center text-left cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors border border-border/60 relative"
+              >
                  <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount} items en carrito</span>
                  <span className="font-bold text-base">{formatCurrency(unifiedCalculations.total)}</span>
                  {unifiedCalculations.totalItemCount > 0 && (
@@ -2338,7 +2344,7 @@ function POSPageContent() {
                      {unifiedCalculations.totalItemCount}
                    </span>
                  )}
-              </div>
+              </button>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col overflow-hidden">
               <SheetHeader className="p-4 border-b">
@@ -2352,7 +2358,7 @@ function POSPageContent() {
                   onApplyDiscount={updateItemDiscount}
                   onCheckout={() => {
                     setIsMobileCartOpen(false)
-                    setIsCheckoutOpen(true)
+                    handleOpenCheckout()
                   }}
                   onClearCart={() => clearCart()}
                   onApplyPromoCode={applyPromoCode}
@@ -2369,8 +2375,7 @@ function POSPageContent() {
                   cartTotal={unifiedCalculations.total}
                   cartItemCount={unifiedCalculations.totalItemCount}
                   taxRate={taxRate}
-                  canCheckout={canCheckout}
-                  checkoutDisabledReason={checkoutDisabledReason}
+                  checkoutEligibility={checkoutEligibility}
                   onHoldSale={handleParkCurrentSale}
                   onOpenHeldSales={() => {
                     setIsMobileCartOpen(false)
@@ -2388,9 +2393,9 @@ function POSPageContent() {
 
           <Button
             className="h-full min-h-[52px] px-5 text-sm font-bold rounded-xl shadow-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all active:scale-[0.97]"
-            onClick={() => setIsCheckoutOpen(true)}
+            onClick={handleOpenCheckout}
             disabled={!canCheckout}
-            title={checkoutDisabledReason}
+            title={checkoutEligibility.reason}
           >
             <CreditCard className="mr-2 h-5 w-5" />
             Cobrar
