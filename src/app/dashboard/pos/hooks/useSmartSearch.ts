@@ -6,19 +6,24 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 
-interface Product {
+export interface SmartSearchProduct {
   id: string
   name: string
-  sku: string
+  sku?: string | null
   barcode?: string
-  description?: string
-  category: string
-  price: number
-  stock: number
+  description?: string | null
+  category?: string | { id?: string; name?: string } | null
+  price?: number
+  sale_price?: number | null
+  stock?: number
+  stock_quantity?: number | null
   tags?: string[]
+  [key: string]: unknown
 }
 
-interface SearchResult {
+type Product = SmartSearchProduct
+
+export interface SearchResult {
   product: Product
   score: number
   matchType: 'exact' | 'partial' | 'fuzzy' | 'semantic' | 'category' | 'barcode'
@@ -26,7 +31,7 @@ interface SearchResult {
   highlightedName: string
 }
 
-interface SearchSuggestion {
+export interface SearchSuggestion {
   text: string
   type: 'product' | 'category' | 'brand' | 'recent'
   count?: number
@@ -343,9 +348,17 @@ export function useSmartSearch({
       })
       
       // Mostrar categorías populares
-      const categories = [...new Set(products.map(p => p.category))].filter(c => typeof c === 'string' && c)
+      const categories = [
+        ...new Set(
+          products.map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
+        )
+      ].filter((c): c is string => typeof c === 'string' && Boolean(c))
+
       categories.slice(0, 5).forEach(category => {
-        const count = products.filter(p => p.category === category).length
+        const count = products.filter(p => {
+          const cat = typeof p.category === 'object' ? p.category?.name : p.category
+          return cat === category
+        }).length
         suggestions.push({
           text: category,
           type: 'category',
@@ -366,13 +379,20 @@ export function useSmartSearch({
       suggestions.push(...productSuggestions)
       
       // Sugerencias de categorías
-      const categorySuggestions = [...new Set(products.map(p => p.category))]
-        .filter(c => typeof c === 'string' && c.toLowerCase().includes(lowerQuery))
+      const categorySuggestions = [
+        ...new Set(
+          products.map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
+        )
+      ]
+        .filter((c): c is string => typeof c === 'string' && c.toLowerCase().includes(lowerQuery))
         .slice(0, 3)
         .map(c => ({
           text: c,
           type: 'category' as const,
-          count: products.filter(p => p.category === c).length
+          count: products.filter(p => {
+            const cat = typeof p.category === 'object' ? p.category?.name : p.category
+            return cat === c
+          }).length
         }))
       
       suggestions.push(...categorySuggestions)

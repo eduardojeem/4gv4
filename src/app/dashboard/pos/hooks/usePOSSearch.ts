@@ -17,7 +17,7 @@ import { useHydrated } from '@/hooks/use-hydrated'
 import { toast } from 'sonner'
 import { hasProductCredit } from '../lib/product-credit'
 import { applyProductCreditFilter, type ProductCreditSort } from '../lib/product-credit-filter'
-import { useSmartSearch } from './useSmartSearch'
+import { useSmartSearch, type SearchResult } from './useSmartSearch'
 import {
   DEFAULT_POS_CATALOG_VIEW,
   countByCatalogView,
@@ -98,7 +98,7 @@ export interface UsePOSSearchReturn {
   virtualizationThreshold: number
 
   // Smart search passthrough
-  smartSearchResults: any[]
+  smartSearchResults: SearchResult[]
   isSmartSearching: boolean
   addToRecentSearches: (v: string) => void
 }
@@ -119,14 +119,14 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
     isSearching: isSmartSearching,
     addToRecentSearches,
   } = useSmartSearch({
-    products: products as any[],
+    products,
     maxResults: 20,
     enableFuzzySearch: true,
     enableSemanticSearch: true,
   })
 
   const searchSuggestions = useMemo(
-    () => smartSearchSuggestions.map((s: any) => s.text),
+    () => smartSearchSuggestions.map(s => s.text),
     [smartSearchSuggestions]
   )
 
@@ -383,7 +383,7 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
 
   const categories = useMemo(() => {
     const names = viewProducts
-      .map(p => (typeof p.category === 'object' ? (p.category as any)?.name : p.category))
+      .map(p => (typeof p.category === 'object' ? (p.category as { name?: string | null })?.name : p.category))
       .filter((name): name is string => !!name && typeof name === 'string')
     return ['all', ...Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))]
   }, [viewProducts])
@@ -395,10 +395,9 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
     return { min: Math.min(...prices), max: Math.max(...prices) }
   }, [products])
 
-  const financedProductsCount = useMemo(
-    () => products.filter(p => p.is_active !== false && hasProductCredit(p)).length,
-    [products]
-  )
+  const financedProductsCount = useMemo(() => {
+    return products.filter(p => p.is_active !== false && hasProductCredit(p)).length
+  }, [products])
 
   // --- Filtrado, ordenamiento y paginación ---
   // Primero todo lo que coincide con búsqueda y filtros; después la vista.
@@ -409,7 +408,7 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
       const searchLower = debouncedSearchTerm.toLowerCase()
       const categoryName =
         (typeof product.category === 'object'
-          ? (product.category as any)?.name
+          ? (product.category as { name?: string | null })?.name
           : product.category) || ''
 
       const matchesSearch =
@@ -418,7 +417,7 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
         categoryName.toLowerCase().includes(searchLower) ||
         product.sku.toLowerCase().includes(searchLower) ||
         (product.barcode && product.barcode.includes(debouncedSearchTerm)) ||
-        smartSearchResults.some((res: any) => res.product.id === product.id)
+        smartSearchResults.some(res => res.product.id === product.id)
 
       const matchesCategory =
         selectedCategory === 'all' || categoryName === selectedCategory
@@ -426,9 +425,9 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
       const matchesFeatured =
         !showFeatured ||
         Boolean(
-          (product as any).featured ||
-            (product as any).is_featured ||
-            (product as any).isFeatured
+          product.featured ||
+            (product as { is_featured?: boolean }).is_featured ||
+            (product as { isFeatured?: boolean }).isFeatured
         )
 
       const matchesPrice =
@@ -485,9 +484,9 @@ export function usePOSSearch({ products }: UsePOSSearchOptions): UsePOSSearchRet
           break
         case 'category': {
           const aName =
-            (typeof a.category === 'object' ? (a.category as any)?.name : a.category) || ''
+            (typeof a.category === 'object' ? (a.category as { name?: string | null })?.name : a.category) || ''
           const bName =
-            (typeof b.category === 'object' ? (b.category as any)?.name : b.category) || ''
+            (typeof b.category === 'object' ? (b.category as { name?: string | null })?.name : b.category) || ''
           cmp = aName.localeCompare(bName)
           break
         }

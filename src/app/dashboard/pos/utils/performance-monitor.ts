@@ -7,10 +7,10 @@ interface PerformanceMetric {
   name: string
   value: number
   timestamp: Date
-  context?: Record<string, any>
+  context?: Record<string, unknown>
 }
 
-interface PerformanceThresholds {
+export interface PerformanceThresholds {
   cartOperationTime: number // ms
   productSearchTime: number // ms
   saleProcessingTime: number // ms
@@ -59,7 +59,7 @@ class POSPerformanceMonitor {
   /**
    * Iniciar medición de performance
    */
-  startMeasurement(name: string, context?: Record<string, any>): () => void {
+  startMeasurement(name: string, context?: Record<string, unknown>): () => void {
     if (!this.isEnabled) return () => {}
 
     const startTime = performance.now()
@@ -87,7 +87,7 @@ class POSPerformanceMonitor {
   /**
    * Registrar métrica de performance
    */
-  recordMetric(name: string, value: number, context?: Record<string, any>) {
+  recordMetric(name: string, value: number, context?: Record<string, unknown>) {
     if (!this.isEnabled) return
 
     const metric: PerformanceMetric = {
@@ -364,8 +364,9 @@ class POSPerformanceMonitor {
         let clsValue = 0
         const observer = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            if (!(entry as any).hadRecentInput) {
-              clsValue += (entry as any).value
+            const shiftEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number }
+            if (!shiftEntry.hadRecentInput) {
+              clsValue += shiftEntry.value ?? 0
             }
           }
           vitals.cls = clsValue
@@ -377,7 +378,10 @@ class POSPerformanceMonitor {
       if ('PerformanceObserver' in window) {
         const observer = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            vitals.fid = (entry as any).processingStart - entry.startTime
+            const eventTimingEntry = entry as PerformanceEntry & { processingStart?: number }
+            if (typeof eventTimingEntry.processingStart === 'number') {
+              vitals.fid = eventTimingEntry.processingStart - entry.startTime
+            }
           }
         })
         observer.observe({ entryTypes: ['first-input'] })
@@ -428,11 +432,11 @@ class POSPerformanceMonitor {
 export const posPerformanceMonitor = new POSPerformanceMonitor()
 
 // Funciones de conveniencia
-export const measurePerformance = (name: string, context?: Record<string, any>) => {
+export const measurePerformance = (name: string, context?: Record<string, unknown>) => {
   return posPerformanceMonitor.startMeasurement(name, context)
 }
 
-export const recordMetric = (name: string, value: number, context?: Record<string, any>) => {
+export const recordMetric = (name: string, value: number, context?: Record<string, unknown>) => {
   posPerformanceMonitor.recordMetric(name, value, context)
 }
 
@@ -445,7 +449,7 @@ export const getWebVitals = () => {
 }
 
 // Wrappers para operaciones específicas del POS
-export const measureCartOperation = async (operation: () => void | Promise<void>) => {
+export const measureCartOperation = async <T = void>(operation: () => T | Promise<T>): Promise<T> => {
   const endMeasurement = measurePerformance('cart-operation')
   
   try {
@@ -464,7 +468,7 @@ export const measureCartOperation = async (operation: () => void | Promise<void>
   }
 }
 
-export const measureProductSearch = async (searchFn: () => Promise<any>) => {
+export const measureProductSearch = async <T>(searchFn: () => Promise<T>): Promise<T> => {
   const endMeasurement = measurePerformance('product-search')
   
   try {
@@ -477,7 +481,7 @@ export const measureProductSearch = async (searchFn: () => Promise<any>) => {
   }
 }
 
-export const measureSaleProcessing = async (saleFn: () => Promise<any>) => {
+export const measureSaleProcessing = async <T>(saleFn: () => Promise<T>): Promise<T> => {
   const endMeasurement = measurePerformance('sale-processing')
   
   try {
@@ -490,7 +494,7 @@ export const measureSaleProcessing = async (saleFn: () => Promise<any>) => {
   }
 }
 
-export const measureDatabaseQuery = async (queryFn: () => Promise<any>) => {
+export const measureDatabaseQuery = async <T>(queryFn: () => Promise<T>): Promise<T> => {
   const endMeasurement = measurePerformance('database-query')
   
   try {

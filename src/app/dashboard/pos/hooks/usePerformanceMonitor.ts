@@ -13,7 +13,8 @@ import {
   measureCartOperation,
   measureProductSearch,
   measureSaleProcessing,
-  measureDatabaseQuery
+  measureDatabaseQuery,
+  type PerformanceThresholds
 } from '../utils/performance-monitor'
 
 interface UsePerformanceMonitorReturn {
@@ -24,11 +25,11 @@ interface UsePerformanceMonitorReturn {
   webVitals: Record<string, number>
   
   // Funciones de medición
-  measureOperation: (name: string, operation: () => void | Promise<void>, context?: Record<string, any>) => Promise<any>
-  measureCartOperation: (operation: () => void | Promise<void>) => Promise<any>
-  measureProductSearch: (searchFn: () => Promise<any>) => Promise<any>
-  measureSaleProcessing: (saleFn: () => Promise<any>) => Promise<any>
-  measureDatabaseQuery: (queryFn: () => Promise<any>) => Promise<any>
+  measureOperation: <T>(name: string, operation: () => T | Promise<T>, context?: Record<string, unknown>) => Promise<T>
+  measureCartOperation: <T = void>(operation: () => T | Promise<T>) => Promise<T>
+  measureProductSearch: <T>(searchFn: () => Promise<T>) => Promise<T>
+  measureSaleProcessing: <T>(saleFn: () => Promise<T>) => Promise<T>
+  measureDatabaseQuery: <T>(queryFn: () => Promise<T>) => Promise<T>
   measureRenderTime: (componentName: string) => () => void
   
   // Funciones de reporte
@@ -37,7 +38,7 @@ interface UsePerformanceMonitorReturn {
   
   // Configuración
   setMonitoring: (enabled: boolean) => void
-  setThresholds: (thresholds: any) => void
+  setThresholds: (thresholds: Partial<PerformanceThresholds>) => void
   
   // Estado del monitor
   getStatus: () => ReturnType<typeof posPerformanceMonitor.getStatus>
@@ -51,11 +52,11 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   const reportIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Función para medir operaciones genéricas
-  const measureOperation = useCallback(async (
+  const measureOperation = useCallback(async <T>(
     name: string, 
-    operation: () => void | Promise<void>,
-    context?: Record<string, any>
-  ) => {
+    operation: () => T | Promise<T>,
+    context?: Record<string, unknown>
+  ): Promise<T> => {
     if (!isMonitoring) {
       return await operation()
     }
@@ -77,7 +78,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para operaciones de carrito
-  const measureCartOperationWrapper = useCallback(async (operation: () => void | Promise<void>) => {
+  const measureCartOperationWrapper = useCallback(async <T = void>(operation: () => T | Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await operation()
     }
@@ -85,7 +86,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para búsqueda de productos
-  const measureProductSearchWrapper = useCallback(async (searchFn: () => Promise<any>) => {
+  const measureProductSearchWrapper = useCallback(async <T>(searchFn: () => Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await searchFn()
     }
@@ -93,7 +94,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para procesamiento de ventas
-  const measureSaleProcessingWrapper = useCallback(async (saleFn: () => Promise<any>) => {
+  const measureSaleProcessingWrapper = useCallback(async <T>(saleFn: () => Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await saleFn()
     }
@@ -101,7 +102,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para consultas de base de datos
-  const measureDatabaseQueryWrapper = useCallback(async (queryFn: () => Promise<any>) => {
+  const measureDatabaseQueryWrapper = useCallback(async <T>(queryFn: () => Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await queryFn()
     }
@@ -143,7 +144,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [generateReport])
 
   // Configurar thresholds
-  const setThresholds = useCallback((thresholds: any) => {
+  const setThresholds = useCallback((thresholds: Partial<PerformanceThresholds>) => {
     posPerformanceMonitor.setThresholds(thresholds)
   }, [])
 
@@ -230,7 +231,7 @@ export const useOperationPerformance = () => {
   const measureAsync = useCallback(async <T>(
     operationName: string,
     operation: () => Promise<T>,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): Promise<T> => {
     if (!isMonitoring) {
       return await operation()
@@ -251,7 +252,7 @@ export const useOperationPerformance = () => {
   const measureSync = useCallback(<T>(
     operationName: string,
     operation: () => T,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): T => {
     if (!isMonitoring) {
       return operation()

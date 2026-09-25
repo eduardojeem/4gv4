@@ -1,11 +1,38 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DateRange } from 'react-day-picker'
-import { calculateProfit, calculateSalesCost, type ProfitResult } from '../lib/pos-profit'
+import { calculateProfit, calculateSalesCost, type ProfitResult, type SaleItemRow } from '../lib/pos-profit'
 import { useBranch } from '@/contexts/branch-context'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { COMPLETED_SALE_STATUSES } from '@/lib/sales-status'
 import { buildDailySales, rangeBounds } from '../lib/pos-dashboard-range'
+
+export type PosSaleItem = SaleItemRow & { sale_id: string }
+
+interface InstallmentRow {
+    amount?: number | string | null
+    amount_paid?: number | string | null
+}
+
+interface SalesDataRow {
+    id: string
+    code?: string | null
+    created_at: string
+    total?: number | null
+    payment_method?: string | null
+    customer?: { name?: string | null } | null
+    [key: string]: unknown
+}
+
+interface RecentDataRow {
+    id: string
+    created_at: string
+    total?: number | null
+    payment_method?: string | null
+    customer?: { name?: string | null } | null
+    sale_items?: Array<{ quantity?: number | string | null }> | null
+    [key: string]: unknown
+}
 
 /**
  * Solo ventas cobradas. La consulta no filtraba por estado: una venta anulada
@@ -16,6 +43,59 @@ import { buildDailySales, rangeBounds } from '../lib/pos-dashboard-range'
  */
 const COUNTED_SALES_FILTER = `status.is.null,status.in.(${COMPLETED_SALE_STATUSES.join(',')})`
 
+export interface PosRecentSale {
+    id: string
+    created_at: string
+    total?: number | null
+    payment_method?: string | null
+    customer?: { name?: string | null } | null
+    customer_name: string | null
+    items?: unknown
+    items_count: number
+}
+
+export interface PosEnrichedSale {
+    id: string
+    code?: string | null
+    created_at: string
+    total?: number | null
+    payment_method?: string | null
+    customer?: { name?: string | null } | null
+    cost: number
+    refundAmount: number
+    itemsCount: number
+    profit: number
+    [key: string]: unknown
+}
+
+export interface PosCreditRecord {
+    id: string
+    created_at: string
+    customer?: { name?: string | null } | null
+    sale?: { code?: string; total_amount?: number; label?: string } | null
+    label?: string | null
+    status?: string
+    totalDebt: number
+    pendingDebt: number
+    origin_type?: string | null
+    [key: string]: unknown
+}
+
+export interface PosDeliveredRepairRecord {
+    id: string
+    ticket_number?: string | null
+    device_brand?: string | null
+    device_model?: string | null
+    delivered_at?: string | null
+    final_cost?: number | null
+    estimated_cost?: number | null
+    paid_amount?: number | null
+    parts_cost?: number | null
+    labor_cost?: number | null
+    payment_status?: string | null
+    [key: string]: unknown
+}
+
 export interface PosStats {
     totalSales: number
     totalTransactions: number
@@ -24,10 +104,10 @@ export interface PosStats {
     dailySales: Array<{ date: string; fullDate: string; sales: number; transactions: number }>
     paymentMethods: Array<{ name: string; value: number; color: string }>
     topProducts: Array<{ name: string; sales: number; revenue: number }>
-    recentSales: any[]
-    allSales: any[]
-    allCredits: any[] // Sales credits
-    allRepairCredits: any[] // Repair credits
+    recentSales: PosRecentSale[]
+    allSales: PosEnrichedSale[]
+    allCredits: PosCreditRecord[] // Sales credits
+    allRepairCredits: PosCreditRecord[] // Repair credits
     creditStats: {
         totalAmount: number
         count: number
@@ -50,7 +130,7 @@ export interface PosStats {
         deliveredLaborCost: number
         netProfit: number
         refundsAmount: number
-        deliveredRepairs: any[]
+        deliveredRepairs: PosDeliveredRepairRecord[]
     }
     refunds: {
         totalAmount: number
@@ -346,7 +426,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
 
             // --- Secondary Query: Fetch items for the retrieved sale IDs ---
             const saleIds = (salesData || []).map(s => s.id)
-            let itemsData: any[] = []
+            let itemsData: PosSaleItem[] = []
             let costUnavailable = false
 
             if (saleIds.length > 0) {
@@ -366,7 +446,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     costUnavailable = true
                     warnings.push('No se pudo calcular el costo de mercadería: la ganancia y el margen no están disponibles.')
                 } else {
-                    itemsData = items || []
+                    itemsData = (items || []) as PosSaleItem[]
                 }
             }
 
@@ -391,8 +471,9 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 let pendingDebt = c.principal || 0
 
                 if (hasInstallments) {
-                    totalDebt = c.installments.reduce((sum: number, inst: any) => sum + (Number(inst.amount) || 0), 0)
-                    const totalPaid = c.installments.reduce((sum: number, inst: any) => sum + (Number(inst.amount_paid) || 0), 0)
+                    const instList = c.installments as InstallmentRow[]
+                    totalDebt = instList.reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0)
+                    const totalPaid = instList.reduce((sum, inst) => sum + (Number(inst.amount_paid) || 0), 0)
                     pendingDebt = totalDebt - totalPaid
                 } else if (c.status === 'paid' || c.status === 'cancelled') {
                     pendingDebt = 0
@@ -408,7 +489,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     }
                 }
 
-                return { ...c, totalDebt, pendingDebt, sale }
+                return { ...c, totalDebt, pendingDebt, sale } as PosCreditRecord
             })
 
             const saleCredits = credits.filter(c => c.origin_type === 'sale' || !c.origin_type)
@@ -485,7 +566,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
 
             // Process Payment Methods
             const methodsMap = new Map<string, number>()
-            salesData?.forEach((sale: any) => {
+            salesData?.forEach((sale: { payment_method?: string | null; total?: number | null }) => {
                 let method = sale.payment_method || 'Otros'
                 if (method === 'cash' || method === 'efectivo') method = 'Efectivo'
                 else if (method === 'card' || method === 'tarjeta') method = 'Tarjeta'
@@ -511,9 +592,9 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             }))
 
             // Build allSales enriched with items cost
-            const validSalesData = salesData || []
-            const allSales = validSalesData.map((sale: any) => {
-                const saleItems = itemsData.filter((i: any) => i.sale_id === sale.id)
+            const validSalesData = (salesData || []) as SalesDataRow[]
+            const allSales: PosEnrichedSale[] = validSalesData.map(sale => {
+                const saleItems = itemsData.filter(i => i.sale_id === sale.id)
                 const saleCost = calculateSalesCost(saleItems).totalCost
                 const refundAmount = saleRefundsAmount > 0 
                     ? afterSales.filter(c => c.source_type === 'sale' && c.sale_id === sale.id && (c.status === 'resolved' || c.status === 'approved')).reduce((sum, c) => sum + (Number(c.refund_amount) || 0), 0)
@@ -522,7 +603,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     ...sale,
                     cost: saleCost,
                     refundAmount,
-                    itemsCount: saleItems.reduce((n: number, i: any) => n + (Number(i.quantity) || 0), 0),
+                    itemsCount: saleItems.reduce((n, i) => n + (Number(i.quantity) || 0), 0),
                     profit: (sale.total || 0) - saleCost - refundAmount
                 }
             })
@@ -531,7 +612,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             // La lista de recientes lee `customer_name` e `items_count`. No se
             // armaban: cada venta figuraba como «Consumidor Final» con
             // «undefined artículos».
-            const recentSales = (recentData || []).map((sale: any) => ({
+            const recentSales: PosRecentSale[] = ((recentData || []) as RecentDataRow[]).map(sale => ({
                 id: sale.id,
                 created_at: sale.created_at,
                 total: sale.total,
@@ -539,7 +620,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 customer: sale.customer,
                 customer_name: sale.customer?.name ?? null,
                 items: sale.sale_items,
-                items_count: (sale.sale_items || []).reduce((n: number, i: any) => n + (Number(i.quantity) || 0), 0)
+                items_count: (sale.sale_items || []).reduce((n, i) => n + (Number(i.quantity) || 0), 0)
             }))
 
             // Llego tarde: el usuario ya eligio otro rango.
@@ -579,7 +660,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                     deliveredLaborCost: repairDeliveredLaborCost,
                     netProfit: repairNetProfit,
                     refundsAmount: repairRefundsAmount,
-                    deliveredRepairs: repairsDelivered
+                    deliveredRepairs: (repairsDelivered || []) as PosDeliveredRepairRecord[]
                 },
                 refunds: {
                     totalAmount: totalRefundsAmount,

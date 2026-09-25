@@ -14,6 +14,25 @@ interface CartConfig {
   storageScope?: string
 }
 
+export interface CartVariantInput {
+  id?: string
+  product_id?: string
+  variant_id?: string
+  variant_name?: string
+  variant?: string
+  variant_attributes?: Array<{ name?: string; value?: string }> | null
+  sku?: string
+  name?: string
+  product_name?: string
+  price?: number | string | null
+  quantity?: number | string | null
+  stock?: number | string | null
+  image?: string | null
+  image_url?: string | null
+  wholesalePrice?: number
+  wholesale_price?: number
+}
+
 interface UseOptimizedCartReturn {
   cart: CartItem[]
 
@@ -38,7 +57,7 @@ interface UseOptimizedCartReturn {
 
   // Acciones
   addToCart: (product: Product, quantity?: number) => void
-  addVariantToCart: (variantItem: any) => void
+  addVariantToCart: (variantItem: CartVariantInput) => void
   removeFromCart: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   updateItemDiscount: (productId: string, discount: number) => void
@@ -52,11 +71,11 @@ interface UseOptimizedCartReturn {
 }
 
 /**
- * Hook optimizado para gestiÃ³n del carrito de compras POS
- * Incluye toda la lÃ³gica de negocio: mayorista, descuentos por volumen, impuestos.
+ * Hook optimizado para gestión del carrito de compras POS
+ * Incluye toda la lógica de negocio: mayorista, descuentos por volumen, impuestos.
  */
 export const useOptimizedCart = (
-  inventoryProducts: any[],
+  inventoryProducts: Product[],
   config: CartConfig = {}
 ): UseOptimizedCartReturn => {
   const {
@@ -103,18 +122,22 @@ export const useOptimizedCart = (
   /**
    * Helper para identificar ítems de servicio o reparaciones sin control de stock físico
    */
-  const isServiceItem = useCallback((itemOrId: any) => {
+  const isServiceItem = useCallback((itemOrId: unknown) => {
     if (!itemOrId) return false
     if (typeof itemOrId === 'string') {
       return itemOrId.startsWith('repair_') || itemOrId.startsWith('service_') || itemOrId.startsWith('quick_')
     }
-    return Boolean(
-      itemOrId.isService ||
-      itemOrId.is_service ||
-      itemOrId.type === 'service' ||
-      (typeof itemOrId.id === 'string' && (itemOrId.id.startsWith('repair_') || itemOrId.id.startsWith('service_'))) ||
-      itemOrId.isServiceItem
-    )
+    if (typeof itemOrId === 'object' && itemOrId !== null) {
+      const obj = itemOrId as Record<string, unknown>
+      return Boolean(
+        obj.isService ||
+        obj.is_service ||
+        obj.type === 'service' ||
+        (typeof obj.id === 'string' && (obj.id.startsWith('repair_') || obj.id.startsWith('service_'))) ||
+        obj.isServiceItem
+      )
+    }
+    return false
   }, [])
 
   /**
@@ -138,7 +161,7 @@ export const useOptimizedCart = (
    */
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
     const isService = isServiceItem(product)
-    const currentProduct = inventoryProducts.find(p => p.id === product.id) || (product as any)
+    const currentProduct = inventoryProducts.find(p => p.id === product.id) || product
     if (!currentProduct) {
       toast.error('Producto no encontrado')
       return
@@ -162,7 +185,7 @@ export const useOptimizedCart = (
         }
       }
 
-      const itemPrice = Number((product as any).price ?? product.sale_price ?? 0)
+      const itemPrice = Number((product as { price?: number | null }).price ?? product.sale_price ?? 0)
 
       if (existingItem) {
         // Actualizar item existente
@@ -182,15 +205,15 @@ export const useOptimizedCart = (
           sku: product.sku,
           price: itemPrice,
           quantity: quantity,
-          stock: isService ? 999 : currentProduct.stock_quantity,
+          stock: isService ? 999 : (currentProduct.stock_quantity ?? 0),
           subtotal: itemPrice * quantity,
-          image: (product as any).image || (product as any).image_url || '',
+          image: (product as { image?: string | null }).image || product.image_url || product.images?.[0] || '',
           wholesalePrice: inferredWholesale,
           originalPrice: itemPrice,
           category: typeof product.category === 'object' ? product.category?.id : product.category,
           categoryName: product.category?.name,
           brand: product.brand || undefined,
-          isService: isService || Boolean((product as any).isService)
+          isService: isService || Boolean((product as { isService?: boolean }).isService)
         }
 
         return [...prev, newItem]
@@ -201,13 +224,13 @@ export const useOptimizedCart = (
   /**
    * Agregar variante al carrito
    */
-  const addVariantToCart = useCallback((cartItem: any) => {
-    const productRef = inventoryProducts.find((p: any) => p.id === cartItem.product_id || p.id === cartItem.id)
+  const addVariantToCart = useCallback((cartItem: CartVariantInput) => {
+    const productRef = inventoryProducts.find(p => p.id === cartItem.product_id || p.id === cartItem.id)
     const variantLabel =
       cartItem.variant ||
       cartItem.variant_name ||
       (Array.isArray(cartItem.variant_attributes)
-        ? cartItem.variant_attributes.map((a: any) => a?.value).filter(Boolean).join(' / ')
+        ? cartItem.variant_attributes.map(a => a?.value).filter(Boolean).join(' / ')
         : undefined)
 
     const normalizedItem: CartItem = {
