@@ -454,11 +454,36 @@ export async function GET(request: NextRequest) {
     if (isNextResponse(ctx)) return ctx
 
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, Number(searchParams.get('page') || 1))
-    const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || 50)))
+    const requestedPage = Number(searchParams.get('page') || 1)
+    const requestedPageSize = Number(searchParams.get('pageSize') || 50)
+    const page = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
+    const pageSize = Number.isFinite(requestedPageSize)
+      ? Math.min(100, Math.max(10, Math.floor(requestedPageSize)))
+      : 50
     const status = searchParams.get('status') || null
     const search = (searchParams.get('search') || '').trim()
+    const chargeable = searchParams.get('chargeable') === 'true'
     const offset = (page - 1) * pageSize
+
+    const escapedSearch = search.replace(/[%,()_]/g, (character) => `\\${character}`)
+    let matchingCustomerIds: string[] = []
+    if (escapedSearch) {
+      const customerFilter = [
+        `name.ilike.%${escapedSearch}%`,
+        `first_name.ilike.%${escapedSearch}%`,
+        `last_name.ilike.%${escapedSearch}%`,
+        `phone.ilike.%${escapedSearch}%`,
+      ].join(',')
+      const { data: matchingCustomers, error: customerSearchError } = await ctx.supabase
+        .from('customers')
+        .select('id')
+        .eq('organization_id', ctx.organizationId)
+        .or(customerFilter)
+        .limit(100)
+
+      if (customerSearchError) throw customerSearchError
+      matchingCustomerIds = (matchingCustomers ?? []).map((customer) => customer.id)
+    }
 
     let lastError: unknown = null
 
@@ -475,8 +500,23 @@ export async function GET(request: NextRequest) {
         query = query.eq('status', status)
       }
 
-      if (search) {
-        query = query.or(`device_brand.ilike.%${search}%,device_model.ilike.%${search}%,problem_description.ilike.%${search}%,ticket_number.ilike.%${search}%`)
+      if (chargeable) {
+        query = query.not('status', 'in', '("delivered","cancelled","entregado","cancelado")')
+      }
+
+      if (escapedSearch) {
+        const repairFilters = [
+          `device_brand.ilike.%${escapedSearch}%`,
+          `device_model.ilike.%${escapedSearch}%`,
+          `problem_description.ilike.%${escapedSearch}%`,
+          `ticket_number.ilike.%${escapedSearch}%`,
+          ...(
+            matchingCustomerIds.length > 0
+              ? [`customer_id.in.(${matchingCustomerIds.join(',')})`]
+              : []
+          ),
+        ]
+        query = query.or(repairFilters.join(','))
       }
 
       const { data, error, count } = await query
