@@ -7,6 +7,44 @@ import {
   renderDonutChartCanvas
 } from './canvas-chart-renderer'
 
+interface AutoTableDoc extends jsPDF {
+  lastAutoTable?: { finalY?: number }
+  internal: jsPDF['internal'] & { getNumberOfPages: () => number }
+}
+
+export interface SalesDataPoint {
+  date: string
+  sales: number | string
+  orders?: number | string
+  profit?: number | string
+}
+
+export interface ProductReportItem {
+  name?: string
+  category?: string
+  sales?: number | string
+  quantity?: number | string
+  profit?: number | string
+  share?: number
+}
+
+export interface CategoryReportItem {
+  name?: string
+  sales?: number | string
+  quantity?: number | string
+}
+
+export interface RepairTrendItem {
+  date: string
+  count: number | string
+}
+
+export interface RepairStatusItem {
+  name: string
+  value: number | string
+  color?: string
+}
+
 // ── Helpers de formato ────────────────────────────────────────────────────────
 const formatGs = (amount: number | null | undefined): string => {
   if (amount === null || amount === undefined || isNaN(amount)) return '0 Gs.'
@@ -111,7 +149,7 @@ function capRows<T>(rows: T[], max = 400): { rows: T[]; omitidas: number } {
 
 function renderOmittedNote(doc: jsPDF, omitidas: number, margin: number) {
   if (omitidas <= 0) return
-  const y = (doc as any).lastAutoTable.finalY + 12
+  const y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 12
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(180, 83, 9)
@@ -140,7 +178,7 @@ function setupDocPageHeadersAndFooters(
   dateLabel: string,
   context?: ReportContext
 ) {
-  const totalPages = (doc.internal as any).getNumberOfPages()
+  const totalPages = (doc as AutoTableDoc).internal.getNumberOfPages()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 32
@@ -299,7 +337,7 @@ function renderKpiCardsGrid(
 // ── 1. EXPORTADOR PDF DE VENTAS ───────────────────────────────────────────────
 export async function exportSalesSectionPDF(params: {
   title: string
-  salesData: any[]
+  salesData: SalesDataPoint[]
   metrics: {
     totalSales: number
     totalOrders: number
@@ -335,7 +373,7 @@ export async function exportSalesSectionPDF(params: {
   let y = coverBottom(params.context)
   const coveredRevenue = params.metrics.profitCoveredRevenue ?? 0
   const showProfit = params.metrics.totalProfit !== undefined && params.metrics.totalProfit > 0
-  const kpiMap: Record<string, any> = {
+  const kpiMap: Record<string, string | number> = {
     'Ventas Totales (POS)': formatGs(params.metrics.totalSales),
     'Órdenes': formatNumber(params.metrics.totalOrders),
     'Clientes que compraron': formatNumber(params.metrics.buyers),
@@ -368,7 +406,7 @@ export async function exportSalesSectionPDF(params: {
   if (params.salesData.length > 0) {
     const chartImg = renderAreaChartCanvas(
       'Tendencia y Evolución Diaria de Ventas',
-      params.salesData.map((d: any) => ({ label: formatDateStr(d.date), value: Number(d.sales) || 0 })),
+      params.salesData.map((d) => ({ label: formatDateStr(d.date), value: Number(d.sales) || 0 })),
       { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs }
     )
     if (chartImg) {
@@ -379,7 +417,7 @@ export async function exportSalesSectionPDF(params: {
 
   // Tabla detallada de ventas
   const totalSalesSum = params.metrics.totalSales
-  const rows = params.salesData.map((r: any) => {
+  const rows = params.salesData.map((r) => {
     const s = Number(r.sales) || 0
     const o = Number(r.orders) || 0
     const p = Number(r.profit) || 0
@@ -440,7 +478,7 @@ export async function exportSalesSectionPDF(params: {
 // ── 2. EXPORTADOR PDF DE PRODUCTOS ────────────────────────────────────────────
 export async function exportProductsSectionPDF(params: {
   title: string
-  products: any[]
+  products: ProductReportItem[]
   chartRef?: React.RefObject<HTMLDivElement | null>
   context?: ReportContext
 }) {
@@ -458,7 +496,7 @@ export async function exportProductsSectionPDF(params: {
   const totalProfitSum = params.products.reduce((acc, p) => acc + (Number(p.profit) || 0), 0)
 
   let y = coverBottom(params.context)
-  const kpiMap: Record<string, any> = {
+  const kpiMap: Record<string, string | number> = {
     'Total Facturado Catálogo': formatGs(totalSalesSum),
     'Unidades Vendidas': formatNumber(totalQtySum),
     'Artículos Diferentes': formatNumber(params.products.length),
@@ -470,7 +508,7 @@ export async function exportProductsSectionPDF(params: {
   if (params.products.length > 0) {
     const chartImg = renderBarChartCanvas(
       'Top 10 Productos Más Vendidos por Facturación',
-      params.products.slice(0, 10).map((p: any) => ({ label: p.name || 'Sin nombre', value: Number(p.sales) || 0 })),
+      params.products.slice(0, 10).map((p) => ({ label: p.name || 'Sin nombre', value: Number(p.sales) || 0 })),
       { barColor: '#059669', formatValue: formatGs }
     )
     if (chartImg) {
@@ -479,7 +517,7 @@ export async function exportProductsSectionPDF(params: {
     }
   }
 
-  const rows = params.products.map((p: any, idx: number) => {
+  const rows = params.products.map((p, idx: number) => {
     const s = Number(p.sales) || 0
     const q = Number(p.quantity) || 0
     const prof = Number(p.profit) || 0
@@ -543,7 +581,7 @@ export async function exportProductsSectionPDF(params: {
 // ── 3. EXPORTADOR PDF DE CATEGORÍAS ───────────────────────────────────────────
 export async function exportCategoriesSectionPDF(params: {
   title: string
-  categories: any[]
+  categories: CategoryReportItem[]
   chartRef?: React.RefObject<HTMLDivElement | null>
   context?: ReportContext
 }) {
@@ -560,7 +598,7 @@ export async function exportCategoriesSectionPDF(params: {
   const totalQtySum = params.categories.reduce((acc, c) => acc + (Number(c.quantity) || 0), 0)
 
   let y = coverBottom(params.context)
-  const kpiMap: Record<string, any> = {
+  const kpiMap: Record<string, string | number> = {
     'Total en Rubros': formatGs(totalSalesSum),
     'Unidades Vendidas': formatNumber(totalQtySum),
     'Total Categorías': formatNumber(params.categories.length),
@@ -571,7 +609,7 @@ export async function exportCategoriesSectionPDF(params: {
   if (params.categories.length > 0) {
     const chartImg = renderDonutChartCanvas(
       'Participación de Facturación por Categoría',
-      params.categories.map((c: any) => ({ label: c.name || 'Sin Categoría', value: Number(c.sales) || 0 })),
+      params.categories.map((c) => ({ label: c.name || 'Sin Categoría', value: Number(c.sales) || 0 })),
       { formatValue: formatGs }
     )
     if (chartImg) {
@@ -580,7 +618,7 @@ export async function exportCategoriesSectionPDF(params: {
     }
   }
 
-  const rows = params.categories.map((c: any) => {
+  const rows = params.categories.map((c) => {
     const s = Number(c.sales) || 0
     const q = Number(c.quantity) || 0
     const avg = q > 0 ? s / q : s
@@ -624,8 +662,8 @@ export async function exportCategoriesSectionPDF(params: {
 // ── 4. EXPORTADOR PDF DE REPARACIONES / TALLER ─────────────────────────────────
 export async function exportRepairsSectionPDF(params: {
   title: string
-  trend: any[]
-  statusDist: any[]
+  trend: RepairTrendItem[]
+  statusDist: RepairStatusItem[]
   metrics: {
     total: number
     // Obligatorios a proposito: cuando eran opcionales, nadie los pasaba y
@@ -658,7 +696,7 @@ export async function exportRepairsSectionPDF(params: {
   renderExecutiveCoverHeader(doc, params.title, 'Informe Técnico de Reparaciones y Taller', dateLabel, margin, contentWidth, pageWidth, params.context)
 
   let y = coverBottom(params.context)
-  const kpiMap: Record<string, any> = {
+  const kpiMap: Record<string, string | number> = {
     'Ingresadas en el Período': formatNumber(params.metrics.total),
     'Ya Entregadas (de las ingresadas)': formatNumber(params.metrics.completed),
     'En Proceso Técnico': formatNumber(params.metrics.inProgress),
@@ -681,7 +719,7 @@ export async function exportRepairsSectionPDF(params: {
   if (params.statusDist.length > 0) {
     const chartImg = renderDonutChartCanvas(
       'Distribución de Órdenes por Estado Operativo',
-      params.statusDist.map((s: any) => ({ label: s.name, value: Number(s.value) || 0, color: s.color })),
+      params.statusDist.map((s) => ({ label: s.name, value: Number(s.value) || 0, color: s.color })),
       { formatValue: (v) => `${v} equipos` }
     )
     if (chartImg) {
@@ -692,7 +730,7 @@ export async function exportRepairsSectionPDF(params: {
 
   // Tablas de estados y tendencia
   const totalRepairs = params.statusDist.reduce((acc, s) => acc + (Number(s.value) || 0), 0)
-  const statusRows = params.statusDist.map((s: any) => {
+  const statusRows = params.statusDist.map((s) => {
     const val = Number(s.value) || 0
     const pct = totalRepairs > 0 ? ((val / totalRepairs) * 100).toFixed(1) : '0'
     return [s.name, formatNumber(val), `${pct}%`]
@@ -715,7 +753,7 @@ export async function exportRepairsSectionPDF(params: {
     },
   })
 
-  const nextY = (doc as any).lastAutoTable.finalY + 16
+  const nextY = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 16
 
   if (params.trend.length > 0) {
     const totalTrendCount = params.trend.reduce((acc, t) => acc + (Number(t.count) || 0), 0)
@@ -723,7 +761,7 @@ export async function exportRepairsSectionPDF(params: {
     // 31 filas mientras el pie anunciaba el total de todos los días, y nada
     // explicaba por qué no sumaban.
     const { rows: trendVisibles, omitidas: trendOmitidas } = capRows(params.trend)
-    const trendRows = trendVisibles.map((t: any) => {
+    const trendRows = trendVisibles.map((t) => {
       const c = Number(t.count) || 0
       const pct = totalTrendCount > 0 ? ((c / totalTrendCount) * 100).toFixed(1) : '0'
       return [formatDateStr(t.date), getDayOfWeekStr(t.date), formatNumber(c), `${pct}%`]
@@ -773,7 +811,7 @@ export async function exportCreditsSectionPDF(params: {
   renderExecutiveCoverHeader(doc, params.title, 'Informe de Créditos, Cartera y Cobranzas', dateLabel, margin, contentWidth, pageWidth, params.context)
 
   let y = coverBottom(params.context)
-  const kpiMap: Record<string, any> = {
+  const kpiMap: Record<string, string | number> = {
     'Créditos Otorgados': formatNumber(params.report.period.grantedCount),
     'Capital Financiado': formatGs(params.report.period.principalGranted),
     'Cobranzas Recibidas': formatGs(params.report.period.paymentsReceived),
@@ -831,7 +869,7 @@ export async function exportCreditsSectionPDF(params: {
     },
   })
 
-  const nextY = (doc as any).lastAutoTable.finalY + 16
+  const nextY = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 16
 
   // Tabla 2: Evolución de Pagos Recibidos
   if (params.report.paymentTrend.length > 0) {

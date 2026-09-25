@@ -9,6 +9,16 @@
 
 import { formatCurrency } from '@/lib/currency'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
+import type { jsPDF } from 'jspdf'
+import type { UserOptions, CellHookData } from 'jspdf-autotable'
+
+type JsPdfConstructor = new (options?: Record<string, unknown>) => jsPDF
+type AutoTableFn = (doc: jsPDF, options: UserOptions) => void
+
+interface AutoTableDoc extends jsPDF {
+  lastAutoTable?: { finalY?: number }
+  internal: jsPDF['internal'] & { getNumberOfPages: () => number }
+}
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -107,8 +117,10 @@ export async function exportProfitabilityPdf({
     import('jspdf-autotable'),
   ])
 
-  const JsPdfClass: any = (jsPdfModule as any).jsPDF || (jsPdfModule as any).default || jsPdfModule
-  const autoTable: any = (autoTableModule as any).default || autoTableModule
+  const jsPdfRecord = jsPdfModule as unknown as { jsPDF?: JsPdfConstructor; default?: JsPdfConstructor }
+  const JsPdfClass: JsPdfConstructor = jsPdfRecord.jsPDF || jsPdfRecord.default || (jsPdfModule as unknown as JsPdfConstructor)
+  const autoTableRecord = autoTableModule as unknown as { default?: AutoTableFn }
+  const autoTable: AutoTableFn = autoTableRecord.default || (autoTableModule as unknown as AutoTableFn)
 
   const doc = new JsPdfClass({
     orientation: 'landscape',
@@ -295,7 +307,7 @@ export async function exportProfitabilityPdf({
       4: { cellWidth: 70, halign: 'center', fontStyle: 'bold' },
       5: { cellWidth: contentWidth - 630, halign: 'center' },
     },
-    didParseCell: (data: any) => {
+    didParseCell: (data: CellHookData) => {
       // Destacar la fila de totales
       if (data.row.index === tableBody.length - 1) {
         data.cell.styles.fontStyle = 'bold'
@@ -305,7 +317,7 @@ export async function exportProfitabilityPdf({
   })
 
   // Numeración de páginas
-  const totalPages = (doc.internal as any).getNumberOfPages()
+  const totalPages = (doc as AutoTableDoc).internal.getNumberOfPages()
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p)
     doc.setDrawColor(226, 232, 240)
@@ -343,8 +355,10 @@ export async function exportFinanceSummaryPdf({
     import('jspdf-autotable'),
   ])
 
-  const JsPdfClass: any = (jsPdfModule as any).jsPDF || (jsPdfModule as any).default || jsPdfModule
-  const autoTable: any = (autoTableModule as any).default || autoTableModule
+  const jsPdfRecord = jsPdfModule as unknown as { jsPDF?: JsPdfConstructor; default?: JsPdfConstructor }
+  const JsPdfClass: JsPdfConstructor = jsPdfRecord.jsPDF || jsPdfRecord.default || (jsPdfModule as unknown as JsPdfConstructor)
+  const autoTableRecord = autoTableModule as unknown as { default?: AutoTableFn }
+  const autoTable: AutoTableFn = autoTableRecord.default || (autoTableModule as unknown as AutoTableFn)
 
   const doc = new JsPdfClass({
     orientation: 'portrait',
@@ -517,7 +531,7 @@ export async function exportFinanceSummaryPdf({
       2: { cellWidth: 120, halign: 'right', fontStyle: 'bold' },
       3: { cellWidth: 80, halign: 'center', fontStyle: 'bold' },
     },
-    didParseCell: (data: any) => {
+    didParseCell: (data: CellHookData) => {
       if (data.row.index === 2 || data.row.index === 5) {
         data.cell.styles.fillColor = [241, 245, 249]
         data.cell.styles.fontStyle = 'bold'
@@ -525,7 +539,7 @@ export async function exportFinanceSummaryPdf({
     },
   })
 
-  y = ((doc as any).lastAutoTable?.finalY ?? y + 140) + 14
+  y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? y + 140) + 14
 
   // Tabla de Cuentas por Pagar Urgentes (si existen)
   const urgentRows: [string, string, string, string][] = []
@@ -572,18 +586,18 @@ export async function exportFinanceSummaryPdf({
         2: { cellWidth: 90, halign: 'center' },
         3: { cellWidth: 110, halign: 'right', fontStyle: 'bold' },
       },
-      didParseCell: (data: any) => {
+      didParseCell: (data: CellHookData) => {
         if (data.column.index === 0 && data.cell.raw === 'VENCIDO') {
           data.cell.styles.textColor = [225, 29, 72]
         }
       },
     })
 
-    y = ((doc as any).lastAutoTable?.finalY ?? y + 80) + 12
+    y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? y + 80) + 12
   }
 
   // Paginación
-  const totalPages = (doc.internal as any).getNumberOfPages()
+  const totalPages = (doc as AutoTableDoc).internal.getNumberOfPages()
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p)
     doc.setDrawColor(226, 232, 240)

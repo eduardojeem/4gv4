@@ -17,7 +17,7 @@ export interface SyncMetrics {
   networkLatency?: number
   status: 'success' | 'partial' | 'failed'
   errors: string[]
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
   timestamp: Date
 }
 
@@ -62,7 +62,7 @@ export interface SyncHealthCheck {
   lastSync: Date | null
   errorCount: number
   message: string
-  details: Record<string, any>
+  details: Record<string, unknown>
 }
 
 export class SyncPerformanceMonitor {
@@ -138,7 +138,7 @@ export class SyncPerformanceMonitor {
     recordsProcessed: number,
     recordsSuccess: number,
     errors: string[] = [],
-    metadata: Record<string, any> = {}
+    metadata: Record<string, unknown> = {}
   ): Promise<void> {
     const duration = endTime - startTime
     const recordsError = recordsProcessed - recordsSuccess
@@ -166,8 +166,8 @@ export class SyncPerformanceMonitor {
 
     // Agregar métricas del sistema si están disponibles
     if (typeof window !== 'undefined' && 'performance' in window) {
-      const memory = (performance as any).memory
-      if (memory) {
+      const memory = (performance as unknown as { memory?: { usedJSHeapSize?: number } }).memory
+      if (memory?.usedJSHeapSize) {
         metric.memoryUsage = memory.usedJSHeapSize
       }
     }
@@ -489,7 +489,7 @@ export class SyncPerformanceMonitor {
   }
 
   private calculateOperationBreakdown(metrics: SyncMetrics[]) {
-    const breakdown: Record<string, any> = {}
+    const breakdown: SyncPerformanceReport['operationBreakdown'] = {}
 
     const operations = [...new Set(metrics.map(m => m.operation))]
     
@@ -647,7 +647,7 @@ export class SyncPerformanceMonitor {
   async measureSyncOperation<T>(
     operation: SyncMetrics['operation'],
     fn: () => Promise<T>,
-    metadata: Record<string, any> = {}
+    metadata: Record<string, unknown> = {}
   ): Promise<T> {
     const startTime = performance.now()
     let recordsProcessed = 0
@@ -659,9 +659,15 @@ export class SyncPerformanceMonitor {
       
       // Intentar extraer métricas del resultado si es posible
       if (typeof result === 'object' && result !== null) {
-        const resultObj = result as any
-        recordsProcessed = resultObj.recordsProcessed || resultObj.length || 1
-        recordsSuccess = resultObj.recordsSuccess || resultObj.length || 1
+        const resultObj = result as Record<string, unknown>
+        const processed = typeof resultObj.recordsProcessed === 'number'
+          ? resultObj.recordsProcessed
+          : (Array.isArray(result) ? result.length : 1)
+        const success = typeof resultObj.recordsSuccess === 'number'
+          ? resultObj.recordsSuccess
+          : (Array.isArray(result) ? result.length : 1)
+        recordsProcessed = processed
+        recordsSuccess = success
       } else {
         recordsProcessed = 1
         recordsSuccess = 1

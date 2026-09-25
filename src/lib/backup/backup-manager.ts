@@ -964,13 +964,13 @@ class BackupManager {
     console.log('Testing connectivity...', { source, destination })
   }
 
-  private async scanSource(source: BackupSource, job: BackupJob): Promise<any[]> {
+  private async scanSource(source: BackupSource, job: BackupJob): Promise<Array<{ size: number; [key: string]: unknown }>> {
     // Implementar escaneo de fuente
     this.addLog(job, 'info', 'Scanning source...')
     return []
   }
 
-  private async performBackup(items: Array<Record<string, unknown>>, config: BackupConfiguration, job: BackupJob): Promise<Record<string, unknown>> {
+  private async performBackup(items: Array<{ size: number; [key: string]: unknown }>, config: BackupConfiguration, job: BackupJob): Promise<Record<string, unknown>> {
     // Implementar backup real
     this.addLog(job, 'info', 'Performing backup...')
     return {}
@@ -1011,7 +1011,7 @@ class BackupManager {
     }
   }
 
-  private async downloadBackup(_location: string, _destination: BackupDestination): Promise<any> {
+  private async downloadBackup(_location: string, _destination: BackupDestination): Promise<Record<string, unknown>> {
     // Implementar descarga
     return {}
   }
@@ -1289,7 +1289,7 @@ class BackupManager {
         id: `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         jobId: job.id,
         configurationId: config.id,
-        type: job.metadata.backupType as any,
+        type: (job.metadata.backupType as BackupInfo['type']) || 'full',
         status: 'completed',
         size: job.statistics.totalSize,
         compressedSize: job.statistics.compressedSize,

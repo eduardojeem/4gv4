@@ -6,6 +6,17 @@
  * descarga en formato Markdown (.md) e impresión directa con estilos modernos.
  */
 
+import type { jsPDF } from 'jspdf'
+import type { UserOptions } from 'jspdf-autotable'
+
+type JsPdfConstructor = new (options?: Record<string, unknown>) => jsPDF
+type AutoTableFn = (doc: jsPDF, options: UserOptions) => void
+
+interface AutoTableDoc extends jsPDF {
+  lastAutoTable?: { finalY?: number }
+  internal: jsPDF['internal'] & { getNumberOfPages: () => number }
+}
+
 export interface GuideSectionData {
   key: string
   title: string
@@ -366,8 +377,10 @@ export async function exportFinanceGuideToPdf({
     import('jspdf-autotable'),
   ])
 
-  const JsPdfClass: any = (jsPdfModule as any).jsPDF || (jsPdfModule as any).default || jsPdfModule
-  const autoTable: any = (autoTableModule as any).default || autoTableModule
+  const jsPdfRecord = jsPdfModule as unknown as { jsPDF?: JsPdfConstructor; default?: JsPdfConstructor }
+  const JsPdfClass: JsPdfConstructor = jsPdfRecord.jsPDF || jsPdfRecord.default || (jsPdfModule as unknown as JsPdfConstructor)
+  const autoTableRecord = autoTableModule as unknown as { default?: AutoTableFn }
+  const autoTable: AutoTableFn = autoTableRecord.default || (autoTableModule as unknown as AutoTableFn)
 
   const doc = new JsPdfClass({
     orientation: 'portrait',
@@ -517,7 +530,7 @@ export async function exportFinanceGuideToPdf({
         },
       })
 
-      y = ((doc as any).lastAutoTable?.finalY ?? y + 100) + 14
+      y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? y + 100) + 14
     }
 
     // Fórmulas si están disponibles
@@ -553,7 +566,7 @@ export async function exportFinanceGuideToPdf({
         },
       })
 
-      y = ((doc as any).lastAutoTable?.finalY ?? y + 80) + 14
+      y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? y + 80) + 14
     }
 
     // Ejemplo Práctico en Guaraníes (solo para ejemplos o todo)
@@ -597,7 +610,7 @@ export async function exportFinanceGuideToPdf({
         },
       })
 
-      y = ((doc as any).lastAutoTable?.finalY ?? y + 80) + 12
+      y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? y + 80) + 12
     }
 
     // Tips de Oro al pie (solo para manual o todo)
@@ -630,7 +643,7 @@ export async function exportFinanceGuideToPdf({
   })
 
   // Numeración y pie de página en todo el documento
-  const totalPages = (doc.internal as any).getNumberOfPages()
+  const totalPages = (doc as AutoTableDoc).internal.getNumberOfPages()
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p)
     doc.setDrawColor(226, 232, 240)

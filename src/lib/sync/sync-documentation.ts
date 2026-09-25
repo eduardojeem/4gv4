@@ -69,7 +69,7 @@ export interface ParameterDoc {
   type: string
   description: string
   required: boolean
-  defaultValue?: any
+  defaultValue?: unknown
 }
 
 export interface PropertyDoc {
@@ -77,7 +77,7 @@ export interface PropertyDoc {
   type: string
   description: string
   readonly: boolean
-  defaultValue?: any
+  defaultValue?: unknown
 }
 
 export class SyncDocumentationGenerator {

@@ -9,7 +9,7 @@ export interface FailureEvent {
   severity: 'low' | 'medium' | 'high' | 'critical'
   operation: string
   error: string
-  context: Record<string, any>
+  context: Record<string, unknown>
   resolved: boolean
   resolvedAt?: Date
   resolutionMethod?: string
@@ -36,14 +36,14 @@ export interface RecoveryResult {
   message: string
   recoveredRecords?: number
   nextAction?: 'retry' | 'escalate' | 'ignore' | 'manual'
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface BackupPoint {
   id: string
   timestamp: Date
   operation: string
-  data: any
+  data: string
   checksum: string
   size: number
   compressed: boolean
@@ -146,7 +146,7 @@ export class DataBackupManager {
   private backups: Map<string, BackupPoint> = new Map()
   private maxBackups: number = 100
 
-  async createBackup(operation: string, data: Record<string, unknown>): Promise<string> {
+  async createBackup(operation: string, data: unknown): Promise<string> {
     const id = `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const serialized = JSON.stringify(data)
     const checksum = await this.calculateChecksum(serialized)
@@ -172,7 +172,7 @@ export class DataBackupManager {
     return id
   }
 
-  async restoreBackup(backupId: string): Promise<any> {
+  async restoreBackup(backupId: string): Promise<unknown> {
     const backup = this.backups.get(backupId)
     if (!backup) {
       throw new Error(`Backup ${backupId} not found`)
@@ -313,9 +313,10 @@ export class FailureRecoverySystem {
           const restoredData = await this.backupManager.restoreBackup(latestBackup.id)
 
           // Validar integridad de datos restaurados
+          const rawRestored = (restoredData && typeof restoredData === 'object' ? restoredData : {}) as Record<string, unknown>
           const validationResults = await dataIntegrityValidator.validateSingleRecord(
-            failure.context.table || 'products',
-            restoredData
+            typeof failure.context.table === 'string' ? failure.context.table : 'products',
+            rawRestored
           )
 
           const hasErrors = validationResults.some(r => !r.passed && r.severity === 'error')
@@ -462,7 +463,7 @@ export class FailureRecoverySystem {
     severity: FailureEvent['severity'],
     operation: string,
     error: string,
-    context: Record<string, any> = {}
+    context: Record<string, unknown> = {}
   ): Promise<string> {
     const id = `failure_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
@@ -476,7 +477,7 @@ export class FailureRecoverySystem {
       context,
       resolved: false,
       retryCount: 0,
-      affectedRecords: context.affectedRecords || 0
+      affectedRecords: typeof context.affectedRecords === 'number' ? context.affectedRecords : 0
     }
 
     this.failures.set(id, failure)
@@ -624,7 +625,7 @@ export class FailureRecoverySystem {
   async executeWithRecovery<T>(
     operation: string,
     fn: () => Promise<T>,
-    context: Record<string, any> = {}
+    context: Record<string, unknown> = {}
   ): Promise<T> {
     const circuitBreaker = await this.getCircuitBreaker(operation)
 

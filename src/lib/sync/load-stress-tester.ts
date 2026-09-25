@@ -139,7 +139,7 @@ export class TestDataGenerator {
     }
   }
 
-  private generateMetadata(size: LoadTestConfig['dataSize']): Record<string, any> {
+  private generateMetadata(size: LoadTestConfig['dataSize']): Record<string, unknown> {
     const base = {
       weight: Math.random() * 10,
       dimensions: {

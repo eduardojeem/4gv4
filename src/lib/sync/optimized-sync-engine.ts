@@ -18,12 +18,12 @@ export interface SyncOperation {
   id: string
   type: 'insert' | 'update' | 'delete' | 'bulk_insert' | 'bulk_update'
   table: string
-  data: any
+  data: unknown
   priority: 'low' | 'medium' | 'high' | 'critical'
   retries: number
   timestamp: Date
   dependencies?: string[]
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface SyncResult {
@@ -34,7 +34,7 @@ export interface SyncResult {
   recordsError: number
   duration: number
   errors: string[]
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface CircuitBreakerState {
@@ -342,12 +342,13 @@ export class OptimizedSyncEngine {
   }
 
   private async executeUpdate(operation: SyncOperation): Promise<SyncResult> {
-    const { id, ...updateData } = operation.data
+    const rawData = (operation.data && typeof operation.data === 'object' ? operation.data : {}) as Record<string, unknown>
+    const { id, ...updateData } = rawData
     
     const { data, error } = await this.supabase
       .from(operation.table)
       .update(updateData)
-      .eq('id', id)
+      .eq('id', id as string | number)
       .select()
 
     if (error) {
@@ -376,10 +377,12 @@ export class OptimizedSyncEngine {
   }
 
   private async executeDelete(operation: SyncOperation): Promise<SyncResult> {
+    const rawData = (operation.data && typeof operation.data === 'object' ? operation.data : {}) as Record<string, unknown>
+    const id = rawData.id as string | number
     const { error } = await this.supabase
       .from(operation.table)
       .delete()
-      .eq('id', operation.data.id)
+      .eq('id', id)
 
     if (error) {
       return {
@@ -460,12 +463,13 @@ export class OptimizedSyncEngine {
     // Para bulk update, procesamos uno por uno ya que cada registro puede tener diferentes condiciones
     for (const record of records) {
       try {
-        const { id, ...updateData } = record
+        const rawRecord = (record && typeof record === 'object' ? record : {}) as Record<string, unknown>
+        const { id, ...updateData } = rawRecord
         
         const { data, error } = await this.supabase
           .from(operation.table)
           .update(updateData)
-          .eq('id', id)
+          .eq('id', id as string | number)
           .select()
 
         totalProcessed++
@@ -505,7 +509,7 @@ export class OptimizedSyncEngine {
     return batches
   }
 
-  private getFromCache(table: string, data: Record<string, unknown>): Record<string, unknown> | null {
+  private getFromCache(table: string, data: unknown): Record<string, unknown> | null {
     if (!this.config.enableCaching) return null
 
     const key = this.generateCacheKey(table, data)
@@ -521,7 +525,7 @@ export class OptimizedSyncEngine {
     return cached.data as Record<string, unknown>
   }
 
-  private updateCache(table: string, data: Record<string, unknown>, result: SyncResult): void {
+  private updateCache(table: string, data: unknown, result: SyncResult): void {
     if (!this.config.enableCaching || !result.success) return
 
     const key = this.generateCacheKey(table, data)
@@ -530,7 +534,7 @@ export class OptimizedSyncEngine {
     this.cache.set(key, { data: result, expiry })
   }
 
-  private generateCacheKey(table: string, data: Record<string, unknown>): string {
+  private generateCacheKey(table: string, data: unknown): string {
     return `${table}_${JSON.stringify(data)}`
   }
 
@@ -613,7 +617,7 @@ export class OptimizedSyncEngine {
     })
   }
 
-  private async decompressData(compressedData: string): Promise<any> {
+  private async decompressData(compressedData: string): Promise<unknown> {
     if (!this.config.enableCompression || !this.compressionWorker) {
       return JSON.parse(compressedData)
     }

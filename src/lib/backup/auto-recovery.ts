@@ -44,7 +44,7 @@ export interface RecoveryAction {
   type: 'restore_backup' | 'restart_service' | 'switch_environment' | 'rollback_deployment' | 'scale_resources' | 'run_script' | 'notify_team' | 'custom'
   name: string
   description: string
-  parameters: { [key: string]: any }
+  parameters: Record<string, unknown>
   order: number
   parallel: boolean
   timeoutMinutes: number
@@ -91,7 +91,7 @@ export interface HealthCheck {
     script?: string
     metric?: string
     threshold?: number
-    expectedValue?: any
+    expectedValue?: unknown
   }
   timeoutSeconds: number
   retryCount: number
@@ -107,7 +107,7 @@ export interface NotificationSettings {
 
 export interface NotificationChannel {
   type: 'email' | 'slack' | 'teams' | 'webhook' | 'sms' | 'push'
-  config: { [key: string]: any }
+  config: Record<string, unknown>
   enabled: boolean
 }
 
@@ -141,7 +141,7 @@ export interface RecoveryExecution {
   metrics: RecoveryMetrics
   rollbackExecution?: RollbackExecution
   notifications: NotificationLog[]
-  metadata: { [key: string]: any }
+  metadata: Record<string, unknown>
 }
 
 export interface RecoveryProgress {
@@ -163,7 +163,7 @@ export interface ActionExecution {
   retryCount: number
   output?: string
   error?: string
-  metrics?: { [key: string]: any }
+  metrics?: Record<string, unknown>
 }
 
 export interface HealthCheckResult {
@@ -172,7 +172,7 @@ export interface HealthCheckResult {
   status: 'passed' | 'failed' | 'timeout' | 'error'
   executedAt: Date
   duration: number
-  result?: any
+  result?: unknown
   error?: string
   retryCount: number
 }
@@ -185,7 +185,7 @@ export interface RecoveryLog {
   message: string
   component: string
   actionId?: string
-  metadata?: { [key: string]: any }
+  metadata?: Record<string, unknown>
 }
 
 export interface RecoveryMetrics {
@@ -457,7 +457,7 @@ class AutoRecovery {
     strategyId: string,
     triggeredBy: string,
     reason: string,
-    metadata?: { [key: string]: any }
+    metadata?: Record<string, unknown>
   ): Promise<string> {
     try {
       const strategy = this.strategies.get(strategyId)
@@ -579,20 +579,22 @@ class AutoRecovery {
     }
   }
 
-  private compareValues(current: any, operator: string, expected: any): boolean {
+  private compareValues(current: unknown, operator: string, expected: unknown): boolean {
+    const cur = typeof current === 'number' || typeof current === 'string' ? current : String(current)
+    const exp = typeof expected === 'number' || typeof expected === 'string' ? expected : String(expected)
     switch (operator) {
-      case '>': return current > expected
-      case '<': return current < expected
+      case '>': return cur > exp
+      case '<': return cur < exp
       case '=': return current === expected
-      case '>=': return current >= expected
-      case '<=': return current <= expected
+      case '>=': return cur >= exp
+      case '<=': return cur <= exp
       case '!=': return current !== expected
       default: return false
     }
   }
 
   // Métodos auxiliares
-  private async getSystemMetrics(): Promise<{ [key: string]: any }> {
+  private async getSystemMetrics(): Promise<Record<string, number>> {
     return {
       cpu_usage: Math.random() * 100,
       memory_usage: Math.random() * 100,
@@ -602,7 +604,7 @@ class AutoRecovery {
     }
   }
 
-  private async getPerformanceMetrics(): Promise<{ [key: string]: any }> {
+  private async getPerformanceMetrics(): Promise<Record<string, number>> {
     return {
       response_time: Math.random() * 5000,
       throughput: Math.random() * 1000,
@@ -615,7 +617,7 @@ class AutoRecovery {
     return []
   }
 
-  private async executeCustomLogic(_logic: string): Promise<any> {
+  private async executeCustomLogic(_logic: string): Promise<unknown> {
     // Implementar ejecución segura de lógica personalizada
     return false
   }
@@ -712,16 +714,16 @@ class AutoRecovery {
     // Implementar rollback
   }
 
-  private async sendNotification(_execution: RecoveryExecution, _event: string, _data: any): Promise<void> {
+  private async sendNotification(_execution: RecoveryExecution, _event: string, _data: unknown): Promise<void> {
     // Implementar notificaciones
   }
 
-  private async logRecovery(execution: RecoveryExecution, level: string, message: string, actionId?: string): Promise<void> {
+  private async logRecovery(execution: RecoveryExecution, level: RecoveryLog['level'], message: string, actionId?: string): Promise<void> {
     const log: RecoveryLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       executionId: execution.id,
       timestamp: new Date(),
-      level: level as any,
+      level,
       message,
       component: 'AutoRecovery',
       actionId,

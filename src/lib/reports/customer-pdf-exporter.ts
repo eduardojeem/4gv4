@@ -2,6 +2,11 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { type ReportContext, describeReportPeriod } from './section-pdf-exporter'
 
+interface AutoTableDoc extends jsPDF {
+  lastAutoTable?: { finalY?: number }
+  internal: jsPDF['internal'] & { getNumberOfPages: () => number }
+}
+
 // ── Helpers de formato ────────────────────────────────────────────────────────
 const formatGs = (amount: number | null | undefined): string => {
   if (amount === null || amount === undefined || isNaN(amount)) return '0 Gs.'
@@ -45,7 +50,7 @@ function capRows<T>(rows: T[], max = 400): { rows: T[]; omitidas: number } {
 
 function renderOmittedNote(doc: jsPDF, omitidas: number, margin: number) {
   if (omitidas <= 0) return
-  const y = (doc as any).lastAutoTable.finalY + 12
+  const y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 12
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(180, 83, 9)
@@ -169,7 +174,7 @@ function setupDocPageHeadersAndFooters(
   dateLabel: string,
   context?: ReportContext
 ) {
-  const totalPages = (doc.internal as any).getNumberOfPages()
+  const totalPages = (doc as AutoTableDoc).internal.getNumberOfPages()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 32

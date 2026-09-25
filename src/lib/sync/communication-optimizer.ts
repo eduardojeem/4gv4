@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { syncPerformanceMonitor } from './sync-performance-monitor'
 import type { SyncMetrics } from './sync-performance-monitor'
 
@@ -54,7 +55,7 @@ export interface OptimizationResult {
 }
 
 export class ConnectionPool {
-  private connections: Map<string, any> = new Map()
+  private connections: Map<string, SupabaseClient> = new Map()
   private activeConnections: Set<string> = new Set()
   private config: ConnectionConfig
   private lastUsed: Map<string, number> = new Map()
@@ -64,11 +65,11 @@ export class ConnectionPool {
     this.startCleanupInterval()
   }
 
-  async getConnection(key: string = 'default'): Promise<any> {
+  async getConnection(key: string = 'default'): Promise<SupabaseClient> {
     if (this.connections.has(key) && this.activeConnections.size < this.config.maxConcurrentConnections) {
       this.lastUsed.set(key, Date.now())
       this.activeConnections.add(key)
-      return this.connections.get(key)
+      return this.connections.get(key)!
     }
 
     if (this.activeConnections.size >= this.config.maxConcurrentConnections) {
@@ -87,7 +88,7 @@ export class ConnectionPool {
     this.activeConnections.delete(key)
   }
 
-  private async createConnection(): Promise<any> {
+  private async createConnection(): Promise<SupabaseClient> {
     return createClient()
   }
 
@@ -166,7 +167,7 @@ export class DataCompressor {
     }
   }
 
-  async decompress(compressedData: string, originalSize: number): Promise<any> {
+  async decompress(compressedData: string, originalSize: number): Promise<unknown> {
     if (!this.config.enabled) {
       return JSON.parse(compressedData)
     }

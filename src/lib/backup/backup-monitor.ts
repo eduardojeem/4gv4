@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { backupManager } from './backup-manager'
+import { backupManager, type BackupConfiguration } from './backup-manager'
 
 // Interfaces para monitoreo
 export interface MonitoringRule {
@@ -41,7 +41,7 @@ export interface MonitoringAction {
     slackChannel?: string
     retryAttempts?: number
     failoverTarget?: string
-    scaleConfig?: any
+    scaleConfig?: Record<string, unknown>
     ticketSystem?: string
   }
   delay?: number // en segundos
@@ -56,7 +56,7 @@ export interface MonitoringAlert {
   severity: 'low' | 'medium' | 'high' | 'critical'
   title: string
   message: string
-  details: any
+  details: Record<string, unknown>
   status: 'active' | 'acknowledged' | 'resolved' | 'suppressed'
   triggeredAt: Date
   acknowledgedAt?: Date
@@ -74,7 +74,7 @@ export interface AlertAction {
   type: string
   status: 'pending' | 'executing' | 'completed' | 'failed'
   executedAt?: Date
-  result?: any
+  result?: unknown
   error?: string
 }
 
@@ -105,7 +105,7 @@ export interface DashboardWidget {
     refreshInterval?: number
     thresholds?: { value: number; color: string }[]
     columns?: string[]
-    filters?: { [key: string]: any }
+    filters?: Record<string, unknown>
   }
   position: { x: number; y: number; width: number; height: number }
 }
@@ -145,12 +145,12 @@ export interface RecoveryStrategy {
 export interface RecoveryCondition {
   type: 'error_type' | 'failure_count' | 'time_since_last_success' | 'resource_availability'
   operator: 'eq' | 'gt' | 'lt' | 'contains'
-  value: any
+  value: unknown
 }
 
 export interface RecoveryAction {
   type: 'restart_backup' | 'switch_destination' | 'increase_resources' | 'notify_admin' | 'run_script'
-  config: any
+  config: Record<string, unknown>
   timeout: number
 }
 
@@ -169,7 +169,7 @@ export interface RecoveryExecution {
 export interface RecoveryActionResult {
   actionType: string
   status: 'completed' | 'failed' | 'timeout'
-  result?: any
+  result?: unknown
   error?: string
   duration: number
 }
@@ -534,8 +534,9 @@ class BackupMonitor {
   }
 
   // Recopilar detalles de alerta
-  private async gatherAlertDetails(rule: MonitoringRule): Promise<any> {
-    const details: any = {
+  private async gatherAlertDetails(rule: MonitoringRule): Promise<Record<string, unknown>> {
+    const context: Record<string, unknown> = {}
+    const details: Record<string, unknown> = {
       rule: {
         id: rule.id,
         name: rule.name,
@@ -543,7 +544,7 @@ class BackupMonitor {
         condition: rule.condition
       },
       timestamp: new Date(),
-      context: {}
+      context
     }
 
     try {
@@ -551,19 +552,19 @@ class BackupMonitor {
         case 'backup_success_rate':
         case 'error_rate':
           const recentJobs = await this.getRecentJobs(rule.condition.timeWindow || 60)
-          details.context.recentJobs = recentJobs
+          context.recentJobs = recentJobs
           break
         case 'storage_usage':
           const storageInfo = await this.getStorageUsage()
-          details.context.storage = storageInfo
+          context.storage = storageInfo
           break
         case 'schedule_compliance':
           const delayedConfigs = await this.getDelayedConfigurations()
-          details.context.delayedConfigurations = delayedConfigs
+          context.delayedConfigurations = delayedConfigs
           break
       }
     } catch (error) {
-      details.context.error = error instanceof Error ? error.message : 'Unknown error'
+      context.error = error instanceof Error ? error.message : 'Unknown error'
     }
 
     return details
@@ -621,7 +622,7 @@ class BackupMonitor {
   }
 
   // Ejecutar acción
-  private async executeAction(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async executeAction(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: unknown; error?: string }> {
     try {
       switch (action.type) {
         case 'email':
@@ -842,7 +843,7 @@ class BackupMonitor {
     return { used: 0, available: 100, percentage: 0 }
   }
 
-  private async getRecentJobs(timeWindowMinutes: number): Promise<any[]> {
+  private async getRecentJobs(timeWindowMinutes: number): Promise<Array<Record<string, unknown>>> {
     const startTime = new Date(Date.now() - timeWindowMinutes * 60 * 1000)
 
     const { data: jobs } = await this.supabase
@@ -850,10 +851,10 @@ class BackupMonitor {
       .select('*')
       .gte('started_at', startTime.toISOString())
 
-    return jobs || []
+    return (jobs || []) as Array<Record<string, unknown>>
   }
 
-  private async getDelayedConfigurations(): Promise<any[]> {
+  private async getDelayedConfigurations(): Promise<BackupConfiguration[]> {
     const configurations = await backupManager.getConfigurations()
     const now = new Date()
 
@@ -914,11 +915,12 @@ class BackupMonitor {
     return true
   }
 
-  private calculateTopIssues(alerts: any[]): { type: string; count: number }[] {
+  private calculateTopIssues(alerts: MonitoringAlert[]): { type: string; count: number }[] {
     const issueCount: { [type: string]: number } = {}
 
     for (const alert of alerts) {
-      const type = alert.details?.rule?.target || 'unknown'
+      const rule = alert.details?.rule as { target?: string } | undefined
+      const type = rule?.target || 'unknown'
       issueCount[type] = (issueCount[type] || 0) + 1
     }
 
@@ -960,25 +962,25 @@ class BackupMonitor {
   }
 
   // Métodos de notificación
-  private async sendEmailNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async sendEmailNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar envío de email
     console.log('Sending email notification:', { action, alert })
     return { success: true, result: 'Email sent' }
   }
 
-  private async sendSlackNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async sendSlackNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar envío a Slack
     console.log('Sending Slack notification:', { action, alert })
     return { success: true, result: 'Slack message sent' }
   }
 
-  private async sendWebhookNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async sendWebhookNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar webhook
     console.log('Sending webhook notification:', { action, alert })
     return { success: true, result: 'Webhook sent' }
   }
 
-  private async executeAutoRetry(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async executeAutoRetry(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar reintento automático
     if (alert.configurationId) {
       try {
@@ -991,13 +993,13 @@ class BackupMonitor {
     return { success: false, error: 'No configuration ID' }
   }
 
-  private async executeAutoFailover(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async executeAutoFailover(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar failover automático
     console.log('Executing auto failover:', { action, alert })
     return { success: true, result: 'Failover executed' }
   }
 
-  private async createSupportTicket(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async createSupportTicket(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar creación de ticket
     console.log('Creating support ticket:', { action, alert })
     return { success: true, result: 'Ticket created' }
