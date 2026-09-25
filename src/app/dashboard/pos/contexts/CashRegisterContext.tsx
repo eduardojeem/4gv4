@@ -5,7 +5,7 @@ import { CashRegisterState, CashMovement } from '../types'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
-import { useCashRegister } from '@/hooks/useCashRegister'
+import { useCashRegister, type CashRegisterSession } from '@/hooks/useCashRegister'
 import { calculateExpectedCashBalance } from '../lib/cash-balance'
 
 // Extended types for advanced features
@@ -275,21 +275,37 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     requiresApprovalForLargeAmounts: true
   })
 
+  interface HistoryClosureSession extends Partial<CashRegisterSession> {
+    id: string
+    register_id: string
+    movements?: CashMovement[]
+    sales_total_cash?: number | null
+    sales_total_card?: number | null
+    sales_total_transfer?: number | null
+    sales_total_mixed?: number | null
+    income_total?: number | null
+    expense_total?: number | null
+    movements_count?: number | null
+    date?: string
+    created_at?: string
+    notes?: string | null
+  }
+
   // Map hook history to ZClosureRecord
   const zClosureHistory = useMemo<ZClosureRecord[]>(() => {
-    return hookHistory.map((h: any) => {
+    return hookHistory.map((h: HistoryClosureSession) => {
       // Calculate totals from movements if available
       const movements: CashMovement[] = h.movements || []
-      const movSales = movements.filter((m: any) => m.type === 'sale' || m.type === 'venta')
-      const movTotalSales = movSales.reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
+      const movSales = movements.filter((m: CashMovement) => m.type === 'sale' || m.type === 'venta')
+      const movTotalSales = movSales.reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
 
-      const movSalesByCash = movSales.filter((s: any) => s.payment_method === 'cash' || s.payment_method === 'efectivo' || !s.payment_method).reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
-      const movSalesByCard = movSales.filter((s: any) => s.payment_method === 'card' || s.payment_method === 'tarjeta').reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
-      const movSalesByTransfer = movSales.filter((s: any) => s.payment_method === 'transfer' || s.payment_method === 'transferencia' || s.payment_method === 'qr' || s.payment_method === 'sipap').reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
-      const movSalesByMixed = movSales.filter((s: any) => s.payment_method === 'mixed' || s.payment_method === 'mixto').reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
+      const movSalesByCash = movSales.filter((s: CashMovement) => s.payment_method === 'cash' || s.payment_method === 'efectivo' || !s.payment_method).reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
+      const movSalesByCard = movSales.filter((s: CashMovement) => s.payment_method === 'card' || s.payment_method === 'tarjeta').reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
+      const movSalesByTransfer = movSales.filter((s: CashMovement) => s.payment_method === 'transfer' || s.payment_method === 'transferencia' || s.payment_method === 'qr' || s.payment_method === 'sipap').reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
+      const movSalesByMixed = movSales.filter((s: CashMovement) => s.payment_method === 'mixed' || s.payment_method === 'mixto').reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
 
-      const movCashIn = movements.filter((m: any) => (m.type === 'cash_in' || m.type === 'ingreso')).reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
-      const movCashOut = movements.filter((m: any) => (m.type === 'cash_out' || m.type === 'egreso')).reduce((s: number, m: any) => s + (Number(m.amount) || 0), 0)
+      const movCashIn = movements.filter((m: CashMovement) => (m.type === 'cash_in' || m.type === 'ingreso')).reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
+      const movCashOut = movements.filter((m: CashMovement) => (m.type === 'cash_out' || m.type === 'egreso')).reduce((s: number, m: CashMovement) => s + (Number(m.amount) || 0), 0)
 
       // Fallback to cash_closures columns from DB if movements wasn't populated
       const dbSalesCash = Number(h.sales_total_cash) || 0

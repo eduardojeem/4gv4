@@ -37,7 +37,7 @@ import {
 import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
-import { printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
+import { printReceipt, downloadReceipt, shareReceipt, type ReceiptData } from '@/lib/receipt-utils'
 // Limpieza: se retiran componentes de debug/diagnóstico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
@@ -489,8 +489,8 @@ function POSPageContent() {
 
   // Estados para sistema de tickets
   const [showReceiptModal, setShowReceiptModal] = useState(false)
-  const [currentReceipt, setCurrentReceipt] = useState<any>(null)
-  const [_lastSaleData, setLastSaleData] = useState<any>(null)
+  const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(null)
+  const [_lastSaleData, setLastSaleData] = useState<ReceiptData | null>(null)
 
   // Estados para sistema de inventario usando el hook de Supabase
   const {
@@ -577,8 +577,8 @@ function POSPageContent() {
   // Mantener compatibilidad con el inventoryManager existente
   const inventoryManager = useMemo(() => ({
     getProducts: () => inventoryProducts,
-    subscribe: (_callback: (products: any[]) => void) => () => {},
-    importData: (_data: { products: any[] }) => {
+    subscribe: (_callback: (products: Product[]) => void) => () => {},
+    importData: (_data: { products: Product[] }) => {
       console.log('Modo Supabase: importData no necesario')
     },
   }), [inventoryProducts])
@@ -694,7 +694,7 @@ function POSPageContent() {
     totalDiscount: unifiedCalculations.totalSavings,
     hasDiscount: unifiedCalculations.totalSavings > 0,
     totalSavings: unifiedCalculations.totalSavings,
-    averageItemPrice: (unifiedCalculations as any).averageItemPrice,
+    averageItemPrice: unifiedCalculations.averageItemPrice,
     repairCost: unifiedCalculations.repairCost,
     repairSubtotal: unifiedCalculations.repairSubtotal,
     repairTax: unifiedCalculations.repairTax,
@@ -705,12 +705,14 @@ function POSPageContent() {
   useEffect(() => {
     try {
       const activeCustomer = customers.find(c => c.id === selectedCustomer)
+      const customerPriority = activeCustomer && 'priority' in activeCustomer ? String((activeCustomer as { priority?: unknown }).priority || '') : ''
+      const customerDiscount = activeCustomer && 'discount_percentage' in activeCustomer ? Number((activeCustomer as { discount_percentage?: unknown }).discount_percentage) : 0
       const isVip = activeCustomer && (
         String(activeCustomer.type || '').toLowerCase() === 'vip' ||
-        String((activeCustomer as any).priority || '').toLowerCase() === 'vip'
+        customerPriority.toLowerCase() === 'vip'
       )
 
-      const configuredDiscount = Math.min(100, Math.max(0, Number((activeCustomer as any)?.discount_percentage) || 0))
+      const configuredDiscount = Math.min(100, Math.max(0, customerDiscount || 0))
 
       if (isVip && configuredDiscount > 0 && generalDiscount === 0 && unifiedCalculations.subtotal > 0 && !vipAutoApplied) {
         setGeneralDiscount(configuredDiscount)
@@ -838,7 +840,7 @@ function POSPageContent() {
     clearCart(true)
     const saleItems = sale.cart || sale.items || []
     saleItems.forEach(item => {
-      addToCartHook(item as any, item.quantity)
+      addToCartHook(item as unknown as Product, item.quantity)
     })
     if (repairsEnabled && Array.isArray(sale.selectedRepairIds) && sale.selectedRepairIds.length > 0) {
       setSelectedRepairIds(sale.selectedRepairIds)
@@ -912,7 +914,7 @@ function POSPageContent() {
   }, [canCheckout, combinedCartItems.length, handleOpenCheckout, handleParkCurrentSale, isWholesale, handleWholesaleToggle])
 
   const applyPromoCode = useCallback((code: string) => {
-    const cartItems = combinedCartItems
+    const cartItems: import('@/types/promotion').CartItem[] = combinedCartItems
       .map(item => ({
         id: item.id,
         product_id: item.id,
@@ -921,7 +923,7 @@ function POSPageContent() {
         name: item.name,
         quantity: item.quantity,
         unit_price: item.price,
-        category_id: (item as any).category,
+        category_id: item.category,
         total_price: item.price * item.quantity
       }))
 
@@ -931,7 +933,7 @@ function POSPageContent() {
     }
 
     // Use promotion engine to validate/apply code against DB promotions
-    const result = applyPromotionByCode(code, cartItems as any, allPromotions)
+    const result = applyPromotionByCode(code, cartItems, allPromotions)
 
     if (!result.applied) {
       toast.error(result.reason || 'Código promocional inválido')
@@ -958,7 +960,7 @@ function POSPageContent() {
     }
 
     // Base de línea según modo mayorista
-    const lineBase = (item: any) => {
+    const lineBase = (item: import('@/types/promotion').CartItem) => {
       const unitNonWholesale = item.unit_price
       const existingItem = combinedCartItems.find(ci => ci.id === item.id)
       const isService = existingItem?.isService === true
@@ -976,7 +978,7 @@ function POSPageContent() {
       // Aplicar porcentaje directo a items elegibles
       eligibleItems.forEach(it => {
         const existingItem = combinedCartItems.find(ci => ci.id === it.id)
-        const currentDiscount = (existingItem as any)?.discount || 0
+        const currentDiscount = existingItem?.discount || 0
         const newDiscount = Math.max(currentDiscount, promotion.value)
         updateItemDiscount(it.id, Math.min(100, Math.max(0, newDiscount)))
         updateItemPromoCode(it.id, code)
@@ -993,7 +995,7 @@ function POSPageContent() {
         const share = (line / totalApplicable) * promotion.value
         const percentShare = line > 0 ? (share / line) * 100 : 0
         const existingItem = combinedCartItems.find(ci => ci.id === it.id)
-        const currentDiscount = (existingItem as any)?.discount || 0
+        const currentDiscount = existingItem?.discount || 0
         const newDiscount = Math.min(100, Math.max(0, currentDiscount + percentShare))
         updateItemDiscount(it.id, newDiscount)
         updateItemPromoCode(it.id, code)
@@ -1038,7 +1040,7 @@ function POSPageContent() {
     setPaymentStatus,
     setPaymentError,
     processInventorySale,
-    onSuccess: (receipt: any) => {
+    onSuccess: (receipt: ReceiptData) => {
       setLastSaleData(receipt)
       setCurrentReceipt(receipt)
       setShowReceiptModal(true)
