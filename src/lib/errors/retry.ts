@@ -178,7 +178,7 @@ export async function withRetry<T>(
  * const data = await fetchWithRetry()
  * ```
  */
-export function retryable<TArgs extends any[], TResult>(
+export function retryable<TArgs extends unknown[], TResult>(
   fn: (...args: TArgs) => Promise<TResult>,
   options: RetryOptions = {}
 ): (...args: TArgs) => Promise<TResult> {

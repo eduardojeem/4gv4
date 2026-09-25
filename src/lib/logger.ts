@@ -9,7 +9,7 @@ export const logger = {
     /**
      * Debug logging - only in development
      */
-    debug: (...args: any[]) => {
+    debug: (...args: unknown[]) => {
         if (isDevelopment) {
             console.debug('[DEBUG]', ...args)
         }
@@ -18,7 +18,7 @@ export const logger = {
     /**
      * Info logging - only in development
      */
-    info: (...args: any[]) => {
+    info: (...args: unknown[]) => {
         if (isDevelopment) {
             console.info('[INFO]', ...args)
         }
@@ -27,14 +27,14 @@ export const logger = {
     /**
      * Warning logging - always shown
      */
-    warn: (...args: any[]) => {
+    warn: (...args: unknown[]) => {
         console.warn('[WARN]', ...args)
     },
 
     /**
      * Error logging - always shown but sanitized in production
      */
-    error: (...args: any[]) => {
+    error: (...args: unknown[]) => {
         if (isDevelopment) {
             const formatted = args.map(arg => {
                 if (arg instanceof Error) {
@@ -62,7 +62,7 @@ export const logger = {
      * Security-sensitive logging - only in development
      * Use for session IDs, user IDs, tokens, etc.
      */
-    security: (message: string, data?: any) => {
+    security: (message: string, data?: unknown) => {
         if (isDevelopment) {
             console.log(`🔒 [SECURITY] ${message}`, data || '')
         }
@@ -71,7 +71,7 @@ export const logger = {
     /**
      * Session logging - only in development
      */
-    session: (message: string, data?: any) => {
+    session: (message: string, data?: unknown) => {
         if (isDevelopment) {
             console.log(`🔑 [SESSION] ${message}`, data || '')
         }

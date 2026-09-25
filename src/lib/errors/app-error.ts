@@ -15,7 +15,7 @@ export interface ErrorContext {
   userId?: string
   repairId?: string
   timestamp?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -71,8 +71,13 @@ export class AppError extends Error {
     if (error instanceof Error) {
       message = error.message
       originalError = error
-    } else if (typeof error === 'object' && error !== null && 'message' in (error as any) && typeof (error as any).message === 'string') {
-      message = (error as any).message as string
+    } else if (
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof (error as { message: unknown }).message === 'string'
+    ) {
+      message = (error as { message: string }).message
       originalError = new Error(message)
     } else {
       message = String(error)
