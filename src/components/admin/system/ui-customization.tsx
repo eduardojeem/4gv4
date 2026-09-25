@@ -287,7 +287,7 @@ function UICustomizationContent() {
     saveCustomTheme(next)
   }
 
-  const updateTypography = (key: keyof ThemeConfig['typography'], value: any) => {
+  const updateTypography = <K extends keyof ThemeConfig['typography']>(key: K, value: ThemeConfig['typography'][K]) => {
     const next = {
       ...customTheme,
       typography: {
@@ -300,7 +300,7 @@ function UICustomizationContent() {
     saveCustomTheme(next)
   }
 
-  const updateLayout = (key: keyof ThemeConfig['layout'], value: any) => {
+  const updateLayout = <K extends keyof ThemeConfig['layout']>(key: K, value: ThemeConfig['layout'][K]) => {
     const next = {
       ...customTheme,
       layout: {
@@ -313,7 +313,7 @@ function UICustomizationContent() {
     saveCustomTheme(next)
   }
 
-  const updateComponent = (key: keyof ThemeConfig['components'], value: any) => {
+  const updateComponent = <K extends keyof ThemeConfig['components']>(key: K, value: ThemeConfig['components'][K]) => {
     setCustomTheme(prev => ({
       ...prev,
       components: {
@@ -763,7 +763,11 @@ function UICustomizationContent() {
                     <Label>Estilo de Botones</Label>
                     <Select
                       value={customTheme.components.buttonStyle}
-                      onValueChange={(value) => updateComponent('buttonStyle', value)}
+                      onValueChange={(value) => {
+                        if (value === 'rounded' || value === 'square' || value === 'pill') {
+                          updateComponent('buttonStyle', value)
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -780,7 +784,11 @@ function UICustomizationContent() {
                     <Label>Estilo de Tarjetas</Label>
                     <Select
                       value={customTheme.components.cardStyle}
-                      onValueChange={(value) => updateComponent('cardStyle', value)}
+                      onValueChange={(value) => {
+                        if (value === 'flat' || value === 'elevated' || value === 'outlined') {
+                          updateComponent('cardStyle', value)
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -797,7 +805,11 @@ function UICustomizationContent() {
                     <Label>Estilo de Navegación</Label>
                     <Select
                       value={customTheme.components.navigationStyle}
-                      onValueChange={(value) => updateComponent('navigationStyle', value)}
+                      onValueChange={(value) => {
+                        if (value === 'sidebar' || value === 'topbar' || value === 'hybrid') {
+                          updateComponent('navigationStyle', value)
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />

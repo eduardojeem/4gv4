@@ -28,11 +28,14 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useCatalogSync } from '@/hooks/use-catalog-sync'
 import { CategoryModal } from './category-modal'
-import { BrandModal } from './brands/BrandModal'
+import { BrandModal, type BrandModalBrand } from './brands/BrandModal'
 import { SupplierModal } from './supplier-modal'
 import { Category, Brand, ModalMode } from '@/lib/types/catalog'
 import { Supplier } from '@/lib/types/supplier'
 import { UISupplier } from '@/lib/types/supplier-ui'
+import type { Database } from '@/lib/supabase/types'
+
+type BrandInsert = Database['public']['Tables']['brands']['Insert'] & { global_brand_id?: string | null }
 
 interface IntegratedCatalogSelectorProps {
   // Valores seleccionados
@@ -118,7 +121,7 @@ export function IntegratedCatalogSelector({
     onCategoryChange?.(category.id)
   }
 
-  const handleBrandSave = async (brandData: any) => {
+  const handleBrandSave = async (brandData: BrandInsert) => {
     try {
       // Map back to our local type if needed, or just add it
       const newBrand: Brand = {
@@ -144,10 +147,11 @@ export function IntegratedCatalogSelector({
 
   const handleSupplierSave = (supplierData: Partial<UISupplier>) => {
     // Create a complete Supplier object with defaults for missing required fields
+    const contactPerson = 'contact_person' in supplierData ? String((supplierData as { contact_person?: unknown }).contact_person || '') : ''
     const newSupplier: Supplier = {
       id: crypto.randomUUID(),
       name: supplierData.name || '',
-      contact_name: supplierData.contact_name || (supplierData as any).contact_person || '',
+      contact_name: supplierData.contact_name || contactPerson || '',
       email: supplierData.email || '',
       phone: supplierData.phone || '',
       address: supplierData.address || '',
@@ -533,7 +537,7 @@ export function IntegratedCatalogSelector({
       <BrandModal
         isOpen={brandModal.isOpen}
         onClose={() => setBrandModal({ isOpen: false, mode: 'add' })}
-        brand={brands.find(b => b.id === selectedBrand) as any}
+        brand={brands.find(b => b.id === selectedBrand) as BrandModalBrand | undefined}
         onSave={handleBrandSave}
       />
 

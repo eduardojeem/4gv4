@@ -439,7 +439,20 @@ export function ServicesManager({
     async function loadInvServices() {
       setLoadingInventory(true)
       try {
-        let all: any[] = []
+        interface ServiceCandidateProduct {
+          id: string
+          sku?: string | null
+          name?: string | null
+          description?: string | null
+          sale_price?: number | null
+          unit_measure?: string | null
+          is_active?: boolean | null
+          visibility?: string | null
+          category_id?: string | null
+          brand?: string | { name?: string | null } | Array<{ name?: string | null }> | null
+          category?: { name?: string | null } | Array<{ name?: string | null }> | string | null
+        }
+        let all: ServiceCandidateProduct[] = []
         const serviceCatIds = new Set<string>()
 
         // Intento 1: Cliente directo de Supabase con sesión activa
@@ -478,13 +491,18 @@ export function ServicesManager({
           }
           if (res.ok) {
             const body = await res.json()
-            all = (body.data?.products ?? body.products ?? []) as Array<any>
+            all = (body.data?.products ?? body.products ?? []) as ServiceCandidateProduct[]
           }
         }
 
         const mappedServices = all
           .map(p => {
-            const catName = typeof p.category === 'object' ? p.category?.name : (p.category || '')
+            const catName: string = Array.isArray(p.category)
+              ? (p.category[0]?.name || '')
+              : (typeof p.category === 'object' && p.category ? (p.category.name || '') : (typeof p.category === 'string' ? p.category : ''))
+            const brandName: string | null = Array.isArray(p.brand)
+              ? (p.brand[0]?.name || null)
+              : (typeof p.brand === 'object' && p.brand ? (p.brand.name || null) : (typeof p.brand === 'string' ? p.brand : null))
             const isCategoryMatch = Boolean(p.category_id && serviceCatIds.has(p.category_id))
             const isServiceLike = isServiceLikeProduct({
               name: p.name,
@@ -498,7 +516,7 @@ export function ServicesManager({
               name: p.name,
               description: p.description || '',
               sale_price: p.sale_price ?? null,
-              brand: p.brand ?? null,
+              brand: brandName,
               category: catName || 'Servicio Técnico',
               visibility: (p.visibility === 'hidden' ? 'hidden' : 'public') as 'public' | 'hidden',
               is_active: p.is_active !== false,
@@ -720,8 +738,9 @@ export function ServicesManager({
           ? 'Servicio ocultado en tienda (estado Interno)'
           : 'Servicio marcado como Público en tienda'
       )
-    } catch (e: any) {
-      toast.error('No se pudo actualizar la visibilidad en el inventario', { description: e?.message })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : undefined
+      toast.error('No se pudo actualizar la visibilidad en el inventario', { description: message })
     } finally {
       setTogglingVisibilityId(null)
     }

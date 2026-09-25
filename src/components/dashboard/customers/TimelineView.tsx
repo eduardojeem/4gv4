@@ -79,14 +79,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       // Combine and format activities
       const combinedActivities: ActivityItem[] = [
         // Sales activities
-        ...salesData.map((sale: any) => ({
-          id: `sale-${sale.id}`,
+        ...salesData.map((sale: Record<string, unknown>) => ({
+          id: `sale-${String(sale.id ?? '')}`,
           type: 'sale' as const,
-          date: sale.date || sale.created_at,
-          title: `Venta ${sale.invoiceNumber || sale.id}`,
-          description: `${sale.items?.length || 0} productos - ${sale.paymentMethod || 'Método no especificado'}`,
-          amount: sale.total,
-          status: sale.status || 'completada',
+          date: String(sale.date || sale.created_at || ''),
+          title: `Venta ${String(sale.invoiceNumber || sale.id || '')}`,
+          description: `${Array.isArray(sale.items) ? sale.items.length : 0} productos - ${String(sale.paymentMethod || 'Método no especificado')}`,
+          amount: Number(sale.total) || 0,
+          status: String(sale.status || 'completada'),
           customer: {
             id: customer.id,
             name: customer.name,
@@ -95,13 +95,13 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           }
         })),
         // Repairs activities
-        ...repairsData.map((repair: any) => ({
+        ...repairsData.map((repair) => ({
           id: `repair-${repair.id}`,
           type: 'repair' as const,
           date: repair.created_at,
           title: `Reparación ${repair.device_brand} ${repair.device_model}`,
           description: repair.problem_description,
-          amount: repair.final_cost || repair.estimated_cost,
+          amount: (repair.final_cost || repair.estimated_cost) ?? undefined,
           status: repair.status,
           customer: {
             id: customer.id,
@@ -230,7 +230,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
               className="pl-10"
             />
           </div>
-          <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
+          <Select value={filterType} onValueChange={(value) => {
+            if (value === 'all' || value === 'sale' || value === 'repair') {
+              setFilterType(value)
+            }
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Filtrar por tipo" />
             </SelectTrigger>
