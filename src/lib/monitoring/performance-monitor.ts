@@ -90,12 +90,23 @@ export interface PerformanceReport {
   generatedAt: Date
 }
 
+export interface SystemMetricRecord {
+  cpu_usage: number
+  memory_usage: number
+  disk_usage: number
+  avg_response_time: number
+  requests_per_second: number
+  error_rate: number
+  active_users: number
+  [key: string]: number
+}
+
 export interface HealthCheck {
   service: string
   status: 'healthy' | 'degraded' | 'unhealthy'
   responseTime: number
   lastCheck: Date
-  details?: Record<string, any>
+  details?: Record<string, unknown>
   dependencies?: HealthCheck[]
 }
 
@@ -335,13 +346,17 @@ export class PerformanceMonitor {
   // Obtener valor de métrica específica
   private getMetricValue(metrics: SystemMetrics, metricPath: string): number {
     const parts = metricPath.split('.')
-    let value: any = metrics
+    let current: unknown = metrics
 
     for (const part of parts) {
-      value = value?.[part]
+      if (current && typeof current === 'object' && part in current) {
+        current = (current as Record<string, unknown>)[part]
+      } else {
+        return 0
+      }
     }
 
-    return typeof value === 'number' ? value : 0
+    return typeof current === 'number' ? current : 0
   }
 
   // Evaluar umbral
@@ -538,7 +553,7 @@ export class PerformanceMonitor {
   }
 
   // Calcular métricas agregadas
-  private calculateAggregateMetrics(metrics: any[]): PerformanceReport['metrics'] {
+  private calculateAggregateMetrics(metrics: SystemMetricRecord[]): PerformanceReport['metrics'] {
     const totalMetrics = metrics.length
 
     return {
@@ -554,7 +569,7 @@ export class PerformanceMonitor {
   }
 
   // Calcular tendencias
-  private calculateTrends(metrics: any[]): PerformanceReport['trends'] {
+  private calculateTrends(metrics: SystemMetricRecord[]): PerformanceReport['trends'] {
     const midpoint = Math.floor(metrics.length / 2)
     const firstHalf = metrics.slice(0, midpoint)
     const secondHalf = metrics.slice(midpoint)
@@ -597,7 +612,7 @@ export class PerformanceMonitor {
   }
 
   // Generar recomendaciones
-  private generateRecommendations(metrics: any[]): string[] {
+  private generateRecommendations(metrics: SystemMetricRecord[]): string[] {
     const recommendations: string[] = []
     const avgCpu = metrics.reduce((sum, m) => sum + m.cpu_usage, 0) / metrics.length
     const avgMemory = metrics.reduce((sum, m) => sum + m.memory_usage, 0) / metrics.length

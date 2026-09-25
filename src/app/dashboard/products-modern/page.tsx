@@ -90,7 +90,7 @@ export default function ModernProductsPage() {
   const handleProductDuplicate = async (product: Product) => {
     // Exclude system fields and relations that shouldn't be duplicated
      
-    const { id: _id, created_at: _created_at, updated_at: _updated_at, category: _category, supplier: _supplier, ...rest } = product as any
+    const { id: _id, created_at: _created_at, updated_at: _updated_at, category: _category, supplier: _supplier, ...rest } = product as Product & Record<string, unknown>
 
     const duplicatedData = {
       ...rest,
@@ -363,9 +363,9 @@ export default function ModernProductsPage() {
             setCreateModalOpen(false)
           }}
           product={editingProduct}
-          categories={categories as any}
-          brands={brands as any}
-          suppliers={suppliers as any}
+          categories={categories}
+          brands={brands}
+          suppliers={suppliers}
           onSave={async (data) => {
             try {
               // Standardized normalization logic
@@ -384,15 +384,15 @@ export default function ModernProductsPage() {
                 images: Array.isArray(data.images) ? data.images.filter(Boolean) : []
               }
 
-              // Transform dimensions to ensure compatibility with Supabase JSONB
-              const dimensions = data.dimensions && typeof data.dimensions === 'object' 
-                ? data.dimensions 
+              // Transform dimensions to ensure compatibility with Supabase JSONB (string | null)
+              const dimensions = data.dimensions
+                ? (typeof data.dimensions === 'string' ? data.dimensions : JSON.stringify(data.dimensions))
                 : null
               
               if (editingProduct) {
                 const updateData: Database['public']['Tables']['products']['Update'] = {
                   ...normalizedData,
-                  dimensions: dimensions as any
+                  dimensions
                 }
                 const result = await updateProduct(editingProduct.id, updateData)
                 if (result.success) {
@@ -407,7 +407,7 @@ export default function ModernProductsPage() {
               } else {
                 const insertData: Database['public']['Tables']['products']['Insert'] = {
                   ...normalizedData,
-                  dimensions: dimensions as any,
+                  dimensions,
                   sku: normalizedData.sku
                 }
                 const result = await createProduct(insertData)
@@ -421,7 +421,7 @@ export default function ModernProductsPage() {
                   throw new Error(result.error)
                 }
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
               throw error
             }
           }}

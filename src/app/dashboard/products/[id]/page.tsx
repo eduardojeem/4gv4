@@ -276,50 +276,6 @@ export default function ProductDetailPage() {
     fetchPriceHistory()
   }, [productId])
 
-  // ─── Normalized lists for edit modal ───────────────────────────────────────
-
-  const normalizedCategories = useMemo(() => {
-    return (categories || []).map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description || null,
-      parent_id: null,
-      is_active: c.is_active,
-      created_at: c.created_at,
-      updated_at: c.updated_at
-    }))
-  }, [categories])
-
-  const normalizedSuppliers = useMemo(() => {
-    return (suppliers || []).map(s => ({
-      id: s.id,
-      name: s.name,
-      contact_name: s.contact_name || null,
-      contact_email: s.email || null,
-      phone: s.phone || null,
-      address: s.address || null,
-      tax_id: s.tax_id || null,
-      is_active: s.is_active,
-      created_at: s.created_at,
-      updated_at: s.updated_at
-    }))
-  }, [suppliers])
-
-  const normalizedBrands = useMemo(() => {
-    return (brands || []).map(b => ({
-      id: b.id,
-      name: b.name,
-      description: b.description || null,
-      website: b.website || null,
-      country: b.country || null,
-      founded_year: b.founded_year || null,
-      logo_url: b.logo_url || null,
-      is_active: b.is_active,
-      created_at: b.created_at,
-      updated_at: b.updated_at
-    }))
-  }, [brands])
-
   const productImages: ProductImage[] = useMemo(() => {
     const urls = (product?.images || []).filter(Boolean) as string[]
     const uniq = Array.from(new Set(urls))
@@ -344,8 +300,9 @@ export default function ProductDetailPage() {
 
   const normalizedVariants: NormalizedVariant[] = useMemo(() => {
     if (!product) return []
-    const rawVariants = Array.isArray((product as any).variants) ? (product as any).variants : []
-    return rawVariants.map((v: any, index: number) => {
+    const rawVariants = Array.isArray((product as { variants?: unknown[] }).variants) ? (product as { variants?: unknown[] }).variants! : []
+    return rawVariants.map((rawV: unknown, index: number) => {
+      const v = (rawV && typeof rawV === 'object' ? rawV : {}) as Record<string, unknown>
       const attributes: Record<string, string> = {}
       if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
         for (const [k, val] of Object.entries(v.attributes)) {
@@ -354,21 +311,22 @@ export default function ProductDetailPage() {
       } else if (Array.isArray(v.attributes)) {
         for (const item of v.attributes) {
           if (item && typeof item === 'object') {
-            const k = item.key || item.attribute_name || item.name || `attr_${index}`
-            const val = item.value || item.display_value || ''
+            const itemObj = item as Record<string, unknown>
+            const k = itemObj.key || itemObj.attribute_name || itemObj.name || `attr_${index}`
+            const val = itemObj.value || itemObj.display_value || ''
             if (k && val) attributes[String(k)] = String(val)
           }
         }
       }
 
-      const name = v.variant_name || v.name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`
+      const name = String(v.variant_name || v.name || Object.values(attributes).join(' / ') || `Variante ${index + 1}`)
       const salePrice = Number(v.sale_price ?? v.salePrice ?? product.sale_price ?? 0)
       const purchasePrice = v.purchase_price ?? v.purchasePrice ?? v.cost_price ?? null
       const wholesalePrice = v.wholesale_price ?? v.wholesalePrice ?? null
       const stockQuantity = Number(v.stock_quantity ?? v.stock ?? 0)
       const minStock = v.min_stock != null ? Number(v.min_stock) : undefined
       const sku = String(v.sku || `${product.sku || 'PROD'}-V${index + 1}`)
-      const barcode = v.barcode || v.ean || undefined
+      const barcode = v.barcode != null ? String(v.barcode) : (v.ean != null ? String(v.ean) : undefined)
       const isActive = v.is_active !== undefined ? Boolean(v.is_active) : (v.active !== undefined ? Boolean(v.active) : true)
 
       return {
@@ -518,7 +476,7 @@ export default function ProductDetailPage() {
     try {
       const result = await updateProduct(product.id, {
         is_active: nextState,
-      } as any)
+      })
 
       if (result.success) {
         setProduct((prev) => (prev ? { ...prev, is_active: nextState } : null))
@@ -2606,9 +2564,9 @@ export default function ProductDetailPage() {
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
             product={product ? ({ ...product, images: product.images ?? [] } as unknown as import('@/types/products').Product) : null}
-            categories={normalizedCategories as any[]}
-            brands={normalizedBrands as any[]}
-            suppliers={normalizedSuppliers as any[]}
+            categories={categories}
+            brands={brands}
+            suppliers={suppliers}
             onSave={async (data) => {
               try {
                 const normalizedData = {
@@ -2625,14 +2583,14 @@ export default function ProductDetailPage() {
                   offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
                   images: Array.isArray(data.images) ? data.images.filter(Boolean) : []
                 }
-                const result = await updateProduct(product.id, normalizedData as any)
+                const result = await updateProduct(product.id, normalizedData as unknown as Parameters<typeof updateProduct>[1])
                 if (result.success) {
                   await loadProduct()
                   setEditModalOpen(false)
                 } else {
                   throw new Error(result.error || 'Error al actualizar el producto')
                 }
-              } catch (error: any) {
+              } catch (error: unknown) {
                 throw error
               }
             }}

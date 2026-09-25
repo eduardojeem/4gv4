@@ -201,18 +201,26 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
   ])
 
   // Los perfiles van en una segunda consulta, cruzada por id en memoria.
+  type ProfileSummary = {
+    id: string
+    email: string | null
+    full_name: string | null
+    avatar_url: string | null
+  }
   const memberList = memberRows ?? []
   const memberUserIds = Array.from(
-    new Set(memberList.map((m: any) => String(m.user_id ?? '')).filter(Boolean))
+    new Set((memberList as Array<{ user_id: string | null }>).map((m) => String(m.user_id ?? '')).filter(Boolean))
   )
   const { data: memberProfiles } = memberUserIds.length
     ? await admin
         .from('profiles')
         .select('id, email, full_name, avatar_url')
         .in('id', memberUserIds)
-    : { data: [] as Array<{ id: string; email: string | null; full_name: string | null; avatar_url: string | null }> }
+    : { data: [] as ProfileSummary[] }
 
-  const profileById = new Map<string, any>((memberProfiles ?? []).map((p: any) => [String(p.id), p] as [string, any]))
+  const profileById = new Map<string, ProfileSummary>(
+    ((memberProfiles ?? []) as ProfileSummary[]).map((p) => [String(p.id), p])
+  )
 
   // Último acceso. Vive en `auth.users`, no en `profiles`: sin esto la ficha no
   // decia si la empresa todavia usa el sistema. Solo el equipo y el dueño; los
@@ -301,7 +309,7 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
   // Las cuotas de los creditos de esta organizacion, en tandas.
   let creditSummary = null
   if (!creditsError) {
-    const creditIds = (creditRows ?? []).map((c: any) => String(c.id)).filter(Boolean)
+    const creditIds = ((creditRows ?? []) as Array<{ id: string }>).map((c) => String(c.id)).filter(Boolean)
     const installments: Array<{ status: string | null; amount: number | null; amount_paid: number | null; due_date: string | null }> = []
     let installmentsFailed = false
 
@@ -335,7 +343,7 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
 
   // Las cajas se cuentan por sucursal: `cash_registers` no tiene
   // `organization_id`. Es el mismo camino que `countCashRegisters`.
-  const branchIds = branchList.map((b: any) => String(b.id)).filter(Boolean)
+  const branchIds = (branchList as Array<{ id: string }>).map((b) => String(b.id)).filter(Boolean)
   const { count: cashRegistersCount, error: cashRegistersError } = branchIds.length
     ? await admin
         .from('cash_registers')
@@ -345,9 +353,9 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
 
   // Solo las pruebas que siguen vigentes: una vencida ya no habilita nada.
   const ahora = Date.now()
-  const activeTrials = (trialRows ?? [])
-    .filter((t: any) => !t.expires_at || new Date(t.expires_at).getTime() > ahora)
-    .map((t: any) => String(t.module))
+  const activeTrials = ((trialRows ?? []) as Array<{ module: string; expires_at: string | null }>)
+    .filter((t) => !t.expires_at || new Date(t.expires_at).getTime() > ahora)
+    .map((t) => String(t.module))
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -355,7 +363,7 @@ async function loadOrganizationDetail(id: string): Promise<FullOrganizationDetai
     organization: org,
     owner: ownerProfile,
     settings,
-    members: memberList.map((m: any) => ({
+    members: (memberList as Array<{ id: string; user_id: string; role: string; status: string; created_at: string | null }>).map((m) => ({
       id: m.id,
       user_id: m.user_id,
       role: m.role,
