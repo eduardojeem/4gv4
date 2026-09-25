@@ -225,11 +225,17 @@ export function PaymentMethods({
   const cashChange = Math.max(0, cashReceived - cartTotal)
   const cashRemaining = Math.max(0, cartTotal - cashReceived)
 
+  const paymentMethodLabels = {
+    cash: 'Efectivo',
+    card: 'Tarjeta',
+    transfer: 'Transferencia',
+    credit: 'Crédito',
+  } as const
   const paymentMethods = [
-    { id: 'cash', label: 'Efectivo', icon: GSIcon, color: 'text-muted-foreground' },
-    { id: 'card', label: 'Tarjeta', icon: CreditCard, color: 'text-muted-foreground' },
-    { id: 'transfer', label: 'Transferencia', icon: Users, color: 'text-muted-foreground' },
-    { id: 'credit', label: 'Crédito', icon: Clock, color: 'text-muted-foreground' }
+    { id: 'cash', label: paymentMethodLabels.cash, icon: GSIcon, color: 'text-muted-foreground' },
+    { id: 'card', label: paymentMethodLabels.card, icon: CreditCard, color: 'text-muted-foreground' },
+    { id: 'transfer', label: paymentMethodLabels.transfer, icon: Users, color: 'text-muted-foreground' },
+    { id: 'credit', label: paymentMethodLabels.credit, icon: Clock, color: 'text-muted-foreground' }
   ]
   const existingCreditPrincipal = React.useMemo(
     () => paymentSplit
@@ -281,7 +287,7 @@ export function PaymentMethods({
           }}
           className="shrink-0 text-xs"
         >
-          {isMixedPayment ? 'Pago Simple' : 'Pago Mixto'}
+          {isMixedPayment ? 'Usar un solo medio' : 'Combinar medios'}
         </Button>
       </div>
 
@@ -587,7 +593,7 @@ export function PaymentMethods({
               {paymentSplit.map(split => (
                 <div key={split.id} className="flex items-center justify-between bg-card border border-border rounded p-2">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm capitalize">{split.method}</span>
+                    <span className="text-sm">{paymentMethodLabels[split.method as keyof typeof paymentMethodLabels] || split.method}</span>
                     {split.reference && (
                       <span className="text-xs text-muted-foreground">({split.reference})</span>
                     )}

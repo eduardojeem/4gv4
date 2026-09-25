@@ -502,13 +502,20 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                        )} />
                                     </div>
                                     <div>
-                                       <div className="text-xs font-semibold leading-tight">Marcar como entregados</div>
+                                       <div className="text-xs font-semibold leading-tight">
+                                         {markRepairDelivered ? 'Cobrar y entregar' : 'Cobrar sin entregar'}
+                                       </div>
                                        <div className="text-[10px] text-muted-foreground leading-tight">
                                           {canDeliver
                                             ? 'Actualizar estado a "Entregado"'
                                             : deliveryEligibility.reason
                                               ?? `${blockedCount === 1 ? 'La reparación seleccionada no puede' : `${blockedCount} reparaciones seleccionadas no pueden`} entregarse todavía. Podés cobrarlas igual.`}
                                        </div>
+                                       {!canDeliver && deliveryEligibility.blockingTickets.length > 0 && (
+                                         <div className="mt-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                           Bloqueadas: {deliveryEligibility.blockingTickets.join(', ')}
+                                         </div>
+                                       )}
                                     </div>
                                  </div>
                                  <Switch

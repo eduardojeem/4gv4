@@ -30,6 +30,7 @@ import {
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import type { CheckoutEligibility } from '../lib/checkout-eligibility';
+import type { ReceiptDocumentKind } from '@/lib/receipt-utils';
 import { resolveProductImageUrl } from '@/lib/images';
 import {
   AlertDialog,
@@ -89,6 +90,7 @@ interface POSCartProps {
   isProcessing?: boolean;
   taxRate?: number;
   checkoutEligibility: CheckoutEligibility;
+  documentKind?: ReceiptDocumentKind;
 }
 
 const CartItemRow = memo<{
@@ -319,7 +321,8 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   onOpenRepairModal,
   isProcessing = false,
   taxRate = 0.19,
-  checkoutEligibility
+  checkoutEligibility,
+  documentKind = 'internal'
 }) => {
   const canCheckout = checkoutEligibility.canConfirm;
   const checkoutDisabledReason = checkoutEligibility.reason;
@@ -585,10 +588,12 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 </div>
               )}
 
-              <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span>Impuesto ({(taxRate * 100).toFixed(0)}%)</span>
-                <span className="tabular-nums">{formatCurrency(cartTax)}</span>
-              </div>
+              {documentKind === 'fiscal' && cartTax > 0 && (
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Impuesto ({(taxRate * 100).toFixed(0)}%)</span>
+                  <span className="tabular-nums">{formatCurrency(cartTax)}</span>
+                </div>
+              )}
             </div>
           </div>
 

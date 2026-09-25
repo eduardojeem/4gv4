@@ -38,6 +38,7 @@ describe('POS checkout actions', () => {
 
     expect(screen.getAllByText('Abrí la caja para continuar').length).toBeGreaterThan(1)
     expect(screen.getAllByRole('button', { name: /cobrar/i }).every(button => button.hasAttribute('disabled'))).toBe(true)
+    expect(screen.queryByText(/Impuesto \(/)).not.toBeInTheDocument()
   })
 
   it('exposes the cart trigger state semantically', () => {

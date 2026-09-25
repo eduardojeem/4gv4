@@ -61,6 +61,56 @@ export interface ReceiptData {
   }
 }
 
+export type ReceiptDocumentKind = 'internal' | 'fiscal'
+
+export interface ReceiptPaymentSummary {
+  cashPaid: number
+  nonCashPaid: number
+  change: number | null
+  financedPrincipal: number
+  financedTotal: number
+  installments: NonNullable<ReceiptData['creditInfo']>['installments']
+  firstDueDate: string | null
+  collectedToday: number
+  financedBalance: number
+  paymentState: 'PAGADO' | 'COBRO PARCIAL + CRÉDITO' | 'CRÉDITO REGISTRADO'
+}
+
+export function buildReceiptPaymentSummary(receiptData: ReceiptData): ReceiptPaymentSummary {
+  const creditInfo = receiptData.creditInfo
+  const immediatePayments = receiptData.payments.filter(payment => payment.method !== 'credit')
+  const firstPayment = creditInfo?.firstPayment
+  const cashPaid = immediatePayments
+    .filter(payment => payment.method === 'cash')
+    .reduce((total, payment) => total + payment.amount, 0)
+    + (firstPayment?.method === 'cash' ? firstPayment.amount : 0)
+  const nonCashPaid = immediatePayments
+    .filter(payment => payment.method !== 'cash')
+    .reduce((total, payment) => total + payment.amount, 0)
+    + (firstPayment && firstPayment.method !== 'cash' ? firstPayment.amount : 0)
+  const collectedToday = cashPaid + nonCashPaid
+  const financedBalance = creditInfo
+    ? creditInfo.remainingBalance ?? Math.max(0, creditInfo.financedTotal - (firstPayment?.amount || 0))
+    : 0
+
+  return {
+    cashPaid,
+    nonCashPaid,
+    change: !creditInfo && (receiptData.change ?? 0) > 0 ? receiptData.change! : null,
+    financedPrincipal: creditInfo?.baseTotal ?? 0,
+    financedTotal: creditInfo?.financedTotal ?? 0,
+    installments: creditInfo?.installments,
+    firstDueDate: creditInfo?.firstDueDate ?? null,
+    collectedToday,
+    financedBalance,
+    paymentState: !creditInfo
+      ? 'PAGADO'
+      : collectedToday > 0
+        ? 'COBRO PARCIAL + CRÉDITO'
+        : 'CRÉDITO REGISTRADO',
+  }
+}
+
 // Generar número de ticket único
 export const generateReceiptNumber = (): string => {
   const now = new Date()
@@ -332,7 +382,11 @@ const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInf
 }
 
 // Generar HTML para impresión con diseño mejorado
-export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): string => {
+export const generatePrintHTML = (
+  receiptData: ReceiptData,
+  companyInfo?: CompanyInfo,
+  documentKind: ReceiptDocumentKind = 'internal',
+): string => {
 
   const company = companyInfo || config.company
 
@@ -357,6 +411,15 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
     }
     return labels[method as keyof typeof labels] || method
   }
+
+  const creditInfo = receiptData.creditInfo
+  const summary = buildReceiptPaymentSummary(receiptData)
+  const settledNow = receiptData.payments
+    .filter(payment => payment.method !== 'credit')
+    .reduce((total, payment) => total + payment.amount, 0)
+  const collectedToday = summary.collectedToday
+  const financedBalance = summary.financedBalance
+  const paymentState = summary.paymentState
 
   return `
     <!DOCTYPE html>
@@ -504,6 +567,24 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           border-radius: 3px;
         }
 
+        .products.compact .section-title {
+          font-size: 9px;
+          padding: 4px;
+          margin: 7px 0 5px;
+        }
+
+        .products.compact .item {
+          font-size: 9px;
+          margin-bottom: 6px;
+          padding-bottom: 5px;
+        }
+
+        .products.compact .item-header {
+          gap: 6px;
+          margin-bottom: 1px;
+          line-height: 1.2;
+        }
+
         .item {
           margin-bottom: 10px;
           padding-bottom: 8px;
@@ -580,11 +661,27 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
 
         .total-row.final {
           background: #f0f0f0;
-          padding: 10px;
-          margin-top: 8px;
+          padding: 7px 8px;
+          margin-top: 6px;
           border-radius: 4px;
-          font-size: 14px;
+          font-size: 12px;
           font-weight: bold;
+        }
+
+        .total-row.final.financed {
+          align-items: center;
+          gap: 8px;
+          line-height: 1.15;
+        }
+
+        .total-row.final.financed span:first-child {
+          min-width: 0;
+          font-size: 10px;
+        }
+
+        .total-row.final.financed span:last-child {
+          flex: 0 0 auto;
+          white-space: nowrap;
         }
 
         .payment-section {
@@ -750,6 +847,7 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
       <div class="separator"></div>
 
       <!-- Productos -->
+      <div class="products compact">
       <div class="section-title">DETALLE DE PRODUCTOS</div>
 
       ${receiptData.items.map(item => `
@@ -761,8 +859,8 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
             </span>
             <span class="item-price">${formatCurrency(item.price * item.quantity)}</span>
           </div>
-          <div class="item-details">
-            <span>SKU: ${item.sku}</span>
+           <div class="item-details">
+             ${item.sku ? `<span>SKU: ${item.sku}</span>` : '<span></span>'}
             <span>${item.quantity} × ${formatCurrency(item.price)}</span>
           </div>
           ${item.discount && item.discount > 0 ? `
@@ -773,26 +871,14 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
           ` : ''}
         </div>
       `).join('')}
+      </div>
 
       <div class="separator"></div>
 
       <!-- Totales -->
       <div class="totals">
         ${(() => {
-          const taxConfig = getTaxConfig()
-          const taxRate = taxConfig.rate
-          const pricesIncludeTax = config.pricesIncludeTax
-
-          // Calculate tax breakdown
-          // If prices include tax: base = total / (1 + rate), tax = total - base
-          // If prices exclude tax: base = subtotal, tax = subtotal * rate
           const totalAmount = receiptData.total
-          const baseImponible = pricesIncludeTax
-            ? Math.round(totalAmount / (1 + taxRate))
-            : receiptData.subtotal
-          const ivaAmount = pricesIncludeTax
-            ? totalAmount - baseImponible
-            : Math.round(receiptData.subtotal * taxRate)
 
           return `
             <div class="total-row">
@@ -805,18 +891,23 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
                 <span>-${formatCurrency(receiptData.totalDiscount)}</span>
               </div>
             ` : ''}
-            <div style="border-top: 1px dashed #ccc; margin: 8px 0; padding-top: 8px;">
-              <div class="total-row" style="font-size: 10px; color: #555;">
-                <span>${taxConfig.label} ${taxConfig.percentage}% incluido:</span>
-                <span>${formatCurrency(ivaAmount)}</span>
+            ${creditInfo ? `
+              <div style="border: 1px solid #bbb; border-radius: 4px; margin: 8px 0; padding: 8px;">
+                <div class="total-row"><span>Capital financiado:</span><span>${formatCurrency(creditInfo.baseTotal)}</span></div>
+                <div class="total-row"><span>Costo financiero:</span><span>+${formatCurrency(creditInfo.interestAmount)}</span></div>
+                <div class="total-row"><strong>Total financiado:</strong><strong>${formatCurrency(creditInfo.financedTotal)}</strong></div>
+                <div style="font-size: 9px; margin-top: 4px;">${creditInfo.installmentCount} cuotas desde ${formatCurrency(creditInfo.installmentAmount)} · Primera cuota: ${formatPosCreditDueDate(creditInfo.firstDueDate)}</div>
               </div>
-            </div>
-            <div class="total-row final">
-              <span>TOTAL:</span>
-              <span>${formatCurrency(totalAmount)}</span>
-            </div>
-            <div style="text-align: center; font-size: 8px; color: #888; margin-top: 4px;">
-              ${pricesIncludeTax ? 'Precios con IVA incluido' : 'IVA calculado sobre el subtotal'}
+            ` : ''}
+            ${documentKind === 'fiscal' && receiptData.tax > 0 ? `
+              <div class="total-row" style="font-size: 10px; color: #555;">
+                <span>IVA incluido:</span>
+                <span>${formatCurrency(receiptData.tax)}</span>
+              </div>
+            ` : ''}
+            <div class="total-row final${creditInfo ? ' financed' : ''}">
+               <span>${creditInfo ? 'TOTAL CON FINANCIACIÓN:' : 'TOTAL:'}</span>
+               <span>${formatCurrency(creditInfo ? settledNow + creditInfo.financedTotal : totalAmount)}</span>
             </div>
           `
         })()}
@@ -837,13 +928,19 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
             <span style="font-weight: bold;">${formatCurrency(payment.amount)}</span>
           </div>
         `).join('')}
-        ${receiptData.change && receiptData.change > 0 ? `
+        ${!creditInfo && receiptData.change && receiptData.change > 0 ? `
           <div class="payment-item change">
             <span>💰 Cambio:</span>
             <span>${formatCurrency(receiptData.change)}</span>
           </div>
         ` : ''}
-        <div class="payment-status">✅ PAGADO</div>
+        ${creditInfo ? `
+          <div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 6px;">
+            <div class="payment-item"><span>Cobrado hoy:</span><strong>${formatCurrency(collectedToday)}</strong></div>
+            <div class="payment-item"><span>Saldo financiado:</span><strong>${formatCurrency(financedBalance)}</strong></div>
+          </div>
+        ` : ''}
+        <div class="payment-status">✅ ${paymentState}</div>
       </div>
 
       ${receiptData.loyaltyPoints && receiptData.loyaltyPoints > 0 ? `
@@ -853,14 +950,6 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
         </div>
       ` : ''}
 
-      <div class="separator"></div>
-
-      <!-- Garantía -->
-      <div class="warranty-box">
-        <div class="title">🛡️ GARANTÍA: 30 días</div>
-        <div class="subtitle">Válido para cambios y reparaciones</div>
-      </div>
-
       <!-- Pie del ticket -->
       <div class="footer">
         <div class="thanks">¡Gracias por su compra!</div>
@@ -868,12 +957,12 @@ export const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: Compan
         <div class="contact">📱 Consultas: ${company.phone}</div>
         <div class="contact">📧 ${company.email}</div>
         <div class="separator"></div>
-        <div style="font-size: 8px; color: #999; margin: 6px 0; padding: 6px; border: 1px solid #eee; border-radius: 3px;">
+        ${documentKind === 'internal' ? `<div style="font-size: 8px; color: #999; margin: 6px 0; padding: 6px; border: 1px solid #eee; border-radius: 3px;">
           <strong style="display: block; margin-bottom: 2px; color: #666;">DOCUMENTO NO FISCAL</strong>
           Este ticket es un comprobante interno de venta y NO tiene validez
           tributaria ante la DNIT. No sustituye factura legal.<br>
           Solicite su factura con timbrado vigente si la necesita.
-        </div>
+        </div>` : ''}
         <div class="id">ID: ${receiptData.receiptNumber}</div>
         ${receiptData.isReprint
           ? `<div class="id"><strong>REIMPRESIÓN</strong> del ${receiptData.date} ${receiptData.time}</div>
@@ -1063,5 +1152,6 @@ const showShareModal = (text: string): void => {
     }
   })
 }
-import { getTaxConfig, config } from './config'
+import { config } from './config'
 import { formatCurrency } from '@/lib/currency'
+import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
