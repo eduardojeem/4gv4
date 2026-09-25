@@ -28,6 +28,17 @@ type InstallmentProgress = {
   progreso: number
 }
 
+export type AuthorizedPerson = {
+  id: string
+  profile_id: string
+  full_name: string
+  document_number: string
+  relationship?: string | null
+  phone?: string | null
+  is_active: boolean
+  created_at: string
+}
+
 type CustomerWithCredit = Customer & {
   /**
    * Saldo pendiente real del cliente, sumando todos sus creditos. Se calcula
@@ -36,7 +47,7 @@ type CustomerWithCredit = Customer & {
   credit_outstanding?: number
   credit_summary?: CreditSummary
   credit_installments_progress?: InstallmentProgress[]
-  authorized_persons?: any[]
+  authorized_persons?: AuthorizedPerson[]
 }
 
 export function useCustomerData(customerId: number | string | null) {

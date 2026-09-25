@@ -133,8 +133,21 @@ export function useAdminDashboard() {
           .from('profiles')
           .select('*')
 
+        interface ProfileRow {
+          id: string
+          full_name?: string | null
+          name?: string | null
+          email?: string | null
+          role?: User['role'] | null
+          status?: User['status'] | null
+          last_sign_in_at?: string | null
+          created_at?: string | null
+          phone?: string
+          department?: string
+        }
+
         if (!usersError && usersData) {
-            const mappedUsers: User[] = usersData.map((u: any) => ({
+            const mappedUsers: User[] = (usersData as unknown as ProfileRow[]).map((u) => ({
                 id: u.id,
                 name: u.full_name || u.name || 'Sin Nombre',
                 email: u.email || '',
@@ -158,7 +171,7 @@ export function useAdminDashboard() {
         setMetrics(prev => ({
             ...prev,
             totalUsers: usersData?.length || 0,
-            activeUsers: usersData?.filter((u: any) => (u.status || 'active') === 'active').length || 0,
+            activeUsers: ((usersData as unknown as ProfileRow[]) || []).filter((u) => (u.status || 'active') === 'active').length,
             totalProducts: productsCount || 0,
             totalSales: totalSales,
             systemHealth: 100

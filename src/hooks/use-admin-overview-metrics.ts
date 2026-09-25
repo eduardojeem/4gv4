@@ -91,11 +91,18 @@ export function useAdminOverviewMetrics() {
       let todaySalesTotal = 0
       let todaySalesCount = 0
       if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
-        const completedSales = salesRes.value.data.filter((sale: any) =>
+        interface SaleRow {
+          status: string
+          total_amount?: number | null
+          total?: number | null
+          subtotal?: number | null
+        }
+        const salesData = salesRes.value.data as unknown as SaleRow[]
+        const completedSales = salesData.filter((sale) =>
           isCompletedSaleStatus(sale.status)
         )
         todaySalesCount = completedSales.length
-        todaySalesTotal = completedSales.reduce((sum: number, sale: any) => {
+        todaySalesTotal = completedSales.reduce((sum: number, sale) => {
           const amount = Number(sale.total_amount ?? sale.total ?? sale.subtotal ?? 0)
           return sum + (Number.isFinite(amount) ? amount : 0)
         }, 0)
@@ -108,7 +115,12 @@ export function useAdminOverviewMetrics() {
 
       let lowStockCount = 0
       if (productsRes.status === 'fulfilled' && !productsRes.value.error && productsRes.value.data) {
-        lowStockCount = productsRes.value.data.filter((p: any) => {
+        interface ProductRow {
+          stock_quantity?: number | null
+          min_stock?: number | null
+        }
+        const productsData = productsRes.value.data as unknown as ProductRow[]
+        lowStockCount = productsData.filter((p) => {
           const stock = Number(p.stock_quantity ?? 0)
           const min = Number(p.min_stock ?? 5)
           return stock <= min
@@ -129,9 +141,9 @@ export function useAdminOverviewMetrics() {
         activeUsersCount,
       })
       setError(null)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('[useAdminOverviewMetrics] error loading metrics:', err)
-      setError(err?.message || 'Error al cargar métricas')
+      setError(err instanceof Error ? err.message : 'Error al cargar métricas')
     } finally {
       setLoading(false)
     }

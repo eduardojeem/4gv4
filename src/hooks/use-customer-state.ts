@@ -135,18 +135,20 @@ const initialFilters: CustomerFilters = {
  * Maps a raw Supabase row to the Customer interface.
  * Centralized here to avoid duplication in realtime handlers.
  */
-export function mapRawToCustomer(raw: Record<string, any>): Customer {
+export function mapRawToCustomer(rawInput: unknown): Customer {
+  const raw = (rawInput && typeof rawInput === 'object' ? rawInput : {}) as Record<string, unknown>
   const identity = buildCustomerIdentity(raw)
+  const id = String(raw.id ?? '')
   return {
     ...raw,
     ...identity,
-    id: raw.id,
-    profile_id: raw.profile_id,
-    customerCode: raw.customer_code || `CLI-${raw.id?.slice(0, 6)}`,
+    id,
+    profile_id: typeof raw.profile_id === 'string' ? raw.profile_id : undefined,
+    customerCode: typeof raw.customer_code === 'string' ? raw.customer_code : `CLI-${id.slice(0, 6)}`,
     name: identity.name,
-    email: raw.email || '',
-    phone: raw.phone || '',
-    ruc: raw.ruc,
+    email: typeof raw.email === 'string' ? raw.email : '',
+    phone: typeof raw.phone === 'string' ? raw.phone : '',
+    ruc: typeof raw.ruc === 'string' ? raw.ruc : undefined,
     customer_type: normalizeCustomerType(raw.customer_type),
     status: normalizeCustomerStatus(raw.status),
     total_purchases: raw.total_purchases || 0,

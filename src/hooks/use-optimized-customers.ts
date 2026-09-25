@@ -80,9 +80,10 @@ export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}
       
       // Configuración de errores
       errorRetryCount: 2,
-      shouldRetryOnError: (error: any) => {
+      shouldRetryOnError: (error: unknown) => {
         // No reintentar errores de autorización
-        return error?.status !== 401 && error?.status !== 403
+        const status = (error as { status?: number } | null)?.status
+        return status !== 401 && status !== 403
       },
       
       // Callback de éxito
@@ -214,7 +215,7 @@ export function useOptimizedCustomer(customerId: string | null) {
       
       // Configuración de errores
       errorRetryCount: 2,
-      shouldRetryOnError: (error: any) => error?.status !== 404
+      shouldRetryOnError: (error: unknown) => (error as { status?: number } | null)?.status !== 404
     }
   )
 

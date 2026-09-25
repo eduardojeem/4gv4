@@ -241,7 +241,7 @@ export function useAvatarUpload(userId: string | null) {
       // Actualizar auth metadata
       try {
         if ('updateUser' in supabase.auth) {
-          await (supabase.auth as any).updateUser({ 
+          await supabase.auth.updateUser({ 
             data: { avatar_url: result.url } 
           })
         }
@@ -322,7 +322,7 @@ export function useAvatarUpload(userId: string | null) {
       // Actualizar auth metadata
       try {
         if ('updateUser' in supabase.auth) {
-          await (supabase.auth as any).updateUser({ 
+          await supabase.auth.updateUser({ 
             data: { avatar_url: null } 
           })
         }

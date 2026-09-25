@@ -96,7 +96,7 @@ export function useAccessibility() {
   }, [state])
 
   // Actualizar una configuración específica
-  const updateSetting = useCallback((key: keyof AccessibilitySettings, value: any) => {
+  const updateSetting = useCallback(<K extends keyof AccessibilitySettings>(key: K, value: AccessibilitySettings[K]) => {
     setState(prev => ({
       ...prev,
       settings: {

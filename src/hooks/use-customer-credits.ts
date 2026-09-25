@@ -105,7 +105,7 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
   const [installments, setInstallments] = useState<InstallmentInfo[]>([])
   const [payments, setPayments] = useState<PaymentInfo[]>([])
   const [customerLimit, setCustomerLimit] = useState<number>(Number(initialCustomer?.credit_limit || 0))
-  const [storeBalance, setStoreBalance] = useState<number>(Number((initialCustomer as any)?.store_credit || 0))
+  const [storeBalance, setStoreBalance] = useState<number>(Number((initialCustomer as { store_credit?: number | null } | undefined)?.store_credit || 0))
   const [storeReserved, setStoreReserved] = useState<number>(0)
   const [debts, setDebts] = useState<DebtItem[]>([])
   const [totalCollectDebt, setTotalCollectDebt] = useState<number>(0)
@@ -195,9 +195,9 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
           if (isMounted) setError('No se pudieron cargar los créditos del cliente.')
         }
 
-      } catch (err: any) {
+      } catch (err) {
         if (isMounted) {
-          setError(err.message || 'Error al cargar datos de créditos')
+          setError(err instanceof Error ? err.message : 'Error al cargar datos de créditos')
           console.error('Error loading credit data:', err)
         }
       } finally {
@@ -502,7 +502,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                     credit_limit: customerLimit,
                     available_credit: availableCredit,
                     credit_utilization: creditUtilization,
-                    store_balance: Number((customer as any).store_credit || 0),
+                    store_balance: Number((customer as { store_credit?: number | null } | null)?.store_credit || 0),
                     store_reserved: 0,
                     overdue_debt: (nextPayment?.is_overdue ? (nextPayment.amount || 0) : 0) + repairOverdue,
                     debts: [],

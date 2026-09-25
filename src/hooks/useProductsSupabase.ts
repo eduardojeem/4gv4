@@ -64,6 +64,7 @@ interface ProductApiPayload {
   error?: string
   code?: string
   message?: string
+  conflictProductId?: string
   details?: Array<{
     field?: string
     message?: string
@@ -530,7 +531,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         success: false, 
         error: errorMessage,
         code: payload?.code,
-        conflictProductId: (payload as any)?.conflictProductId,
+        conflictProductId: payload?.conflictProductId,
       }
     }
   }, [selectedBranchId, fetchDashboardStats, fetchProducts])
@@ -574,7 +575,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Actualizar estado local inmediatamente preservando stock y relaciones si la respuesta o payload no los tocó
       setProducts(prev => prev.map(p => {
         if (p.id !== id) return p
-        const isStockTouched = (productData as any).stock_quantity !== undefined || (productData as any).stockQuantity !== undefined
+        const rawProductData = productData as Record<string, unknown>
+        const isStockTouched = rawProductData.stock_quantity !== undefined || rawProductData.stockQuantity !== undefined
         const finalStock = isStockTouched
           ? (updatedProduct.stock_quantity ?? p.stock_quantity)
           : (p.stock_quantity ?? updatedProduct.stock_quantity)

@@ -166,7 +166,7 @@ export function useCashRegister() {
                     .in('id', sessionUserIds)
 
                 if (profiles && profiles.length > 0) {
-                    sessionUserMap = profiles.reduce((acc, p: any) => {
+                    sessionUserMap = (profiles as Array<{ id: string; full_name?: string | null; email?: string | null }>).reduce((acc, p) => {
                         const displayName = p.full_name || (p.email ? p.email.split('@')[0] : '')
                         if (displayName) {
                             acc[p.id] = displayName
@@ -252,12 +252,14 @@ export function useCashRegister() {
                     .in('id', userIds)
 
                 if (profilesWithEmail) {
-                    userMap = profilesWithEmail.reduce((acc, p: any) => {
+                    type ProfileEmailRow = { id: string; full_name?: string | null; email?: string | null }
+                    const typedProfiles = profilesWithEmail as ProfileEmailRow[]
+                    userMap = typedProfiles.reduce((acc, p) => {
                         acc[p.id] = p.full_name || ''
                         return acc
                     }, {} as Record<string, string>)
 
-                    emailMap = profilesWithEmail.reduce((acc, p: any) => {
+                    emailMap = typedProfiles.reduce((acc, p) => {
                         acc[p.id] = p.email || ''
                         return acc
                     }, {} as Record<string, string>)

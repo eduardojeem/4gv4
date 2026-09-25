@@ -110,14 +110,15 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
 
         const map = new Map<string, { revenue: number; count: number }>()
         for (const row of data) {
-          const created = (row as any).created_at as string | null
+          const rowObj = row as { created_at?: string | null; status?: string | null; total_amount?: number | string | null }
+          const created = rowObj.created_at
           if (!created) continue
           // Una venta anulada no es ingreso del mes.
-          if (!isCountableSale((row as { status?: string | null }).status)) continue
+          if (!isCountableSale(rowObj.status)) continue
           const d = new Date(created)
           const key = `${d.getFullYear()}-${d.getMonth()}`
           const cur = map.get(key) || { revenue: 0, count: 0 }
-          cur.revenue += Number((row as any).total_amount) || 0
+          cur.revenue += Number(rowObj.total_amount) || 0
           cur.count += 1
           map.set(key, cur)
         }
@@ -167,7 +168,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   const segmentDistribution = useMemo(() => {
     const map: Record<string, number> = {}
     customers.forEach(c => {
-      const key = (c as any)[segmentBy] || 'desconocido'
+      const key = (c[segmentBy] as string | undefined) || 'desconocido'
       map[key] = (map[key] || 0) + 1
     })
     return Object.entries(map).map(([name, value]) => ({ name, value }))

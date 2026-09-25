@@ -133,8 +133,9 @@ export function useOptimizedRepairAnalytics(timeRange: string = '6months') {
     })
 
     // Usar Maps para O(1) lookup performance
-    const repairsByMonth = new Map<string, any[]>()
-    const completedByMonth = new Map<string, any[]>()
+    type RepairItem = (typeof repairs)[number]
+    const repairsByMonth = new Map<string, RepairItem[]>()
+    const completedByMonth = new Map<string, RepairItem[]>()
     const technicianStats = new Map<string, TechnicianPerformance>()
     const statusStats = new Map<string, StatusAnalysis>()
     const deviceStats = new Map<string, DeviceAnalysis>()

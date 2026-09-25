@@ -44,10 +44,10 @@ export interface NotificationOptions {
     label: string
     onClick: () => void
   }
-  promise?: Promise<any>
+  promise?: Promise<unknown>
   loading?: string
-  success?: string | ((data: any) => string)
-  error?: string | ((error: any) => string)
+  success?: string | ((data: unknown) => string)
+  error?: string | ((error: unknown) => string)
 }
 
 export interface ButtonNotificationState {

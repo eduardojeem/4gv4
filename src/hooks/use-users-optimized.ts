@@ -194,7 +194,7 @@ export function useUsersOptimized({
                         // Only update if the change affects current view
                         const shouldUpdate = 
                             !roleFilter || roleFilter === 'all' || 
-                            (payload.new as any)?.role === roleFilter
+                            (payload.new as { role?: string } | null)?.role === roleFilter
                         
                         if (shouldUpdate) {
                             fetchUsers()

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Customer, CustomerFilters } from './use-customer-state'
+import { Customer, CustomerFilters, mapRawToCustomer } from './use-customer-state'
 import { useDebounce } from './use-debounce'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 export type { Customer, CustomerFilters }
@@ -188,49 +188,9 @@ export function useCustomers(options: UseCustomersOptions = {}) {
 
             if (fetchError) throw fetchError
 
-            const transformedCustomers: Customer[] = (data || []).map((c: any) => ({
-                id: c.id,
-                customerCode: c.customer_code || `CLI-${c.id?.slice(0, 6)}`,
-                name: c.name || '',
-                email: c.email || '',
-                phone: c.phone || '',
-                ruc: c.ruc,
-                customer_type: c.customer_type || 'regular',
-                status: c.status || 'active',
-                total_purchases: c.total_purchases || 0,
-                total_repairs: c.total_repairs || 0,
-                registration_date: c.created_at,
-                created_at: c.created_at,
-                last_visit: c.last_visit || c.created_at,
-                last_activity: c.updated_at || c.created_at,
-                address: c.address || '',
-                city: c.city || '',
-                credit_score: c.credit_score || 0,
-                segment: c.segment || 'regular',
-                satisfaction_score: c.satisfaction_score || 0,
-                lifetime_value: c.lifetime_value || 0,
-                avg_order_value: c.avg_order_value || 0,
-                purchase_frequency: c.purchase_frequency || 'low',
-                preferred_contact: c.preferred_contact || 'email',
-                birthday: c.birthday || '',
-                loyalty_points: c.loyalty_points || 0,
-                credit_limit: c.credit_limit || 0,
-                current_balance: c.current_balance || 0,
-                pending_amount: c.pending_amount || 0,
-                notes: c.notes || '',
-                tags: c.tags || [],
-                whatsapp: c.whatsapp,
-                social_media: c.social_media,
-                company: c.company,
-                position: c.position,
-                referral_source: c.referral_source || '',
-                discount_percentage: c.discount_percentage || 0,
-                payment_terms: c.payment_terms || 'Contado',
-                assigned_salesperson: c.assigned_salesperson || 'Sin asignar',
-                last_purchase_amount: c.last_purchase_amount || 0,
-                total_spent_this_year: c.total_spent_this_year || 0,
-                avatar: c.avatar
-            }))
+            const transformedCustomers: Customer[] = (data || []).map((c) =>
+                mapRawToCustomer(c as Record<string, unknown>)
+            )
 
             setCustomers(transformedCustomers)
         } catch (err) {

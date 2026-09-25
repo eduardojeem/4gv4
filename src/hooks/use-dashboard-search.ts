@@ -94,8 +94,13 @@ export function useDashboardSearch() {
                     `)
                     .ilike('device_model', `%${query}%`)
                     .limit(5)
-
-                repairs?.forEach((r: any) => {
+                type RepairSearchRow = {
+                    id: string
+                    device_model?: string | null
+                    status?: string | null
+                    customer?: { first_name?: string | null; last_name?: string | null } | null
+                }
+                ;(repairs as RepairSearchRow[] | null)?.forEach((r) => {
                     const customerName = r.customer ? `${r.customer.first_name || ''} ${r.customer.last_name || ''}`.trim() : 'Desconocido'
                     results.push({
                         title: `Reparación - ${r.device_model || 'Dispositivo'}`,

@@ -51,9 +51,11 @@ export function useCustomerRepairs() {
             setRepairs(data || [])
             return data || []
         } catch (error: unknown) {
-            const msg = error && typeof error === 'object' && 'message' in (error as any)
-                ? String((error as any).message)
-                : JSON.stringify(error)
+            const msg = error instanceof Error
+                ? error.message
+                : (typeof error === 'object' && error !== null && 'message' in error)
+                    ? String((error as { message: unknown }).message)
+                    : String(error)
             console.error('Error fetching customer repairs:', msg)
             toast.error('No se pudieron cargar las reparaciones del cliente.')
             return []

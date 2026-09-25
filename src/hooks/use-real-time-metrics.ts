@@ -95,9 +95,9 @@ export function useRealTimeMetrics(customers: Customer[]) {
       }
 
       setIsConnected(true)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error loading metrics:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
       setIsConnected(false)
     } finally {
       setLoading(false)
