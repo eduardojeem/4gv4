@@ -6,15 +6,33 @@ import { config } from '@/lib/config'
 
 const METRICS_CACHE_TTL = 5 * 60 * 1000
 
+export interface POSCustomer {
+  id: string
+  name: string
+  email: string
+  phone: string
+  type: string
+  updated_at: string
+  address: string
+  city?: string
+  last_visit: string | null
+  loyalty_points: number
+  total_purchases: number
+  total_repairs: number
+  current_balance: number
+  credit_limit?: number
+  discount_percentage?: number
+}
+
 interface POSCustomerContextType {
   // Customer Selection State
   selectedCustomer: string
   setSelectedCustomer: (id: string) => void
-  activeCustomer: any | null
+  activeCustomer: POSCustomer | null
   
   // Customer Data State
-  customers: any[]
-  setCustomers: (customers: any[]) => void
+  customers: POSCustomer[]
+  setCustomers: React.Dispatch<React.SetStateAction<POSCustomer[]>>
   customersSourceSupabase: boolean
   setCustomersSourceSupabase: (isSupabase: boolean) => void
   lastCustomerRefreshCount: number | null
@@ -30,7 +48,7 @@ interface POSCustomerContextType {
   
   // Derived Data
   customerTypes: string[]
-  filteredCustomers: any[]
+  filteredCustomers: POSCustomer[]
   
   // New Customer Form State
   newCustomerOpen: boolean
@@ -102,7 +120,7 @@ function mapApiCustomer(row: ApiCustomerRow) {
 export function POSCustomerProvider({ children }: { children: ReactNode }) {
   // Estados principales
   const [selectedCustomer, setSelectedCustomer] = useState<string>('')
-  const [customers, setCustomers] = useState<any[]>([])
+  const [customers, setCustomers] = useState<POSCustomer[]>([])
   const [customersSourceSupabase, setCustomersSourceSupabase] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all')
@@ -196,7 +214,7 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
   }, [refreshCustomers])
 
   // Load real aggregates from Supabase when selecting a customer (parallelized + cached)
-  const customerMetricsCache = React.useRef<Map<string, { data: any; timestamp: number }>>(new Map())
+  const customerMetricsCache = React.useRef<Map<string, { data: Partial<POSCustomer>; timestamp: number }>>(new Map())
   React.useEffect(() => {
     const run = async () => {
       if (!config.supabase.isConfigured || !selectedCustomer) return
@@ -229,8 +247,8 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
         setCustomers(prev => prev.map(c => (
           c.id === selectedCustomer ? { ...c, ...metrics } : c
         )))
-      } catch (e: any) {
-        console.warn('No se pudieron cargar métricas del cliente:', String(e?.message || e || ''))
+      } catch (e: unknown) {
+        console.warn('No se pudieron cargar métricas del cliente:', e instanceof Error ? e.message : String(e || ''))
       }
     }
     run()
@@ -294,9 +312,9 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
       setNewPhone('')
       setNewEmail('')
       setNewType('regular')
-    } catch (e: any) {
+    } catch (e: unknown) {
       setNewCustomerSaving(false)
-      toast.error('No se pudo crear cliente: ' + String(e?.message || e || ''))
+      toast.error('No se pudo crear cliente: ' + (e instanceof Error ? e.message : String(e || '')))
     }
   }, [customers.length, newFirstName, newLastName, newPhone, newEmail, newType])
 

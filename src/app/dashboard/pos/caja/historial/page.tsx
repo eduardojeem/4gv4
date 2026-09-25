@@ -47,7 +47,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useAuth } from '@/contexts/auth-context'
 import { formatRegisterName, formatUserLabel, formatEventConcept } from '@/app/dashboard/pos/lib/formatters'
 import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
-import { downloadPdfReport } from '@/app/dashboard/pos/lib/exportPdf'
+import { downloadPdfReport, type PdfSection } from '@/app/dashboard/pos/lib/exportPdf'
 import { ZClosureDetailsModal } from '@/app/dashboard/pos/components/ZClosureDetailsModal'
 import { cn } from '@/lib/utils'
 
@@ -517,11 +517,12 @@ export default function CashRegisterHistoryPage() {
       const movCashIn = movs.filter(m => m.type === 'cash_in' || (m.type as string) === 'ingreso').reduce((s, m) => s + (Number(m.amount) || 0), 0)
       const movCashOut = movs.filter(m => m.type === 'cash_out' || (m.type as string) === 'egreso').reduce((s, m) => s + (Number(m.amount) || 0), 0)
 
-      const openingBal = (reg as any).opening_balance ?? (movs.find(m => m.type === 'opening')?.amount ?? 0)
-      const totalSales = (reg as any).total_sales ?? (movTotalSales > 0 ? movTotalSales : (salesByCash + salesByCard + salesByTransfer + salesByMixed))
-      const totalCashIn = (reg as any).total_cash_in ?? movCashIn
-      const totalCashOut = (reg as any).total_cash_out ?? movCashOut
-      const currentBalance = (reg as any).balance ?? (Number(openingBal) + Number(totalSales) + Number(totalCashIn) - Number(totalCashOut))
+      const regRecord = reg as unknown as Record<string, unknown>
+      const openingBal = (typeof regRecord.opening_balance === 'number' ? regRecord.opening_balance : null) ?? (movs.find(m => m.type === 'opening')?.amount ?? 0)
+      const totalSales = (typeof regRecord.total_sales === 'number' ? regRecord.total_sales : null) ?? (movTotalSales > 0 ? movTotalSales : (salesByCash + salesByCard + salesByTransfer + salesByMixed))
+      const totalCashIn = (typeof regRecord.total_cash_in === 'number' ? regRecord.total_cash_in : null) ?? movCashIn
+      const totalCashOut = (typeof regRecord.total_cash_out === 'number' ? regRecord.total_cash_out : null) ?? movCashOut
+      const currentBalance = (typeof regRecord.balance === 'number' ? regRecord.balance : null) ?? (Number(openingBal) + Number(totalSales) + Number(totalCashIn) - Number(totalCashOut))
 
       const openRecord: ZClosureRecord = {
         id: 'current',
@@ -705,7 +706,7 @@ export default function CashRegisterHistoryPage() {
     const openSessions = filtered.filter(s => s.id === 'current')
     const closedSessions = filtered.filter(s => s.id !== 'current')
 
-    const sections: any[] = []
+    const sections: PdfSection[] = []
 
     // 1. SECCIÓN DE CAJAS CON TURNO ABIERTO (EN VIVO)
     if (openSessions.length > 0) {

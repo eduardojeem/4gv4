@@ -24,10 +24,16 @@ import type { CartItem } from '../types'
 /** Datos mínimos que el POS necesita para construir la línea del carrito de una reparación */
 export type PosCartRepair = PosChargeableRepair & {
   id: string
+  created_at?: string | null
   customer_id?: string | null
   customer_name?: string | null
+  customer_phone?: string | null
   device_brand?: string | null
   device_model?: string | null
+  problem_description?: string | null
+  notes?: string | null
+  status: string
+  payment_status?: string | null
 }
 
 export interface UsePOSRepairsOptions {
@@ -47,8 +53,8 @@ export interface UsePOSRepairsOptions {
 
 export interface UsePOSRepairsReturn {
   /** Reparaciones del cliente cargadas desde Supabase */
-  customerRepairs: any[]
-  setCustomerRepairs: React.Dispatch<React.SetStateAction<any[]>>
+  customerRepairs: PosCartRepair[]
+  setCustomerRepairs: React.Dispatch<React.SetStateAction<PosCartRepair[]>>
 
   /** Reparaciones añadidas manualmente desde el buscador del taller */
   manualRepairs: PosCartRepair[]
@@ -59,7 +65,7 @@ export interface UsePOSRepairsReturn {
   setSelectedRepairIds: React.Dispatch<React.SetStateAction<string[]>>
 
   /** Objetos de reparación resueltos (union de customerRepairs y manualRepairs) */
-  selectedRepairs: any[]
+  selectedRepairs: PosCartRepair[]
 
   /** Toggles de entrega para el checkout */
   markRepairDelivered: boolean
@@ -92,7 +98,7 @@ export function usePOSRepairs({
   enabled = true,
 }: UsePOSRepairsOptions): UsePOSRepairsReturn {
   const { selectedBranchId } = useBranch()
-  const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
+  const [customerRepairs, setCustomerRepairs] = useState<PosCartRepair[]>([])
   const [manualRepairs, setManualRepairs] = useState<PosCartRepair[]>([])
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
@@ -115,7 +121,14 @@ export function usePOSRepairs({
       const response = await fetch(`/api/customers/${selectedCustomer}/repairs?limit=20${branchQuery}`, { cache: 'no-store', signal: controller.signal })
       const payload = await response.json().catch(() => null) as { repairs?: Array<Record<string, unknown>>; error?: string } | null
       if (!response.ok || !Array.isArray(payload?.repairs)) throw new Error(payload?.error || 'No se pudieron cargar las reparaciones')
-      if (!controller.signal.aborted) setCustomerRepairs(payload.repairs.map(repair => ({ ...repair, notes: repair.problem_description })))
+      if (!controller.signal.aborted) {
+        setCustomerRepairs(payload.repairs.map(repair => ({
+          ...repair,
+          id: String(repair.id ?? ''),
+          status: String(repair.status ?? 'recibido'),
+          notes: typeof repair.problem_description === 'string' ? repair.problem_description : undefined,
+        } as PosCartRepair)))
+      }
     }
     loadRepairs().catch(error => {
       if (controller.signal.aborted) return
@@ -131,10 +144,10 @@ export function usePOSRepairs({
   const selectedRepairs = useMemo(() => {
     // customerRepairs tiene prioridad (datos frescos de Supabase).
     // manualRepairs cubre reparaciones de otros clientes añadidas manualmente.
-    const byId = new Map<string, any>()
+    const byId = new Map<string, PosCartRepair>()
     for (const repair of manualRepairs) byId.set(repair.id, repair)
     for (const repair of customerRepairs) byId.set(repair.id, repair)
-    return selectedRepairIds.map(id => byId.get(id)).filter(Boolean)
+    return selectedRepairIds.map(id => byId.get(id)).filter((r): r is PosCartRepair => Boolean(r))
   }, [customerRepairs, manualRepairs, selectedRepairIds])
 
   const deliveryEligibility = useMemo(

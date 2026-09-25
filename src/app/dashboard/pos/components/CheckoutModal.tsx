@@ -57,7 +57,7 @@ type CheckoutRepair = {
   status: string
   device_brand?: string | null
   device_model?: string | null
-  created_at: string
+  created_at?: string | null
   final_cost?: number | null
   estimated_cost?: number | null
   paid_amount?: number | null
@@ -212,9 +212,9 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     installmentCount: creditTerms.count,
     frequency: creditTerms.frequency,
   }), [amountDue, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
-  const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, creditPlan.financedTotal)
+  const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer as unknown as Parameters<typeof canSellOnCredit>[0], creditPlan.financedTotal)
   const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : amountDue
-  const creditSummary = activeCustomer ? getCreditSummary(activeCustomer) : null
+  const creditSummary = activeCustomer ? getCreditSummary(activeCustomer as unknown as Parameters<typeof getCreditSummary>[0]) : null
   const mixedCreditPrincipal = React.useMemo(() => paymentSplit
     .filter((split) => split.method === 'credit')
     .reduce((total, split) => total + split.amount, 0), [paymentSplit])
@@ -428,7 +428,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                                   </Badge>
                                                   <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                                       <Calendar className="h-3 w-3" />
-                                                      {new Date(repair.created_at).toLocaleDateString()}
+                                                      {repair.created_at ? new Date(repair.created_at).toLocaleDateString() : ''}
                                                   </span>
                                               </div>
                                            </div>
@@ -824,7 +824,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             <div className="px-6 py-4 overflow-y-auto bg-background/95 max-h-[70vh]">
               <div className="rounded-xl border bg-card/70 p-4 md:p-5">
                 <CustomerCreditHistory
-                  customer={activeCustomer}
+                  customer={activeCustomer as unknown as Parameters<typeof CustomerCreditHistory>[0]['customer']}
                   onClose={() => setShowCreditHistory(false)}
                   compact={true}
                 />

@@ -12,11 +12,13 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { createReceiptData } from '@/lib/receipt-utils'
+import { createReceiptData, type ReceiptData, type PaymentSplit as ReceiptPaymentSplit } from '@/lib/receipt-utils'
 import { buildPosCreditSummary, withPersistedCreditSchedule, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
-import type { CartItem } from '../types'
+import type { CartItem, PaymentSplit } from '../types'
 import { firstPaymentError } from '@/lib/credits/first-payment'
+import type { POSCustomer } from '../contexts/POSCustomerContext'
+import type { SaleData } from '@/hooks/usePOSProducts'
 
 // ─── Tipos auxiliares ────────────────────────────────────────────────────────
 
@@ -26,6 +28,20 @@ export interface PaymentAttempt {
   method: 'single' | 'mixed'
   amount: number
   message?: string
+}
+
+export interface ProcessSaleResult {
+  success: boolean
+  saleId?: string | number
+  data?: {
+    id?: string
+    total?: number
+    tax?: number
+    discount?: number
+    creditSchedule?: unknown
+    [key: string]: unknown
+  }
+  error?: string
 }
 
 export interface SaleProcessorDependencies {
@@ -53,21 +69,11 @@ export interface SaleProcessorDependencies {
   transferReference: string
   electronicProvider: string
   electronicInstitution: string
-  electronicChannel: string
+  electronicChannel: 'card_terminal' | 'bank_transfer' | 'qr'
   terminalId: string
   notes: string
   creditTerms: PosCreditTerms
-  paymentSplit: Array<{
-    id: string
-    method: string
-    amount: number
-    reference?: string
-    cardLast4?: string
-    provider?: string
-    institution?: string
-    channel?: string
-    terminalId?: string
-  }>
+  paymentSplit: PaymentSplit[]
   storeCreditApplied: number
 
   // Reparaciones
@@ -77,7 +83,7 @@ export interface SaleProcessorDependencies {
 
   // Cliente
   selectedCustomer: string
-  customers: any[]
+  customers: POSCustomer[]
   cashierName: string
 
   // Callbacks de estado de pago (CheckoutContext setters)
@@ -85,10 +91,10 @@ export interface SaleProcessorDependencies {
   setPaymentError: (e: string) => void
 
   // Callback que ejecuta la transacción en el servidor
-  processInventorySale: (payload: any) => Promise<any>
+  processInventorySale: (payload: SaleData) => Promise<ProcessSaleResult>
 
   // Callbacks post-venta
-  onSuccess: (receiptData: any) => void
+  onSuccess: (receiptData: ReceiptData) => void
   onAfterSale: () => void
 
   // Formateo
@@ -119,11 +125,14 @@ export function usePOSSaleProcessor() {
   const normalizePaymentError = useCallback((err: unknown): string => {
     try {
       if (!err) return 'Error desconocido'
-      const e = err as any
+      if (typeof err === 'string') return err
+      const e = typeof err === 'object' ? (err as Record<string, unknown>) : null
       const msg =
-        typeof err === 'string'
-          ? err
-          : e.message || e.error_description || e.details || e.hint || 'Error desconocido'
+        (typeof e?.message === 'string' && e.message) ||
+        (typeof e?.error_description === 'string' && e.error_description) ||
+        (typeof e?.details === 'string' && e.details) ||
+        (typeof e?.hint === 'string' && e.hint) ||
+        'Error desconocido'
       const lower = (msg || '').toLowerCase()
       if (lower.includes('network') || lower.includes('fetch'))
         return 'Error de red: verifique la conexión.'
@@ -447,7 +456,7 @@ export function usePOSSaleProcessor() {
         return
       }
 
-      const validation = getMixedPaymentValidation(amountDue, paymentSplit as any)
+      const validation = getMixedPaymentValidation(amountDue, paymentSplit)
       if (!validation.valid) {
         const errorMessages: Record<string, string> = {
           PAYMENT_INCOMPLETE: `Faltan ${formatCurrency(validation.remaining)} para completar el pago`,
@@ -478,7 +487,7 @@ export function usePOSSaleProcessor() {
         return
       }
 
-      const receiptPayments = [
+      const receiptPayments: ReceiptPaymentSplit[] = [
         ...(storeCreditApplied > 0
           ? [{ id: 'store-credit', method: 'store_credit' as const, amount: storeCreditApplied }]
           : []),
@@ -493,7 +502,7 @@ export function usePOSSaleProcessor() {
               creditInfo: { ...mixedCreditSummary, interestRate: creditTerms.interestRate },
             }
           : cartCalculations,
-        receiptPayments as any,
+        receiptPayments,
         customer,
         cashierName
       )

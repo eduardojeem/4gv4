@@ -45,7 +45,7 @@ interface StockMovement {
   new_stock?: number
 }
 
-interface SaleData {
+export interface SaleData {
   items: CartItem[]
   total: number
   payment_method: 'cash' | 'card' | 'transfer' | 'credit'

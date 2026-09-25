@@ -17,7 +17,7 @@ import { formatCurrency } from '@/lib/currency'
 import { ZClosureRecord, useCashRegisterContext } from '../contexts/CashRegisterContext'
 import { formatRegisterName, formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
 import { downloadCsvReport } from '@/app/dashboard/pos/lib/exportCsv'
-import { downloadPdfReport } from '@/app/dashboard/pos/lib/exportPdf'
+import { downloadPdfReport, type PdfSection } from '@/app/dashboard/pos/lib/exportPdf'
 
 interface ZClosureDetailsModalProps {
   isOpen: boolean
@@ -34,7 +34,7 @@ export function ZClosureDetailsModal({ isOpen, onClose, closure }: ZClosureDetai
   // Movimientos categorizados (seguros ante closure nulo)
   const movements = useMemo(() => closure?.movements || [], [closure?.movements])
 
-  const getMovementMeta = (m: any) => {
+  const getMovementMeta = (m: { reason?: string | null; type?: string | null }) => {
     const reasonLower = (m.reason || '').toLowerCase()
     const isRepair = reasonLower.includes('reparaci') || reasonLower.includes('orden') || reasonLower.includes('ord-') || reasonLower.includes('tecnico') || reasonLower.includes('repuesto')
     
@@ -84,7 +84,7 @@ export function ZClosureDetailsModal({ isOpen, onClose, closure }: ZClosureDetai
     : 0
 
   const exportClosureReport = () => {
-    const rows: any[] = [
+    const rows: Array<[string, string, string | number, string]> = [
       ['🟢 FASE 1: APERTURA', 'Fondo Inicial Declarado', closure.openingBalance || 0, 'Fondo de cambio inicial'],
       ['🟢 FASE 1: APERTURA', 'Responsable de Apertura', openedByDisplayName, 'Cajero de apertura'],
       ['🔵 FASE 2: VENTAS', 'Ventas en Efectivo', salesCash, 'Cobrado en efectivo'],
@@ -144,7 +144,7 @@ export function ZClosureDetailsModal({ isOpen, onClose, closure }: ZClosureDetai
   }
 
   const exportClosurePdf = async () => {
-    const sections: any[] = []
+    const sections: PdfSection[] = []
 
     // SECCIÓN 1: RESUMEN FINANCIERO Y ARQUEO Z
     sections.push({
@@ -645,18 +645,18 @@ export function ZClosureDetailsModal({ isOpen, onClose, closure }: ZClosureDetai
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 text-xs">
-                  {[
+                  {([
                     { key: 'all', label: 'Todos' },
                     { key: 'sale', label: '🛍️ Ventas' },
                     { key: 'repair', label: '🔧 Reparaciones' },
                     { key: 'cash_in', label: '📥 Ingresos' },
                     { key: 'cash_out', label: '📤 Egresos' }
-                  ].map(tab => (
+                  ] as const).map(tab => (
                     <Button
                       key={tab.key}
                       variant={movementTypeFilter === tab.key ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => setMovementTypeFilter(tab.key as any)}
+                      onClick={() => setMovementTypeFilter(tab.key)}
                       className="h-8 text-xs px-2.5 rounded-lg font-medium"
                     >
                       {tab.label}
