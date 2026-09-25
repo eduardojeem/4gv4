@@ -12,7 +12,8 @@ describe('reglas comerciales del POS', () => {
   it('usa descuento configurado del cliente y conserva sus puntos canónicos', () => {
     const page = readFileSync(resolve(process.cwd(), 'src/app/dashboard/pos/page.tsx'), 'utf8')
     const customers = readFileSync(resolve(process.cwd(), 'src/app/dashboard/pos/contexts/POSCustomerContext.tsx'), 'utf8')
-    expect(page).toContain('activeCustomer as any)?.discount_percentage')
+    expect(page).toContain("'discount_percentage' in activeCustomer")
+    expect(page).toContain('activeCustomer as { discount_percentage?: unknown }')
     expect(page).not.toContain('const VIP_DISCOUNT_RATE = 10')
     expect(customers).not.toContain('const loyaltyPoints = Math.floor')
   })
