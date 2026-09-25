@@ -75,7 +75,7 @@ import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useHeldSales, HeldSale } from './hooks/useHeldSales'
 import { HeldSalesModal } from './components/HeldSalesModal'
 import { POSShortcutsBar } from './components/POSShortcutsBar'
-import { POSRepairChargeModal } from './components/POSRepairChargeModal'
+import { POSRepairChargeModal, type RepairItemData } from './components/POSRepairChargeModal'
 import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
 import { POSProductDetailDialog } from './components/POSProductDetailDialog'
 import { POSCashMovementDialog } from './components/POSCashMovementDialog'
@@ -240,7 +240,6 @@ function POSPageContent() {
   const repairsEnabled = effectiveModules.includes('repairs')
 
   const {
-    customerRepairs,
     setCustomerRepairs,
     manualRepairs: _manualRepairs,
     setManualRepairs: _setManualRepairs,
@@ -251,6 +250,7 @@ function POSPageContent() {
     setMarkRepairDelivered,
     deliveryOutcome,
     setDeliveryOutcome,
+    deliveryEligibility,
     repairTotals,
     addRepairToCart: handleAddRepairToCart,
     removeRepair: removeRepairById,
@@ -840,6 +840,25 @@ function POSPageContent() {
   }, [clearCart, addToCartHook, repairsEnabled, setIsWholesale, setGeneralDiscount, setSelectedCustomer, setSelectedRepairIds])
 
   // handleAddRepairToCart viene de usePOSRepairs (ver desestructuración arriba)
+  const handleAddSearchedRepair = useCallback((item: CartItem, repair: RepairItemData) => {
+    const repairCustomerId = repair.customer_id || ''
+    const conflictsWithCart = Boolean(
+      repairCustomerId
+      && selectedCustomer
+      && repairCustomerId !== selectedCustomer
+      && combinedCartItems.length > 0
+    )
+    if (conflictsWithCart) {
+      toast.error('La reparación pertenece a otro cliente', {
+        description: 'Finalizá o vaciá la venta actual antes de cambiar el cliente.',
+      })
+      return
+    }
+    if (repairCustomerId && repairCustomerId !== selectedCustomer) {
+      setSelectedCustomer(repairCustomerId)
+    }
+    handleAddRepairToCart(item, repair)
+  }, [combinedCartItems.length, handleAddRepairToCart, selectedCustomer, setSelectedCustomer])
 
   // Global Keyboard Shortcuts (F2, F3, F4, F8, F9)
   useEffect(() => {
@@ -2589,12 +2608,13 @@ function POSPageContent() {
         onUpdateQuantity={updateQuantity}
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
-        customerRepairs={customerRepairs}
+        customerRepairs={selectedRepairs}
         repairsEnabled={repairsEnabled}
         markRepairDelivered={markRepairDelivered}
         setMarkRepairDelivered={setMarkRepairDelivered}
         deliveryOutcome={deliveryOutcome}
         setDeliveryOutcome={setDeliveryOutcome}
+        deliveryEligibility={deliveryEligibility}
         supabaseStatusToLabel={supabaseStatusToLabel}
         cart={combinedCartItems}
         cartCalculations={cartCalculations}
@@ -3038,7 +3058,7 @@ function POSPageContent() {
       <POSRepairChargeModal
         open={repairsEnabled && isRepairModalOpen}
         onOpenChange={setIsRepairModalOpen}
-        onAddRepairToCart={handleAddRepairToCart}
+        onAddRepairToCart={handleAddSearchedRepair}
       />
 
       {/* Alta rapida de cliente: el mismo dialogo que el checkout y que

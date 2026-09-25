@@ -44,6 +44,7 @@ import type { Promotion } from '@/types/promotion'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { getMixedPaymentValidation } from '../lib/payment-validation'
 import { getRepairBalanceDue } from '../lib/repair-charge'
+import type { RepairDeliveryEligibility } from '../lib/repair-charge'
 import type { CartProductCreditPlan } from '../lib/cart-credit-plans'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { firstPaymentError } from '@/lib/credits/first-payment'
@@ -74,6 +75,7 @@ export interface CheckoutModalProps {
   customerRepairs: CheckoutRepair[]
   markRepairDelivered: boolean
   setMarkRepairDelivered: (val: boolean) => void
+  deliveryEligibility: RepairDeliveryEligibility
   deliveryOutcome: 'repaired' | 'withdrawn' | 'unrepairable'
   setDeliveryOutcome: (val: 'repaired' | 'withdrawn' | 'unrepairable') => void
   supabaseStatusToLabel: Record<string, string>
@@ -127,6 +129,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   customerRepairs,
   markRepairDelivered,
   setMarkRepairDelivered,
+  deliveryEligibility,
   deliveryOutcome,
   setDeliveryOutcome,
   supabaseStatusToLabel,
@@ -264,37 +267,6 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="shrink-0 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 px-5 py-3 sm:px-7 sm:py-4">
-          <ol className="grid grid-cols-3 gap-1.5 text-xs sm:gap-3 sm:text-sm" aria-label="Pasos para cobrar la venta">
-            <li className="flex min-w-0 items-center gap-2 rounded-md bg-primary/10 px-2 py-2 text-primary sm:px-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">Cliente</span>
-                <span className="hidden truncate text-[10px] text-muted-foreground sm:block">{activeCustomer?.name || 'Consumidor final'}</span>
-              </span>
-            </li>
-            <li className="flex min-w-0 items-center gap-2 rounded-md border bg-card px-2 py-2 sm:px-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-bold">2</span>
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">Forma de cobro</span>
-                <span className="hidden truncate text-[10px] capitalize text-muted-foreground sm:block">{isMixedPayment ? 'Pago mixto' : (paymentMethod || 'Elegir método')}</span>
-              </span>
-            </li>
-            <li className="flex min-w-0 items-center gap-2 rounded-md border bg-card px-2 py-2 sm:px-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-bold">3</span>
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">Confirmar</span>
-                <span className="hidden truncate text-[10px] text-muted-foreground sm:block">{formatCurrency(displayTotal)}</span>
-              </span>
-            </li>
-          </ol>
-          <div className="sr-only">
-            <span>1. Cliente</span>
-            <span>2. Forma de cobro</span>
-            <span>3. Revisar y confirmar</span>
-          </div>
-        </div>
-        
         {!isRegisterOpen && (
           <div className="mx-6 mt-4 mb-1 flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive">
              <div className="flex items-center gap-2">
@@ -357,7 +329,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <UserRound className="h-4 w-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">1. Cliente</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Cliente</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Identificá al comprador y vinculá reparaciones si corresponde.</p>
               </div>
             </div>
@@ -511,15 +483,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                          {(() => {
-                            // El servidor solo entrega equipos en estado "listo".
-                            // Antes el interruptor se ofrecia igual y la venta
-                            // entera fallaba al confirmar, con el codigo crudo
-                            // REPAIR_DELIVERY_INVALID_STATE en pantalla.
-                            const notReady = customerRepairs.filter(
-                              (repair) => selectedRepairIds.includes(repair.id)
-                                && String(repair.status ?? '').toLowerCase() !== 'listo'
-                            )
-                            const canDeliver = notReady.length === 0
+                            const canDeliver = deliveryEligibility.canDeliver
+                            const blockedCount = deliveryEligibility.blockingTickets.length
 
                             return (
                               <div className={cn(
@@ -541,7 +506,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                        <div className="text-[10px] text-muted-foreground leading-tight">
                                           {canDeliver
                                             ? 'Actualizar estado a "Entregado"'
-                                            : `${notReady.length === 1 ? 'La reparación no está' : `${notReady.length} reparaciones no están`} en "Listo para entrega". Podés cobrarla igual.`}
+                                            : deliveryEligibility.reason
+                                              ?? `${blockedCount === 1 ? 'La reparación seleccionada no puede' : `${blockedCount} reparaciones seleccionadas no pueden`} entregarse todavía. Podés cobrarlas igual.`}
                                        </div>
                                     </div>
                                  </div>
@@ -598,7 +564,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <WalletCards className="h-4 w-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">2. Forma de cobro</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Forma de cobro</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Elegí un método simple o combiná varios en pago mixto.</p>
               </div>
             </div>
@@ -659,7 +625,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <ReceiptText className="h-4 w-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">3. Revisar y confirmar</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Resumen final</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Comprobá los importes antes de registrar la venta.</p>
               </div>
             </div>

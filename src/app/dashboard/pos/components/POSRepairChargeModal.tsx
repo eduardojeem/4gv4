@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -21,12 +21,15 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import type { CartItem } from '../types'
+import { useBranch } from '@/contexts/branch-context'
+import { usePOSRepairSearch } from '../hooks/usePOSRepairSearch'
+import { getRepairChargeability } from '../lib/repair-charge'
 
-interface RepairItemData {
+export interface RepairItemData {
   id: string
+  customer_id?: string | null
   ticket_number: string | number
   customer_name?: string | null
   customer_phone?: string | null
@@ -37,6 +40,8 @@ interface RepairItemData {
   final_cost?: number | null
   estimated_cost?: number | null
   paid_amount?: number | null
+  payment_status?: string | null
+  qualityCheck?: { result?: string | null } | Array<{ result?: string | null }> | null
   created_at: string
 }
 
@@ -92,103 +97,32 @@ export function POSRepairChargeModal({
   onOpenChange,
   onAddRepairToCart
 }: POSRepairChargeModalProps) {
-  const supabase = React.useMemo(() => createClient(), [])
+  const { selectedBranchId } = useBranch()
   const [searchTerm, setSearchTerm] = useState('')
-  const [repairs, setRepairs] = useState<RepairItemData[]>([])
-  const [loading, setLoading] = useState(false)
-
-  // Fetch pending / ready repairs on open
-  useEffect(() => {
-    if (!open) return
-
-    async function loadRepairs() {
-      setLoading(true)
-      try {
-        // 1. Intentar por endpoint API primero (maneja branches, joins y permisos)
-        const response = await fetch('/api/repairs?pageSize=50', {
-          headers: { 'Content-Type': 'application/json' }
-        }).catch(() => null)
-
-        if (response && response.ok) {
-          const res = await response.json().catch(() => null)
-          if (res && Array.isArray(res.repairs)) {
-            const mapped: RepairItemData[] = res.repairs
-              .filter((r: any) => r.status !== 'delivered' && r.status !== 'cancelled' && r.status !== 'entregado')
-              .map((r: any) => ({
-                id: r.id,
-                ticket_number: r.ticket_number || r.ticket_id || r.id.substring(0, 6),
-                customer_name: r.customer?.name || (r.customer?.first_name ? `${r.customer.first_name} ${r.customer.last_name || ''}`.trim() : r.customer_name) || 'Cliente',
-                customer_phone: r.customer?.phone || r.customer_phone || '',
-                device_brand: r.device_brand || '',
-                device_model: r.device_model || '',
-                problem_description: r.problem_description || r.notes || '',
-                status: r.status || 'recibido',
-                final_cost: r.final_cost,
-                estimated_cost: r.estimated_cost,
-                paid_amount: r.paid_amount || 0,
-                created_at: r.created_at || new Date().toISOString()
-              }))
-            setRepairs(mapped)
-            return
-          }
-        }
-
-        // 2. Fallback a cliente Supabase
-        const { data, error } = await supabase
-          .from('repairs')
-          .select('id, device_brand, device_model, problem_description, status, final_cost, estimated_cost, paid_amount, created_at, customer_id')
-          .not('status', 'in', '("delivered","cancelled","entregado")')
-          .order('created_at', { ascending: false })
-          .limit(30)
-
-        if (!error && Array.isArray(data)) {
-          const mapped: RepairItemData[] = data.map((r: any) => ({
-            id: r.id,
-            ticket_number: r.id.substring(0, 6).toUpperCase(),
-            customer_name: 'Cliente',
-            customer_phone: '',
-            device_brand: r.device_brand || '',
-            device_model: r.device_model || '',
-            problem_description: r.problem_description || '',
-            status: r.status || 'recibido',
-            final_cost: r.final_cost,
-            estimated_cost: r.estimated_cost,
-            paid_amount: r.paid_amount || 0,
-            created_at: r.created_at || new Date().toISOString()
-          }))
-          setRepairs(mapped)
-        }
-      } catch (err) {
-        console.warn('Info: No se pudieron cargar reparaciones activas:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadRepairs()
-  }, [open, supabase])
-
-  // Filter repairs by search term
-  const filteredRepairs = repairs.filter(r => {
-    if (!searchTerm.trim()) return true
-    const term = searchTerm.toLowerCase()
-    const ticket = String(r.ticket_number || '').toLowerCase()
-    const name = (r.customer_name || '').toLowerCase()
-    const phone = (r.customer_phone || '').toLowerCase()
-    const device = `${r.device_brand || ''} ${r.device_model || ''}`.toLowerCase()
-    return ticket.includes(term) || name.includes(term) || phone.includes(term) || device.includes(term)
+  const search = usePOSRepairSearch({ open, branchId: selectedBranchId, search: searchTerm })
+  const repairs = search.repairs.map((row) => {
+    const customer = row.customer && typeof row.customer === 'object'
+      ? row.customer as Record<string, unknown>
+      : null
+    return {
+      ...row,
+      ticket_number: row.ticket_number || row.id.slice(0, 6).toUpperCase(),
+      customer_name: String(customer?.name || [customer?.first_name, customer?.last_name].filter(Boolean).join(' ') || row.customer_name || 'Cliente'),
+      customer_phone: String(customer?.phone || row.customer_phone || ''),
+      status: String(row.status || 'recibido'),
+      created_at: String(row.created_at || new Date().toISOString()),
+    } as RepairItemData
   })
 
   const handleSelectRepair = (repair: RepairItemData) => {
-    const totalCost = Number(repair.final_cost || repair.estimated_cost || 0)
+    const totalCost = Number(repair.final_cost ?? repair.estimated_cost ?? 0)
     const paidAmount = Number(repair.paid_amount || 0)
-    const balanceDue = Math.max(0, totalCost - paidAmount)
-    const priceToCharge = balanceDue > 0 ? balanceDue : totalCost
-
-    if (balanceDue <= 0 && totalCost > 0) {
+    const chargeability = getRepairChargeability(repair)
+    if (!chargeability.canCharge) {
       toast.info('Esta reparación ya está 100% pagada', {
         description: `Total: ${formatCurrency(totalCost)} | Abonado: ${formatCurrency(paidAmount)}`
       })
+      return
     }
 
     const deviceName = `${repair.device_brand || ''} ${repair.device_model || 'Equipo'}`.trim()
@@ -197,10 +131,10 @@ export function POSRepairChargeModal({
     const cartItem: CartItem = {
       id: `repair_${repair.id}`,
       name: `Reparación ${ticketLabel} - ${deviceName}`,
-      price: priceToCharge,
+      price: chargeability.balanceDue,
       quantity: 1,
       stock: 999,
-      subtotal: priceToCharge,
+      subtotal: chargeability.balanceDue,
       isService: true,
       sku: `REP-${repair.ticket_number || repair.id.substring(0, 6)}`
     }
@@ -243,12 +177,19 @@ export function POSRepairChargeModal({
           </div>
 
           {/* Results */}
-          {loading ? (
+          {search.status === 'loading' && repairs.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground flex flex-col items-center gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               <span className="text-sm">Buscando reparaciones activas...</span>
             </div>
-          ) : filteredRepairs.length === 0 ? (
+          ) : search.status === 'error' ? (
+            <div className="py-12 text-center" role="alert">
+              <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-destructive" />
+              <p className="text-sm font-medium">No se pudieron cargar las reparaciones</p>
+              <p className="mt-1 text-xs text-muted-foreground">{search.error}</p>
+              <Button className="mt-4" size="sm" variant="outline" onClick={search.retry}>Reintentar</Button>
+            </div>
+          ) : repairs.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Smartphone className="h-8 w-8 mx-auto mb-2 opacity-40" />
               <p className="text-sm font-medium">No se encontraron reparaciones pendientes</p>
@@ -257,10 +198,9 @@ export function POSRepairChargeModal({
           ) : (
             <ScrollArea className="max-h-[50vh] pr-2">
               <div className="space-y-2.5">
-                {filteredRepairs.map((repair) => {
-                  const totalCost = Number(repair.final_cost || repair.estimated_cost || 0)
+                {repairs.map((repair) => {
                   const paidAmount = Number(repair.paid_amount || 0)
-                  const balanceDue = Math.max(0, totalCost - paidAmount)
+                  const chargeability = getRepairChargeability(repair)
                   const statusMeta = STATUS_LABELS[repair.status] || { label: repair.status, color: 'bg-muted text-foreground' }
                   const ready = isRepairReady(repair.status)
 
@@ -315,7 +255,7 @@ export function POSRepairChargeModal({
                         <div className="text-right">
                           <div className="text-xs text-muted-foreground">Saldo pendiente</div>
                           <div className="text-base font-bold text-indigo-600 dark:text-indigo-400">
-                            {formatCurrency(balanceDue > 0 ? balanceDue : totalCost)}
+                            {formatCurrency(chargeability.balanceDue)}
                           </div>
                           {paidAmount > 0 && (
                             <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -326,23 +266,38 @@ export function POSRepairChargeModal({
 
                         <Button
                           size="sm"
-                          disabled={!ready}
+                          disabled={!chargeability.canCharge}
                           className={cn(
                             'h-8 gap-1.5 text-xs shadow-sm',
-                            ready && 'bg-indigo-600 hover:bg-indigo-700 text-white',
+                            chargeability.canCharge && 'bg-indigo-600 hover:bg-indigo-700 text-white',
                           )}
-                          variant={ready ? 'default' : 'outline'}
-                          title={ready ? undefined : notReadyReason(repair.status)}
+                          variant={chargeability.canCharge ? 'default' : 'outline'}
+                          title={chargeability.reason}
                           onClick={() => handleSelectRepair(repair)}
                         >
                           <Plus className="h-3.5 w-3.5" />
-                          {ready ? 'Sumar al Carrito' : 'No disponible'}
+                          {!chargeability.canCharge
+                            ? 'Sin saldo pendiente'
+                            : ready ? 'Cobrar saldo' : 'Cobrar sin entregar'}
                         </Button>
                       </div>
                     </div>
                   )
                 })}
               </div>
+              {search.pagination.totalPages > 1 && (
+                <div className="mt-3 flex items-center justify-between border-t pt-3">
+                  <Button size="sm" variant="outline" onClick={search.previousPage} disabled={search.pagination.page <= 1}>
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Página {search.pagination.page} de {search.pagination.totalPages}
+                  </span>
+                  <Button size="sm" variant="outline" onClick={search.nextPage} disabled={search.pagination.page >= search.pagination.totalPages}>
+                    Siguiente
+                  </Button>
+                </div>
+              )}
             </ScrollArea>
           )}
         </div>

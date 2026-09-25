@@ -12,13 +12,20 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useBranch } from '@/contexts/branch-context'
-import { getRepairBalanceDue, type ChargeableRepair } from '../lib/repair-charge'
+import {
+  getRepairBalanceDue,
+  getRepairDeliveryEligibility,
+  type PosChargeableRepair,
+  type RepairDeliveryEligibility,
+} from '../lib/repair-charge'
 import { calculateRepairTotal } from '@/lib/pos-calculator'
 import type { CartItem } from '../types'
 
 /** Datos mínimos que el POS necesita para construir la línea del carrito de una reparación */
-export type PosCartRepair = ChargeableRepair & {
+export type PosCartRepair = PosChargeableRepair & {
   id: string
+  customer_id?: string | null
+  customer_name?: string | null
   device_brand?: string | null
   device_model?: string | null
 }
@@ -59,6 +66,7 @@ export interface UsePOSRepairsReturn {
   setMarkRepairDelivered: React.Dispatch<React.SetStateAction<boolean>>
   deliveryOutcome: 'repaired' | 'withdrawn' | 'unrepairable'
   setDeliveryOutcome: React.Dispatch<React.SetStateAction<'repaired' | 'withdrawn' | 'unrepairable'>>
+  deliveryEligibility: RepairDeliveryEligibility
 
   /** Totales de reparaciones seleccionadas */
   repairTotals: {
@@ -96,13 +104,6 @@ export function usePOSRepairs({
     setCustomerRepairs([])
     if (!selectedCustomer || !enabled) setSelectedRepairIds([])
   }
-  const [deliveryContext, setDeliveryContext] = useState({ isCheckoutOpen, selectedRepairIds })
-  if (deliveryContext.isCheckoutOpen !== isCheckoutOpen || deliveryContext.selectedRepairIds !== selectedRepairIds) {
-    setDeliveryContext({ isCheckoutOpen, selectedRepairIds })
-    setMarkRepairDelivered(isCheckoutOpen && selectedRepairIds.length > 0)
-    if (!isCheckoutOpen) setDeliveryOutcome('repaired')
-  }
-
   // --- Carga desde Supabase + suscripción Realtime ---
   useEffect(() => {
     if (!selectedCustomer || !enabled) {
@@ -135,6 +136,24 @@ export function usePOSRepairs({
     for (const repair of customerRepairs) byId.set(repair.id, repair)
     return selectedRepairIds.map(id => byId.get(id)).filter(Boolean)
   }, [customerRepairs, manualRepairs, selectedRepairIds])
+
+  const deliveryEligibility = useMemo(
+    () => getRepairDeliveryEligibility(selectedRepairs),
+    [selectedRepairs],
+  )
+
+  const updateMarkRepairDelivered = useCallback<React.Dispatch<React.SetStateAction<boolean>>>((value) => {
+    setMarkRepairDelivered((current) => {
+      const next = typeof value === 'function' ? value(current) : value
+      return next && deliveryEligibility.canDeliver
+    })
+  }, [deliveryEligibility.canDeliver])
+
+  const effectiveMarkRepairDelivered = (
+    isCheckoutOpen
+    && deliveryEligibility.canDeliver
+    && markRepairDelivered
+  )
 
   // --- Totales de reparaciones ---
   const repairTotals = useMemo(() => {
@@ -178,6 +197,8 @@ export function usePOSRepairs({
   const clearRepairs = useCallback(() => {
     setSelectedRepairIds([])
     setManualRepairs([])
+    setMarkRepairDelivered(false)
+    setDeliveryOutcome('repaired')
   }, [])
 
   return {
@@ -188,10 +209,11 @@ export function usePOSRepairs({
     selectedRepairIds,
     setSelectedRepairIds,
     selectedRepairs,
-    markRepairDelivered,
-    setMarkRepairDelivered,
+    markRepairDelivered: effectiveMarkRepairDelivered,
+    setMarkRepairDelivered: updateMarkRepairDelivered,
     deliveryOutcome,
     setDeliveryOutcome,
+    deliveryEligibility,
     repairTotals,
     addRepairToCart,
     removeRepair,
