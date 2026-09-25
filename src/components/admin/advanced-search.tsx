@@ -26,11 +26,13 @@ import {
 } from 'lucide-react'
 
 // Interfaces
-interface SearchFilter {
+export type SearchFilterValue = string | number | boolean | string[] | number[] | [number, number]
+
+export interface SearchFilter {
   id: string
   name: string
   type: 'text' | 'select' | 'range' | 'date' | 'checkbox' | 'multiselect'
-  value: any
+  value: SearchFilterValue
   options?: { label: string; value: string }[]
   min?: number
   max?: number
@@ -216,7 +218,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
   })
 
   // Funciones
-  const updateFilter = (filterId: string, value: any) => {
+  const updateFilter = (filterId: string, value: SearchFilterValue) => {
     setFilters(filters.map(filter =>
       filter.id === filterId ? { ...filter, value } : filter
     ))
@@ -328,7 +330,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
         return (
           <Input
             placeholder={filter.placeholder}
-            value={filter.value}
+            value={typeof filter.value === 'string' ? filter.value : ''}
             onChange={(e) => updateFilter(filter.id, e.target.value)}
             className="w-full"
           />
@@ -336,7 +338,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
 
       case 'select':
         return (
-          <Select value={filter.value} onValueChange={(value) => updateFilter(filter.id, value)}>
+          <Select value={typeof filter.value === 'string' ? filter.value : ''} onValueChange={(value) => updateFilter(filter.id, value)}>
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar..." />
             </SelectTrigger>
@@ -357,9 +359,9 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
               <div key={option.value} className="flex items-center space-x-2">
                 <Checkbox
                   id={`${filter.id}-${option.value}`}
-                  checked={Array.isArray(filter.value) && filter.value.includes(option.value)}
+                  checked={Array.isArray(filter.value) && (filter.value as string[]).includes(option.value)}
                   onCheckedChange={(checked) => {
-                    const currentValue = Array.isArray(filter.value) ? filter.value : []
+                    const currentValue = Array.isArray(filter.value) ? (filter.value as string[]) : []
                     if (checked) {
                       updateFilter(filter.id, [...currentValue, option.value])
                     } else {
@@ -379,7 +381,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
         return (
           <div className="space-y-4">
             <Slider
-              value={Array.isArray(filter.value) ? filter.value : [filter.min || 0, filter.max || 100]}
+              value={Array.isArray(filter.value) ? (filter.value as number[]) : [filter.min || 0, filter.max || 100]}
               onValueChange={(value) => updateFilter(filter.id, value)}
               min={filter.min || 0}
               max={filter.max || 100}
@@ -397,7 +399,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
         return (
           <Input
             type="date"
-            value={filter.value}
+            value={typeof filter.value === 'string' ? filter.value : ''}
             onChange={(e) => updateFilter(filter.id, e.target.value)}
             className="w-full"
           />
@@ -408,8 +410,8 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
           <div className="flex items-center space-x-2">
             <Checkbox
               id={filter.id}
-              checked={filter.value}
-              onCheckedChange={(checked) => updateFilter(filter.id, checked)}
+              checked={filter.value === true}
+              onCheckedChange={(checked) => updateFilter(filter.id, Boolean(checked))}
             />
             <Label htmlFor={filter.id}>Sí</Label>
           </div>
@@ -432,7 +434,7 @@ const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 placeholder="Buscar productos por nombre, SKU, descripción..."
-                value={filters.find(f => f.id === 'search')?.value || ''}
+                value={(filters.find(f => f.id === 'search')?.value as string) || ''}
                 onChange={(e) => updateFilter('search', e.target.value)}
                 className="pl-10"
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
