@@ -14,13 +14,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { MetricsGrid } from './MetricsGrid'
 import { AlertsBanner } from './AlertsBanner'
-import { DashboardMetrics } from '@/types/products-dashboard'
+import { DashboardMetrics, ProductAlert } from '@/types/products-dashboard'
 import { formatCurrencyCompact } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 export interface ProductSummaryOverviewProps {
   metrics: DashboardMetrics
-  alerts?: any[]
+  alerts?: ProductAlert[]
   canViewCost?: boolean
   showServices?: boolean
   isExpanded: boolean

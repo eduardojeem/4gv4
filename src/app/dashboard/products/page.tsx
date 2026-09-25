@@ -19,7 +19,7 @@ import { ProductModal } from "@/components/dashboard/product-modal";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { usePermissions } from "@/hooks/use-permissions";
-import type { Product } from "@/types/product-unified";
+import type { Product, ProductAlert } from "@/types/product-unified";
 import { SectionGuideButton } from "@/components/dashboard/common/SectionGuideButton";
 import {
   PrintLabelsDialog,
@@ -30,6 +30,7 @@ import { PRODUCTS_GUIDE } from "@/components/dashboard/common/section-guides-dat
 import {
   exportCatalogToExcel,
   exportCatalogToCSV,
+  type ExportProductItem,
   type ImportProductRow,
 } from "@/lib/products/import-export-utils";
 import {
@@ -287,11 +288,11 @@ export default function ProductsPage() {
   const [labelsTarget, setLabelsTarget] = useState<LabelDialogProduct[] | null>(null);
   const [_showGuide, _setShowGuide] = useState(true);
 
-  const normalizedAlerts = useMemo(() => {
+  const normalizedAlerts = useMemo<ProductAlert[]>(() => {
     return alerts
       .map(alert => ({
         ...alert,
-        type: alert.type || (alert as any).alert_type || 'other'
+        type: (alert.type || (alert as { alert_type?: ProductAlert['type'] }).alert_type || 'out_of_stock') as ProductAlert['type']
       }))
       .filter(alert => !dismissedAlertIds.includes(alert.id));
   }, [alerts, dismissedAlertIds]);
@@ -543,20 +544,19 @@ export default function ProductsPage() {
     }
 
     // Exclude system fields and relations that shouldn't be duplicated
-
     const { id: _id, created_at: _created_at, updated_at: _updated_at, category: _category, supplier: _supplier, ...rest } =
-      product as any;
+      product as Product & Record<string, unknown>;
 
-    const parseDimensions = (value: unknown): Json => {
-      if (typeof value !== "string") return value as Json;
+    const parseDimensions = (value: unknown): Database['public']['Tables']['products']['Insert']['dimensions'] => {
+      if (typeof value !== "string") return value as Database['public']['Tables']['products']['Insert']['dimensions'];
       try {
-        return JSON.parse(value) as Json;
+        return JSON.parse(value) as Database['public']['Tables']['products']['Insert']['dimensions'];
       } catch {
-        return null as Json;
+        return null;
       }
     };
 
-    const duplicatedData = {
+    const duplicatedData: Database['public']['Tables']['products']['Insert'] = {
       ...rest,
       // El codigo, el nombre y el stock de la copia: sin encadenar prefijos,
       // sin arrastrar el codigo de barras del original y con el stock en cero.
@@ -586,7 +586,7 @@ export default function ProductsPage() {
   // Handle visibility toggle (Catálogo Público vs Oculto)
   const handleToggleActive = async (product: Product, newValue: boolean) => {
     const nextVisibility = newValue ? 'public' : 'hidden';
-    const updatePayload: any = {
+    const updatePayload: Database['public']['Tables']['products']['Update'] = {
       visibility: nextVisibility,
       ...(newValue && !product.is_active ? { is_active: true } : {}),
     };
@@ -607,7 +607,7 @@ export default function ProductsPage() {
   const handleToggleProductActiveState = async (product: Product, newActiveState: boolean) => {
     const result = await updateProduct(product.id, {
       is_active: newActiveState,
-    } as any);
+    });
 
     if (result.success) {
       toast.success(
@@ -645,9 +645,11 @@ export default function ProductsPage() {
     let failed = 0;
     const errors: Array<{ row: number; error: string }> = [];
 
+    type ImportMatchedProduct = Pick<Product, 'id'> & Partial<Product>;
+
     // Map de productos existentes por SKU y por código de barras para lookup rápido
-    const existingBySku = new Map<string, Product>();
-    const existingByBarcode = new Map<string, Product>();
+    const existingBySku = new Map<string, ImportMatchedProduct>();
+    const existingByBarcode = new Map<string, ImportMatchedProduct>();
     for (const p of products) {
       if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p);
       if (p.barcode) existingByBarcode.set(p.barcode.trim(), p);
@@ -667,8 +669,8 @@ export default function ProductsPage() {
           .in('sku', skusToSearch);
         if (matchedBySku) {
           for (const p of matchedBySku) {
-            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p as any);
-            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p as any);
+            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p);
+            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p);
           }
         }
       } catch (e) {
@@ -684,8 +686,8 @@ export default function ProductsPage() {
           .in('barcode', barcodesToSearch);
         if (matchedByBarcode) {
           for (const p of matchedByBarcode) {
-            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p as any);
-            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p as any);
+            if (p.sku) existingBySku.set(p.sku.toLowerCase().trim(), p);
+            if (p.barcode) existingByBarcode.set(p.barcode.trim(), p);
           }
         }
       } catch (e) {
@@ -734,7 +736,7 @@ export default function ProductsPage() {
           : '';
         const supplierId = supplierMap.get(supplierNorm) || null;
 
-        const updatePayload: any = {
+        const updatePayload: Database['public']['Tables']['products']['Update'] = {
           sale_price: row.sale_price,
           ...(row.purchase_price !== undefined ? { purchase_price: row.purchase_price } : {}),
           stock_quantity: row.stock_quantity,
@@ -756,7 +758,7 @@ export default function ProductsPage() {
           }
         } else {
           // Modo crear nuevo
-          const createPayload: any = {
+          const createPayload: Database['public']['Tables']['products']['Insert'] = {
             name: row.name,
             sku: row.sku || `IMP-${Date.now()}-${i + 1}`,
             description: row.description || '',
@@ -821,7 +823,7 @@ export default function ProductsPage() {
     }
 
     try {
-      await exportCatalogToExcel(itemsToExport as any, {
+      await exportCatalogToExcel(itemsToExport as unknown as ExportProductItem[], {
         filename: isSelected
           ? `productos_seleccionados_${itemsToExport.length}_${new Date().toISOString().split("T")[0]}`
           : `catalogo_productos_${new Date().toISOString().split("T")[0]}`,
@@ -846,7 +848,7 @@ export default function ProductsPage() {
     }
 
     try {
-      exportCatalogToCSV(itemsToExport as any, {
+      exportCatalogToCSV(itemsToExport as unknown as ExportProductItem[], {
         filename: isSelected
           ? `productos_seleccionados_${itemsToExport.length}_${new Date().toISOString().split("T")[0]}`
           : `catalogo_productos_${new Date().toISOString().split("T")[0]}`,
@@ -1126,7 +1128,7 @@ export default function ProductsPage() {
           <div className="animate-in fade-in slide-in-from-top-2 duration-200">
             <ProductSummaryOverview
               metrics={globalMetrics}
-              alerts={normalizedAlerts as any}
+              alerts={normalizedAlerts}
               canViewCost={canViewCost}
               showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
               isExpanded={isSummaryExpanded}
@@ -1387,14 +1389,17 @@ export default function ProductsPage() {
             setCreateModalOpen(false);
           }}
           product={editingProduct}
-          categories={categories as any}
-          brands={brands as any}
-          suppliers={suppliers as any}
+          categories={categories}
+          brands={brands}
+          suppliers={suppliers}
           onCatalogChange={() => refreshData()}
           onSave={async (data) => {
             try {
               if (editingProduct) {
-                const result = await updateProduct(editingProduct.id, data as any);
+                const result = await updateProduct(
+                  editingProduct.id,
+                  data as unknown as Database['public']['Tables']['products']['Update']
+                );
                 if (result.success) {
                   // Modal handles success toast and closing
                 } else {
@@ -1402,7 +1407,9 @@ export default function ProductsPage() {
                   throw new Error(result.error);
                 }
               } else {
-                const result = await createProduct(data as any);
+                const result = await createProduct(
+                  data as unknown as Database['public']['Tables']['products']['Insert']
+                );
                 if (result.success) {
                   // Modal handles success toast and closing
                 } else {
@@ -1410,7 +1417,7 @@ export default function ProductsPage() {
                   throw new Error(result.error);
                 }
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
               // Re-throw to be caught by the modal's internal handling
               throw error;
             }
