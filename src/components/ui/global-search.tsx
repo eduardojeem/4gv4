@@ -8,16 +8,23 @@ import { Button } from '@/components/ui/button'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import type { DashboardSearchType } from '@/lib/navigation/dashboard-navigation'
 
+interface SearchFilters {
+  type: DashboardSearchType | 'todos'
+  status: string
+  from?: string
+  to?: string
+}
+
 interface GlobalSearchProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSearch?: (input: { query: string; filters: any }) => Promise<Array<{ title: string; subtitle?: string; href: string }>> | Array<{ title: string; subtitle?: string; href: string }>
+  onSearch?: (input: { query: string; filters: SearchFilters }) => Promise<Array<{ title: string; subtitle?: string; href: string }>> | Array<{ title: string; subtitle?: string; href: string }>
   availableTypes?: readonly DashboardSearchType[]
 }
 
 export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: GlobalSearchProps) {
   const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState<any>({ type: 'todos', status: 'todos' })
+  const [filters, setFilters] = useState<SearchFilters>({ type: 'todos', status: 'todos' })
   const [results, setResults] = useState<Array<{ title: string; subtitle?: string; href: string }>>([])
   const [resultsCount, setResultsCount] = useState(0)
   const [_isLoading, setIsLoading] = useState(false)
@@ -103,7 +110,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
               <select
                 className="border rounded px-2 py-1 text-sm bg-background"
                 value={showsType(filters.type as DashboardSearchType) ? (filters.type ?? 'todos') : 'todos'}
-                onChange={e => setFilters(f => ({ ...f, type: e.target.value as any }))}
+                onChange={e => setFilters(f => ({ ...f, type: e.target.value as DashboardSearchType | 'todos' }))}
                 aria-label="Filtrar por tipo"
               >
                 <option value="todos">Todos</option>
@@ -119,7 +126,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: G
               <select
                 className="border rounded px-2 py-1 text-sm bg-background"
                 value={filters.status ?? 'todos'}
-                onChange={e => setFilters(f => ({ ...f, status: e.target.value as any }))}
+                onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
                 aria-label="Filtrar por estado de usuario"
               >
                 <option value="todos">Todos</option>

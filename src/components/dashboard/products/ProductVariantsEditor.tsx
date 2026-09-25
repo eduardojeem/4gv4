@@ -22,12 +22,24 @@ import {
 } from '@/lib/products/variant-combinations'
 import type {
   ProductAttributeDefinition,
+  ProductVariantInput,
   ProductVariantsPayload,
 } from '@/lib/products/variant-contract'
 import {
   getVerticalAttributeSuggestions,
   getVerticalProductCopy,
 } from '@/lib/products/vertical-attributes'
+
+interface LegacyVariantFields {
+  variant_name?: string
+  purchase_price?: number
+  sale_price?: number
+  wholesale_price?: number
+  stock_quantity?: number
+  client_key?: string
+}
+
+type VariantItem = ProductVariantInput & Partial<LegacyVariantFields>
 
 export interface ProductVariantsEditorProps {
   value: ProductVariantsPayload
@@ -761,12 +773,13 @@ export function ProductVariantsEditor({
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {value.variants.map((variant, index) => {
-                      const vName = variant.name || (variant as any).variant_name || `Variante ${index + 1}`
-                      const vPurchase = Number(variant.purchasePrice ?? (variant as any).purchase_price ?? 0)
-                      const vSale = Number(variant.salePrice ?? (variant as any).sale_price ?? 0)
-                      const vWholesale = variant.wholesalePrice !== undefined ? variant.wholesalePrice : (variant as any).wholesale_price
-                      const vStock = Number(variant.stockQuantity ?? (variant as any).stock_quantity ?? 0)
-                      const vKey = variant.clientKey || (variant as any).client_key || (variant as any).id || String(index)
+                      const v = variant as VariantItem
+                      const vName = v.name || v.variant_name || `Variante ${index + 1}`
+                      const vPurchase = Number(v.purchasePrice ?? v.purchase_price ?? 0)
+                      const vSale = Number(v.salePrice ?? v.sale_price ?? 0)
+                      const vWholesale = v.wholesalePrice !== undefined ? v.wholesalePrice : v.wholesale_price
+                      const vStock = Number(v.stockQuantity ?? v.stock_quantity ?? 0)
+                      const vKey = v.clientKey || v.client_key || v.id || String(index)
                       const margin = vPurchase > 0 && vSale > 0
                         ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                         : null
@@ -855,12 +868,13 @@ export function ProductVariantsEditor({
               <div className="space-y-2 md:hidden">
                 {value.variants.map((variant, index) => {
                   const isExpanded = expandedVariant === index
-                  const vName = variant.name || (variant as any).variant_name || `Variante ${index + 1}`
-                  const vPurchase = Number(variant.purchasePrice ?? (variant as any).purchase_price ?? 0)
-                  const vSale = Number(variant.salePrice ?? (variant as any).sale_price ?? 0)
-                  const vWholesale = variant.wholesalePrice !== undefined ? variant.wholesalePrice : (variant as any).wholesale_price
-                  const vStock = Number(variant.stockQuantity ?? (variant as any).stock_quantity ?? 0)
-                  const vKey = variant.clientKey || (variant as any).client_key || (variant as any).id || String(index)
+                  const v = variant as VariantItem
+                  const vName = v.name || v.variant_name || `Variante ${index + 1}`
+                  const vPurchase = Number(v.purchasePrice ?? v.purchase_price ?? 0)
+                  const vSale = Number(v.salePrice ?? v.sale_price ?? 0)
+                  const vWholesale = v.wholesalePrice !== undefined ? v.wholesalePrice : v.wholesale_price
+                  const vStock = Number(v.stockQuantity ?? v.stock_quantity ?? 0)
+                  const vKey = v.clientKey || v.client_key || v.id || String(index)
                   const margin = vPurchase > 0 && vSale > 0
                     ? (((vSale - vPurchase) / vSale) * 100).toFixed(0)
                     : null

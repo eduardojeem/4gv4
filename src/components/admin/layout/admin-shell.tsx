@@ -70,7 +70,7 @@ export function AdminShell({ active, onNavigate, topRightActions, onContextActio
   }, [handleKeydown])
 
   // Búsqueda global con filtros
-  const handleSearch = useCallback((input: { query: string; filters: { type?: 'usuarios' | 'seguridad' | 'todos' } }) => {
+  const handleSearch = useCallback((input: { query: string; filters: { type?: string } }) => {
     const q = input.query.toLowerCase()
     const type = input.filters?.type ?? 'todos'
     const items = visibleCategories.flatMap(cat => cat.items.map(i => ({

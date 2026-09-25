@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Building2, User, Star, Tag, AlertCircle } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -56,8 +57,10 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
   const [activeTab, setActiveTab] = useState('basic')
   const [generalError, setGeneralError] = useState<string | null>(null)
 
-  const form = useForm<any>({
-    resolver: zodResolver(supplierSchema) as any,
+  type SupplierFormValues = z.input<typeof supplierSchema>
+
+  const form = useForm<SupplierFormValues>({
+    resolver: zodResolver(supplierSchema),
     defaultValues: {
       name: supplier?.name || '',
       contact_name: supplier?.contact_name || '',
@@ -68,8 +71,8 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
       country: supplier?.country || '',
       postal_code: supplier?.postal_code || '',
       website: supplier?.website || '',
-      business_type: (supplier?.business_type as any) || 'distributor',
-      status: (supplier?.status as any) || 'active',
+      business_type: (supplier?.business_type as SupplierFormValues['business_type']) || 'distributor',
+      status: (supplier?.status as SupplierFormValues['status']) || 'active',
       rating: supplier?.rating || 0,
       notes: supplier?.notes || '',
     },
@@ -79,7 +82,7 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
   useEffect(() => {
     if (isOpen) {
 
-      const values: any = {
+      const values: SupplierFormValues = {
         name: supplier?.name || '',
         contact_name: supplier?.contact_name || '',
         email: supplier?.email || '',
@@ -89,8 +92,8 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
         country: supplier?.country || '',
         postal_code: supplier?.postal_code || '',
         website: supplier?.website || '',
-        business_type: (supplier?.business_type as any) || 'distributor',
-        status: (supplier?.status as any) || 'active',
+        business_type: (supplier?.business_type as SupplierFormValues['business_type']) || 'distributor',
+        status: (supplier?.status as SupplierFormValues['status']) || 'active',
         rating: supplier?.rating || 0,
         notes: supplier?.notes || '',
       }
@@ -98,7 +101,7 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
     }
   }, [isOpen, supplier, mode, form])
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: SupplierFormValues) => {
     setGeneralError(null)
     try {
       await onSave(data)
@@ -124,7 +127,7 @@ function SupplierModalContent({ isOpen, onClose, onSave, supplier, mode, loading
   }
 
   // Handle form validation errors to switch tabs
-  const onError = (errors: any) => {
+  const onError = (errors: FieldErrors<SupplierFormValues>) => {
     const errorFields = Object.keys(errors)
     if (errorFields.length > 0) {
       const firstErrorField = errorFields[0]

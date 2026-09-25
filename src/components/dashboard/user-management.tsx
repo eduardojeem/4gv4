@@ -54,8 +54,10 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
-import { ROLE_PERMISSIONS } from '@/lib/auth/roles-permissions'
+import { ROLE_PERMISSIONS, type UserRole } from '@/lib/auth/roles-permissions'
 import { format } from 'date-fns'
+
+const isUserRole = (r: string): r is UserRole => r in ROLE_PERMISSIONS
 
 type DashboardUserRole =
   | 'super_admin'
@@ -116,7 +118,8 @@ function RoleBadge({ role }: { role: DashboardUserRole }) {
     }
   }
 
-  const config = (roleConfig as any)[role] || roleConfig.viewer
+  type RoleConfigEntry = { label: string; color: string; icon: React.ElementType }
+  const config = (roleConfig as Record<string, RoleConfigEntry>)[role] || roleConfig.viewer
   const Icon = config.icon
 
   return (
@@ -151,7 +154,7 @@ function EditUserDialogContent({
   const handleSave = () => {
     if (!user || !formData.role) return
 
-    if (!canManageUser(user.role as any)) {
+    if (isUserRole(user.role) && !canManageUser(user.role)) {
       toast.error('Sin permisos', {
         description: 'No tienes permisos para editar este usuario.'
       })
@@ -250,7 +253,7 @@ function EditUserDialogContent({
 
 // Componente para mostrar permisos de un rol
 function RolePermissions({ role }: { role: DashboardUserRole }) {
-  const roleData = (ROLE_PERMISSIONS as any)[role] || {
+  const roleData = (isUserRole(role) ? ROLE_PERMISSIONS[role] : undefined) || {
     description: role,
     permissions: []
   }
@@ -305,7 +308,7 @@ export default function UserManagement() {
         if (error) throw error
 
         if (data) {
-          const mappedUsers: User[] = data.map((profile: any) => ({
+          const mappedUsers: User[] = data.map((profile) => ({
             id: profile.id,
             email: profile.email || '', 
             name: profile.full_name || 'Sin nombre',
@@ -366,7 +369,7 @@ export default function UserManagement() {
   }, [users])
 
   const handleEditUser = (user: User) => {
-    if (!canManageUser(user.role as any)) {
+    if (isUserRole(user.role) && !canManageUser(user.role)) {
       toast.error('Sin permisos', {
         description: 'No tienes permisos para editar este usuario.'
       })
@@ -382,7 +385,7 @@ export default function UserManagement() {
 
   const handleToggleUserStatus = (userId: string) => {
     const user = users.find(u => u.id === userId)
-    if (!user || !canManageUser(user.role as any)) {
+    if (!user || (isUserRole(user.role) && !canManageUser(user.role))) {
       toast.error('Sin permisos', {
         description: 'No tienes permisos para modificar este usuario.'
       })
@@ -524,7 +527,7 @@ export default function UserManagement() {
                     <SelectItem value="viewer">Visualizador</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
+                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'active' | 'inactive')}>
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
