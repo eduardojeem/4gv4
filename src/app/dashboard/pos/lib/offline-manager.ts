@@ -72,7 +72,7 @@ export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'error'
 
 export interface MetadataEntry {
   key: string
-  value: any
+  value: unknown
   updated_at: Date
 }
 
@@ -225,7 +225,7 @@ export class OfflineManager {
   /**
    * Cache products in IndexedDB
    */
-  async cacheProducts(products: any[]): Promise<void> {
+  async cacheProducts(products: Array<Partial<CachedProduct> & { id: string }>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
     const tx = this.db.transaction('products', 'readwrite')
@@ -450,7 +450,7 @@ export class OfflineManager {
   /**
    * Set metadata
    */
-  async setMetadata(key: string, value: any): Promise<void> {
+  async setMetadata(key: string, value: unknown): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
     await this.db.put('metadata', {
@@ -463,11 +463,11 @@ export class OfflineManager {
   /**
    * Get metadata
    */
-  async getMetadata(key: string): Promise<any> {
+  async getMetadata<T = unknown>(key: string): Promise<T | undefined> {
     if (!this.db) throw new Error('Database not initialized')
 
     const entry = await this.db.get('metadata', key)
-    return entry?.value
+    return entry?.value as T | undefined
   }
 
   // ==========================================================================
@@ -512,7 +512,7 @@ export class OfflineManager {
     const [cachedProducts, pendingSales, lastSync] = await Promise.all([
       this.db.count('products'),
       this.getPendingSales().then((sales) => sales.length),
-      this.getMetadata('last_sync'),
+      this.getMetadata<string>('last_sync'),
     ])
 
     // Get storage usage

@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import type { User } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/types'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
-  const [error, setError] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<Database['public']['Tables']['profiles']['Row'] | null>(null)
+  const [error, setError] = useState<unknown>(null)
   
   const supabase = createSupabaseClient()
   

@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function CheckUserPage() {
-  const [data, setData] = useState<any>(null)
-  const [error, setError] = useState<any>(null)
+  const [data, setData] = useState<Record<string, unknown> | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('jeem101595@gmail.com')
 
@@ -14,7 +14,7 @@ export default function CheckUserPage() {
     const supabase = createClient()
     try {
       // 1. Check profiles table
-      const { data: profile, error: profileError } = await (supabase as any)
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', email)
@@ -26,7 +26,7 @@ export default function CheckUserPage() {
       // 2. Check user_roles table
       let roleData = null
       if (profile) {
-        const { data: roles, error: _roleError } = await (supabase as any)
+        const { data: roles, error: _roleError } = await supabase
           .from('user_roles')
           .select('*')
           .eq('user_id', profile.id)

@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
+import type { Database } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/client'
 import {
   Dialog,
@@ -30,7 +31,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
-import { getCreditDisplayInfo, resolveInstallmentStatus } from '@/lib/credits/display'
+import { getCreditDisplayInfo, resolveInstallmentStatus, type SaleLike, type SaleItemLike } from '@/lib/credits/display'
 import {
   Calendar, DollarSign, Percent, TrendingUp,
   Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
@@ -83,8 +84,8 @@ interface CreditDetailDialogProps {
     payments: PaymentItem[]
     remainingBalance: number
     paidAmount: number
-    sales?: any[]
-    saleItems?: any[]
+    sales?: SaleLike[]
+    saleItems?: SaleItemLike[]
     onPayInstallment?: (installmentId: string) => void
     /**
      * Todos los creditos y cuotas de la tienda. El estado de cuenta abarca al
@@ -149,7 +150,7 @@ export function CreditDetailDialog({
 }: CreditDetailDialogProps) {
     const { format, changeFormat, issuer } = useCreditPrinting()
     const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>({})
-    const [customerDetails, setCustomerDetails] = useState<any>(null)
+    const [customerDetails, setCustomerDetails] = useState<Database['public']['Tables']['customers']['Row'] | null>(null)
 
     useEffect(() => {
         if (open && credit?.customer_id) {
@@ -681,7 +682,7 @@ export function CreditDetailDialog({
                                     groupedPurchases.map((group, groupIdx) => {
                                         const isExpanded = expandedSales[group.id] ?? (groupIdx === 0)
                                         const productsSummary = group.items && group.items.length > 0
-                                            ? group.items.map((item: any) => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ')
+                                            ? group.items.map((item: { quantity?: number; product?: { name?: string } }) => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ')
                                             : group.isLegacy ? 'Cuotas consolidadas del saldo anterior' : 'Sin productos registrados'
 
                                         const hasLate = group.installments.some(inst => {

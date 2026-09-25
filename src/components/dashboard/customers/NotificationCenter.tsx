@@ -81,7 +81,7 @@ export interface Notification {
     userAgent?: string
     referrer?: string
     sessionId?: string
-    [key: string]: any
+    [key: string]: unknown
   }
   actions?: NotificationAction[]
   attachments?: NotificationAttachment[]
@@ -132,7 +132,7 @@ export interface NotificationTemplate {
     timeRange?: { start: string; end: string }
     minAmount?: number
     maxAmount?: number
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -143,7 +143,7 @@ export interface NotificationRule {
   enabled: boolean
   trigger: {
     event: string
-    conditions: Record<string, any>
+    conditions: Record<string, unknown>
   }
   template: NotificationTemplate
   frequency: 'immediate' | 'hourly' | 'daily' | 'weekly'
@@ -1253,7 +1253,11 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
                 </SelectContent>
               </Select>
 
-              <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <Select value={sortBy} onValueChange={(value) => {
+                if (value === 'timestamp' || value === 'priority' || value === 'category') {
+                  setSortBy(value)
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
