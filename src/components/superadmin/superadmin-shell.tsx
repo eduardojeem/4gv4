@@ -24,6 +24,7 @@ import {
   Mail,
   Menu,
   MoreHorizontal,
+  MousePointerClick,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -118,6 +119,7 @@ const navItems: NavItem[] = [
       { title: 'Panel general', href: '/superadmin', icon: BarChart3 },
       { title: 'Analiticas', href: '/superadmin/analytics', icon: Activity },
       { title: 'Metricas SaaS', href: '/superadmin/saas-metrics', icon: Database },
+      { title: 'Visitas web', href: '/superadmin/visitas', icon: MousePointerClick },
     ],
   },
   {

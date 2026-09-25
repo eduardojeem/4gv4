@@ -13,7 +13,7 @@ import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-chec
 import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
-import { StorefrontVisitTracker } from '@/components/public/StorefrontVisitTracker'
+import { SiteAnalyticsTracker } from '@/components/analytics/SiteAnalyticsTracker'
 import {
   MAX_STORE_ANNOUNCEMENTS,
   normalizeAnnouncementList,
@@ -88,7 +88,7 @@ export default async function OrganizationPublicLayout({
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
             <StoreMobileBottomNav offersEnabled={settings?.offers_section?.enabled !== false} />
             <WhatsAppFloatButton />
-            <StorefrontVisitTracker organizationId={storefrontOrganization.id} />
+            <SiteAnalyticsTracker />
           </div>
         </CartProviderWithDrawer>
       </StorefrontStyleProvider>

@@ -14,6 +14,7 @@ import {
     CreditCard,
     Star,
     WalletCards,
+    MousePointerClick,
     type LucideIcon
 } from 'lucide-react'
 import type { OrganizationModule } from '@/lib/organization/business-profile'
@@ -87,6 +88,14 @@ export const adminNavCategories: NavCategory[] = [
                 description: 'Análisis avanzado de datos',
                 permissions: ['analytics.read'],
                 module: 'analytics'
+            },
+            {
+                key: 'website-visits',
+                label: 'Visitas web',
+                icon: MousePointerClick,
+                href: '/admin/visitas',
+                description: 'Visitas e interacciones de tu tienda online',
+                permissions: ['analytics.read']
             }
         ]
     },

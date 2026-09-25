@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { MarketplacePublicNav } from '@/components/public/marketplace-public-nav'
 import { MarketplaceMobileBottomNav } from '@/components/public/MarketplaceMobileBottomNav'
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/branding'
+import { SiteAnalyticsTracker } from '@/components/analytics/SiteAnalyticsTracker'
 
 // Pisa el manifest del layout raiz (que es el del comerciante): quien instala
 // desde el marketplace debe recibir la app del marketplace.
@@ -20,6 +21,7 @@ export default async function MarketplaceLayout({
       <MarketplacePublicNav initialBranding={branding} />
       {children}
       <MarketplaceMobileBottomNav />
+      <SiteAnalyticsTracker />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import type { PublicProduct } from '@/types/public'
 import { getTenantSlugFromPathname as getSharedTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { trackSiteEvent } from '@/lib/site-analytics/client'
 
 export type PublicCartItem = {
   cartItemId: string
@@ -171,6 +172,9 @@ export function addPublicProductToCart({
       ].filter((item) => item.quantity > 0)
 
   setPublicCartItems(tenantSlug, next)
+  if (nextQuantity > (existing?.quantity ?? 0)) {
+    trackSiteEvent('add_to_cart', { entityId: product.id })
+  }
   return {
     items: next,
     quantity: nextQuantity,
