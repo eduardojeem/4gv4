@@ -26,7 +26,7 @@ export interface POSError {
   severity: ErrorSeverity
   message: string
   code?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
   timestamp: Date
   context?: string
   recoverable?: boolean
@@ -363,7 +363,7 @@ export const clearErrorLog = () => posErrorHandler.clearErrorLog()
 export const getRecentErrors = (limit?: number) => posErrorHandler.getRecentErrors(limit)
 
 // Wrapper para errores comunes
-export const handleNetworkError = (message: string, code?: string, details?: any) => {
+export const handleNetworkError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.NETWORK,
     severity: ErrorSeverity.MEDIUM,
@@ -374,7 +374,7 @@ export const handleNetworkError = (message: string, code?: string, details?: any
   })
 }
 
-export const handlePaymentError = (message: string, code?: string, details?: any) => {
+export const handlePaymentError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.PAYMENT,
     severity: ErrorSeverity.HIGH,
@@ -385,7 +385,7 @@ export const handlePaymentError = (message: string, code?: string, details?: any
   })
 }
 
-export const handleInventoryError = (message: string, code?: string, details?: any) => {
+export const handleInventoryError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.INVENTORY,
     severity: ErrorSeverity.MEDIUM,
@@ -396,7 +396,7 @@ export const handleInventoryError = (message: string, code?: string, details?: a
   })
 }
 
-export const handleValidationError = (message: string, code?: string, details?: any) => {
+export const handleValidationError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.VALIDATION,
     severity: ErrorSeverity.LOW,

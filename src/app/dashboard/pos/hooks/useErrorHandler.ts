@@ -25,10 +25,10 @@ interface UseErrorHandlerReturn {
   
   // Funciones de manejo
   handleError: (error: Partial<POSError> & { message: string; type: ErrorType }) => Promise<boolean>
-  handleNetworkError: (message: string, code?: string, details?: any) => Promise<boolean>
-  handlePaymentError: (message: string, code?: string, details?: any) => Promise<boolean>
-  handleInventoryError: (message: string, code?: string, details?: any) => Promise<boolean>
-  handleValidationError: (message: string, code?: string, details?: any) => Promise<boolean>
+  handleNetworkError: (message: string, code?: string, details?: Record<string, unknown>) => Promise<boolean>
+  handlePaymentError: (message: string, code?: string, details?: Record<string, unknown>) => Promise<boolean>
+  handleInventoryError: (message: string, code?: string, details?: Record<string, unknown>) => Promise<boolean>
+  handleValidationError: (message: string, code?: string, details?: Record<string, unknown>) => Promise<boolean>
   
   // Utilidades
   clearErrors: () => void
@@ -70,25 +70,25 @@ export const useErrorHandler = (): UseErrorHandlerReturn => {
   }, [updateErrorState])
 
   // Wrappers para errores específicos
-  const handleNetworkErrorWithState = useCallback(async (message: string, code?: string, details?: any) => {
+  const handleNetworkErrorWithState = useCallback(async (message: string, code?: string, details?: Record<string, unknown>) => {
     const result = await handleNetworkError(message, code, details)
     updateErrorState()
     return result
   }, [updateErrorState])
 
-  const handlePaymentErrorWithState = useCallback(async (message: string, code?: string, details?: any) => {
+  const handlePaymentErrorWithState = useCallback(async (message: string, code?: string, details?: Record<string, unknown>) => {
     const result = await handlePaymentError(message, code, details)
     updateErrorState()
     return result
   }, [updateErrorState])
 
-  const handleInventoryErrorWithState = useCallback(async (message: string, code?: string, details?: any) => {
+  const handleInventoryErrorWithState = useCallback(async (message: string, code?: string, details?: Record<string, unknown>) => {
     const result = await handleInventoryError(message, code, details)
     updateErrorState()
     return result
   }, [updateErrorState])
 
-  const handleValidationErrorWithState = useCallback(async (message: string, code?: string, details?: any) => {
+  const handleValidationErrorWithState = useCallback(async (message: string, code?: string, details?: Record<string, unknown>) => {
     const result = await handleValidationError(message, code, details)
     updateErrorState()
     return result
@@ -188,7 +188,7 @@ export const useNetworkErrorHandler = () => {
 
   return {
     executeWithRetry,
-    withNetworkErrorHandling: (operation: () => Promise<any>, context?: string) =>
+    withNetworkErrorHandling: <T>(operation: () => Promise<T>, context?: string) =>
       withErrorHandling(operation, ErrorType.NETWORK, context)
   }
 }
