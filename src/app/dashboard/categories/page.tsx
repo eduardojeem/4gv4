@@ -98,7 +98,7 @@ export default function CategoriesPage() {
   const subCount = useMemo(() => categories.filter(c => !!c.parent_id).length, [categories])
   const withProducts = useMemo(
     () =>
-      categories.filter((c) => (((c as any).products_count ?? c.stats?.product_count ?? 0) > 0)).length,
+      categories.filter((c) => ((c.products_count ?? c.stats?.product_count ?? 0) > 0)).length,
     [categories]
   )
 
@@ -191,7 +191,7 @@ export default function CategoriesPage() {
     if (failCount > 0) toast.error(`No se pudieron actualizar ${failCount} categorías`)
   }
 
-  const handleModalSubmit = async (data: any) => {
+  const handleModalSubmit = async (data: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => {
     if ((editingCategory && !canUpdate) || (!editingCategory && !canCreate)) return Promise.reject()
     if (editingCategory) {
       const res = await updateCategory(editingCategory.id, data)
@@ -456,7 +456,7 @@ export default function CategoriesPage() {
         </div>
 
         {/* ─── VIEWS ─── */}
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="space-y-4">
+        <Tabs value={viewMode} onValueChange={(v) => { if (v === 'grid' || v === 'list' || v === 'tree') setViewMode(v) }} className="space-y-4">
           <TabsList className="h-10 bg-muted/60 p-1 rounded-xl border border-border/60">
             <TabsTrigger value="grid" className="gap-1.5 text-xs rounded-lg font-semibold data-[state=active]:bg-card data-[state=active]:shadow-xs">
               <LayoutGrid className="h-3.5 w-3.5" /> Grid

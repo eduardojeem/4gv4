@@ -145,10 +145,7 @@ export default function ProductListOptimized({
           <TableRow className="bg-gray-50/50">
             <TableHead className="w-12">
               <Checkbox
-                checked={allSelected}
-                ref={(el) => {
-                  if (el) (el as any).indeterminate = someSelected
-                }}
+                checked={someSelected ? 'indeterminate' : allSelected}
                 onCheckedChange={(checked) => onProductSelectAll?.(!!checked)}
               />
             </TableHead>
@@ -190,7 +187,7 @@ export default function ProductListOptimized({
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 rounded-lg">
-                      <AvatarImage src={(product as any).image || (product as any).images?.[0]} alt={product.name} />
+                      <AvatarImage src={product.image || product.images?.[0] || undefined} alt={product.name} />
                       <AvatarFallback className="rounded-lg bg-gray-100 text-gray-600 text-sm">
                         {product.name.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
@@ -204,7 +201,7 @@ export default function ProductListOptimized({
 
                 <TableCell>
                   <Badge variant="outline" className="font-normal">
-                    {typeof product.category === 'string' ? product.category : (product.category as any)?.name || 'Sin categoría'}
+                    {typeof product.category === 'string' ? product.category : product.category?.name || 'Sin categoría'}
                   </Badge>
                 </TableCell>
 

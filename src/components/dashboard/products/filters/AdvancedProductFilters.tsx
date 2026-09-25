@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ElementType, type ReactNode } from 'react'
 import {
   Filter,
   Search, ChevronDown,
@@ -39,7 +39,7 @@ import { ProductFilters } from '@/hooks/products/types'
 
 interface AdvancedProductFiltersProps {
   className?: string
-  onFiltersChange?: (filters: any) => void
+  onFiltersChange?: (filters: ProductFilters) => void
   showPresets?: boolean
   collapsible?: boolean
 }
@@ -62,7 +62,7 @@ const marginStatusOptions = [
 type FilterPreset = {
   id: string
   name: string
-  icon: any
+  icon: ElementType
   getFilters: () => Partial<ProductFilters>
 }
 
@@ -100,8 +100,8 @@ const filterPresets: FilterPreset[] = [
 
 const FilterSection = ({ title, icon: Icon, children }: {
   title: string
-  icon: any
-  children: React.ReactNode
+  icon: ElementType
+  children: ReactNode
 }) => (
   <div className="space-y-3">
     <div className="flex items-center space-x-2">
@@ -147,7 +147,7 @@ export const AdvancedProductFilters = ({
     }
   }
 
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = <K extends keyof ProductFilters>(key: K, value: ProductFilters[K]) => {
     updateFilters({ [key]: value })
     setActivePreset(null) // Desactivar preset al cambiar filtros manualmente
   }

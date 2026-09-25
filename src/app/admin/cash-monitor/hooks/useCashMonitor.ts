@@ -8,6 +8,9 @@ import { withBranchFilter } from '@/lib/branches/client'
 import { calculateSessionFigures, openDurationHours } from '@/lib/cash/session-figures'
 import { buildSessionPeriodFilter } from '@/lib/cash/session-period-filter'
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import type { Database } from '@/lib/supabase/types'
+
+type CashClosureRow = Database['public']['Tables']['cash_closures']['Row']
 import type {
   CashSession,
   CashMovementAdmin,
@@ -122,7 +125,7 @@ export function useCashMonitor() {
       // y nada avisaba: un mes con varias cajas pasa ese corte facil.
       const PAGE_SIZE = 500
       const SAFETY_CAP = 3000
-      const collected: any[] = []
+      const collected: CashClosureRow[] = []
       let totalAvailable = 0
 
       for (let offset = 0; offset < SAFETY_CAP; offset += PAGE_SIZE) {
@@ -372,19 +375,18 @@ export function useCashMonitor() {
 
       // Conteos exactos, aparte de la lista: la lista es lo ultimo que paso, los
       // contadores son cuantas hay.
-      const countQuery = (extra: (q: any) => any) => {
-        let q = supabase!
+      const buildAlertCountBase = () => {
+        const q = supabase!
           .from('cash_alerts')
           .select('id', { count: 'exact', head: true })
           .eq('organization_id', organization.id)
           .eq('is_resolved', false)
-        q = withBranchFilter(q, selectedBranchId)
-        return extra(q)
+        return withBranchFilter(q, selectedBranchId)
       }
 
       const [{ count: unresolved }, { count: critical }] = await Promise.all([
-        countQuery((q) => q),
-        countQuery((q) => q.eq('severity', 'critical')),
+        buildAlertCountBase(),
+        buildAlertCountBase().eq('severity', 'critical'),
       ])
 
       setAlertCounts({ unresolved: unresolved ?? 0, critical: critical ?? 0 })

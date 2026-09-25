@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
-import { Product } from '@/types/products'
+import { Product, ProductMovement } from '@/types/products'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -566,7 +566,7 @@ export function ProductDetailsDialogV2({
                     </Card>
                   )}
 
-                  {(product as any).offer_price && (product as any).offer_price > 0 && (
+                  {product.offer_price && product.offer_price > 0 && (
                     <Card className="shadow-md border-2 border-orange-200 dark:border-orange-900/30 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-background">
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between mb-4">
@@ -582,7 +582,7 @@ export function ProductDetailsDialogV2({
                             🔥 Precio de Oferta
                           </div>
                           <div className="text-4xl font-bold text-orange-600 dark:text-orange-400">
-                            {formatCurrency((product as any).offer_price)}
+                            {formatCurrency(product.offer_price)}
                           </div>
                           <div className="text-sm text-muted-foreground pt-1">
                             Precio promocional especial
@@ -873,7 +873,7 @@ export function ProductDetailsDialogV2({
                     <CardContent className="p-4">
                       <div className="text-sm font-medium mb-3">Movimientos Recientes</div>
                       <div className="space-y-3">
-                        {product.recent_movements.map((movement: any) => (
+                        {product.recent_movements.map((movement: ProductMovement) => (
                           <div 
                             key={movement.id} 
                             className="flex items-center justify-between p-3 bg-muted rounded-lg"
