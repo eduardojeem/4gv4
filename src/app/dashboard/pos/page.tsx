@@ -76,6 +76,7 @@ import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useHeldSales, HeldSale } from './hooks/useHeldSales'
 import { HeldSalesModal } from './components/HeldSalesModal'
 import { POSShortcutsBar } from './components/POSShortcutsBar'
+import { POSWorkspace } from './components/POSWorkspace'
 import { POSRepairChargeModal, type RepairItemData } from './components/POSRepairChargeModal'
 import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
 import { POSProductDetailDialog } from './components/POSProductDetailDialog'
@@ -2017,7 +2018,9 @@ function POSPageContent() {
           </div>
 
           {/* Contenido principal con productos y carrito */}
-          <div className="flex-1 min-h-0 flex overflow-hidden bg-muted/5">
+          <POSWorkspace
+            statusMessage={checkoutEligibility.reason}
+            catalog={<>
             {/* Lista de productos */}
             <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
               <div className="mb-2.5 space-y-2.5">
@@ -2271,7 +2274,8 @@ function POSPageContent() {
                 </div>
               )}
             </div>
-
+            </>}
+            cart={<>
             {/* Carrito lateral mejorado - responsive */}
             <div id="pos-cart-panel" tabIndex={-1} className="hidden md:flex min-h-0 flex-col w-72 lg:w-80 xl:w-[22rem] h-full transition-all duration-300 z-20 p-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40">
               <POSCart
@@ -2302,7 +2306,8 @@ function POSPageContent() {
                 onOpenRepairModal={repairsEnabled ? () => setIsRepairModalOpen(true) : undefined}
               />
             </div>
-          </div>
+            </>}
+          />
         </div>
       </div>
 

@@ -87,7 +87,7 @@ export const ProductCard = memo(({
           isOutOfStock && 'opacity-50'
         )}
         onKeyDown={handleKeyDown}
-        tabIndex={0}
+        tabIndex={isOutOfStock ? -1 : 0}
         role="button"
         aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.${financingAriaLabel}`}
       >
@@ -230,7 +230,7 @@ export const ProductCard = memo(({
       )}
       onClick={() => !isOutOfStock && addToCart(product)}
       onKeyDown={handleKeyDown}
-      tabIndex={0}
+      tabIndex={isOutOfStock ? -1 : 0}
       role="button"
       aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.${financingAriaLabel}`}
     >
@@ -300,7 +300,7 @@ export const ProductCard = memo(({
         <div className="p-1 sm:p-2.5 flex flex-col flex-1 justify-between gap-0 sm:gap-1">
           {/* Titulo y Categoria */}
           <div className="mb-0.5">
-            <h3 className="font-semibold text-[10px] sm:text-xs leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
+            <h3 className="font-semibold text-[13px] leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
               {product.name}
             </h3>
             {product.is_active === false && (
@@ -309,14 +309,14 @@ export const ProductCard = memo(({
                 Oculto
               </span>
             )}
-            <p className="text-[8px] sm:text-[9px] text-muted-foreground mt-0.5 truncate leading-none">
+            <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
               {product.category?.name || product.category_id}
             </p>
           </div>
 
           {/* Stock indicator */}
           {showStock && stockStatus && !isOutOfStock && (
-            <div className="flex items-center gap-1 text-[8px] sm:text-[9px] text-muted-foreground mb-0.5 sm:mb-0">
+            <div className="mb-0.5 flex items-center gap-1 text-[11px] text-muted-foreground sm:mb-0">
               <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", stockBarColor)} />
               <span className="truncate tabular-nums font-medium">
                 {stock} disp.
@@ -325,7 +325,7 @@ export const ProductCard = memo(({
           )}
               {featuredCreditPlan && (
             <div
-              className="rounded border border-sky-500/20 bg-sky-500/10 px-1 py-0.5 sm:px-1.5 sm:py-1 text-[7.5px] sm:text-[9px] leading-[1.1] text-sky-800 dark:text-sky-200 cursor-pointer hover:bg-sky-500/20 hover:border-sky-500/30 transition-colors mb-0.5"
+              className="mb-0.5 rounded border border-sky-500/20 bg-sky-500/10 px-1.5 py-1 text-[11px] leading-tight text-sky-800 transition-colors hover:border-sky-500/30 hover:bg-sky-500/20 dark:text-sky-200"
               onClick={(e) => {
                 if (onViewDetail) {
                   e.stopPropagation()
@@ -352,7 +352,7 @@ export const ProductCard = memo(({
                   {formatCurrency(price)}
                 </span>
               )}
-              <span className="text-[10px] sm:text-sm font-bold text-primary leading-none tracking-tight">
+              <span className="text-[13px] font-bold leading-none tracking-tight text-primary sm:text-sm">
                 {formatCurrency(appliedPrice)}
               </span>
             </div>
@@ -363,7 +363,7 @@ export const ProductCard = memo(({
               disabled={isOutOfStock}
               size="sm"
               className={cn(
-                "h-5 px-1 sm:h-6.5 sm:px-2 text-[9px] sm:text-[10.5px] font-semibold rounded sm:rounded-md shadow-xs transition-all",
+                "min-h-10 min-w-10 px-2 text-[11px] font-semibold rounded-md shadow-xs transition-all",
                 cartQuantity > 0
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
