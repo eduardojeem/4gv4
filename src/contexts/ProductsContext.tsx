@@ -35,6 +35,23 @@ export interface Product {
     is_active?: boolean
 }
 
+interface ProductDbRow {
+    id: string
+    name: string
+    description?: string | null
+    sku: string
+    category_id?: string | null
+    category?: { name?: string | null } | null
+    sale_price: number
+    purchase_price?: number | null
+    stock_quantity: number
+    min_stock: number
+    images?: string[] | null
+    is_active?: boolean
+    created_at: string
+    updated_at: string
+}
+
 export interface ProductFormData {
     name: string
     description?: string
@@ -111,7 +128,7 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
 
             if (fetchError) throw fetchError
 
-            const mappedProducts: Product[] = (data || []).map((item: any) => ({
+            const mappedProducts: Product[] = ((data as ProductDbRow[] | null) || []).map((item) => ({
                 id: item.id,
                 name: item.name,
                 description: item.description,
@@ -211,7 +228,7 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
         try {
             setError(null)
 
-            const dbData: any = {}
+            const dbData: Record<string, unknown> = {}
             if (data.name !== undefined) dbData.name = data.name
             if (data.description !== undefined) dbData.description = data.description
             if (data.sku !== undefined) dbData.sku = data.sku
@@ -416,31 +433,31 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
                 { event: '*', schema: 'public', table: 'products' },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
-                        const newProduct = payload.new as any
+                        const newProduct = payload.new as ProductDbRow
                         const mappedProduct: Product = {
                             id: newProduct.id,
                             name: newProduct.name,
-                            description: newProduct.description,
+                            description: newProduct.description || undefined,
                             sku: newProduct.sku,
                             category: 'Uncategorized',
                             price: newProduct.sale_price,
-                            cost: newProduct.purchase_price,
+                            cost: newProduct.purchase_price || undefined,
                             stock: newProduct.stock_quantity,
                             min_stock: newProduct.min_stock,
                             image_url: newProduct.images?.[0] || null,
                             image: newProduct.images?.[0] || null,
-                            active: newProduct.is_active,
+                            active: !!newProduct.is_active,
                             created_at: newProduct.created_at,
                             updated_at: newProduct.updated_at,
                             sale_price: newProduct.sale_price,
-                            purchase_price: newProduct.purchase_price,
+                            purchase_price: newProduct.purchase_price || undefined,
                             stock_quantity: newProduct.stock_quantity,
                             is_active: newProduct.is_active,
                             images: newProduct.images
                         }
                         setProducts(prev => [...prev, mappedProduct].sort((a, b) => a.name.localeCompare(b.name)))
                     } else if (payload.eventType === 'UPDATE') {
-                        const updatedProduct = payload.new as any
+                        const updatedProduct = payload.new as ProductDbRow
                         const mappedProduct: Product = {
                             id: updatedProduct.id,
                             name: updatedProduct.name,

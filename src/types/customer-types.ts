@@ -85,7 +85,7 @@ export interface Customer extends BaseEntity {
   // Metadata
   tags: CustomerTag[]
   notes: CustomerNote[]
-  customFields: Record<string, any>
+  customFields: Record<string, unknown>
 
   // Business metrics
   totalOrders: number
@@ -163,7 +163,7 @@ export interface CustomerActivity extends BaseEntity {
   type: ActivityType
   title: string
   description: string
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
   performedBy?: string
   performedByName?: string
   relatedEntityId?: string
@@ -181,7 +181,7 @@ export interface CommunicationRecord extends BaseEntity {
   sentBy?: string
   sentByName?: string
   attachments: string[]
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 // Customer notification
@@ -197,7 +197,7 @@ export interface CustomerNotification extends BaseEntity {
   actionUrl?: string
   actionLabel?: string
   expiresAt?: Date
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 // Analytics interfaces
@@ -254,7 +254,7 @@ export interface CustomerFormData {
   status: CustomerStatus
   tags: string[]
   notes: string
-  customFields: Record<string, any>
+  customFields: Record<string, unknown>
   addresses: Omit<Address, 'isDefault'>[]
   communicationPreferences: {
     email: boolean
@@ -366,7 +366,7 @@ export interface BulkOperation {
   id: string
   type: 'update' | 'delete' | 'tag' | 'status_change' | 'assign'
   customerIds: string[]
-  data: Record<string, any>
+  data: Record<string, unknown>
   status: 'pending' | 'processing' | 'completed' | 'failed'
   progress: number
   results?: BulkOperationResult[]
@@ -460,7 +460,7 @@ export interface UseCustomerActionsReturn {
   createCustomer: (data: CustomerFormData) => Promise<Customer>
   updateCustomer: (id: string, data: Partial<CustomerFormData>) => Promise<Customer>
   deleteCustomer: (id: string) => Promise<void>
-  bulkUpdateCustomers: (customerIds: string[], data: Record<string, any>) => Promise<void>
+  bulkUpdateCustomers: (customerIds: string[], data: Record<string, unknown>) => Promise<void>
   exportCustomers: (options: ExportOptions) => Promise<ExportResult>
   importCustomers: (options: ImportOptions) => Promise<ImportResult>
 }

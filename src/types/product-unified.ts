@@ -116,7 +116,7 @@ export interface ProductAlert {
     last_sale?: string
     old_price?: number
     new_price?: number
-    [key: string]: any
+    [key: string]: unknown
   }
   // DB compatibility
   alert_type?: string
