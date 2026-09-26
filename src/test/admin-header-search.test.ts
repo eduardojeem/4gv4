@@ -68,7 +68,7 @@ describe('el buscador encuentra lo que uno escribe', () => {
   it('el layout usa ese mismo criterio', () => {
     expect(LAYOUT).toContain("import { normalizeText, primaryModifierLabel } from '@/lib/text/normalize'")
     expect(LAYOUT).toContain('haystack: normalizeText(')
-    expect(LAYOUT).toContain('terms.every(term => item.haystack.includes(term))')
+    expect(LAYOUT).toMatch(/terms\.every\(\(?term\)? => item\.haystack\.includes\(term\)\)/)
     expect(LAYOUT).not.toContain('item.title.toLowerCase().includes(query)')
   })
 })
