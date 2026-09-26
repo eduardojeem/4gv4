@@ -75,7 +75,6 @@ import {
   describeProductViewPreferences,
   type ProductViewPreferences,
 } from "@/lib/products/product-view-preferences";
-type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 /**
  * Alcance configurable de la sección:

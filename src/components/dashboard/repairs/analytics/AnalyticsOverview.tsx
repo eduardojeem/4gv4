@@ -118,6 +118,8 @@ const MetricCard = memo(({
   )
 })
 
+MetricCard.displayName = 'MetricCard'
+
 interface TooltipPayloadEntry {
   color?: string
   name: string
