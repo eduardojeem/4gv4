@@ -4,6 +4,7 @@
  */
 
 import { formatCurrency } from '@/lib/currency'
+import { trackSiteEvent } from '@/lib/site-analytics/client'
 
 export interface WhatsAppMessageOptions {
   phone: string
@@ -48,6 +49,7 @@ export function getWhatsAppLink({ phone, message = '' }: WhatsAppMessageOptions)
  */
 export function openWhatsApp({ phone, message }: WhatsAppMessageOptions): void {
   const link = getWhatsAppLink({ phone, message })
+  trackSiteEvent('whatsapp_click')
   window.open(link, '_blank', 'noopener,noreferrer')
 }
 

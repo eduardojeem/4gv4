@@ -92,7 +92,7 @@ export function LandingCommercePanel({
           {!commerce.visitsAvailable && (
             <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              Las visitas se empiezan a contar cuando se aplica la migración <code className="font-mono">storefront_daily_visits</code>.
+              Las visitas se empiezan a contar cuando se aplica la migración <code className="font-mono">storefront_visits_from_site_analytics</code>.
               Hasta entonces no hay visitas ni conversión: no son cero, faltan los datos.
             </p>
           )}

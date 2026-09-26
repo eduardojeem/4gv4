@@ -5,6 +5,7 @@ import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { ProductsClient } from '@/components/public/ProductsClient'
 import { getMarketplaceOrganizations, getMarketplaceProductsPage } from '@/lib/public/marketplace'
+import { SiteSearchTracker } from '@/components/analytics/SiteSearchTracker'
 
 export const metadata: Metadata = {
   title: 'Buscar | Marketplace MiPOS',
@@ -65,6 +66,9 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
               Busca productos, empresas, categorias, marcas y codigos publicados en el marketplace.
             </p>
             <MarketplaceSearchBox className="mt-6 max-w-2xl" initialQuery={query} autoFocus />
+            {query && (
+              <SiteSearchTracker term={query} resultsCount={productPage.total + organizations.length} />
+            )}
           </div>
         </div>
       </section>

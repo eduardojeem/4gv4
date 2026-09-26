@@ -130,10 +130,11 @@ async function getCommerce(range: CommerceRange): Promise<CommerceSummary | null
       fetchAllRows<{ product_id: string | null; product_name: string | null; quantity: number | null; subtotal: number | null; customer_orders: { organization_id: string; status: string | null; created_at: string | null } }>((from, to) =>
         admin.from('customer_order_items').select('product_id, product_name, quantity, subtotal, customer_orders!inner(organization_id, status, created_at)')
           .gte('customer_orders.created_at', currentStart).lte('customer_orders.created_at', end).range(from, to) as never),
-      // Sin la migración la tabla no existe: se muestra que falta, no ceros.
+      // Sin la migración la función no existe: se muestra que falta, no ceros.
       fetchAllRows<CommerceVisit>((from, to) =>
-        admin.from('storefront_daily_visits').select('organization_id, day, page, views, visitors')
-          .gte('day', range.previous.from).lte('day', range.to).range(from, to)).catch(() => null),
+        admin.rpc('get_storefront_daily_visits', { p_from: range.previous.from, p_to: range.to })
+          .order('day').order('organization_id').order('page')
+          .range(from, to)).catch(() => null),
     ])
 
     const productIds = [...new Set(saleItems.map((item) => item.product_id).filter(Boolean))] as string[]

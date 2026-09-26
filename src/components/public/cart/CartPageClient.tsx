@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { formatMoney } from '@/components/dashboard/orders/format'
 import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
+import { trackSiteEvent } from '@/lib/site-analytics/client'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
@@ -582,6 +583,7 @@ export function CartPageClient({
         }
       }
 
+      trackSiteEvent('order_placed', { entityId: typeof payload.data?.id === 'string' ? payload.data.id : null })
       clear()
       setCreatedOrderNumber(payload.data.order_number as string)
       checkoutAttemptId.current = crypto.randomUUID()
