@@ -9,7 +9,7 @@ import { createMockProduct } from '@/test/setup'
 import React from 'react'
 
 // Mock de componente con muchos elementos para testing de performance
-const MockLargeList = ({ items }: { items: any[] }) => {
+const MockLargeList = ({ items }: { items: unknown[] }) => {
   const [filter, setFilter] = React.useState('')
 
   const filteredItems = React.useMemo(() => {
@@ -41,7 +41,7 @@ const MockLargeList = ({ items }: { items: any[] }) => {
 // Mock de componente con re-renders frecuentes
 const MockFrequentUpdates = () => {
   const [count, setCount] = React.useState(0)
-  const [data, setData] = React.useState<any[]>([])
+  const [data, setData] = React.useState<unknown[]>([])
 
   React.useEffect(() => {
     const interval = setInterval(() => {
@@ -128,7 +128,8 @@ describe('Component Performance Tests', () => {
     })
 
     it('should handle memory efficiently with large datasets', () => {
-      const initialMemory = (performance as any).memory?.usedJSHeapSize || 0
+      const perf = performance as typeof performance & { memory?: { usedJSHeapSize: number } }
+      const initialMemory = perf.memory?.usedJSHeapSize || 0
 
       const items = Array.from({ length: 10000 }, (_, i) =>
         createMockProduct({
@@ -140,7 +141,7 @@ describe('Component Performance Tests', () => {
 
       const { unmount } = render(<MockLargeList items={items} />)
 
-      const afterRenderMemory = (performance as any).memory?.usedJSHeapSize || 0
+      const afterRenderMemory = perf.memory?.usedJSHeapSize || 0
 
       unmount()
 
@@ -149,7 +150,7 @@ describe('Component Performance Tests', () => {
         global.gc()
       }
 
-      const afterUnmountMemory = (performance as any).memory?.usedJSHeapSize || 0
+      const afterUnmountMemory = perf.memory?.usedJSHeapSize || 0
 
       // La memoria debería liberarse después del unmount
       if (initialMemory > 0) {
@@ -186,7 +187,7 @@ describe('Component Performance Tests', () => {
     it('should optimize re-renders with React.memo', () => {
       let renderCount = 0
 
-      const OptimizedComponent = React.memo(function OptimizedComponent({ data }: { data: any[] }) {
+      const OptimizedComponent = React.memo(function OptimizedComponent({ data }: { data: unknown[] }) {
         renderCount++
         return (
           <div data-testid="optimized-component">

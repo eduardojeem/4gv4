@@ -10,14 +10,14 @@ import { createMockProduct } from '@/test/setup'
 
 // Mock de componentes POS
 const MockPOSPage = () => {
-  const [cart, setCart] = React.useState<any[]>([])
+  const [cart, setCart] = React.useState<{ product: { id: string; price: number }; quantity: number; subtotal: number }[]>([])
   const [products] = React.useState([
     createMockProduct({ id: '1', name: 'Producto 1', price: 100, stock: 10 }),
     createMockProduct({ id: '2', name: 'Producto 2', price: 50, stock: 5 }),
     createMockProduct({ id: '3', name: 'Producto 3', price: 200, stock: 2 })
   ])
 
-  const addToCart = (product: any, quantity: number) => {
+  const addToCart = (product: { id: string; price: number }, quantity: number) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.product.id === product.id)
       if (existingItem) {

@@ -192,8 +192,8 @@ describe('cálculo de stock y preservación de estado al alternar visibilidad', 
     const productoConVariantes = producto({
       stock_quantity: 0,
       variants: [
-        { id: 'v1', stock_quantity: 5, is_active: true } as any,
-        { id: 'v2', stock_quantity: 3, is_active: true } as any,
+        { id: 'v1', stock_quantity: 5, is_active: true } as unknown,
+        { id: 'v2', stock_quantity: 3, is_active: true } as unknown,
       ],
     })
 

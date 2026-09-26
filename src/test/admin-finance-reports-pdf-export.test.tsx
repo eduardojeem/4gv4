@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
@@ -168,7 +168,7 @@ describe('finance-reports-pdf-exporter', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ rows: [] }),
-    } as any)
+    } as unknown)
 
     render(
       <ProfitabilityPanel

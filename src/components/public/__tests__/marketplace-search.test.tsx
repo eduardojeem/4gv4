@@ -23,13 +23,13 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href, ...rest }: any) => <a href={String(href)} {...rest}>{children}</a>,
+  default: ({ children, href, ...rest }: { children?: React.ReactNode; href?: string; [key: string]: unknown }) => <a href={String(href)} {...(rest as Record<string, unknown>)}>{children}</a>,
 }))
 
 /* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({
   __esModule: true,
-  default: ({ alt, ...rest }: any) => <img alt={alt} {...rest} />,
+  default: ({ alt, ...rest }: { alt: string; [key: string]: unknown }) => <img alt={alt} {...(rest as Record<string, unknown>)} />,
 }))
 /* eslint-enable @next/next/no-img-element */
 

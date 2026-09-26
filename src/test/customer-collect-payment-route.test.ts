@@ -108,7 +108,7 @@ vi.mock('@/lib/supabase/server', () => ({
         estado.escriturasDirectas.push(tabla)
         return { update: () => ({ eq: async () => ({ error: null }) }) }
       }
-      const builder: any = {
+      const builder: { select: () => typeof builder; eq: () => typeof builder; is: () => typeof builder; order: () => Promise<{ data: { id: string; register_id: string }[]; error: null }> } = {
         select: () => builder,
         eq: () => builder,
         is: () => builder,

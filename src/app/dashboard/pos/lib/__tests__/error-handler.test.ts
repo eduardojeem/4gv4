@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { POSErrorHandler } from '../error-handler'
+import type { ErrorContext } from '../error-handler'
 import { toast } from 'sonner'
 
 // Mock sonner
@@ -216,7 +217,7 @@ describe('POSErrorHandler', () => {
 
     contexts.forEach(({ context, expected }) => {
       it(`should include context in message for ${context}`, () => {
-        POSErrorHandler.handle('Test error', context as any)
+        POSErrorHandler.handle('Test error', context as ErrorContext)
 
         if (context === 'sale' || context === 'payment') {
           expect(toast.error).toHaveBeenCalledWith(

@@ -50,7 +50,7 @@ describe('AfterSalesDashboard validations upon completion', () => {
         },
     }
 
-    function createFetchMock(cases: any[] = [mockCase], totalOverride?: number, totalPagesOverride?: number) {
+    function createFetchMock(cases: unknown[] = [mockCase], totalOverride?: number, totalPagesOverride?: number) {
         return vi.fn().mockImplementation((input: RequestInfo | URL) => {
             const url = String(input)
             if (url.includes('/api/after-sales/summary')) {

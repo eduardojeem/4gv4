@@ -35,8 +35,8 @@ vi.mock('sonner', () => ({
 
 vi.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href, ...props }: { children?: React.ReactNode; href?: string; [key: string]: any }) => (
-    <a href={typeof href === 'string' ? href : '#'} {...props}>{children}</a>
+  default: ({ children, href, ...props }: { children?: React.ReactNode; href?: string; [key: string]: unknown }) => (
+    <a href={typeof href === 'string' ? href : '#'} {...(props as Record<string, unknown>)}>{children}</a>
   ),
 }))
 
@@ -84,7 +84,7 @@ describe('BrandsSectionEditor', () => {
         }
       }
       return { ok: false, json: async () => ({}) }
-    }) as any
+    }) as unknown
   })
 
   it('renders public visibility options for home, products, and offers', async () => {
