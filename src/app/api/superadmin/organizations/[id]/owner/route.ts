@@ -6,7 +6,7 @@ import { siteUrl } from '@/lib/site-url'
 import { provisionOrganizationOwner } from '@/lib/superadmin/provision-owner'
 import { parseOwnerInput } from '@/lib/superadmin/create-organization'
 
-const OWNER_INVITE_REDIRECT = '/auth/confirm?next=/dashboard/onboarding'
+const OWNER_INVITE_REDIRECT = '/auth/confirm?next=/admin/onboarding'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**

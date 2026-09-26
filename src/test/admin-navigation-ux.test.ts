@@ -42,7 +42,7 @@ describe('active admin navigation', () => {
     expect(getNavItemByPath('/admin/visitas?period=30d')).toMatchObject({
       key: 'website-visits',
     })
-    expect(getNavItemByPath('/dashboard/onboarding')).toMatchObject({
+    expect(getNavItemByPath('/admin/onboarding')).toMatchObject({
       key: 'business-profile',
     })
     expect(getNavItemByPath('/admin-unrelated')).toBeUndefined()

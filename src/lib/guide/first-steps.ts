@@ -88,7 +88,7 @@ export function assessFirstSteps(input: FirstStepsInput): FirstStepsAssessment {
         : `Falta ${missingFromBusiness.join(', ')}`,
       done: missingFromBusiness.length === 0,
       essential: true,
-      action: { label: 'Configurar el negocio', href: '/dashboard/onboarding' },
+      action: { label: 'Configurar el negocio', href: '/admin/onboarding' },
       permission: 'settings.update',
     },
     {

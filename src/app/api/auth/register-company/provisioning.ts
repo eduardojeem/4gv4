@@ -8,7 +8,7 @@
  * entonces entra al onboarding. Es el mismo destino que ya usan las
  * invitaciones que crea el superadmin.
  */
-const ONBOARDING_REDIRECT_PATH = '/auth/confirm?next=/dashboard/onboarding'
+const ONBOARDING_REDIRECT_PATH = '/auth/confirm?next=/admin/onboarding'
 
 type SupabaseLikeResult = {
   error?: {

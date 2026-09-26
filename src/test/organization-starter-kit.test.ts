@@ -117,7 +117,7 @@ describe('datos inventados fuera de los predeterminados', () => {
 
   it('el onboarding no guarda un horario de ejemplo', () => {
     expect(leer('src/app/api/onboarding/complete/route.ts')).not.toContain("'Lunes a viernes, 08:00 a 18:00'")
-    expect(leer('src/app/dashboard/onboarding/page.tsx')).not.toContain("|| 'Lunes a viernes, 08:00 a 18:00'")
+    expect(leer('src/app/admin/onboarding/page.tsx')).not.toContain("|| 'Lunes a viernes, 08:00 a 18:00'")
   })
 })
 

@@ -19,10 +19,10 @@ import {
 
 /**
  * Pasa por /auth/confirm (no protegida) para establecer la sesion del hash
- * antes de entrar a /dashboard/onboarding. Usa la URL canonica para no generar
+ * antes de entrar a /admin/onboarding. Usa la URL canonica para no generar
  * enlaces a localhost desde dev.
  */
-const OWNER_INVITE_REDIRECT = '/auth/confirm?next=/dashboard/onboarding'
+const OWNER_INVITE_REDIRECT = '/auth/confirm?next=/admin/onboarding'
 
 export async function POST(request: NextRequest) {
   const superAdmin = await getSuperAdminUser()

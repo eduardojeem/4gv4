@@ -217,7 +217,7 @@ export const adminNavCategories: NavCategory[] = [
                 key: 'business-profile',
                 label: 'Datos del negocio',
                 icon: Store,
-                href: '/dashboard/onboarding',
+                href: '/admin/onboarding',
                 description: 'Datos, rubro, moneda y visibilidad de la tienda',
                 permissions: ['settings.read'],
             },

@@ -35,8 +35,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   const canRequireOnboarding = Boolean(
     user &&
     !isInactiveUser &&
-    user.role === 'admin' &&
-    !pathname.startsWith('/dashboard/onboarding')
+    user.role === 'admin'
   )
 
   useEffect(() => {
@@ -55,7 +54,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
     const cachedStatus = getCachedOnboardingStatus()
     if (cachedStatus) {
       if (cachedStatus.needsOnboarding) {
-        router.replace('/dashboard/onboarding')
+        router.replace('/admin/onboarding')
       }
       return
     }
@@ -66,7 +65,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
       .then((payload) => {
         if (cancelled) return
         if (payload?.needsOnboarding) {
-          router.replace('/dashboard/onboarding')
+          router.replace('/admin/onboarding')
         }
       })
       .finally(() => {

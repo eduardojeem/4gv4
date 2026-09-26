@@ -226,7 +226,7 @@ function buildSteps(slug: string): OnboardingStep[] {
     {
       title: 'Datos del negocio',
       description: 'Identidad, contacto y operación',
-      href: '/dashboard/onboarding#company-info',
+      href: '/admin/onboarding#company-info',
       icon: Building2,
       doneKey: 'hasCompanyInfo',
     },
@@ -1269,12 +1269,12 @@ export function OnboardingClient({
                 // nadie puede ver: mientras el paso este pendiente, apunta al
                 // interruptor que lo resuelve.
                 const pendingStorefront = step.doneKey === 'hasPublicStore' && !done
-                const href = pendingStorefront ? '/dashboard/onboarding#company-info' : step.href
+                const href = pendingStorefront ? '/admin/onboarding#company-info' : step.href
                 // Todo lo que saca de esta pantalla se abre en otra pestaña: el
                 // formulario puede tener cambios sin guardar, y la navegacion
                 // interna de Next no dispara el aviso de `beforeunload`. La
                 // unica excepcion es el enlace que lleva a esta misma pantalla.
-                const leavesOnboarding = !pendingStorefront && !href.startsWith('/dashboard/onboarding')
+                const leavesOnboarding = !pendingStorefront && !href.startsWith('/admin/onboarding')
                 return (
                   <li key={step.title} className="py-3 first:pt-0 last:pb-0">
                     <div className="flex gap-3">
