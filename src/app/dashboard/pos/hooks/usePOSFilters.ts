@@ -181,7 +181,7 @@ export function usePOSFilters(products: Product[]): POSFiltersResult {
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
       
       // Destacados
-      const matchesFeatured = !showFeatured || (product as any).featured === true
+      const matchesFeatured = !showFeatured || (product as { featured?: boolean }).featured === true
       
       // Precio
       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max

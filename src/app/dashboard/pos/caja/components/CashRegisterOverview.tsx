@@ -482,16 +482,16 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
 
             {/* Chips de filtro rápido */}
             <div className="flex gap-1.5 pt-2 flex-wrap">
-              {[
+              {([
                 { id: 'all', label: 'Todos' },
                 { id: 'sale', label: 'Ventas' },
                 { id: 'cash_in', label: 'Entradas' },
                 { id: 'cash_out', label: 'Salidas' }
-              ].map((f) => (
+              ] as const).map((f) => (
                 <button
                   key={f.id}
                   type="button"
-                  onClick={() => setMovementTypeFilter(f.id as any)}
+                  onClick={() => setMovementTypeFilter(f.id)}
                   className={cn(
                     "px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-all",
                     movementTypeFilter === f.id

@@ -27,8 +27,18 @@ type AuthUserWithIdentities = {
 }
 
 // Minimal admin client type — enough to do DB + auth admin ops.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AdminClient = any
+type AdminClient = {
+  from: (table: string) => {
+    delete: () => {
+      eq: (field: string, val: string) => PromiseLike<{ error: { message: string } | null }>
+    }
+  }
+  auth: {
+    admin: {
+      deleteUser: (id: string) => PromiseLike<{ error: { message: string } | null }>
+    }
+  }
+}
 
 function getConfiguredAppOrigin() {
   const configuredUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL

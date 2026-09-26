@@ -155,8 +155,9 @@ export function POSCashMovementDialog({
         )
         onOpenChange(false)
       }
-    } catch (err: any) {
-      toast.error('Error al registrar el movimiento: ' + (err?.message || 'Error desconocido'))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string } | null)?.message || 'Error desconocido'
+      toast.error('Error al registrar el movimiento: ' + message)
     } finally {
       setIsSaving(false)
     }

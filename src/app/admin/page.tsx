@@ -169,7 +169,7 @@ export default function AdminHome() {
   const handleRefreshAll = async () => {
     setIsRefreshingAll(true)
     try {
-      const promises: Promise<any>[] = [refreshOverview()]
+      const promises: Promise<unknown>[] = [refreshOverview()]
       if (hasRepairs) {
         promises.push(Promise.resolve(refreshRepairs()))
       }

@@ -67,10 +67,15 @@ export async function GET(
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)'
       : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name)'
 
-    // Supabase's inferred builder type here explodes into an overly large union.
-    // Keep the query typed at runtime and let the final payload shape stay explicit.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const productsTable = supabase.from('products') as any
+    type DynamicProductQuery = {
+      eq: (col: string, val: unknown) => DynamicProductQuery
+      in: (col: string, vals: unknown[]) => DynamicProductQuery
+      maybeSingle: () => PromiseLike<{ data: unknown; error: { message: string } | null }>
+    }
+
+    const productsTable = supabase.from('products') as unknown as {
+      select: (fields: string) => DynamicProductQuery
+    }
 
     let byIdQuery = productsTable
       .select(selectFields)

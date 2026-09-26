@@ -128,19 +128,19 @@ export function CashRegisterHistory({ onOpenFullHistory, onOpenAudit }: CashRegi
       <div className="flex items-center justify-between p-2 rounded-2xl border border-border/60 bg-muted/20 gap-2 flex-wrap">
         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-2">Período de Visualización:</span>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {[
+          {([
             { key: 'today', label: 'Hoy' },
             { key: 'week', label: 'Esta Semana (Por Defecto)' },
             { key: 'month', label: 'Este Mes' },
             { key: 'year', label: 'Este Año' },
             { key: 'all', label: 'Todo el Historial' }
-          ].map(p => (
+          ] as const).map(p => (
             <Button
               key={p.key}
               type="button"
               size="sm"
               variant={period === p.key ? 'default' : 'outline'}
-              onClick={() => setPeriod(p.key as any)}
+              onClick={() => setPeriod(p.key)}
               className="h-7 text-xs px-3 rounded-xl font-medium"
             >
               {p.label}

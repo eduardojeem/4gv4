@@ -349,17 +349,17 @@ function SessionDetailContent({ session, open, onClose, onAction, fetchMovements
                   Transacciones ({movements.length})
                 </h4>
                 <div className="flex gap-1">
-                  {[
+                  {([
                     { key: 'all', label: 'Todos' },
                     { key: 'sale', label: 'Ventas' },
                     { key: 'cash_in', label: 'Ingresos' },
                     { key: 'cash_out', label: 'Egresos' }
-                  ].map(tab => (
+                  ] as const).map(tab => (
                     <Button
                       key={tab.key}
                       size="sm"
                       variant={movementFilter === tab.key ? 'default' : 'outline'}
-                      onClick={() => setMovementFilter(tab.key as any)}
+                      onClick={() => setMovementFilter(tab.key)}
                       className="h-6 px-2 text-[10px] rounded-lg"
                     >
                       {tab.label}

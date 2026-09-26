@@ -94,7 +94,7 @@ export default function BrandsPage() {
     }
   }
 
-  const handleModalSave = async (data: any) => {
+  const handleModalSave = async (data: Parameters<typeof createBrand>[0]) => {
     if (editingBrand) {
       const res = await updateBrand(editingBrand.id, data)
       return { success: res.success, error: res.error }

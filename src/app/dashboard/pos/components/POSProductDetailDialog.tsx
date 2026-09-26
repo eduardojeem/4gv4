@@ -132,7 +132,25 @@ export function POSProductDetailDialog({
       if (p && p.variants && p.variants.length > 0) return p
     }
     if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
-      const mappedVariants: ProductVariant[] = (product.variants as any[]).map(v => ({
+      type RawVariantItem = {
+        id: string
+        sku?: string | null
+        barcode?: string | null
+        variant_name?: string | null
+        name?: string | null
+        attributes?: unknown
+        sale_price?: number | null
+        wholesale_price?: number | null
+        purchase_price?: number | null
+        stock_quantity?: number | null
+        stock?: number | null
+        min_stock?: number | null
+        is_active?: boolean | null
+        images?: string[]
+        created_at?: string | null
+        updated_at?: string | null
+      }
+      const mappedVariants: ProductVariant[] = (product.variants as RawVariantItem[]).map(v => ({
         id: v.id,
         product_id: product.id,
         sku: v.sku || '',
