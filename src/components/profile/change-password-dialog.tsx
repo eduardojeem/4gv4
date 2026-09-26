@@ -19,18 +19,19 @@ import { Key, Loader2, Eye, EyeOff, Check, X, Clock, LogOut } from 'lucide-react
 import { createClient } from '@/lib/supabase/client'
 import { logAuthEventClient } from '@/lib/auth-event-client'
 import { getSessionIdFromAccessToken } from '@/lib/session-id'
+import { cn } from '@/lib/utils'
 import { z } from 'zod'
 
 const passwordSchema = z.object({
   password: z.string()
-    .min(8, 'Minimo 8 caracteres')
-    .regex(/[A-Z]/, 'Debe incluir una mayuscula')
-    .regex(/[a-z]/, 'Debe incluir una minuscula')
-    .regex(/[0-9]/, 'Debe incluir un numero')
-    .regex(/[^A-Za-z0-9]/, 'Debe incluir un caracter especial'),
+    .min(8, 'Mínimo 8 caracteres')
+    .regex(/[A-Z]/, 'Debe incluir una letra mayúscula')
+    .regex(/[a-z]/, 'Debe incluir una letra minúscula')
+    .regex(/[0-9]/, 'Debe incluir al menos un número')
+    .regex(/[^A-Za-z0-9]/, 'Debe incluir un carácter especial (@, $, !, %, etc.)'),
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Las contrasenas no coinciden",
+  message: "Las contraseñas no coinciden",
   path: ["confirmPassword"],
 })
 
@@ -41,7 +42,11 @@ type UserActivityRow = {
   created_at?: string
 }
 
-export function ChangePasswordDialog() {
+export interface ChangePasswordDialogProps {
+  className?: string
+}
+
+export function ChangePasswordDialog({ className }: ChangePasswordDialogProps = {}) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -112,7 +117,7 @@ export function ChangePasswordDialog() {
     // Check rate limit
     if (cooldownRemaining > 0) {
       const seconds = Math.ceil(cooldownRemaining / 1000)
-      toast.error(`Debes esperar ${seconds} segundos antes de cambiar la contrasena nuevamente`)
+      toast.error(`Debes esperar ${seconds} segundos antes de cambiar la contraseña nuevamente`)
       return
     }
 
@@ -160,16 +165,16 @@ export function ChangePasswordDialog() {
             })
           }
         } catch {
-          toast.warning('Contrasena actualizada, pero no se pudieron cerrar otras sesiones')
+          toast.warning('Contraseña actualizada, pero no se pudieron cerrar otras sesiones')
         }
       }
 
-      toast.success('Contrasena actualizada correctamente')
+      toast.success('Contraseña actualizada correctamente')
       setOpen(false)
       setFormData({ password: '', confirmPassword: '' })
       setCooldownRemaining(COOLDOWN_MS)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Error al actualizar contrasena'
+      const message = error instanceof Error ? error.message : 'Error al actualizar contraseña'
       toast.error(message)
     } finally {
       setIsLoading(false)
@@ -190,16 +195,16 @@ export function ChangePasswordDialog() {
   const getStrengthColor = (s: number) => {
     if (s <= 25) return 'bg-red-500'
     if (s <= 50) return 'bg-orange-500'
-    if (s <= 75) return 'bg-yellow-500'
-    return 'bg-green-500'
+    if (s <= 75) return 'bg-amber-500'
+    return 'bg-emerald-500'
   }
 
   const passwordChecks = [
-    { label: 'Minimo 8 caracteres', ok: formData.password.length >= 8 },
-    { label: 'Una mayuscula', ok: /[A-Z]/.test(formData.password) },
-    { label: 'Una minuscula', ok: /[a-z]/.test(formData.password) },
-    { label: 'Un numero', ok: /[0-9]/.test(formData.password) },
-    { label: 'Un caracter especial', ok: /[^A-Za-z0-9]/.test(formData.password) },
+    { label: 'Mínimo 8 caracteres', ok: formData.password.length >= 8 },
+    { label: 'Una mayúscula', ok: /[A-Z]/.test(formData.password) },
+    { label: 'Una minúscula', ok: /[a-z]/.test(formData.password) },
+    { label: 'Un número', ok: /[0-9]/.test(formData.password) },
+    { label: 'Un carácter especial', ok: /[^A-Za-z0-9]/.test(formData.password) },
   ]
 
   const isOnCooldown = cooldownRemaining > 0
@@ -207,7 +212,11 @@ export function ChangePasswordDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="w-full justify-start gap-2" disabled={isOnCooldown}>
+        <Button
+          variant="outline"
+          className={cn("gap-2", className)}
+          disabled={isOnCooldown}
+        >
           <Key className="h-4 w-4" />
           {isOnCooldown ? (
             <span className="flex items-center gap-1.5">
@@ -215,27 +224,28 @@ export function ChangePasswordDialog() {
               Espera {Math.ceil(cooldownRemaining / 1000)}s
             </span>
           ) : (
-            'Cambiar contrasena'
+            'Cambiar contraseña'
           )}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Cambiar contrasena</DialogTitle>
+          <DialogTitle>Cambiar contraseña</DialogTitle>
           <DialogDescription>
-            Asegurate de usar una contrasena segura y unica.
+            Asegúrate de utilizar una contraseña segura y exclusiva para esta cuenta.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           <div className="space-y-2">
-            <Label htmlFor="new-password">Nueva contrasena</Label>
+            <Label htmlFor="new-password">Nueva contraseña</Label>
             <div className="relative">
               <Input
                 id="new-password"
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className={errors.password ? 'border-red-500 pr-10' : 'pr-10'}
+                className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
+                placeholder="Ingresa la nueva clave"
               />
               <Button
                 type="button"
@@ -252,25 +262,26 @@ export function ChangePasswordDialog() {
               </Button>
             </div>
             {formData.password && (
-              <div className="space-y-2">
-                <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+              <div className="space-y-2 pt-1">
+                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all duration-300 ${getStrengthColor(strength)}`}
+                    className={cn("h-full transition-all duration-300", getStrengthColor(strength))}
                     style={{ width: `${strength}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-right">
-                  Fortaleza: {strength}%
-                </p>
-                <div className="grid gap-1">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Seguridad de contraseña</span>
+                  <span className="font-semibold font-mono">{strength}%</span>
+                </div>
+                <div className="grid gap-1 pt-1">
                   {passwordChecks.map((rule) => (
                     <div key={rule.label} className="flex items-center gap-1.5 text-[11px]">
                       {rule.ok ? (
-                        <Check className="h-3.5 w-3.5 text-green-600" />
+                        <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                       ) : (
-                        <X className="h-3.5 w-3.5 text-slate-400" />
+                        <X className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
                       )}
-                      <span className={rule.ok ? 'text-green-700 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}>
+                      <span className={rule.ok ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-muted-foreground'}>
                         {rule.label}
                       </span>
                     </div>
@@ -279,33 +290,34 @@ export function ChangePasswordDialog() {
               </div>
             )}
             {errors.password && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
+              <p className="text-xs text-destructive flex items-center gap-1">
                 <X className="h-3 w-3" /> {errors.password}
               </p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirmar contrasena</Label>
+            <Label htmlFor="confirm-password">Confirmar contraseña</Label>
             <Input
               id="confirm-password"
               type={showPassword ? 'text' : 'password'}
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              className={errors.confirmPassword ? 'border-red-500' : ''}
+              className={errors.confirmPassword ? 'border-destructive' : ''}
+              placeholder="Vuelve a escribir la contraseña"
             />
             {errors.confirmPassword && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
+              <p className="text-xs text-destructive flex items-center gap-1">
                 <X className="h-3 w-3" /> {errors.confirmPassword}
               </p>
             )}
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
+          <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/20 p-3">
+            <div className="space-y-0.5 pr-2">
               <p className="text-sm font-medium">Cerrar otras sesiones</p>
               <p className="text-xs text-muted-foreground">
-                Recomendado despues de cambiar la contrasena
+                Recomendado para invalidar accesos en equipos antiguos.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -318,13 +330,13 @@ export function ChangePasswordDialog() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={isLoading || strength < 60}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Actualizar
+              Actualizar contraseña
             </Button>
           </DialogFooter>
         </form>

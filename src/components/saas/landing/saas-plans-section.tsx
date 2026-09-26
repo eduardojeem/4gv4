@@ -3,319 +3,479 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Minus, Sparkles, ChevronDown } from 'lucide-react'
+import {
+  Check,
+  Minus,
+  Sparkles,
+  ChevronDown,
+  ShieldCheck, ArrowRight,
+  Building2,
+  Wrench,
+  Store, Compass,
+  CreditCard,
+  Gift,
+  CheckCircle2
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { planNotes } from './saas-landing-data'
 import { cn } from '@/lib/utils'
+import {
+  buildPlanFeatureRows,
+  buildPlanLimitRows,
+  formatPlanLimit,
+  selectActivePlans,
+  type SubscriptionPlan,
+} from './saas-plan-presentation'
 
-// Types (should match Supabase schema roughly)
-type PlanFeature = { label: string; iconName?: string; value: string | boolean }
-type SubscriptionPlan = {
-  id: string
-  tier: string
-  name: string
-  price: number
-  price_note: string | null
-  description: string | null
-  is_popular: boolean
-  limits: {
-    users?: string
-    products?: string
-    branches?: string
-    repairs?: string
-  }
-  highlights: string[]
-  features: PlanFeature[]
-  color_config: any
-}
+export type { SubscriptionPlan } from './saas-plan-presentation'
 
-// Ensure exact match with admin panel
-const PLAN_LIMITS = [
-  { key: 'users', label: 'Límite de usuarios' },
-  { key: 'products', label: 'Límite de productos' },
-  { key: 'branches', label: 'Sucursales permitidas' },
-  { key: 'repairs', label: 'Reparaciones por mes' },
+// Interactive Business Profiles
+const BUSINESS_PROFILES = [
+  {
+    id: 'store_workshop',
+    label: 'Tienda o Taller Técnico',
+    icon: Wrench,
+    recommendedTier: 'basic',
+    reason: 'Perfecto para gestionar turnos de caja, inventario y órdenes de reparación.',
+  },
+  {
+    id: 'multibranch_online',
+    label: 'Multi-sucursal o Ecommerce',
+    icon: Store,
+    recommendedTier: 'pro',
+    reason: 'Recomendado para conectar varias sucursales, tienda online y analytics financieros.',
+  },
+  {
+    id: 'enterprise_chain',
+    label: 'Cadena Comercial / Distribuidora',
+    icon: Building2,
+    recommendedTier: 'enterprise',
+    reason: 'Todo ilimitado, despacho de delivery, SLA 99.9% y soporte técnico dedicado.',
+  },
 ]
 
-const PLAN_FEATURES = [
-  { key: 'pos', label: 'Punto de Venta (POS)' },
-  { key: 'inventory', label: 'Inventario' },
-  { key: 'users', label: 'Gestión de usuarios' },
-  { key: 'branches', label: 'Sucursales múltiples' },
-  { key: 'repairs', label: 'Módulo de Reparaciones' },
-  { key: 'crm', label: 'CRM / Clientes' },
-  { key: 'ecommerce', label: 'Ecommerce & Marketplace' },
-  { key: 'analytics', label: 'Analytics avanzado' },
-  { key: 'reports', label: 'Reportes exportables' },
-  { key: 'support', label: 'Soporte prioritario' },
+// FAQ Items
+const FAQ_ITEMS = [
+  {
+    q: '¿Cómo funcionan los días de prueba gratis? ¿Piden tarjeta?',
+    a: 'No pedimos tarjeta de crédito ni ningún medio de pago para comenzar. Cada plan indica en su tarjeta cuántos días de prueba incluye. Podés registrarte y probar el 100% de las funciones al instante.',
+  },
+  {
+    q: '¿Qué ocurre al terminar los días de prueba gratis?',
+    a: 'Al finalizar el período de prueba podés activar tu suscripción para continuar operando sin perder ningún dato, producto ni configuración cargada.',
+  },
+  {
+    q: '¿Puedo cambiar de plan o cancelar en cualquier momento?',
+    a: 'Sí, podés subir o bajar de plan en cualquier momento desde tu panel de administración, sin contratos forzosos ni penalidades.',
+  },
+  {
+    q: '¿Qué ocurre si supero el límite de productos o usuarios de mi plan?',
+    a: 'El sistema te notificará cuando te acerques al límite. Podrás continuar operando normalmente con tus datos existentes y actualizar tu plan cuando desees agregar más usuarios o productos.',
+  },
 ]
 
-export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: SubscriptionPlan[] }) {
-  const [yearly, setYearly] = useState(false)
+export function SaaSPlansSection({ initialPlans }: { initialPlans?: SubscriptionPlan[] }) {
   const [showTable, setShowTable] = useState(false)
+  const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
+  const [openFaq, setOpenFaq] = useState<number | null>(null)
 
-  // Descuento matemático del 20% para el toggle
-  const getPrice = (price: number) => {
-    if (!price || price === 0) return 0
-    return yearly ? Math.floor(price * 0.8) : price
+  const activePlans = selectActivePlans(initialPlans)
+  const limitRows = buildPlanLimitRows(activePlans)
+  const featureRows = buildPlanFeatureRows(activePlans)
+
+  // Solo el plan a medida se cotiza. Un precio 0 es el plan gratuito y se
+  // anuncia como tal: antes caia en el mismo caso que enterprise y el plan de
+  // entrada aparecia como "A Medida", escondido detras de un supuesto contacto
+  // comercial, aunque su boton llevaba igual al registro.
+  const getPrice = (price: number, isCustom?: boolean) => {
+    if (isCustom) return 'A Medida'
+    if (!price || price === 0) return 'Gratis'
+    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(price)
   }
 
-  const formatLimit = (val?: string) => {
-    if (!val) return <Minus className="mx-auto h-5 w-5 text-slate-300 dark:text-slate-600" />
-    if (val.toLowerCase() === 'ilimitado' || val === '∞') {
-      return <span className="text-emerald-500 font-bold text-lg">∞</span>
-    }
-    return <span className="text-slate-700 dark:text-slate-300 font-medium">{val}</span>
+  // Los tiers reales del sistema son free, basic, pro y enterprise: son los
+  // unicos que acepta la API al crear un plan. Antes se mapeaba a nombres
+  // inventados ('lite', 'pro_plus') y 'free' no coincidia con ninguno, asi que
+  // terminaba tratado como el plan pago mas bajo.
+  const getTierKey = (tierName: string) => {
+    const t = (tierName || '').toLowerCase()
+    if (t.includes('free') || t.includes('gratis')) return 'free'
+    if (t.includes('basic') || t.includes('lite')) return 'basic'
+    if (t.includes('enterp')) return 'enterprise'
+    if (t.includes('pro')) return 'pro'
+    return 'basic'
   }
+
+  // La base manda. Si el superadmin configuro 0 dias, la web no debe prometer
+  // una prueba: antes el 0 no pasaba el `> 0` y se caia a un valor inventado,
+  // asi que "sin prueba" se publicaba como "20 dias gratis".
+  const getPlanTrialDays = (plan: SubscriptionPlan) => {
+    return typeof plan.trial_days === 'number' && plan.trial_days > 0 ? plan.trial_days : 0
+  }
+
+  const availableProfiles = BUSINESS_PROFILES.filter((profile) =>
+    activePlans.some((plan) => getTierKey(plan.tier || plan.name) === profile.recommendedTier),
+  )
 
   return (
-    <section id="planes" className="relative py-24 sm:py-32 overflow-hidden">
+    <section id="planes" className="relative scroll-mt-24 py-14 sm:py-20 overflow-hidden bg-slate-50/50 dark:bg-slate-950/60">
       {/* Background aesthetics */}
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-100 via-white to-white dark:from-slate-900 dark:via-slate-950 dark:to-slate-950" />
-      <div className="absolute top-0 right-1/2 -z-10 -translate-y-1/2 translate-x-1/3 transform-gpu blur-3xl opacity-20 dark:opacity-30">
-        <div className="aspect-[1097/845] w-[68.5625rem] bg-gradient-to-tr from-[#ff4694] to-[#776fff] opacity-20" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
-      </div>
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-50/60 via-white to-white dark:from-slate-900/60 dark:via-slate-950 dark:to-slate-950" />
 
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         {/* Header Section */}
-        <div className="mx-auto max-w-4xl text-center">
-          <motion.p 
+        <div className="mx-auto max-w-3xl text-center">
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-sm font-semibold uppercase tracking-widest text-cyan-600 dark:text-cyan-400"
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 shadow-xs"
           >
-            Precios y Planes
-          </motion.p>
+            <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Prueba Gratis · 100% Sin Tarjeta de Crédito</span>
+          </motion.div>
+
           <motion.h2 
             initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="mt-2 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl dark:text-white"
+            className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl dark:text-white"
           >
-            Elige el plan ideal para tu negocio
+            Elegí cómo empezar
           </motion.h2>
+
           <motion.p 
             initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-400"
+            className="mx-auto mt-4 max-w-2xl text-sm sm:text-base text-slate-600 dark:text-slate-400 leading-relaxed"
           >
-            Comienza gratis o prueba cualquier plan sin compromiso. Sin tarjetas de crédito al inicio, cancela cuando quieras.
+            Probá el sistema con los días de prueba que incluye cada plan. Sin costos ocultos y sin necesidad de tarjeta.
           </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.25 }}
+            className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs font-semibold text-slate-600 dark:text-slate-300"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Prueba gratis según el plan
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Gift className="h-4 w-4 text-emerald-500" />
+              Cancelás cuando quieras
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <CreditCard className="h-4 w-4 text-cyan-500" />
+              Sin tarjeta de crédito
+            </span>
+          </motion.div>
         </div>
 
-        {/* Toggle Mensual/Anual */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mt-10 flex justify-center"
-        >
-          <div className="relative flex rounded-full bg-slate-100 p-1 shadow-inner dark:bg-slate-900">
-            <button
-              onClick={() => setYearly(false)}
-              className={cn(
-                "relative rounded-full px-6 py-2 text-sm font-medium transition-colors",
-                !yearly ? "text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              )}
-            >
-              {!yearly && (
-                <motion.div layoutId="bubble" className="absolute inset-0 -z-10 rounded-full bg-white shadow-sm dark:bg-slate-800" />
-              )}
-              Mensual
-            </button>
-            <button
-              onClick={() => setYearly(true)}
-              className={cn(
-                "relative rounded-full px-6 py-2 text-sm font-medium transition-colors",
-                yearly ? "text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              )}
-            >
-              {yearly && (
-                <motion.div layoutId="bubble" className="absolute inset-0 -z-10 rounded-full bg-white shadow-sm dark:bg-slate-800" />
-              )}
-              Anual
-              <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400 border-none">
-                -20%
-              </Badge>
-            </button>
+        {/* Recomendador Interactivo de Plan */}
+        {availableProfiles.length > 0 && (
+        <details className="mt-8 mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <summary className="cursor-pointer text-sm font-semibold">¿Necesitás ayuda para elegir un plan?</summary>
+          <div className="pt-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Compass className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              ¿Qué plan se adapta mejor a tu tamaño?
+            </span>
           </div>
-        </motion.div>
 
-        {/* Pricing Cards */}
-        <div className="isolate mx-auto mt-16 grid max-w-md grid-cols-1 gap-8 lg:mx-0 lg:max-w-none lg:grid-cols-4">
-          {initialPlans.map((plan, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {availableProfiles.map((profile) => {
+              const Icon = profile.icon
+              const isSelected = selectedProfile === profile.id
+
+              return (
+                <button
+                  key={profile.id}
+                  type="button"
+                  onClick={() => setSelectedProfile(isSelected ? null : profile.id)}
+                  aria-pressed={isSelected}
+                  className={cn(
+                    "flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer text-xs font-semibold gap-1.5",
+                    isSelected
+                      ? "border-cyan-500 bg-cyan-50/80 text-cyan-950 dark:border-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-200 shadow-xs ring-2 ring-cyan-500/20"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300"
+                  )}
+                >
+                  <Icon className={cn("h-4 w-4", isSelected ? "text-cyan-600" : "text-slate-400")} />
+                  <span>{profile.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {selectedProfile && (
             <motion.div
-              key={plan.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 + i * 0.1 }}
-              className={cn(
-                "group relative flex flex-col justify-between rounded-3xl p-8 backdrop-blur-xl transition-all hover:scale-[1.02]",
-                plan.is_popular 
-                  ? "bg-white shadow-2xl ring-2 ring-violet-500 dark:bg-slate-900 dark:shadow-violet-900/20" 
-                  : "bg-white/60 ring-1 ring-slate-200 hover:shadow-lg dark:bg-slate-900/60 dark:ring-slate-800"
-              )}
+              className="mt-3.5 p-3 rounded-xl bg-cyan-50/90 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/60 text-xs text-cyan-950 dark:text-cyan-200 flex items-center justify-between gap-3"
             >
-              {plan.is_popular && (
-                <div className="absolute -top-4 left-0 right-0 mx-auto w-fit">
-                  <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1 text-xs font-semibold tracking-wide text-white shadow-md">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    MÁS ELEGIDO
-                  </span>
-                </div>
-              )}
-
               <div>
-                <div className="flex items-center justify-between gap-x-4">
-                  <h3 className={cn("text-lg font-semibold leading-8", plan.is_popular ? "text-violet-600 dark:text-violet-400" : "text-slate-900 dark:text-white")}>
-                    {plan.name}
-                  </h3>
-                </div>
-                
-                <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-400 min-h-[48px]">
-                  {plan.description}
-                </p>
-
-                <div className="mt-6 flex items-baseline gap-x-1">
-                  <span className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">
-                    {new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(getPrice(plan.price))}
-                  </span>
-                </div>
-                {yearly && plan.price > 0 && (
-                  <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                    Facturado anualmente
-                  </p>
-                )}
-                {!yearly && plan.price === 0 && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    {plan.price_note || 'Siempre gratis'}
-                  </p>
-                )}
-                {!yearly && plan.price > 0 && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    {plan.price_note || '/mes'}
-                  </p>
-                )}
-
-                <ul role="list" className="mt-8 space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                  {plan.highlights.map((highlight) => (
-                    <li key={highlight} className="flex gap-x-3">
-                      <Check className={cn("h-6 w-5 flex-none", plan.is_popular ? "text-violet-600 dark:text-violet-400" : "text-cyan-600 dark:text-cyan-400")} aria-hidden="true" />
-                      {highlight}
-                    </li>
-                  ))}
-                </ul>
+                <span className="font-bold">Recomendación para tu negocio: </span>
+                <span>{availableProfiles.find((p) => p.id === selectedProfile)?.reason}</span>
               </div>
+              <Badge className="bg-cyan-600 text-white shrink-0 font-bold">
+                Plan {availableProfiles.find((p) => p.id === selectedProfile)?.recommendedTier?.toUpperCase()}
+              </Badge>
+            </motion.div>
+          )}
+          </div>
+        </details>
+        )}
 
-              <Link
-                href={`/register?plan=${plan.tier}`}
-                aria-describedby={plan.tier}
+
+        {/* Pricing Cards Grid */}
+        {activePlans.length > 0 ? (
+        <div className="isolate mx-auto mt-12 grid max-w-md grid-cols-1 gap-6 sm:max-w-none sm:grid-cols-2 lg:grid-cols-4">
+          {activePlans.map((plan, i) => {
+            const isPopular = Boolean(plan.is_popular)
+            const isEnterprise = plan.custom || plan.tier === 'enterprise'
+            const tierKey = getTierKey(plan.tier || plan.name)
+            const trialDays = getPlanTrialDays(plan)
+
+            // Resaltar si el usuario seleccionó un perfil en el recomendador
+            const isHighlightedByQuiz = selectedProfile && availableProfiles.find(p => p.id === selectedProfile)?.recommendedTier === tierKey
+
+            return (
+              <motion.div
+                key={plan.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 * i }}
                 className={cn(
-                  "mt-8 block rounded-xl px-3 py-2.5 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all",
-                  plan.is_popular
-                    ? "bg-violet-600 text-white hover:bg-violet-500 focus-visible:outline-violet-600 shadow-md"
-                    : "text-cyan-600 ring-1 ring-inset ring-cyan-200 hover:ring-cyan-300 hover:bg-cyan-50 dark:text-cyan-400 dark:ring-slate-700 dark:hover:bg-slate-800"
+                  "group relative flex flex-col justify-between rounded-xl p-5 sm:p-6 transition-colors",
+                  isHighlightedByQuiz
+                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-600"
+                    : isPopular
+                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-600"
+                    : "bg-white/80 dark:bg-slate-900/70 border border-slate-200/90 dark:border-slate-800/80 shadow-sm"
                 )}
               >
-                Comenzar prueba gratis
-              </Link>
-            </motion.div>
-          ))}
+                {isPopular && (
+                  <div className="absolute -top-3.5 left-0 right-0 mx-auto w-fit">
+                    <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-1 text-[11px] font-bold tracking-wide text-white shadow-md">
+                      <Sparkles className="h-3 w-3" />
+                      MÁS ELEGIDO
+                    </span>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between gap-x-2">
+                    <h3 className={cn("text-lg font-bold", isPopular ? "text-violet-600 dark:text-violet-400" : "text-slate-900 dark:text-white")}>
+                      {plan.name}
+                    </h3>
+                    {plan.limits?.branches && (
+                      <Badge variant="outline" className="text-[10px] font-semibold border-slate-200 dark:border-slate-700">
+                        {formatPlanLimit(plan.limits.branches)}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <p className="mt-2.5 text-xs text-slate-600 dark:text-slate-400 min-h-[36px] leading-relaxed">
+                    {plan.description}
+                  </p>
+
+                  <div className="mt-5 flex items-baseline gap-x-1.5">
+                    <span className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                      {getPrice(plan.price, isEnterprise)}
+                    </span>
+                    {!isEnterprise && plan.price > 0 && (
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        /mes
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Badge de Prueba Gratis y Sin Tarjeta */}
+                  <div className="mt-3">
+                    {!isEnterprise ? (
+                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 w-full justify-center">
+                        <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>{trialDays > 0 ? `${trialDays} días gratis · Sin tarjeta` : 'Sin tarjeta requerida'}</span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/60 px-2.5 py-1 text-[11px] font-bold text-violet-800 dark:text-violet-300 w-full justify-center">
+                        <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                        <span>Demo y prueba a medida</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resumen de Límites Claves */}
+                  {plan.limits && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
+                        <span className="block font-bold text-slate-900 dark:text-slate-200">{formatPlanLimit(plan.limits.users)}</span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Usuarios</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
+                        <span className="block font-bold text-slate-900 dark:text-slate-200">{formatPlanLimit(plan.limits.products)}</span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Catálogo</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Características Destacadas */}
+                  <ul role="list" className="mt-5 space-y-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                    {(plan.highlights || []).map((highlight) => (
+                      <li key={highlight} className="flex items-start gap-2.5">
+                        <Check className={cn("h-4 w-4 shrink-0 mt-0.5", isPopular ? "text-violet-600 dark:text-violet-400" : "text-cyan-600 dark:text-cyan-400")} />
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-7 space-y-1.5">
+                  <Link
+                    href={isEnterprise ? '/saas#contacto' : `/register?plan=${plan.public_slug || plan.tier}`}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-center text-xs font-bold transition-all shadow-xs cursor-pointer",
+                      isPopular
+                        ? "bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-500/20"
+                        : "bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
+                    )}
+                  >
+                    <span>
+                      {isEnterprise
+                        ? 'Contactar a Ventas'
+                        : trialDays > 0
+                        ? `Probar ${trialDays} Días Gratis`
+                        : 'Comenzar Ahora'}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                  <p className="text-center text-[10px] text-muted-foreground font-medium">
+                    {isEnterprise
+                      ? 'Sin compromiso · Respuesta en 24hs'
+                      : 'Sin tarjeta de crédito · Activación instantánea'}
+                  </p>
+                </div>
+              </motion.div>
+            )
+          })}
         </div>
+        ) : (
+          <div role="status" className="mx-auto mt-12 max-w-2xl rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">No hay planes disponibles en este momento</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Volvé a consultar más adelante o contactanos para recibir orientación.
+            </p>
+          </div>
+        )}
 
         {/* Feature Comparison Table Toggle */}
-        <div className="mt-20 text-center">
+        {activePlans.length > 0 && (
+        <div className="mt-14 text-center">
           <Button 
-            variant="ghost" 
+            variant="outline"
+            size="sm"
             onClick={() => setShowTable(!showTable)}
-            className="group font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            className="rounded-xl px-5 py-2.5 text-xs font-bold border-slate-300 dark:border-slate-700 gap-2 text-slate-700 dark:text-slate-200 shadow-xs cursor-pointer"
           >
-            Ver todas las características comparadas
-            <motion.div
-              animate={{ rotate: showTable ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ChevronDown className="ml-2 h-4 w-4" />
-            </motion.div>
+            <span>{showTable ? 'Ocultar comparativa detallada' : 'Ver todas las características y módulos comparados'}</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", showTable && "rotate-180")} />
           </Button>
         </div>
+        )}
 
-        {/* Feature Table */}
+        {/* Detailed Feature Comparison Table */}
         <AnimatePresence>
-          {showTable && (
+          {showTable && activePlans.length > 0 && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.4, ease: "easeInOut" }}
-              className="mt-8 overflow-hidden"
+              transition={{ duration: 0.3 }}
+              className="mt-6 overflow-hidden"
             >
-              <div className="rounded-3xl border border-slate-200 bg-white/50 backdrop-blur-xl shadow-sm dark:border-slate-800 dark:bg-slate-950/50">
+              <div className="rounded-3xl border border-slate-200 bg-white/95 backdrop-blur-xl shadow-lg dark:border-slate-800 dark:bg-slate-900/95 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[800px]">
+                  <table className="w-full text-left border-collapse min-w-[720px]">
                     <caption className="sr-only">Comparación detallada de características por plan</caption>
-                    <colgroup>
-                      <col className="w-1/4" />
-                      {initialPlans.map(p => <col key={p.id} className="w-1/5" />)}
-                    </colgroup>
                     <thead>
-                      <tr>
-                        <th className="p-6 text-sm font-semibold text-slate-900 dark:text-white"></th>
-                        {initialPlans.map((plan) => (
-                          <th key={plan.id} className="p-6 text-center">
-                            <span className="text-sm font-semibold text-slate-900 dark:text-white">{plan.name}</span>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
+                        <th className="p-4 sm:p-5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 w-1/3">
+                          Capacidad y Funcionalidades
+                        </th>
+                        {activePlans.map((plan) => (
+                          <th key={plan.id} className="p-4 sm:p-5 text-center">
+                            <span className="text-sm font-bold text-slate-900 dark:text-white block">{plan.name}</span>
+                            <span className="text-[11px] font-medium text-muted-foreground">{getPrice(plan.price, plan.custom)}</span>
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                       
-                      {/* Límites */}
-                      <tr className="bg-slate-50/80 dark:bg-slate-900/80">
-                        <th colSpan={initialPlans.length + 1} className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Límites del sistema
+                      {/* Límites de Plan */}
+                      <tr className="bg-slate-100/70 dark:bg-slate-800/50 font-bold">
+                        <th colSpan={activePlans.length + 1} className="px-4 py-2 text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                          1. Límites Operativos
                         </th>
                       </tr>
-                      {PLAN_LIMITS.map((limit) => (
-                        <tr key={limit.key} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          <th scope="row" className="p-6 text-sm font-medium text-slate-600 dark:text-slate-400">
+                      {limitRows.map((limit) => (
+                        <tr key={limit.key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                          <th scope="row" className="p-3.5 sm:p-4 text-xs font-medium text-slate-700 dark:text-slate-300">
                             {limit.label}
                           </th>
-                          {initialPlans.map((plan) => (
-                            <td key={plan.id} className="p-6 text-center text-sm">
-                              {formatLimit(plan.limits?.[limit.key as keyof typeof plan.limits])}
-                            </td>
-                          ))}
+                          {activePlans.map((plan) => {
+                            const val = limit.values[plan.id] ?? 'No especificado'
+                            const isUnlimited = val.toLowerCase().includes('ilimitad')
+
+                            return (
+                              <td key={plan.id} className="p-3.5 sm:p-4 text-center">
+                                {isUnlimited ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">{val}</span>
+                                ) : (
+                                  <span className="text-slate-700 dark:text-slate-300 font-semibold">{val}</span>
+                                )}
+                              </td>
+                            )
+                          })}
                         </tr>
                       ))}
 
-                      {/* Módulos */}
-                      <tr className="bg-slate-50/80 dark:bg-slate-900/80 border-t-2 border-slate-200 dark:border-slate-800">
-                        <th colSpan={initialPlans.length + 1} className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Módulos & Features
+                      {/* Módulos Funcionales */}
+                      <tr className="bg-slate-100/70 dark:bg-slate-800/50 font-bold border-t border-slate-200 dark:border-slate-800">
+                        <th colSpan={activePlans.length + 1} className="px-4 py-2 text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                          2. Módulos y Funciones Incluidas
                         </th>
                       </tr>
-                      {PLAN_FEATURES.map((feat) => (
-                        <tr key={feat.key} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          <th scope="row" className="p-6 text-sm font-medium text-slate-600 dark:text-slate-400">
+                      {featureRows.map((feat) => (
+                        <tr key={feat.key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                          <th scope="row" className="p-3.5 sm:p-4 text-xs font-medium text-slate-700 dark:text-slate-300">
                             {feat.label}
                           </th>
-                          {initialPlans.map((plan) => {
-                            const featureData = plan.features?.find((f) => f.label === feat.label)
-                            const val = featureData ? featureData.value : false
+                          {activePlans.map((plan) => {
+                            const value = feat.values[plan.id] ?? false
 
                             return (
-                              <td key={plan.id} className="p-6 text-center text-sm text-slate-500">
-                                {typeof val === 'boolean' ? (
-                                  val ? (
-                                    <Check className="mx-auto h-5 w-5 text-emerald-500" />
-                                  ) : (
-                                    <Minus className="mx-auto h-5 w-5 text-slate-300 dark:text-slate-600" />
-                                  )
+                              <td key={plan.id} className="p-3.5 sm:p-4 text-center">
+                                {value === true ? (
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 mx-auto">
+                                    <Check className="h-3.5 w-3.5" />
+                                  </div>
+                                ) : value === false ? (
+                                  <Minus className="mx-auto h-4 w-4 text-slate-300 dark:text-slate-600" />
                                 ) : (
-                                  <span className="text-slate-700 dark:text-slate-300 font-medium">{val}</span>
+                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                    {String(value)}
+                                  </span>
                                 )}
                               </td>
                             )
@@ -330,8 +490,62 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
           )}
         </AnimatePresence>
 
+        {/* Sección de Preguntas Frecuentes (FAQ) */}
+        <div className="mt-20 max-w-3xl mx-auto space-y-4">
+          <div className="text-center space-y-1 mb-8">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Preguntas Frecuentes sobre los Planes
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Respuestas rápidas a las consultas más comunes.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {FAQ_ITEMS.map((faq, index) => {
+              const isOpen = openFaq === index
+              return (
+                <div
+                  key={index}
+                  className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900/60"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? null : index)}
+                    aria-expanded={isOpen}
+                    aria-controls={`saas-faq-${index}`}
+                    className="flex w-full items-center justify-between text-left text-sm font-bold text-slate-900 dark:text-slate-50 cursor-pointer"
+                  >
+                    <span>{faq.q}</span>
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform text-slate-400", isOpen && "rotate-180")} />
+                  </button>
+                  {isOpen && (
+                    <p id={`saas-faq-${index}`} className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {faq.a}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Plan Notes & Trust Badges */}
+        <div className="mt-16 grid gap-6 md:grid-cols-3">
+          {planNotes.map((note) => (
+            <div key={note.title} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{note.title}</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                {note.description}
+              </p>
+            </div>
+          ))}
+        </div>
+
       </div>
     </section>
   )
 }
-

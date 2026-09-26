@@ -1,69 +1,47 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
+import React, { useCallback, useEffect, useState } from 'react'
+import { motion } from '../ui/motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
-import { BarChart } from 'recharts/es6/chart/BarChart';
-import { Bar } from 'recharts/es6/cartesian/Bar';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
-import { PieChart } from 'recharts/es6/chart/PieChart';
-import { Pie } from 'recharts/es6/polar/Pie';
-import { Cell } from 'recharts/es6/component/Cell';
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Area } from 'recharts/es6/cartesian/Area';
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
+import { PieChart } from 'recharts/es6/chart/PieChart'
+import { Pie } from 'recharts/es6/polar/Pie'
+import { Cell } from 'recharts/es6/component/Cell'
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
+import { Area } from 'recharts/es6/cartesian/Area'
 import {
   Database,
   HardDrive,
   Shield,
   Clock,
   CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Play,
-  Pause,
-  RotateCcw,
-  Download,
-  Upload,
-  Settings,
-  Calendar,
-  FileText,
-  Server,
-  Cloud,
-  Archive,
+  XCircle, Play, RotateCcw, Settings,
+  Calendar, Archive,
   RefreshCw,
   Plus,
   Edit,
   Trash2,
   Eye,
-  Activity,
-  Zap,
-  Target,
-  TrendingUp,
-  AlertCircle
+  Activity, Target, AlertCircle
 } from 'lucide-react'
-import { 
-  useBackupSystem, 
-  type BackupConfig, 
-  type BackupJob, 
-  type BackupMetrics,
-  type RestoreJob 
+import {
+  useBackupSystem,
+  type BackupConfig,
+  type BackupJob, type RestoreJob
 } from '@/lib/backup/backup-system'
 import { formatBytes, formatDuration } from '@/lib/utils'
 
@@ -113,11 +91,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
     testRestore: false
   })
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       await loadBackupData()
@@ -126,7 +100,11 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [loadBackupData])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -676,9 +654,9 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                 <Label htmlFor="frequency">Frecuencia</Label>
                 <Select
                   value={newConfig.schedule?.frequency}
-                  onValueChange={(value) => setNewConfig(prev => ({
+                  onValueChange={(value: NonNullable<BackupConfig['schedule']>['frequency']) => setNewConfig(prev => ({
                     ...prev,
-                    schedule: { ...prev.schedule!, frequency: value as any }
+                    schedule: { ...prev.schedule!, frequency: value }
                   }))}
                 >
                   <SelectTrigger>

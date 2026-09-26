@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  AlertTriangle, 
-  X, 
-  CheckCircle, 
-  Package, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  AlertTriangle,
+  X,
+  CheckCircle,
+  Package,
   Clock,
   RefreshCw,
   AlertCircle
@@ -14,7 +14,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { useProductAlerts } from '@/hooks/useProductAlerts'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -52,7 +51,7 @@ export function ProductAlerts() {
     }
   }
 
-  const getAlertColor = (alertType: string) => {
+  const getAlertColor = (alertType: string): 'destructive' | 'secondary' | 'default' => {
     switch (alertType) {
       case 'out_of_stock':
         return 'destructive'
@@ -97,9 +96,9 @@ export function ProductAlerts() {
         </CardHeader>
         <CardContent>
           <div className="text-sm text-red-600">{error}</div>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleRefresh}
             className="mt-2"
           >
@@ -202,12 +201,12 @@ export function ProductAlerts() {
                     >
                       {getAlertIcon(alert.alert_type)}
                     </motion.div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={getAlertColor(alert.alert_type) as any} className="text-xs">
+                            <Badge variant={getAlertColor(alert.alert_type)} className="text-xs">
                               {alert.alert_type === 'out_of_stock' ? 'Agotado' : 'Stock Bajo'}
                             </Badge>
                             {alert.product && (
@@ -216,15 +215,15 @@ export function ProductAlerts() {
                               </span>
                             )}
                           </div>
-                          
+
                           <p className="text-sm font-medium mb-1">
                             {alert.product?.name || 'Producto'}
                           </p>
-                          
+
                           <p className="text-xs text-muted-foreground mb-2">
                             {alert.message}
                           </p>
-                          
+
                           {alert.product && (
                             <div className="flex items-center gap-4 text-xs text-muted-foreground">
                               <span>Stock actual: {alert.product.stock_quantity}</span>
@@ -232,7 +231,7 @@ export function ProductAlerts() {
                             </div>
                           )}
                         </div>
-                        
+
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
@@ -242,7 +241,7 @@ export function ProductAlerts() {
                           <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                         </motion.button>
                       </div>
-                      
+
                       <div className="flex items-center gap-2 mt-2 pt-2 border-t">
                         <Clock className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
@@ -251,11 +250,11 @@ export function ProductAlerts() {
                               if (!alert.created_at) return 'Fecha no disponible'
                               const date = new Date(alert.created_at)
                               if (isNaN(date.getTime())) return 'Fecha inválida'
-                              return formatDistanceToNow(date, { 
-                                addSuffix: true, 
-                                locale: es 
+                              return formatDistanceToNow(date, {
+                                addSuffix: true,
+                                locale: es
                               })
-                            } catch (error) {
+                            } catch (_error) {
                               return 'Fecha no disponible'
                             }
                           })()}

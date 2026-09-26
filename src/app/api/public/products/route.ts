@@ -5,8 +5,10 @@ import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
-import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
+import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { parsePublicProductsQuery } from '@/lib/public/products-query'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -52,10 +54,23 @@ export async function GET(request: NextRequest) {
       organizationId: organization.id,
     })
 
+    const { data: automaticPromotionRows } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('organization_id', organization.id)
+      .eq('public_mode', 'automatic')
+      .eq('is_active', true)
+    const automaticPromotions = (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+
+    // El inicio de la tienda se sirve por acá: sin esta columna mostraba el
+    // precio de los productos publicados «solo para mayoristas».
+    const conPrecioOculto = await productsHaveHidePriceColumn(supabase)
+    const campoPrecioOculto = conPrecioOculto ? ', hide_price' : ''
+
     // Build query - only active products, never select wholesale_price for non-wholesale
-    const selectFields = isWholesale
-      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+    const selectFields = (isWholesale
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, created_at, has_variants, variant_attribute_config, category:categories(id, name)') + campoPrecioOculto
 
     let queryBuilder = supabase.from('products')
       .select(selectFields as '*', { count: 'exact' })
@@ -68,6 +83,10 @@ export async function GET(request: NextRequest) {
       queryBuilder = queryBuilder.in('visibility', ['public', 'wholesale'])
     } else {
       queryBuilder = queryBuilder.eq('visibility', 'public')
+    }
+
+    if (hasOffer) {
+      queryBuilder = queryBuilder.or(buildPublicOfferCandidateFilter(automaticPromotions))
     }
 
     // Apply search filter with sanitized input
@@ -119,19 +138,33 @@ export async function GET(request: NextRequest) {
       logger.error('Failed to fetch public products', { error: error.message })
       throw error
     }
+    const pageProductIds = (products ?? []).map((product) => String(product.id))
+    const { data: variantRows, error: variantError } = pageProductIds.length > 0
+      ? await supabase.from('product_variants')
+          .select(isWholesale
+            ? 'id, product_id, variant_name, attributes, sku, sale_price, wholesale_price, stock_quantity, is_active'
+            : 'id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
+          .eq('organization_id', organization.id).eq('is_active', true).in('product_id', pageProductIds).order('variant_name')
+      : { data: [], error: null }
+    if (variantError) throw variantError
+    const publicVariantRows = (variantRows ?? []) as unknown as Array<Record<string, unknown>>
+    const variantsByProduct = new Map<string, Array<Record<string, unknown>>>()
+    for (const variant of publicVariantRows) {
+      const key = String(variant.product_id)
+      variantsByProduct.set(key, [...(variantsByProduct.get(key) ?? []), variant])
+    }
 
     // Transform to PublicProduct type - hide sensitive data
-    const { data: automaticPromotionRows } = await supabase
-      .from('promotions')
-      .select('*')
-      .eq('organization_id', organization.id)
-      .eq('public_mode', 'automatic')
-      .eq('is_active', true)
-    const automaticPromotions = (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
-
-    const publicProducts: PublicProduct[] = (products || []).map((p: Record<string, unknown>) => {
+    const publicProducts: Array<PublicProduct & { created_at: string | null }> = (products || []).map((p: Record<string, unknown>) => {
       const category = Array.isArray(p.category) ? p.category[0] : p.category
       const cat = category as { id: string; name: string } | null
+      const productVariants = variantsByProduct.get(String(p.id)) ?? []
+      const effectiveHasVariants = Boolean(p.has_variants) || productVariants.length > 0
+      const baseStock = Number(p.stock_quantity ?? 0)
+      const publicStock = effectiveHasVariants && productVariants.length > 0
+        ? productVariants.reduce((sum, variant) => sum + Number(variant.stock_quantity ?? 0), 0)
+        : baseStock
+      const configuredAttributes = Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : []
       const priced = applyAutomaticPromotionToProduct({
         id: p.id as string,
         category_id: cat?.id ?? null,
@@ -148,8 +181,12 @@ export async function GET(request: NextRequest) {
         category: cat ? { id: cat.id, name: cat.name } : undefined,
         sale_price: p.sale_price as number,
         wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-        stock_quantity: Number(p.stock_quantity ?? 0),
-        in_stock: Number(p.stock_quantity ?? 0) > 0,
+        // Igual que en el catálogo: al mayorista registrado no se le esconde.
+        hide_price: p.hide_price === true && !isWholesale,
+        stock_quantity: effectiveHasVariants && productVariants.length > 0
+          ? publicStock
+          : Number(p.stock_quantity ?? 0), // stock_quantity: Number(p.stock_quantity ?? 0)
+        in_stock: publicStock > 0,
         is_active: p.is_active as boolean,
         featured: (p.featured as boolean) || false,
         has_offer: priced.has_offer,
@@ -159,6 +196,18 @@ export async function GET(request: NextRequest) {
         images: p.images as string[] | null,
         unit_measure: p.unit_measure as string,
         barcode: p.barcode as string | null,
+        created_at: p.created_at ? String(p.created_at) : null,
+        has_variants: effectiveHasVariants,
+        variant_attribute_config: configuredAttributes.length > 0
+          ? configuredAttributes
+          : deriveVariantAttributeConfig(productVariants),
+        variants: productVariants.map((variant) => ({
+          id: String(variant.id), product_id: String(variant.product_id), variant_name: String(variant.variant_name),
+          attributes: (variant.attributes ?? {}) as Record<string, string>, sku: variant.sku ? String(variant.sku) : null,
+          sale_price: Number(variant.sale_price ?? 0),
+          wholesale_price: isWholesale ? Number(variant.wholesale_price ?? 0) : null,
+          stock_quantity: Number(variant.stock_quantity ?? 0), is_active: Boolean(variant.is_active),
+        })),
       }
     }).filter((product) => !hasOffer || Boolean(product.has_offer && product.offer_price))
 
@@ -176,7 +225,7 @@ export async function GET(request: NextRequest) {
     response.headers.set('Vary', 'Cookie')
     response.headers.set(
       'Cache-Control',
-      user ? 'private, no-store' : 'public, max-age=30, s-maxage=60'
+      'private, no-store'
     )
     return response
   } catch (error) {

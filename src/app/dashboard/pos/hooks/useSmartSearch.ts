@@ -6,19 +6,24 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 
-interface Product {
+export interface SmartSearchProduct {
   id: string
   name: string
-  sku: string
+  sku?: string | null
   barcode?: string
-  description?: string
-  category: string
-  price: number
-  stock: number
+  description?: string | null
+  category?: string | { id?: string; name?: string } | null
+  price?: number
+  sale_price?: number | null
+  stock?: number
+  stock_quantity?: number | null
   tags?: string[]
+  [key: string]: unknown
 }
 
-interface SearchResult {
+type Product = SmartSearchProduct
+
+export interface SearchResult {
   product: Product
   score: number
   matchType: 'exact' | 'partial' | 'fuzzy' | 'semantic' | 'category' | 'barcode'
@@ -26,7 +31,7 @@ interface SearchResult {
   highlightedName: string
 }
 
-interface SearchSuggestion {
+export interface SearchSuggestion {
   text: string
   type: 'product' | 'category' | 'brand' | 'recent'
   count?: number
@@ -52,7 +57,6 @@ export function useSmartSearch({
   
   const [query, setQuery] = useState('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
-  const [isSearching, setIsSearching] = useState(false)
   
   const debouncedQuery = useDebounce(query, debounceMs)
   const searchCacheRef = useRef<Map<string, SearchResult[]>>(new Map())
@@ -95,7 +99,7 @@ export function useSmartSearch({
     products.forEach(product => {
       const lowerName = (typeof product.name === 'string' ? product.name : '').toLowerCase()
       const lowerSku = (typeof product.sku === 'string' ? product.sku : '').toLowerCase()
-      const lowerDescription = (typeof product.description === 'string' ? product.description : '').toLowerCase()
+      void ((typeof product.description === 'string' ? product.description : '').toLowerCase());
       
       // Coincidencia exacta en nombre
       if (lowerName === lowerQuery && lowerName) {
@@ -309,27 +313,26 @@ export function useSmartSearch({
   }, [products, minQueryLength, maxResults, exactSearch, partialSearch, fuzzySearch, semanticSearch])
 
   // Resultados de búsqueda - Managed via useEffect to avoid state updates during render
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [completedSearch, setCompletedSearch] = useState<{ query: string; products: typeof products; results: SearchResult[] } | null>(null)
+  const validQuery = debouncedQuery.length >= minQueryLength && debouncedQuery.length > 0
+  const searchResults = validQuery && completedSearch?.query === debouncedQuery && completedSearch.products === products ? completedSearch.results : []
+  const isSearching = validQuery && (completedSearch?.query !== debouncedQuery || completedSearch?.products !== products)
 
   useEffect(() => {
     // If query is empty, clear results immediately
     if (!debouncedQuery || debouncedQuery.length < minQueryLength) {
-      setSearchResults([])
-      setIsSearching(false)
       return
     }
 
-    setIsSearching(true)
     
     // Use setTimeout to allow UI to update and avoid blocking render
     const timer = setTimeout(() => {
       const results = performSearch(debouncedQuery)
-      setSearchResults(results)
-      setIsSearching(false)
+      setCompletedSearch({ query: debouncedQuery, products, results })
     }, 0)
 
     return () => clearTimeout(timer)
-  }, [debouncedQuery, performSearch, minQueryLength])
+  }, [debouncedQuery, performSearch, minQueryLength, products])
 
   // Generar sugerencias
   const suggestions = useMemo((): SearchSuggestion[] => {
@@ -345,9 +348,17 @@ export function useSmartSearch({
       })
       
       // Mostrar categorías populares
-      const categories = [...new Set(products.map(p => p.category))].filter(c => typeof c === 'string' && c)
+      const categories = [
+        ...new Set(
+          products.map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
+        )
+      ].filter((c): c is string => typeof c === 'string' && Boolean(c))
+
       categories.slice(0, 5).forEach(category => {
-        const count = products.filter(p => p.category === category).length
+        const count = products.filter(p => {
+          const cat = typeof p.category === 'object' ? p.category?.name : p.category
+          return cat === category
+        }).length
         suggestions.push({
           text: category,
           type: 'category',
@@ -368,13 +379,20 @@ export function useSmartSearch({
       suggestions.push(...productSuggestions)
       
       // Sugerencias de categorías
-      const categorySuggestions = [...new Set(products.map(p => p.category))]
-        .filter(c => typeof c === 'string' && c.toLowerCase().includes(lowerQuery))
+      const categorySuggestions = [
+        ...new Set(
+          products.map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
+        )
+      ]
+        .filter((c): c is string => typeof c === 'string' && c.toLowerCase().includes(lowerQuery))
         .slice(0, 3)
         .map(c => ({
           text: c,
           type: 'category' as const,
-          count: products.filter(p => p.category === c).length
+          count: products.filter(p => {
+            const cat = typeof p.category === 'object' ? p.category?.name : p.category
+            return cat === c
+          }).length
         }))
       
       suggestions.push(...categorySuggestions)

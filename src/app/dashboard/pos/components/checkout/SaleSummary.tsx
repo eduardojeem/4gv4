@@ -9,16 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Wrench } from 'lucide-react'
 import { config, getTaxConfig } from '@/lib/config'
 import { useCheckout } from '../../contexts/CheckoutContext'
-import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
-
-interface CartItem {
-  id: string
-  name: string
-  price: number
-  quantity: number
-  wholesalePrice?: number
-  isService?: boolean
-}
+import { buildPosCreditSummary, formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
+import { firstPaymentError } from '@/lib/credits/first-payment'
+import { FirstInstallmentPaymentFields } from './FirstInstallmentPaymentFields'
+import { CheckoutProductRow, type CheckoutProductItem } from './CheckoutProductRow'
 
 interface CartCalculations {
   subtotal: number
@@ -34,11 +28,12 @@ interface CartCalculations {
 }
 
 interface SaleSummaryProps {
-  cart: CartItem[]
+  cart: CheckoutProductItem[]
   cartCalculations: CartCalculations
   isWholesale: boolean
   WHOLESALE_DISCOUNT_RATE: number
   formatCurrency: (amount: number) => string
+  onUpdateQuantity?: (id: string, quantity: number) => void
 }
 
 export function SaleSummary({
@@ -46,33 +41,43 @@ export function SaleSummary({
   cartCalculations,
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
-  formatCurrency
+  formatCurrency,
+  onUpdateQuantity
 }: SaleSummaryProps) {
-  const { discount, paymentMethod, creditTerms, storeCreditApplied } = useCheckout()
-  const creditSummary = React.useMemo(() => buildPosCreditSummary(cartCalculations.total, creditTerms), [
-    cartCalculations.total,
-    creditTerms.count,
-    creditTerms.frequency,
-    creditTerms.interestRate,
-  ])
-  const isCreditSale = paymentMethod === 'credit'
-  const displayedTotal = isCreditSale ? creditSummary.financedTotal : cartCalculations.total
+  const { discount, paymentMethod, isMixedPayment, paymentSplit, creditTerms, setCreditTerms, storeCreditApplied, paymentStatus } = useCheckout()
+  const amountDueAfterStoreCredit = Math.max(0, cartCalculations.total - storeCreditApplied)
+  const mixedCreditPrincipal = React.useMemo(() => paymentSplit
+    .filter(split => split.method === 'credit')
+    .reduce((total, split) => total + split.amount, 0), [paymentSplit])
+  const immediatePayment = React.useMemo(() => paymentSplit
+    .filter(split => split.method !== 'credit')
+    .reduce((total, split) => total + split.amount, 0), [paymentSplit])
+  const isMixedCreditSale = isMixedPayment && mixedCreditPrincipal > 0
+  const isCreditSale = isMixedPayment ? isMixedCreditSale : paymentMethod === 'credit'
+  const creditPrincipal = isMixedCreditSale ? mixedCreditPrincipal : amountDueAfterStoreCredit
+  const creditSummary = React.useMemo(
+    () => buildPosCreditSummary(creditPrincipal, creditTerms),
+    [creditPrincipal, creditTerms],
+  )
+  const displayedTotal = isCreditSale
+    ? cartCalculations.total + creditSummary.interestAmount
+    : cartCalculations.total
+  const paymentError = isCreditSale ? firstPaymentError(creditTerms.firstPayment, creditSummary.installmentAmount, creditSummary.firstInstallmentTiming) : null
+  const firstPaymentAmount = isCreditSale && creditTerms.firstPayment && !paymentError ? creditSummary.installmentAmount : 0
+  const collectNow = (isMixedPayment ? immediatePayment : isCreditSale ? 0 : amountDueAfterStoreCredit) + firstPaymentAmount
 
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold mb-4">Resumen de la Venta</h3>
+      <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">Detalle del total</h4><span className="text-xs text-muted-foreground">{cart.length} ítems</span></div>
       
       {/* Items del carrito */}
-      <div className="space-y-2 text-sm">
+      <div role="region" aria-label="Productos de la venta" tabIndex={0} className="max-h-56 overflow-y-auto overscroll-contain rounded-md border text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring divide-y [scrollbar-gutter:stable] max-sm:max-h-[30dvh]">
         {cart.map(item => {
           const appliedUnit = isWholesale
             ? (typeof item.wholesalePrice === 'number' ? item.wholesalePrice : (item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
             : item.price
           return (
-            <div key={item.id} className="flex justify-between">
-              <span>{item.name} x{item.quantity}</span>
-              <span>{formatCurrency(appliedUnit * item.quantity)}</span>
-            </div>
+            <CheckoutProductRow key={item.id} item={item} unitPrice={appliedUnit} formatCurrency={formatCurrency} onUpdateQuantity={onUpdateQuantity} disabled={paymentStatus === 'processing'} />
           )
         })}
       </div>
@@ -130,13 +135,31 @@ export function SaleSummary({
         </div>
         {isCreditSale && (
           <>
+            {isMixedCreditSale && (
+              <div className="flex justify-between text-amber-700 dark:text-amber-300">
+                <span>Pago inmediato:</span>
+                <span>{formatCurrency(immediatePayment)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-blue-700 dark:text-blue-300">
+              <span>Capital financiado:</span>
+              <span>{formatCurrency(creditPrincipal)}</span>
+            </div>
             <div className="flex justify-between text-blue-700 dark:text-blue-300">
               <span>Interes credito ({creditTerms.interestRate}%):</span>
               <span>+{formatCurrency(creditSummary.interestAmount)}</span>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-              {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} de{' '}
-              <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+              <div>
+                {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} desde{' '}
+                <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+              </div>
+              <div className="mt-1 flex justify-between gap-3 border-t border-blue-200 pt-1 dark:border-blue-800">
+                <span>Primera cuota:</span>
+                <strong>{formatPosCreditDueDate(creditSummary.firstDueDate)}</strong>
+              </div>
+              <p className="mt-1">{creditSummary.firstInstallmentTiming === 'at_start' ? 'Desde el inicio del crédito' : 'Desde el próximo ciclo'}. {firstPaymentAmount > 0 ? 'La cuota 1 se registrará pagada al confirmar; las restantes quedarán pendientes.' : 'Cuotas pendientes hasta registrar su cobro.'}</p>
+              {creditSummary.lastInstallmentAmount !== creditSummary.installmentAmount && <p className="mt-1">Última cuota: {formatCurrency(creditSummary.lastInstallmentAmount)} (redondeo).</p>}
             </div>
           </>
         )}
@@ -145,9 +168,9 @@ export function SaleSummary({
       <Separator />
 
       {/* Total */}
-      <div className="flex justify-between font-bold text-lg">
-        <span>{isCreditSale ? 'Total financiado:' : 'Total:'}</span>
-        <span className="text-primary">{formatCurrency(displayedTotal)}</span>
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg bg-muted px-3 py-3">
+        <span>{isCreditSale ? 'Total final con financiación:' : 'Total:'}</span>
+        <span className="text-xl font-bold tabular-nums text-primary sm:text-2xl">{formatCurrency(displayedTotal)}</span>
       </div>
 
       {/* El saldo a favor no baja el total: baja lo que hay que cobrar. */}
@@ -158,13 +181,38 @@ export function SaleSummary({
             <span>- {formatCurrency(storeCreditApplied)}</span>
           </div>
           <div className="flex justify-between font-bold">
-            <span>A cobrar:</span>
+            <span>{isCreditSale ? 'A financiar:' : 'A cobrar:'}</span>
             <span className="text-primary">
-              {formatCurrency(Math.max(0, displayedTotal - storeCreditApplied))}
+              {formatCurrency(isCreditSale ? creditSummary.financedTotal : amountDueAfterStoreCredit)}
             </span>
           </div>
         </>
       )}
+
+      {isCreditSale && <FirstInstallmentPaymentFields
+        payment={creditTerms.firstPayment}
+        onChange={firstPayment => setCreditTerms({ ...creditTerms, firstPayment })}
+        amount={creditSummary.installmentAmount}
+        available={creditSummary.firstInstallmentTiming === 'at_start'}
+        formatCurrency={formatCurrency}
+        disabled={paymentStatus === 'processing'}
+      />}
+      {paymentError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{paymentError}</p>}
+      <section aria-label="Resumen del cobro" className="space-y-3 rounded-lg border border-primary/25 bg-primary/5 p-3">
+        <div aria-live="polite">
+          <p className="text-sm font-medium">Total a cobrar ahora</p>
+          <p data-testid="checkout-collect-now" className="break-words text-2xl font-bold tabular-nums text-primary">{formatCurrency(collectNow)}</p>
+        </div>
+        {isCreditSale && <>
+          <dl className="space-y-2 border-t pt-3 text-sm">
+            <div className="flex flex-wrap justify-between gap-2"><dt>Entrega inicial</dt><dd className="font-medium tabular-nums">{formatCurrency(isMixedPayment ? immediatePayment : 0)}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2"><dt>Primera cuota a cobrar</dt><dd className="font-medium tabular-nums">{formatCurrency(firstPaymentAmount)}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2 border-t pt-2"><dt>Saldo del crédito después del cobro</dt><dd data-testid="checkout-credit-balance" className="font-semibold tabular-nums">{formatCurrency(creditSummary.financedTotal - firstPaymentAmount)}</dd></div>
+          </dl>
+          <p className="text-xs text-muted-foreground">La primera cuota forma parte del crédito: no aumenta el precio ni se descuenta otra vez del capital financiado.</p>
+        </>}
+        <p className="text-xs text-muted-foreground">Todavía no se registra ningún cobro. Revisá los datos y confirmá en el siguiente paso.</p>
+      </section>
 
       {/* Información adicional */}
       {isWholesale && (

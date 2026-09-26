@@ -1,6 +1,6 @@
 /**
  * Offline Manager - Gestión de modo offline con IndexedDB
- * 
+ *
  * Características:
  * - Cache completo de productos en IndexedDB
  * - Detección automática de conectividad
@@ -72,7 +72,7 @@ export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'error'
 
 export interface MetadataEntry {
   key: string
-  value: any
+  value: unknown
   updated_at: Date
 }
 
@@ -96,7 +96,7 @@ export interface OfflineStats {
 // Offline Manager Class
 // ============================================================================
 
-class OfflineManager {
+export class OfflineManager {
   private db: IDBPDatabase<POSDatabase> | null = null
   private isOnline: boolean = true
   private syncInterval: NodeJS.Timeout | null = null
@@ -225,7 +225,7 @@ class OfflineManager {
   /**
    * Cache products in IndexedDB
    */
-  async cacheProducts(products: any[]): Promise<void> {
+  async cacheProducts(products: Array<Partial<CachedProduct> & { id: string }>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
     const tx = this.db.transaction('products', 'readwrite')
@@ -405,31 +405,22 @@ class OfflineManager {
   }
 
   /**
-   * Sync single sale to server (placeholder)
+   * Todavía no existe.
+   *
+   * Era un cuerpo vacío: `syncPendingSales` lo llamaba, no pasaba nada, y
+   * marcaba la venta como «synced». Con el modo sin conexión activado eso
+   * significa que la venta se pierde y el cajero ve que se sincronizó.
+   *
+   * Falla a propósito hasta que se implemente de verdad. Cuando se haga, tiene
+   * que ir contra `/api/pos/process-sale` —la única vía que descuenta stock,
+   * arma el crédito y registra la caja— y con una clave de idempotencia
+   * guardada junto a la venta, para que reintentar no cobre dos veces.
    */
   private async syncSaleToServer(sale: PendingSale): Promise<void> {
-    // TODO: Implement actual API call to Supabase
-    // This is a placeholder that simulates the API call
-
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    // Simulate 10% failure rate for testing
-    if (Math.random() < 0.1) {
-      throw new Error('Network error')
-    }
-
-    // In production, this would be:
-    // const { error } = await supabase.from('sales').insert({
-    //   items: sale.items,
-    //   total: sale.total,
-    //   subtotal: sale.subtotal,
-    //   tax: sale.tax,
-    //   payment_method: sale.payment_method,
-    //   customer_id: sale.customer_id,
-    //   created_at: sale.created_at,
-    // })
-    // if (error) throw error
+    throw new Error(
+      `La sincronización de ventas sin conexión no está implementada (venta ${sale.id}). ` +
+      'La venta sigue guardada en este equipo: no se envió nada al servidor.'
+    )
   }
 
   /**
@@ -459,7 +450,7 @@ class OfflineManager {
   /**
    * Set metadata
    */
-  async setMetadata(key: string, value: any): Promise<void> {
+  async setMetadata(key: string, value: unknown): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
     await this.db.put('metadata', {
@@ -472,11 +463,11 @@ class OfflineManager {
   /**
    * Get metadata
    */
-  async getMetadata(key: string): Promise<any> {
+  async getMetadata<T = unknown>(key: string): Promise<T | undefined> {
     if (!this.db) throw new Error('Database not initialized')
 
     const entry = await this.db.get('metadata', key)
-    return entry?.value
+    return entry?.value as T | undefined
   }
 
   // ==========================================================================
@@ -521,7 +512,7 @@ class OfflineManager {
     const [cachedProducts, pendingSales, lastSync] = await Promise.all([
       this.db.count('products'),
       this.getPendingSales().then((sales) => sales.length),
-      this.getMetadata('last_sync'),
+      this.getMetadata<string>('last_sync'),
     ])
 
     // Get storage usage

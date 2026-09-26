@@ -3,7 +3,10 @@
  */
 
 import { Product, ProductAlert } from '@/types/product-unified'
-import { DashboardFilters, DashboardMetrics, SortConfig, SearchOptions, GroupedAlerts } from '@/types/products-dashboard'
+import { DashboardFilters, DashboardMetrics, SortConfig, GroupedAlerts } from '@/types/products-dashboard'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
+
+export { isServiceLikeProduct }
 
 /**
  * Filter products by search query across multiple fields
@@ -35,6 +38,23 @@ export function searchProducts(products: Product[], query: string): Product[] {
  */
 export function applyFilters(products: Product[], filters: DashboardFilters): Product[] {
   let filtered = [...products]
+
+  // Item type filter (products vs services)
+  if (filters.item_type && filters.item_type !== 'all') {
+    if (filters.item_type === 'services') {
+      filtered = filtered.filter(isServiceLikeProduct)
+    } else if (filters.item_type === 'products') {
+      filtered = filtered.filter(p => !isServiceLikeProduct(p))
+    }
+  }
+
+  // Tipo de catalogo: es el alcance de la pantalla y vive aparte del filtro
+  // rapido, para que pedir «bajo stock» no vuelva a mezclar los servicios.
+  if (filters.catalog_kind) {
+    filtered = filters.catalog_kind === 'service'
+      ? filtered.filter(isServiceLikeProduct)
+      : filtered.filter(p => !isServiceLikeProduct(p))
+  }
 
   // Category filter
   if (filters.category_id) {
@@ -77,13 +97,25 @@ export function applyFilters(products: Product[], filters: DashboardFilters): Pr
   if (filters.quick_filter) {
     switch (filters.quick_filter) {
       case 'low_stock':
-        filtered = filtered.filter(isLowStock)
+        filtered = filtered.filter(p => !isServiceLikeProduct(p) && isLowStock(p))
         break
       case 'out_of_stock':
-        filtered = filtered.filter(isOutOfStock)
+        filtered = filtered.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p))
         break
       case 'active':
         filtered = filtered.filter(p => p.is_active)
+        break
+      case 'inactive':
+        filtered = filtered.filter(p => !p.is_active)
+        break
+      case 'products':
+        filtered = filtered.filter(p => !isServiceLikeProduct(p))
+        break
+      case 'services':
+        filtered = filtered.filter(isServiceLikeProduct)
+        break
+      case 'variants':
+        filtered = filtered.filter(p => Boolean(p.has_variants || (p.variants && p.variants.length > 0)))
         break
       case 'all':
       default:
@@ -108,12 +140,24 @@ export function getMinStockThreshold(product: Pick<StockShape, 'min_stock'>): nu
   return Number(product.min_stock ?? 0)
 }
 
-export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'>): boolean {
+export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'> & { variants?: Array<{ stock_quantity?: number | null; stockQuantity?: number | null }> }): boolean {
+  if (product.variants && product.variants.length > 0) {
+    const totalVariantStock = product.variants.reduce((acc: number, v) => {
+      const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
+      return acc + (Number.isFinite(qty) ? qty : 0)
+    }, 0)
+    return totalVariantStock <= 0
+  }
   return Number(product.stock_quantity ?? 0) <= 0
 }
 
-export function isLowStock(product: StockShape): boolean {
-  const stock = Number(product.stock_quantity ?? 0)
+export function isLowStock(product: StockShape & { variants?: Array<{ stock_quantity?: number | null; stockQuantity?: number | null }> }): boolean {
+  const stock = (product.variants && product.variants.length > 0)
+    ? product.variants.reduce((acc: number, v) => {
+        const qty = Number(v.stock_quantity ?? v.stockQuantity ?? 0)
+        return acc + (Number.isFinite(qty) ? qty : 0)
+      }, 0)
+    : Number(product.stock_quantity ?? 0)
   return stock > 0 && stock <= getMinStockThreshold(product)
 }
 
@@ -137,8 +181,8 @@ export function sortProducts(products: Product[], sortConfig: SortConfig): Produ
   const sorted = [...products]
 
   sorted.sort((a, b) => {
-    let aValue: any
-    let bValue: any
+    let aValue: string | number = ''
+    let bValue: string | number = ''
 
     switch (sortConfig.field) {
       case 'name':
@@ -187,18 +231,23 @@ export function sortProducts(products: Product[], sortConfig: SortConfig): Produ
 export function calculateMetrics(products: Product[]): DashboardMetrics {
   const total_products = products.length
   const active_products = products.filter(p => p.is_active).length
-  
-  const low_stock_count = products.filter(isLowStock).length
 
-  const out_of_stock_count = products.filter(isOutOfStock).length
-  
-  const inventory_value = products.reduce(
-    (sum, p) => sum + (p.sale_price * p.stock_quantity),
-    0
-  )
+  const services_count = products.filter(isServiceLikeProduct).length
+  const physical_products_count = total_products - services_count
+
+  // Low stock & out of stock apply strictly to physical inventory items
+  const low_stock_count = products.filter(p => !isServiceLikeProduct(p) && isLowStock(p)).length
+  const out_of_stock_count = products.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p)).length
+
+  // Inventory value applies to physical items in stock
+  const inventory_value = products
+    .filter(p => !isServiceLikeProduct(p))
+    .reduce((sum, p) => sum + (p.sale_price * Number(p.stock_quantity || 0)), 0)
 
   return {
     total_products,
+    physical_products_count,
+    services_count,
     active_products,
     low_stock_count,
     out_of_stock_count,
@@ -411,31 +460,6 @@ export function exportProductsToInventoryCSV(products: Product[]): string {
     return ''
   }
 
-  const headers = [
-    'SKU',
-    'Nombre',
-    'Descripción',
-    'Categoría',
-    'Marca',
-    'Proveedor',
-    'Precio Compra',
-    'Precio Venta',
-    'Precio Mayoreo',
-    'Stock',
-    'Stock Mínimo',
-    'Stock Máximo',
-    'Unidad',
-    'Código Barras',
-    'Ubicación',
-    'Activo',
-    'Destacado',
-    'Valor Stock',
-    'Margen %',
-    'Estado Stock',
-    'Fecha Creación',
-    'Fecha Actualización',
-    'ID',
-  ]
 
   const exportHeaders = [
     'SKU',

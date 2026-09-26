@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
-import { createSupabaseClient } from '@/lib/supabase/client'
+import { useState, useEffect } from 'react'
 import { Repair, RepairStatus } from '@/types/repairs'
 
 export function useKanban(
@@ -17,7 +15,7 @@ export function useKanban(
         cancelado: []
     })
     const [draggedRepairId, setDraggedRepairId] = useState<string | null>(null)
-    const [dragOverTarget, setDragOverTarget] = useState<{ id: string | null, status: RepairStatus } | null>(null)
+    const [_dragOverTarget, setDragOverTarget] = useState<{ id: string | null, status: RepairStatus } | null>(null)
 
     // Initialize Kanban Order
     useEffect(() => {

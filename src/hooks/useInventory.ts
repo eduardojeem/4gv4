@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 export interface InventoryProduct {
     id: string
@@ -28,20 +29,23 @@ export interface LowStockAlert {
 }
 
 export function useInventory() {
+    const { organization } = useActiveOrganization()
     const [products, setProducts] = useState<InventoryProduct[]>([])
     const [loading, setLoading] = useState(true)
     const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlert[]>([])
 
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
     // Fetch products
     const fetchProducts = useCallback(async (activeOnly: boolean = true) => {
+        if (!organization?.id) return
         try {
             setLoading(true)
 
             let query = supabase
                 .from('products')
                 .select('*')
+                .eq('organization_id', organization.id)
                 .order('name', { ascending: true })
 
             if (activeOnly) {
@@ -76,7 +80,7 @@ export function useInventory() {
         } finally {
             setLoading(false)
         }
-    }, [supabase])
+    }, [organization?.id, supabase])
 
     // Search products
     const searchProducts = useCallback(async (query: string) => {
@@ -94,10 +98,12 @@ export function useInventory() {
 
     // Get product by barcode
     const getProductByBarcode = useCallback(async (barcode: string) => {
+        if (!organization?.id) return null
         try {
             const { data, error } = await supabase
                 .from('products')
                 .select('*')
+                .eq('organization_id', organization.id)
                 .eq('barcode', barcode)
                 .eq('is_active', true)
                 .single()
@@ -116,10 +122,11 @@ export function useInventory() {
             toast.error('Error al buscar producto')
             return null
         }
-    }, [supabase])
+    }, [organization?.id, supabase])
 
     // Update stock
     const updateStock = useCallback(async (productId: string, quantity: number, operation: 'add' | 'subtract' = 'subtract') => {
+        if (!organization?.id) return false
         try {
             const product = products.find(p => p.id === productId)
             if (!product) {
@@ -143,6 +150,7 @@ export function useInventory() {
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', productId)
+                .eq('organization_id', organization.id)
 
             if (error) throw error
 
@@ -153,10 +161,11 @@ export function useInventory() {
             toast.error('Error al actualizar stock')
             return false
         }
-    }, [products, fetchProducts, supabase])
+    }, [organization?.id, products, fetchProducts, supabase])
 
     // Adjust stock (for corrections)
     const adjustStock = useCallback(async (productId: string, newStock: number, reason: string) => {
+        if (!organization?.id) return false
         try {
             const { error } = await supabase
                 .from('products')
@@ -165,6 +174,7 @@ export function useInventory() {
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', productId)
+                .eq('organization_id', organization.id)
 
             if (error) throw error
 
@@ -186,7 +196,7 @@ export function useInventory() {
             toast.error('Error al ajustar stock')
             return false
         }
-    }, [fetchProducts, supabase])
+    }, [organization?.id, fetchProducts, supabase])
 
     // Real-time subscription
     useEffect(() => {

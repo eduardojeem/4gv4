@@ -1,6 +1,5 @@
 "use client"
 
-import React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -8,9 +7,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  TrendingUp,
-  TrendingDown,
-  Shield,
+  TrendingUp, Shield,
   AlertCircle,
   Info
 } from 'lucide-react'

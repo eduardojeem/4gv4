@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { BarChart } from 'recharts/es6/chart/BarChart';
 import { Bar } from 'recharts/es6/cartesian/Bar';
 import { XAxis } from 'recharts/es6/cartesian/XAxis';
@@ -10,18 +10,49 @@ import { YAxis } from 'recharts/es6/cartesian/YAxis';
 import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
 import { Tooltip } from 'recharts/es6/component/Tooltip';
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { TrendingUp, Calendar, DollarSign } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
-import { Repair } from '@/types/repairs'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { TrendingUp, Calendar, DollarSign } from 'lucide-react';
+import { GSIcon } from '@/components/ui/standardized-components';
+import { Repair } from '@/types/repairs';
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 interface WorkHistoryChartProps {
     repairs: Repair[]
+}
+
+interface TooltipPayloadEntry {
+    name: string
+    value: number
+    color?: string
+}
+
+interface CustomTooltipProps {
+    active?: boolean
+    payload?: TooltipPayloadEntry[]
+    label?: string
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-background border rounded-lg shadow-lg p-3">
+                <p className="font-medium">{label}</p>
+                {payload.map((entry, index: number) => (
+                    <p key={index} className="text-sm" style={{ color: entry.color }}>
+                        {entry.name}: {entry.name === 'Ingresos' ? (
+                            <span className="flex items-center gap-1">
+                                <GSIcon className="h-3 w-3" />
+                                {entry.value.toLocaleString()}
+                            </span>
+                        ) : entry.value}
+                    </p>
+                ))}
+            </div>
+        )
+    }
+    return null
 }
 
 export function WorkHistoryChart({ repairs }: WorkHistoryChartProps) {
@@ -82,26 +113,6 @@ export function WorkHistoryChart({ repairs }: WorkHistoryChartProps) {
         return Object.values(deviceTypes).sort((a, b) => b.count - a.count)
     }, [repairs])
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-background border rounded-lg shadow-lg p-3">
-                    <p className="font-medium">{label}</p>
-                    {payload.map((entry: any, index: number) => (
-                        <p key={index} className="text-sm" style={{ color: entry.color }}>
-                            {entry.name}: {entry.name === 'Ingresos' ? (
-                                <span className="flex items-center gap-1">
-                                    <GSIcon className="h-3 w-3" />
-                                    {entry.value.toLocaleString()}
-                                </span>
-                            ) : entry.value}
-                        </p>
-                    ))}
-                </div>
-            )
-        }
-        return null
-    }
 
     return (
         <div className="space-y-6">

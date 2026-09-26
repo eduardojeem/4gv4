@@ -55,7 +55,7 @@ export interface ProductAssociation {
 // Recommendation Engine Class
 // ============================================================================
 
-class RecommendationEngine {
+export class RecommendationEngine {
   // Purchase patterns (products bought together)
   private patterns: Map<string, PurchasePattern> = new Map()
 
@@ -175,7 +175,7 @@ class RecommendationEngine {
    * Calculate confidence (P(B|A))
    */
   private calculateConfidence(productA: string, productB: string): number {
-    const totalPurchases = this.getTotalPurchases()
+    void (this.getTotalPurchases());
     const purchasesWithA = this.getPurchasesWithProduct(productA)
     const purchasesWithBoth = this.getPurchasesWithBoth(productA, productB)
 
@@ -293,15 +293,15 @@ class RecommendationEngine {
   ): ProductRecommendation[] {
     const recommendations: ProductRecommendation[] = []
 
+    // Ordered from most to least specific: deduplication keeps the first
+    // reason, and every upsell/favorite in the cart's category would otherwise
+    // be reported as a generic "similar category" product.
+
     // 1. Frequently bought together
     const frequentlyBought = this.getFrequentlyBoughtTogether(cartProductIds)
     recommendations.push(...frequentlyBought)
 
-    // 2. Similar category
-    const similarCategory = this.getSimilarCategoryProducts(cartProductIds)
-    recommendations.push(...similarCategory)
-
-    // 3. Customer history
+    // 2. Customer history
     if (customerId) {
       const customerBased = this.getCustomerBasedRecommendations(
         customerId,
@@ -310,9 +310,13 @@ class RecommendationEngine {
       recommendations.push(...customerBased)
     }
 
-    // 4. Upsell (higher price in same category)
+    // 3. Upsell (higher price in same category)
     const upsell = this.getUpsellRecommendations(cartProductIds)
     recommendations.push(...upsell)
+
+    // 4. Similar category
+    const similarCategory = this.getSimilarCategoryProducts(cartProductIds)
+    recommendations.push(...similarCategory)
 
     // Remove duplicates and products already in cart
     const uniqueRecommendations = this.deduplicateRecommendations(

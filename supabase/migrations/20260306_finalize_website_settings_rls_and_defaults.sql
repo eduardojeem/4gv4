@@ -153,6 +153,7 @@ USING (
   )
 );
 
+/*
 INSERT INTO public.website_settings (key, value)
 VALUES
   (
@@ -179,6 +180,7 @@ VALUES
     'maintenance_mode',
     '{"enabled":false,"title":"Sitio en Mantenimiento","message":"Estamos realizando mejoras en nuestro sitio. Volveremos pronto.","estimatedEnd":""}'::jsonb
   )
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT DO NOTHING;
+*/
 
 COMMIT;

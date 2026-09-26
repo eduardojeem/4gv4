@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   searchHistory,
   type SearchHistoryEntry,
@@ -43,10 +43,10 @@ export interface UseSearchHistoryReturn {
 }
 
 export function useSearchHistory(): UseSearchHistoryReturn {
-  const [recentSearches, setRecentSearches] = useState<SearchHistoryEntry[]>([])
-  const [uniqueRecentSearches, setUniqueRecentSearches] = useState<string[]>([])
-  const [frequentSearches, setFrequentSearches] = useState<FrequentSearch[]>([])
-  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([])
+  const [recentSearches, setRecentSearches] = useState<SearchHistoryEntry[]>(() => searchHistory.getRecentSearches())
+  const [uniqueRecentSearches, setUniqueRecentSearches] = useState<string[]>(() => searchHistory.getUniqueRecentSearches())
+  const [frequentSearches, setFrequentSearches] = useState<FrequentSearch[]>(() => searchHistory.getFrequentSearches())
+  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>(() => searchHistory.getRecentProducts())
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [stats, setStats] = useState<SearchStats>(searchHistory.getStats())
 
@@ -126,9 +126,6 @@ export function useSearchHistory(): UseSearchHistoryReturn {
   /**
    * Initial load
    */
-  useEffect(() => {
-    refresh()
-  }, [refresh])
 
   return {
     recentSearches,

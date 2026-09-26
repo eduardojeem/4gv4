@@ -39,6 +39,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { SuperAdminAnalyticsData } from '@/lib/superadmin/analytics'
 import { cn } from '@/lib/utils'
+import {
+  buildAnalyticsCsvRows,
+  selectAnalyticsPeriod,
+  type AnalyticsPeriod,
+} from './analytics-presentation'
 
 const PLAN_COLORS: Record<string, string> = {
   FREE: '#94a3b8',
@@ -123,13 +128,11 @@ function HeroMetric({
 // Main
 // ---------------------------------------------------------------------------
 
-type Period = '3m' | '6m' | '12m'
-
 export function SuperAdminAnalyticsDashboard() {
   const [analytics, setAnalytics] = useState<SuperAdminAnalyticsData>(emptyAnalytics)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [period, setPeriod] = useState<Period>('6m')
+  const [period, setPeriod] = useState<AnalyticsPeriod>('6m')
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -151,25 +154,7 @@ export function SuperAdminAnalyticsDashboard() {
   }, [refresh])
 
   function exportCsv() {
-    const rows = [
-      ['Métrica', 'Valor'],
-      ['MRR', analytics.revenueData.mrr],
-      ['ARR', analytics.revenueData.arr],
-      ['Suscripciones activas', analytics.revenueData.activeSubscriptions],
-      ['ARPS (promedio)', analytics.revenueData.averageRevenuePerSub],
-      [],
-      ['Mes', 'Nuevas organizaciones'],
-      ...analytics.growthData.map((g) => [g.month, g.count]),
-      [],
-      ['Plan', 'Cantidad'],
-      ...analytics.planDistribution.map((p) => [p.name, p.value]),
-      [],
-      ['Mes', 'Altas activas', 'Altas en otros estados'],
-      ...analytics.activityData.map((item) => [item.month, item.activeRegistrations, item.otherRegistrations]),
-      [],
-      ['Organización', 'Personal registrado'],
-      ...analytics.topOrganizations.map((organization) => [organization.name, organization.user_count]),
-    ]
+    const rows = buildAnalyticsCsvRows(analytics, period)
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -202,26 +187,20 @@ export function SuperAdminAnalyticsDashboard() {
     )
   }
 
-  const { growthData, planDistribution, activityData, revenueData, topOrganizations } = analytics
+  const { planDistribution, revenueData, topOrganizations } = analytics
   const totalOrgs = planDistribution.reduce((sum, item) => sum + item.value, 0)
-  const currentMonth = growthData[growthData.length - 1]?.count || 0
-  const previousMonth = growthData[growthData.length - 2]?.count || 0
-  const growthPercentage = previousMonth > 0
-    ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100)
-    : (currentMonth > 0 ? 100 : 0)
-
-  // Filter growth data by period
-  const periodMonths = period === '3m' ? 3 : period === '12m' ? 12 : 6
-  const filteredGrowth = growthData.slice(-periodMonths)
-  const filteredActivity = activityData.slice(-periodMonths)
+  const selectedPeriod = selectAnalyticsPeriod(analytics, period)
+  const { currentMonth, growthPercentage } = selectedPeriod
+  const filteredGrowth = selectedPeriod.growth
+  const filteredActivity = selectedPeriod.activity
 
   return (
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Período:</span>
-          <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-lg border bg-muted/30 p-1" aria-label="Período de análisis">
             {(['3m', '6m', '12m'] as const).map((p) => (
               <button
                 key={p}
@@ -245,7 +224,7 @@ export function SuperAdminAnalyticsDashboard() {
         <div className="flex gap-2">
           <Button onClick={exportCsv} variant="outline" size="sm" className="gap-2">
             <Download className="h-3.5 w-3.5" />
-            Exportar CSV
+            Exportar período
           </Button>
           <Button onClick={refresh} variant="outline" size="sm" className="gap-2" disabled={loading}>
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />

@@ -1,4 +1,14 @@
-import { CommunicationChannel, CommunicationMessage } from "@/types/repairs"
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { CommunicationChannel, CommunicationMessage, CommunicationStatus } from "@/types/repairs"
+
+interface CommunicationMessageRow {
+  id: string
+  repair_id: string
+  channel: CommunicationChannel
+  content: string
+  sent_at: string
+  status: CommunicationStatus
+}
 
 export function expandTemplate(
   template: string,
@@ -44,9 +54,9 @@ export class CommunicationStore {
 }
 
 export class CommunicationService {
-  private supabase
+  private supabase: SupabaseClient
 
-  constructor(supabaseClient: any) {
+  constructor(supabaseClient: SupabaseClient) {
     this.supabase = supabaseClient
   }
 
@@ -59,10 +69,11 @@ export class CommunicationService {
 
     if (error) throw error
 
-    return (data || []).map((msg: any) => ({
+    const rows = (data || []) as unknown as CommunicationMessageRow[]
+    return rows.map((msg) => ({
       id: msg.id,
       repairId: msg.repair_id,
-      channel: msg.channel as CommunicationChannel,
+      channel: msg.channel,
       content: msg.content,
       sentAt: msg.sent_at,
       status: msg.status,

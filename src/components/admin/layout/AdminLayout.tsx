@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  HelpCircle,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -33,12 +34,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { GlobalSearch } from '@/components/ui/global-search'
-import { Input } from '@/components/ui/input'
+import { normalizeText, primaryModifierLabel } from '@/lib/text/normalize'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
+import { useAdminNavBadges } from '@/hooks/use-admin-nav-badges'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { cn } from '@/lib/utils'
 
 interface AdminLayoutProps {
@@ -48,32 +51,53 @@ interface AdminLayoutProps {
 function AdminLayoutContent({ children }: AdminLayoutProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration', 'help'])
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
   const { hasPermission, isAdmin, isSuperAdmin, user, signOut } = useAuth()
+  // Los modulos efectivos: los del plan menos los que la organizacion apago.
+  // Se pasaban los del plan, asi que Analitica, Inventario avanzado o Seguridad
+  // seguian en el menu aunque la organizacion los hubiera deshabilitado.
+  const { effectiveModules } = useSubscriptionStatus()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
   const active = searchParams.get('tab') ?? 'overview'
   const currentItem = useMemo(() => getNavItemByKey(active), [active])
+  const navBadges = useAdminNavBadges()
 
+  // Oculta del menú las secciones cuyo módulo no está incluido en el plan activo
+  // (ej. Analytics, Inventario avanzado, Seguridad si el plan no las trae).
   const visibleCategories = useMemo(
-    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin),
-    [hasPermission, isAdmin, isSuperAdmin]
+    () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin, effectiveModules),
+    [hasPermission, isAdmin, isSuperAdmin, effectiveModules]
   )
+
+  // El manejador acepta Ctrl y Cmd; el cartel decia «Ctrl» siempre.
+  const [shortcutHint, setShortcutHint] = useState('Ctrl+K')
+  useEffect(() => {
+    setShortcutHint(`${primaryModifierLabel()}${primaryModifierLabel() === '⌘' ? 'K' : '+K'}`)
+  }, [])
 
   const searchableItems = useMemo(
     () =>
       visibleCategories.flatMap(category =>
-        category.items.map(item => ({
-          title: item.label,
-          subtitle: `${category.label}${item.description ? ` - ${item.description}` : ''}`,
-          href: item.href || '#',
-          type: category.id,
-        }))
+        category.items.map(item => {
+          const href = item.href || '#'
+          const subtitle = `${category.label}${item.description ? ` - ${item.description}` : ''}`
+          return {
+            title: item.label,
+            subtitle,
+            href,
+            type: category.id,
+            // Se compara contra esto, no contra el texto con tildes: «analisis»
+            // tiene que encontrar «Análisis». Incluye la ruta porque quien
+            // conoce la URL escribe «inventory» antes que «Inventario».
+            haystack: normalizeText(`${item.label} ${subtitle} ${href}`),
+          }
+        })
       ),
     [visibleCategories]
   )
@@ -111,18 +135,15 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
   }, [])
 
   const handleSearch = useCallback((input: { query: string; filters?: { type?: string } }) => {
-    const query = input.query.trim().toLowerCase()
     const type = input.filters?.type ?? 'todos'
+    // Cada palabra por separado: «config sitio» encuentra «Sitio Web ·
+    // Configuración del sitio web público», que con la frase entera no salia.
+    const terms = normalizeText(input.query).split(/\s+/).filter(Boolean)
 
     return searchableItems
       .filter(item => {
-        const matchesType = type === 'todos' || item.type === type
-        const matchesQuery =
-          query.length === 0 ||
-          item.title.toLowerCase().includes(query) ||
-          item.subtitle.toLowerCase().includes(query)
-
-        return matchesType && matchesQuery
+        if (type !== 'todos' && item.type !== type) return false
+        return terms.every(term => item.haystack.includes(term))
       })
       .slice(0, 25)
   }, [searchableItems])
@@ -226,10 +247,11 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
                 {(collapsed || isExpanded) && (
                   <div className="space-y-1">
-                    {category.items.map(({ key, label, icon: Icon, description, href }) => {
+                    {category.items.map(({ key, label, icon: Icon, description, href, badge }) => {
                       const isActive = href === '/admin'
                         ? pathname === href
                         : pathname.startsWith(href || '')
+                      const pendientes = badge ? navBadges[badge] ?? 0 : 0
 
                       return (
                         <Link
@@ -244,18 +266,31 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                               : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                           )}
                           title={collapsed ? label : description}
+                          aria-label={pendientes > 0 ? `${label}: ${pendientes} sin resolver` : undefined}
                         >
-                          <Icon
-                            className={cn(
-                              'flex-shrink-0 transition-colors',
-                              collapsed ? 'h-6 w-6' : 'h-5 w-5',
-                              isActive
-                                ? 'text-blue-600 dark:text-blue-400'
-                                : 'text-muted-foreground group-hover:text-foreground'
+                          <span className="relative flex-shrink-0">
+                            <Icon
+                              className={cn(
+                                'transition-colors',
+                                collapsed ? 'h-6 w-6' : 'h-5 w-5',
+                                isActive
+                                  ? 'text-blue-600 dark:text-blue-400'
+                                  : 'text-muted-foreground group-hover:text-foreground'
+                              )}
+                            />
+                            {/* Plegado no entra el numero, pero el punto tiene
+                                que verse igual: es todo el sentido de esto. */}
+                            {collapsed && pendientes > 0 && (
+                              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-rose-500" aria-hidden />
                             )}
-                          />
+                          </span>
                           {!collapsed && <span>{label}</span>}
-                          {!collapsed && isActive && <div className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
+                          {!collapsed && pendientes > 0 && (
+                            <span className="ml-auto min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums text-white">
+                              {pendientes > 99 ? '99+' : pendientes}
+                            </span>
+                          )}
+                          {!collapsed && pendientes === 0 && isActive && <div className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />}
                         </Link>
                       )
                     })}
@@ -297,7 +332,12 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <Menu className="h-5 w-5" />
               </Button>
 
-              <div className="min-w-0 flex-1">
+              {/* En 375px «Inicio / Admin / Seccion» compite con el boton de
+                  menu y tres iconos. Lo que importa es donde estas. */}
+              <p className="min-w-0 flex-1 truncate text-base font-semibold text-foreground md:hidden">
+                {currentItem?.label ?? 'Administración'}
+              </p>
+              <div className="hidden min-w-0 flex-1 md:block">
                 <Breadcrumbs items={[
                   { label: 'Inicio', href: '/dashboard' },
                   { label: 'Admin', href: '/admin' },
@@ -307,20 +347,41 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             </div>
 
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="group relative hidden md:flex">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-blue-500" />
-                <Input
-                  className="w-64 border-border/60 bg-muted/50 pl-10 transition-all duration-200 focus-visible:bg-background"
-                  placeholder="Buscar (Ctrl+K)"
-                  readOnly
-                  onClick={() => setSearchOpen(true)}
-                />
-                <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-1">
-                  <kbd className="hidden h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
-                    Ctrl+K
-                  </kbd>
-                </div>
-              </div>
+              {/* Era un <input readOnly> con onClick: recibia el foco pero no
+                  se abria con Enter. Un boton lo hace alcanzable por teclado y
+                  se anuncia como lo que es. */}
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-haspopup="dialog"
+                className="group hidden h-9 w-56 items-center gap-2 rounded-md border border-border/60 bg-muted/50 pl-3 pr-2 text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex lg:w-64"
+              >
+                <Search className="h-4 w-4 shrink-0 transition-colors group-hover:text-foreground" />
+                {/* El cartel decia «Ctrl+K» y adentro habia otro «Ctrl+K». */}
+                <span className="flex-1 text-left">Buscar</span>
+                <kbd className="inline-flex h-5 shrink-0 items-center rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
+                  {shortcutHint}
+                </kbd>
+              </button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 md:hidden"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Buscar en el panel"
+                aria-haspopup="dialog"
+              >
+                <Search className="h-5 w-5" />
+              </Button>
+
+              {/* La guia no tenia como abrirse desde el panel: el unico boton
+                  de ayuda global vivia en el header del dashboard. */}
+              <Button asChild variant="ghost" size="icon" className="h-9 w-9">
+                <Link href="/admin/guia" aria-label="Abrir la guía del sistema" title="Guía del sistema">
+                  <HelpCircle className="h-5 w-5" />
+                </Link>
+              </Button>
 
               {user?.role === 'super_admin' && (
                 <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-purple-200/60 text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-800/40 dark:text-purple-400 dark:hover:bg-purple-950/20 sm:inline-flex">
@@ -428,8 +489,8 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                         <Settings className="h-4 w-4" />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">Configuracion</span>
-                        <span className="text-xs text-muted-foreground">Ajustes del sistema</span>
+                        <span className="text-sm font-medium">Configuración</span>
+                        <span className="text-xs text-muted-foreground">Datos de la empresa, impuestos y moneda</span>
                       </div>
                     </Link>
                   </DropdownMenuItem>
@@ -468,36 +529,20 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             </div>
           </div>
 
-          <div className="space-y-2 px-4 pb-3 md:hidden">
-            <Button
-              variant="outline"
-              className="h-10 w-full justify-start gap-3 rounded-xl border-border/70 bg-muted/40 px-3 text-left text-sm font-normal text-muted-foreground shadow-none"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search className="h-4 w-4 shrink-0" />
-              <span className="truncate">Buscar en admin</span>
-            </Button>
+          {/* Esta fila duplicaba cuatro componentes que ya estan arriba:
+              el selector de organizacion, el de sucursal, «Inicio» y «Super
+              Admin». Con el buscador aparte, el encabezado movil ocupaba unos
+              150px fijos de una pantalla de 812.
 
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <OrganizationSwitcher compact />
-              <BranchSelector compact className="shrink-0" />
-              {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5 border-border/80 shadow-sm">
-                  <Link href="/dashboard" className="flex items-center gap-1.5">
-                    <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">Inicio</span>
-                  </Link>
-                </Button>
-              )}
-              {user?.role === 'super_admin' && (
-                <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5 border-purple-200/60 text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-800/40 dark:text-purple-400 dark:hover:bg-purple-950/20">
-                  <Link href="/superadmin" className="flex items-center gap-1.5">
-                    <Crown className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">Super Admin</span>
-                  </Link>
-                </Button>
-              )}
-            </div>
+              «Inicio» y «Super Admin» estaban de hecho TRES veces cada uno:
+              el boton del encabezado, esta fila, y el menu del avatar. Con
+              sacar esta copia siguen alcanzables desde los otros dos lados.
+
+              Queda solo el contexto —en que empresa y en que sucursal estas—,
+              que es lo unico que hay que poder ver sin abrir nada. */}
+          <div className="flex items-center gap-2 px-4 pb-2.5 md:hidden">
+            <OrganizationSwitcher compact />
+            <BranchSelector compact className="min-w-0 flex-1" />
           </div>
         </header>
 

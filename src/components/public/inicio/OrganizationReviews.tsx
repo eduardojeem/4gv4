@@ -1,332 +1,189 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
+import { useState, useSyncExternalStore } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
-import { Star, Send, CheckCircle2, AlertCircle } from 'lucide-react'
+import { BadgeCheck, ChevronLeft, ChevronRight, MessageSquareText, RefreshCw, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
+import { OrganizationReviewCard } from './OrganizationReviewCard'
+import { OrganizationReviewForm } from './OrganizationReviewForm'
+import { ReviewStars } from './ReviewStars'
+import type { PublicReviewFilter, PublicReviewStats, ReviewsResponse } from './review-types'
 
-interface ReviewData {
-  id: string
-  reviewer_name: string
-  rating: number
-  comment: string | null
-  created_at: string
+const PAGE_SIZE = 6
+const EMPTY_STATS: PublicReviewStats = {
+  average: 0,
+  count: 0,
+  verifiedAverage: 0,
+  verifiedCount: 0,
+  respondedCount: 0,
+  satisfactionRate: 0,
+  breakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+}
+const FILTERS: Array<{ value: PublicReviewFilter; label: string }> = [
+  { value: 'all', label: 'Todas' },
+  { value: 'verified', label: 'Verificadas' },
+  { value: 'purchase', label: 'Compras' },
+  { value: 'repair', label: 'Reparaciones' },
+]
+
+const subscribeToNothing = () => () => {}
+
+const fetcher = async (url: string): Promise<ReviewsResponse> => {
+  const response = await fetch(url)
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error || 'No se pudieron cargar las reseñas.')
+  return data
 }
 
-interface ReviewsResponse {
-  success: boolean
-  data: {
-    reviews: ReviewData[]
-    stats: { average: number; count: number }
-    pagination: { total: number; limit: number; offset: number }
-  }
-}
-
-const fetcher = (url: string) => fetch(url).then(res => res.json())
-
-function StarRating({
-  value,
-  onChange,
-  readonly = false,
-  size = 'md',
-}: {
-  value: number
-  onChange?: (rating: number) => void
-  readonly?: boolean
-  size?: 'sm' | 'md' | 'lg'
-}) {
-  const [hovered, setHovered] = useState(0)
-  const sizeClass = size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-7 w-7' : 'h-5 w-5'
-
+function ReviewsSummary({ stats }: { stats: PublicReviewStats }) {
+  if (stats.count === 0) return null
   return (
-    <div className="flex gap-0.5" role="group" aria-label="Calificación">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          disabled={readonly}
-          className={cn(
-            'transition-transform',
-            !readonly && 'cursor-pointer hover:scale-110',
-            readonly && 'cursor-default'
-          )}
-          onMouseEnter={() => !readonly && setHovered(star)}
-          onMouseLeave={() => !readonly && setHovered(0)}
-          onClick={() => onChange?.(star)}
-          aria-label={`${star} estrella${star > 1 ? 's' : ''}`}
-        >
-          <Star
-            className={cn(
-              sizeClass,
-              'transition-colors',
-              (hovered || value) >= star
-                ? 'fill-yellow-400 text-yellow-400'
-                : 'fill-none text-slate-300'
-            )}
-          />
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function ReviewForm({ onSuccess, tenantSlug }: { onSuccess: () => void; tenantSlug: string }) {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [rating, setRating] = useState(0)
-  const [comment, setComment] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [errorMsg, setErrorMsg] = useState('')
-
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (rating === 0) {
-      setStatus('error')
-      setErrorMsg('Selecciona una calificación')
-      return
-    }
-
-    setSubmitting(true)
-    setStatus('idle')
-
-    try {
-      const res = await fetch(withOrgQuery('/api/public/reviews', tenantSlug), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reviewer_name: name,
-          reviewer_email: email || null,
-          rating,
-          comment: comment || null,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setStatus('error')
-        setErrorMsg(data.error || 'Error al enviar la reseña')
-        return
-      }
-
-      setStatus('success')
-      setName('')
-      setEmail('')
-      setRating(0)
-      setComment('')
-      onSuccess()
-    } catch {
-      setStatus('error')
-      setErrorMsg('Error de conexión. Intenta nuevamente.')
-    } finally {
-      setSubmitting(false)
-    }
-  }, [name, email, rating, comment, onSuccess])
-
-  if (status === 'success') {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-green-200 bg-green-50 p-6 text-center dark:border-green-900 dark:bg-green-950/30">
-        <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
-        <p className="font-medium text-green-800 dark:text-green-300">
-          ¡Gracias por tu reseña!
-        </p>
-        <p className="text-sm text-green-600 dark:text-green-400">
-          Tu opinión ya está publicada y visible para todos.
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setStatus('idle')}
-          className="mt-2"
-        >
-          Escribir otra reseña
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="mb-2 block text-sm font-medium">Tu calificación *</label>
-        <StarRating value={rating} onChange={setRating} size="lg" />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="review-name" className="mb-1 block text-sm font-medium">
-            Nombre *
-          </label>
-          <Input
-            id="review-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Tu nombre"
-            required
-            minLength={2}
-            maxLength={100}
-          />
-        </div>
-        <div>
-          <label htmlFor="review-email" className="mb-1 block text-sm font-medium">
-            Email <span className="text-muted-foreground">(opcional)</span>
-          </label>
-          <Input
-            id="review-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="tu@email.com"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="review-comment" className="mb-1 block text-sm font-medium">
-          Comentario <span className="text-muted-foreground">(opcional)</span>
-        </label>
-        <Textarea
-          id="review-comment"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Cuéntanos tu experiencia con este negocio..."
-          maxLength={500}
-          rows={3}
-        />
-        {comment.length > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">{comment.length}/500</p>
-        )}
-      </div>
-
-      {status === 'error' && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {errorMsg}
-        </div>
-      )}
-
-      <Button type="submit" disabled={submitting || !name.trim() || rating === 0}>
-        <Send className="mr-2 h-4 w-4" />
-        {submitting ? 'Enviando...' : 'Enviar reseña'}
-      </Button>
-    </form>
-  )
-}
-
-function ReviewCard({ review }: { review: ReviewData }) {
-  const date = new Date(review.created_at)
-  const formattedDate = date.toLocaleDateString('es', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-
-  return (
-    <Card>
-      <CardContent className="pt-5">
-        <div className="flex items-start justify-between gap-2">
+    <Card className="border-border/70 shadow-none">
+      <CardContent className="grid gap-6 p-5 sm:grid-cols-[auto_1fr] sm:p-6">
+        <div className="flex items-center gap-4 sm:block sm:min-w-40 sm:text-center">
+          <p className="text-4xl font-bold tracking-tight">{stats.average.toFixed(1)}</p>
           <div>
-            <p className="font-semibold text-sm">{review.reviewer_name}</p>
-            <p className="text-xs text-muted-foreground">{formattedDate}</p>
+            <ReviewStars value={stats.average} size="md" />
+            <p className="mt-1 text-sm text-muted-foreground">{stats.count} opiniones públicas</p>
           </div>
-          <StarRating value={review.rating} readonly size="sm" />
         </div>
-        {review.comment && (
-          <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-            {review.comment}
-          </p>
-        )}
+        <div className="space-y-2" aria-label="Distribución de calificaciones">
+          {[5, 4, 3, 2, 1].map((rating) => {
+            const count = stats.breakdown[rating as 1 | 2 | 3 | 4 | 5] ?? 0
+            return (
+              <div key={rating} className="grid grid-cols-[18px_1fr_28px] items-center gap-2 text-xs">
+                <span>{rating}</span>
+                <Progress value={stats.count > 0 ? (count / stats.count) * 100 : 0} className="h-1.5" />
+                <span className="text-right text-muted-foreground">{count}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="sm:col-span-2 flex flex-wrap gap-x-5 gap-y-2 border-t pt-4 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-600" />{stats.verifiedCount} verificadas</span>
+          <span>{stats.verifiedCount > 0 ? `${stats.verifiedAverage.toFixed(1)} promedio verificado` : 'Aún sin opiniones verificadas'}</span>
+          <span>{stats.respondedCount} respondidas por el negocio</span>
+        </div>
       </CardContent>
     </Card>
   )
 }
 
-function RatingSummary({ average, count }: { average: number; count: number }) {
-  if (count === 0) return null
-
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-4xl font-bold">{average.toFixed(1)}</span>
-      <div>
-        <StarRating value={Math.round(average)} readonly size="md" />
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          {count} reseña{count !== 1 ? 's' : ''}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-export function OrganizationReviews() {
+/**
+ * Opiniones públicas de la tienda.
+ *
+ * `hasRepairs` sale del módulo de reparaciones de la empresa. Sin él, la
+ * sección ofrecía un filtro «Reparaciones» y hablaba de reparaciones
+ * comprobadas en tiendas que no reparan nada.
+ */
+export function OrganizationReviews({ hasRepairs = false }: { hasRepairs?: boolean }) {
   const pathname = usePathname()
-  const tenantSlug = getTenantSlugFromPathname(pathname)
-
-  const { data, mutate } = useSWR<ReviewsResponse>(
-    withOrgQuery('/api/public/reviews?limit=6', tenantSlug),
-    fetcher,
-    { revalidateOnFocus: false }
+  const searchParams = useSearchParams()
+  const mounted = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
   )
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+  const inviteToken = searchParams.get('review')
+  const [filter, setFilter] = useState<PublicReviewFilter>('all')
+  const [page, setPage] = useState(1)
+  const offset = (page - 1) * PAGE_SIZE
+  const url = withOrgQuery(
+    `/api/public/reviews?limit=${PAGE_SIZE}&offset=${offset}&verification=${filter}`,
+    tenantSlug,
+  )
+  const { data, error, isLoading, mutate } = useSWR<ReviewsResponse>(url, fetcher, { revalidateOnFocus: false })
+  const hydratedData = mounted ? data : undefined
+  const reviews = hydratedData?.data?.reviews ?? []
+  const stats = hydratedData?.data?.stats ?? EMPTY_STATS
+  const total = hydratedData?.data?.pagination.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  const [showAll, setShowAll] = useState(false)
-  const reviews = data?.data?.reviews ?? []
-  const stats = data?.data?.stats ?? { average: 0, count: 0 }
-  const total = data?.data?.pagination?.total ?? 0
-
-  const displayedReviews = showAll ? reviews : reviews.slice(0, 3)
+  function selectFilter(nextFilter: PublicReviewFilter) {
+    setFilter(nextFilter)
+    setPage(1)
+  }
 
   return (
-    <section id="resenas" className="border-t bg-muted/40 py-16 md:py-24">
-      <div className="container">
-        <div className="mx-auto max-w-4xl">
-          {/* Encabezado */}
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Opiniones de nuestros clientes
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-              Conoce la experiencia de quienes nos visitaron
-            </p>
+    <section id="resenas" className="border-t bg-muted/35 py-14 md:py-20">
+      <div className="container mx-auto max-w-6xl px-4">
+        <header className="mx-auto max-w-2xl text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <MessageSquareText className="h-5 w-5" aria-hidden="true" />
           </div>
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Experiencias reales de clientes</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">
+            {hasRepairs
+              ? 'Distinguimos las opiniones abiertas de las compras y reparaciones comprobadas por el sistema.'
+              : 'Distinguimos las opiniones abiertas de las compras comprobadas por el sistema.'}
+          </p>
+        </header>
 
-          {/* Resumen de rating */}
-          {stats.count > 0 && (
-            <div className="mb-8 flex justify-center">
-              <RatingSummary average={stats.average} count={stats.count} />
+        <div className="mt-8"><ReviewsSummary stats={stats} /></div>
+
+        <div className="mt-6 flex gap-2 overflow-x-auto pb-2" role="group" aria-label="Filtrar opiniones">
+          {FILTERS.filter((item) => hasRepairs || item.value !== 'repair').map((item) => (
+            <Button
+              key={item.value}
+              type="button"
+              size="sm"
+              variant={filter === item.value ? 'default' : 'outline'}
+              aria-pressed={filter === item.value}
+              onClick={() => selectFilter(item.value)}
+              className="shrink-0"
+            >
+              {item.value === 'verified' && <BadgeCheck className="h-4 w-4" aria-hidden="true" />}
+              {item.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="mt-4 min-h-48" aria-live="polite">
+           {!mounted || isLoading ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Cargando opiniones">
+              {[1, 2, 3].map((item) => <div key={item} className="h-44 animate-pulse rounded-xl border bg-card" />)}
             </div>
-          )}
-
-          {/* Grid de reseñas existentes */}
-          {displayedReviews.length > 0 && (
-            <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {displayedReviews.map((review) => (
-                <ReviewCard key={review.id} review={review} />
-              ))}
-            </div>
-          )}
-
-          {/* Botón "ver más" */}
-          {!showAll && total > 3 && (
-            <div className="mb-10 text-center">
-              <Button variant="outline" onClick={() => setShowAll(true)}>
-                Ver todas las reseñas ({total})
+           ) : error || hydratedData?.success === false ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
+              <p className="text-sm text-destructive">No pudimos cargar las opiniones.</p>
+              <Button variant="outline" size="sm" onClick={() => void mutate()} className="mt-3">
+                <RefreshCw className="h-4 w-4" /> Reintentar
               </Button>
             </div>
+          ) : reviews.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-background p-8 text-center">
+              <p className="font-medium">No hay opiniones en este filtro</p>
+              <p className="mt-1 text-sm text-muted-foreground">Probá otro filtro o compartí la primera experiencia.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {reviews.map((review) => <OrganizationReviewCard key={review.id} review={review} />)}
+            </div>
           )}
+        </div>
 
-          {/* Formulario para dejar reseña */}
-          <div className="mx-auto max-w-lg rounded-2xl border bg-background p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-center">
-              ¿Ya nos visitaste? Dejanos tu opinión
-            </h3>
-            <ReviewForm onSuccess={() => mutate()} tenantSlug={tenantSlug} />
-          </div>
+        {totalPages > 1 && (
+          <nav className="mt-5 flex items-center justify-center gap-3" aria-label="Páginas de opiniones">
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+              <ChevronLeft className="h-4 w-4" /> Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>
+              Siguiente <ChevronRight className="h-4 w-4" />
+            </Button>
+          </nav>
+        )}
+
+        <div className={cn('mx-auto mt-10 max-w-2xl rounded-xl border bg-background p-5 sm:p-6', inviteToken && 'border-emerald-500/40')}>
+          <h3 className="text-lg font-semibold">{inviteToken ? 'Contanos tu experiencia verificada' : '¿Ya nos visitaste? Dejanos tu opinión'}</h3>
+          <p className="mb-5 mt-1 text-sm text-muted-foreground">Las opiniones se revisan por contenido, no por la cantidad de estrellas.</p>
+          <OrganizationReviewForm tenantSlug={tenantSlug} inviteToken={inviteToken} hasRepairs={hasRepairs} onSuccess={() => void mutate()} />
         </div>
       </div>
     </section>

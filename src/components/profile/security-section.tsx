@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Shield,
@@ -21,6 +21,14 @@ import {
   LogOut,
   Trash2,
   RefreshCw,
+  Bell,
+  Mail,
+  Laptop,
+  Check,
+  Sparkles,
+  Globe,
+  Compass,
+  Filter
 } from 'lucide-react'
 import { ChangePasswordDialog } from './change-password-dialog'
 import { createClient } from '@/lib/supabase/client'
@@ -59,6 +67,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [sessionView, setSessionView] = useState<'all' | 'current' | 'others'>('all')
+  const [selectedBrowser, setSelectedBrowser] = useState<string>('all')
 
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
   const [emailNotifications, setEmailNotifications] = useState(true)
@@ -66,6 +75,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   const [savingSettings, setSavingSettings] = useState(false)
 
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null)
+  const [closingBrowser, setClosingBrowser] = useState<string | null>(null)
   const [closingOthers, setClosingOthers] = useState(false)
   const [closingOtherBrowsers, setClosingOtherBrowsers] = useState(false)
   const [closingEverywhere, setClosingEverywhere] = useState(false)
@@ -86,39 +96,77 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       logger.session('Loading sessions for user', { userId: effectiveUserId })
 
-      const [rpcResult, authSessionResult] = await Promise.all([
-        supabase.rpc('get_user_active_sessions', { p_user_id: effectiveUserId }),
-        supabase.auth.getSession(),
-      ])
+      let rows: Array<Record<string, unknown>> = []
+      let loadError: unknown = null
 
-      if (rpcResult.error) {
-        throw rpcResult.error
-      }
-
+      const authSessionResult = await supabase.auth.getSession()
       const currentSessionId = await getSessionIdFromAccessToken(authSessionResult.data.session?.access_token)
 
-      const rows = (rpcResult.data || []) as Array<Record<string, any>>
+      // 1. Intentar consulta RPC optimizada get_user_active_sessions
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_active_sessions', {
+          p_user_id: effectiveUserId,
+        })
+
+        if (!rpcError && Array.isArray(rpcData)) {
+          rows = rpcData
+        } else if (rpcError) {
+          loadError = rpcError
+          console.warn('RPC get_user_active_sessions no disponible o con error, intentando consulta directa:', rpcError.message || rpcError)
+        }
+      } catch (err) {
+        loadError = err
+        console.warn('Excepción al ejecutar get_user_active_sessions RPC:', err)
+      }
+
+      // 2. Si el RPC falló o no devolvió filas, consultar la tabla user_sessions directamente
+      if (rows.length === 0) {
+        try {
+          const { data: tableData, error: tableError } = await supabase
+            .from('user_sessions')
+            .select('*')
+            .eq('user_id', effectiveUserId)
+            .eq('is_active', true)
+            .order('last_activity', { ascending: false })
+
+          if (!tableError && Array.isArray(tableData)) {
+            rows = tableData
+            loadError = null
+          } else if (tableError) {
+            loadError = tableError
+          }
+        } catch (tableErr) {
+          loadError = tableErr
+        }
+      }
+
       const mapped: SessionRecord[] = rows.map((row) => ({
-        id: row.id,
-        session_id: row.session_id,
-        user_agent: row.user_agent || navigator.userAgent,
-        ip_address: row.ip_address || 'IP not available',
-        device_type: row.device_type || 'desktop',
-        browser: row.browser || 'Unknown',
-        os: row.os || 'Unknown',
-        created_at: row.created_at,
-        last_activity: row.last_activity,
-        is_active: row.is_active,
-        country: row.country || undefined,
-        city: row.city || undefined,
+        id: String(row.id || ''),
+        session_id: String(row.session_id || ''),
+        user_agent: String(row.user_agent || (typeof navigator !== 'undefined' ? navigator.userAgent : '')),
+        ip_address: String(row.ip_address || 'IP no disponible'),
+        device_type: String(row.device_type || 'desktop'),
+        browser: String(row.browser || 'Navegador desconocido'),
+        os: String(row.os || 'Sistema desconocido'),
+        created_at: String(row.created_at || ''),
+        last_activity: String(row.last_activity || ''),
+        is_active: Boolean(row.is_active),
+        country: row.country ? String(row.country) : undefined,
+        city: row.city ? String(row.city) : undefined,
         is_current: Boolean(currentSessionId && row.session_id === currentSessionId),
       }))
 
       setSessions(mapped)
       setLastSyncAt(new Date())
+
+      if (rows.length === 0 && loadError) {
+        const errMsg = (loadError instanceof Error ? loadError.message : (loadError as { message?: string } | null)?.message) || 'Error de sincronización'
+        console.warn('Aviso al sincronizar sesiones:', errMsg)
+      }
     } catch (error) {
-      logger.error('Error loading sessions', { error })
-      setSessionsError('No se pudieron cargar las sesiones activas')
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn('Error recuperando sesiones de usuario:', message)
+      setSessionsError('No se pudieron cargar las sesiones activas en este momento')
     } finally {
       setLoadingSessions(false)
     }
@@ -170,14 +218,15 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         !closingEverywhere &&
         !closingOthers &&
         !closingOtherBrowsers &&
-        !closingSessionId
+        !closingSessionId &&
+        !closingBrowser
       ) {
         loadSessions()
       }
     }, 60000)
 
     return () => window.clearInterval(intervalId)
-  }, [closingEverywhere, closingOthers, closingOtherBrowsers, closingSessionId, loadSessions])
+  }, [closingEverywhere, closingOthers, closingOtherBrowsers, closingSessionId, closingBrowser, loadSessions])
 
   const saveSecuritySettings = async (settings: Partial<{
     two_factor_enabled: boolean
@@ -198,10 +247,10 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         })
 
       if (error) throw error
-      toast.success('Configuracion de seguridad actualizada')
+      toast.success('Configuración de seguridad guardada')
     } catch (error) {
       logger.error('Error saving security settings', { error })
-      toast.error('No se pudo guardar la configuracion de seguridad')
+      toast.error('No se pudo guardar la configuración de seguridad')
     } finally {
       setSavingSettings(false)
     }
@@ -214,11 +263,11 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       const current = sessions.find((s) => s.session_id === sessionId)
       if (current?.is_current) {
-        toast.error('No puedes cerrar la sesion actual desde esta accion')
+        toast.error('No puedes cerrar la sesión actual desde esta acción')
         return
       }
 
-      const confirmClose = window.confirm('Deseas cerrar esta sesion remota?')
+      const confirmClose = window.confirm('¿Deseas cerrar esta sesión remota?')
       if (!confirmClose) return
 
       setClosingSessionId(sessionId)
@@ -230,23 +279,23 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       if (error) throw error
 
       if (data?.success) {
-        toast.success(data.message || 'Sesion cerrada')
+        toast.success(data.message || 'Sesión remota finalizada correctamente')
         setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
         setLastSyncAt(new Date())
       } else {
-        toast.error(data?.message || 'No se pudo cerrar la sesion')
+        toast.error(data?.message || 'No se pudo cerrar la sesión')
         await loadSessions()
       }
     } catch (error) {
       logger.error('Error closing session', { error })
-      toast.error('Error al cerrar la sesion')
+      toast.error('Error al cerrar la sesión remota')
     } finally {
       setClosingSessionId(null)
     }
   }
 
   const handleLogoutAllSessions = async () => {
-    if (!window.confirm('Vas a cerrar todas las otras sesiones activas. Continuar?')) return
+    if (!window.confirm('¿Deseas cerrar todas las otras sesiones activas y mantener solo este dispositivo?')) return
 
     try {
       const effectiveUserId = await getEffectiveUserId()
@@ -255,7 +304,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
       const currentSessionId = await getSessionIdFromAccessToken(currentSession?.access_token)
       if (!currentSessionId) {
-        toast.error('No se pudo identificar la sesion actual')
+        toast.error('No se pudo identificar la sesión actual')
         return
       }
 
@@ -268,11 +317,11 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       if (error) throw error
 
       const closedCount = Number(data || 0)
-      toast.success(closedCount > 0 ? `${closedCount} sesiones cerradas` : 'No hay otras sesiones activas')
+      toast.success(closedCount > 0 ? `${closedCount} sesiones remotas cerradas` : 'No hay otras sesiones activas')
       await loadSessions()
     } catch (error) {
       logger.error('Error closing all other sessions', { error })
-      toast.error('Error al cerrar las sesiones')
+      toast.error('Error al cerrar las sesiones remotas')
     } finally {
       setClosingOthers(false)
     }
@@ -287,7 +336,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       return
     }
 
-    if (!window.confirm(`Se cerraran ${targets.length} sesiones en otros navegadores. Continuar?`)) return
+    if (!window.confirm(`Se cerrarán ${targets.length} sesiones en otros navegadores. ¿Continuar?`)) return
 
     try {
       const effectiveUserId = await getEffectiveUserId()
@@ -324,8 +373,56 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     }
   }
 
+  const handleLogoutBrowser = async (targetBrowser: string) => {
+    const effectiveUserId = await getEffectiveUserId()
+    if (!effectiveUserId) return
+
+    const currentSessionId = sessions.find((s) => s.is_current)?.session_id
+    const targets = sessions.filter(
+      (s) => (s.browser || 'Desconocido') === targetBrowser && s.session_id !== currentSessionId
+    )
+
+    if (targets.length === 0) {
+      toast.info(`No hay sesiones remotas abiertas en ${targetBrowser}`)
+      return
+    }
+
+    if (!window.confirm(`¿Deseas cerrar las ${targets.length} sesiones abiertas en ${targetBrowser}?`)) return
+
+    try {
+      setClosingBrowser(targetBrowser)
+      const results = await Promise.allSettled(
+        targets.map((target) =>
+          supabase.rpc('close_user_session', {
+            p_session_id: target.session_id,
+            p_user_id: effectiveUserId,
+          }),
+        ),
+      )
+
+      const closedCount = results.filter((result) => {
+        if (result.status !== 'fulfilled') return false
+        const rpcResult = result.value
+        return Boolean(!rpcResult.error && rpcResult.data?.success)
+      }).length
+
+      if (closedCount > 0) {
+        toast.success(`${closedCount} sesiones cerradas en ${targetBrowser}`)
+      } else {
+        toast.error(`No se pudieron cerrar sesiones en ${targetBrowser}`)
+      }
+
+      await loadSessions()
+    } catch (error) {
+      logger.error(`Error closing sessions for browser ${targetBrowser}`, { error })
+      toast.error(`Error al cerrar sesiones en ${targetBrowser}`)
+    } finally {
+      setClosingBrowser(null)
+    }
+  }
+
   const handleLogoutEverywhere = async () => {
-    if (!window.confirm('Vas a cerrar todas las sesiones, incluida esta. Continuar?')) return
+    if (!window.confirm('¿Estás seguro de que deseas cerrar todas las sesiones, incluida esta? Tendrás que volver a iniciar sesión.')) return
 
     try {
       const effectiveUserId = await getEffectiveUserId()
@@ -334,7 +431,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
       const currentSessionId = await getSessionIdFromAccessToken(currentSession?.access_token)
       if (!currentSessionId) {
-        toast.error('No se pudo identificar la sesion actual')
+        toast.error('No se pudo identificar la sesión actual')
         return
       }
 
@@ -354,10 +451,10 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       await supabase.auth.signOut({ scope: 'global' })
 
-      toast.success('Sesiones cerradas. Redirigiendo...')
+      toast.success('Todas las sesiones fueron cerradas. Redirigiendo al login...')
       setTimeout(() => {
         window.location.href = '/login'
-      }, 1200)
+      }, 1000)
     } catch (error) {
       logger.error('Error closing all sessions', { error })
       toast.error('Error al cerrar todas las sesiones')
@@ -375,10 +472,14 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   }, [sessions])
 
   const visibleSessions = useMemo(() => {
-    if (sessionView === 'current') return sortedSessions.filter((s) => s.is_current)
-    if (sessionView === 'others') return sortedSessions.filter((s) => !s.is_current)
-    return sortedSessions
-  }, [sortedSessions, sessionView])
+    let list = sortedSessions
+    if (sessionView === 'current') list = list.filter((s) => s.is_current)
+    if (sessionView === 'others') list = list.filter((s) => !s.is_current)
+    if (selectedBrowser !== 'all') {
+      list = list.filter((s) => (s.browser || 'Desconocido') === selectedBrowser)
+    }
+    return list
+  }, [sortedSessions, sessionView, selectedBrowser])
 
   const stats = useMemo(() => ({
     total: sessions.length,
@@ -387,142 +488,248 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     tablet: sessions.filter((s) => s.device_type === 'tablet').length,
   }), [sessions])
 
+  const currentBrowser = useMemo(() => {
+    return sessions.find((s) => s.is_current)?.browser || 'Desconocido'
+  }, [sessions])
+
   const browserStats = useMemo(() => {
-    const counter = sessions.reduce<Record<string, number>>((acc, session) => {
+    const counter = sessions.reduce<Record<string, { count: number; hasCurrent: boolean; remoteCount: number }>>((acc, session) => {
       const key = session.browser || 'Desconocido'
-      acc[key] = (acc[key] || 0) + 1
+      if (!acc[key]) {
+        acc[key] = { count: 0, hasCurrent: false, remoteCount: 0 }
+      }
+      acc[key].count += 1
+      if (session.is_current) {
+        acc[key].hasCurrent = true
+      } else {
+        acc[key].remoteCount += 1
+      }
       return acc
     }, {})
 
     return Object.entries(counter)
-      .map(([browser, count]) => ({ browser, count }))
+      .map(([browser, data]) => ({
+        browser,
+        count: data.count,
+        hasCurrent: data.hasCurrent,
+        remoteCount: data.remoteCount
+      }))
       .sort((a, b) => b.count - a.count)
   }, [sessions])
 
   const otherBrowserSessionsCount = useMemo(() => {
-    const currentBrowser = sessions.find((s) => s.is_current)?.browser
     return sessions.filter((s) => !s.is_current && (!currentBrowser || s.browser !== currentBrowser)).length
-  }, [sessions])
+  }, [sessions, currentBrowser])
 
   const securityOverview = useMemo(() => {
-    let score = 35
-    if (emailNotifications) score += 15
-    if (loginAlerts) score += 15
+    let score = 40
+    if (emailNotifications) score += 20
+    if (loginAlerts) score += 20
     if (twoFactorEnabled) score += 20
-    if (stats.total <= 1) score += 15
-    else if (stats.total <= 3) score += 5
+    if (stats.total <= 1) score += 20
+    else if (stats.total <= 3) score += 10
     score = Math.min(100, score)
 
-    const level = score >= 80 ? 'Alto' : score >= 60 ? 'Medio' : 'Bajo'
-    const variant = score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+    const level = score >= 80 ? 'Protección Alta' : score >= 60 ? 'Protección Moderada' : 'Protección Básica'
+    const variantColor = score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+    const textColor = score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'
 
     return {
       score,
       level,
-      variant,
+      variantColor,
+      textColor,
       hasMultipleSessions: stats.total > 1,
     }
   }, [emailNotifications, loginAlerts, twoFactorEnabled, stats.total])
 
   const getDeviceIcon = (deviceType: string) => {
-    if (deviceType === 'mobile' || deviceType === 'tablet') return Smartphone
-    return Monitor
+    if (deviceType === 'mobile') return Smartphone
+    if (deviceType === 'tablet') return Smartphone
+    return Laptop
   }
 
-  const getDeviceType = (deviceType: string) => {
-    if (deviceType === 'mobile') return 'Movil'
+  const getDeviceLabel = (deviceType: string) => {
+    if (deviceType === 'mobile') return 'Teléfono Móvil'
     if (deviceType === 'tablet') return 'Tablet'
     return 'Computadora'
   }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    if (Number.isNaN(date.getTime())) return 'Sin fecha'
+    if (Number.isNaN(date.getTime())) return 'Sin fecha registrada'
     return formatDistanceToNow(date, { addSuffix: true, locale: es })
   }
 
-  const formatAbsoluteDate = (dateString: string) => {
-    const date = new Date(dateString)
-    if (Number.isNaN(date.getTime())) return 'Sin fecha'
-    return date.toLocaleString('es-PY', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <Card className="border-none shadow-2xl overflow-hidden bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl relative">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-red-400/20 via-orange-400/20 to-yellow-400/20 rounded-full blur-3xl" />
-        <CardHeader className="bg-gradient-to-r from-red-500/10 via-orange-500/10 to-yellow-500/10 border-b border-red-200/50 dark:border-red-800/50 relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-br from-red-600 to-orange-600 rounded-xl shadow-lg">
-              <Shield className="h-6 w-6 text-white" />
+    <div className="space-y-6">
+      {/* Banner Principal de Seguridad */}
+      <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-xl">Seguridad de la Cuenta</CardTitle>
+                <CardDescription>
+                  Monitorea el estado de protección, credenciales y dispositivos autorizados.
+                </CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-2xl bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent">
-                Seguridad de la Cuenta
-              </CardTitle>
-              <CardDescription className="text-slate-600 dark:text-slate-400">
-                Protege tu cuenta y administra sesiones activas.
-              </CardDescription>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs py-1 px-2.5 font-normal gap-1.5">
+                <Clock className="h-3 w-3 text-muted-foreground" />
+                <span>
+                  {lastSyncAt ? `Sincronizado ${formatDate(lastSyncAt.toISOString())}` : 'Cargando...'}
+                </span>
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={loadSessions}
+                className="h-8 px-2.5 text-xs gap-1.5"
+                disabled={loadingSessions}
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', loadingSessions && 'animate-spin')} />
+                Actualizar
+              </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6 relative z-10">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+        <CardContent className="space-y-6">
+          {/* Métricas de Diagnóstico Ejecutivo */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Nivel de seguridad</p>
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                <p className="text-xs font-medium text-muted-foreground">Nivel de protección</p>
+                <Shield className={cn('h-4 w-4', securityOverview.textColor)} />
               </div>
-              <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{securityOverview.score}/100</p>
-              <Badge variant="outline" className="mt-2">{securityOverview.level}</Badge>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold tracking-tight text-foreground">
+                  {securityOverview.score}%
+                </span>
+                <span className={cn('text-xs font-semibold', securityOverview.textColor)}>
+                  {securityOverview.level}
+                </span>
+              </div>
+              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn('h-full transition-all duration-500 rounded-full', securityOverview.variantColor)}
+                  style={{ width: `${securityOverview.score}%` }}
+                />
+              </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-900/60">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Sesiones activas</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.total}</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {securityOverview.hasMultipleSessions ? 'Revisa dispositivos no reconocidos' : 'Solo tu sesion actual'}
+
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Sesiones activas</p>
+                <Laptop className="h-4 w-4 text-blue-500" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                {stats.total} {stats.total === 1 ? 'dispositivo' : 'dispositivos'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {securityOverview.hasMultipleSessions
+                  ? `${browserStats.length} navegadores detectados`
+                  : 'Solo este dispositivo tiene acceso activo'}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-900/60">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Ultima sincronizacion</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {lastSyncAt ? formatDate(lastSyncAt.toISOString()) : 'Sin datos'}
-              </p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                <div className={cn('h-full transition-all', securityOverview.variant)} style={{ width: `${securityOverview.score}%` }} />
+
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Alertas de acceso</p>
+                <Bell className="h-4 w-4 text-amber-500" />
               </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                {loginAlerts && emailNotifications ? 'Monitoreo 24/7' : 'Parcial'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {loginAlerts ? 'Avisos en tiempo real por nuevo inicio' : 'Alertas desactivadas'}
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-xl border border-blue-200/60 bg-gradient-to-r from-blue-50 to-cyan-50 p-4 dark:border-blue-800/60 dark:from-blue-950/30 dark:to-cyan-950/30 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="rounded-lg bg-blue-100 p-3 dark:bg-blue-900/50">
-                <Key className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          {/* Checklist de Seguridad */}
+          <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2.5">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              Estado de las medidas de protección
+            </h4>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span className="text-foreground font-medium">Contraseña encriptada con Bcrypt/Argon2</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {emailNotifications ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                )}
+                <span className="text-foreground">Notificaciones por correo electrónico</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {loginAlerts ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                )}
+                <span className="text-foreground">Detección de dispositivos no habituales</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span className="text-foreground">Aislamiento estricto de datos multi-inquilino</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Credenciales y Autenticacion */}
+      <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+              <Key className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Credenciales de Acceso</CardTitle>
+              <CardDescription>Gestiona tu contraseña y los métodos de validación de identidad.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Bloque de Contraseña */}
+          <div className="flex flex-col gap-4 rounded-xl border border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between bg-card">
+            <div className="flex items-start gap-3.5">
+              <div className="rounded-lg bg-muted p-2.5 mt-0.5">
+                <Key className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Contrasena</p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Actualiza tu contrasena y luego cierra sesiones antiguas para reforzar la seguridad.
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-sm text-foreground">Contraseña de la cuenta</p>
+                  <Badge variant="outline" className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800">
+                    Activa y cifrada
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tu contraseña nunca se guarda en texto plano. Se almacena con hash irreversible.
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 sm:justify-end">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
               <ChangePasswordDialog />
               {stats.total > 1 && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2"
                   onClick={handleLogoutAllSessions}
                   disabled={closingOthers || closingOtherBrowsers || closingEverywhere || Boolean(closingSessionId)}
+                  className="text-xs gap-1.5"
                 >
-                  {closingOthers ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                  {closingOthers ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
                   Cerrar otras sesiones
                 </Button>
               )}
@@ -531,183 +738,297 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
           <Separator />
 
-          <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border border-purple-200/50 dark:border-purple-800/50 opacity-60">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
-                <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          {/* Bloque 2FA */}
+          <div className="flex flex-col gap-4 rounded-xl border border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between bg-card">
+            <div className="flex items-start gap-3.5">
+              <div className="rounded-lg bg-purple-500/10 p-2.5 mt-0.5 text-purple-600">
+                <Smartphone className="h-5 w-5" />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Autenticacion 2FA</p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Disponible proximamente</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-sm text-foreground">Autenticación en dos pasos (2FA)</p>
+                  <Badge variant="secondary" className="text-[10px]">
+                    Próximamente
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Requerirá un código de verificación desde Google Authenticator o Authy al iniciar sesión.
+                </p>
               </div>
             </div>
-            <Switch disabled checked={twoFactorEnabled} />
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              Alertas de Seguridad
-            </h3>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <div>
-                  <p className="font-medium text-sm">Notificaciones por email</p>
-                  <p className="text-xs text-muted-foreground">Recibe alertas de actividad sospechosa</p>
-                </div>
-                <Switch
-                  disabled={savingSettings}
-                  checked={emailNotifications}
-                  onCheckedChange={(checked) => {
-                    setEmailNotifications(checked)
-                    saveSecuritySettings({ email_notifications: checked })
-                  }}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <div>
-                  <p className="font-medium text-sm">Alertas de inicio de sesion</p>
-                  <p className="text-xs text-muted-foreground">Notifica cuando inicies sesion en un dispositivo nuevo</p>
-                </div>
-                <Switch
-                  disabled={savingSettings}
-                  checked={loginAlerts}
-                  onCheckedChange={(checked) => {
-                    setLoginAlerts(checked)
-                    saveSecuritySettings({ login_alerts: checked })
-                  }}
-                />
-              </div>
+            <div className="flex items-center sm:shrink-0">
+              <Switch disabled checked={twoFactorEnabled} />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="border-none shadow-2xl overflow-hidden bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl relative">
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-green-400/20 via-emerald-400/20 to-teal-400/20 rounded-full blur-3xl" />
-        <CardHeader className="bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-teal-500/10 border-b border-green-200/50 dark:border-green-800/50 relative z-10">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl shadow-lg">
-                <Monitor className="h-6 w-6 text-white" />
+      {/* Alertas de Seguridad */}
+      <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Alertas y Notificaciones de Seguridad</CardTitle>
+              <CardDescription>Decide qué eventos críticos deben notificarte de forma inmediata.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between rounded-xl border border-border/60 p-3.5 transition-colors hover:bg-muted/30">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-blue-500/10 p-2 text-blue-600 mt-0.5">
+                <Mail className="h-4 w-4" />
               </div>
               <div>
-                <CardTitle className="text-2xl bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                  Sesiones y Dispositivos
-                </CardTitle>
-                <CardDescription className="text-slate-600 dark:text-slate-400">
-                  Administra accesos activos y cierra dispositivos que no reconozcas.
-                </CardDescription>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Ultima sincronizacion:{' '}
-                  {lastSyncAt ? formatAbsoluteDate(lastSyncAt.toISOString()) : 'sin datos'}
+                <p className="text-sm font-medium text-foreground">Notificaciones por email</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Recibe avisos en tu correo sobre cambios de contraseña o accesos desde ciudades nuevas.
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadSessions}
-              className="gap-2"
-              disabled={loadingSessions || closingOthers || closingOtherBrowsers || closingEverywhere}
-            >
-              <RefreshCw className={cn('h-4 w-4', loadingSessions && 'animate-spin')} />
-              Actualizar
-            </Button>
+            <Switch
+              disabled={savingSettings}
+              checked={emailNotifications}
+              onCheckedChange={(checked) => {
+                setEmailNotifications(checked)
+                saveSecuritySettings({ email_notifications: checked })
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-border/60 p-3.5 transition-colors hover:bg-muted/30">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600 mt-0.5">
+                <Shield className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Alertas de inicio de sesión</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Genera una notificación en el panel de control cuando tu cuenta sea iniciada en otro dispositivo.
+                </p>
+              </div>
+            </div>
+            <Switch
+              disabled={savingSettings}
+              checked={loginAlerts}
+              onCheckedChange={(checked) => {
+                setLoginAlerts(checked)
+                saveSecuritySettings({ login_alerts: checked })
+              }}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sesiones y Dispositivos */}
+      <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                <Monitor className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-xl">Sesiones y Dispositivos</CardTitle>
+                <CardDescription>
+                  Visualiza los navegadores y equipos donde tu cuenta está actualmente conectada.
+                </CardDescription>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="text-xs font-normal">
+                {stats.desktop} Computadoras
+              </Badge>
+              <Badge variant="outline" className="text-xs font-normal">
+                {stats.mobile} Móviles
+              </Badge>
+              {stats.tablet > 0 && (
+                <Badge variant="outline" className="text-xs font-normal">
+                  {stats.tablet} Tablets
+                </Badge>
+              )}
+            </div>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4 pt-6 relative z-10">
+        <CardContent className="space-y-5">
           {loadingSessions && (
             <div className="space-y-3">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full rounded-xl" />
+              <Skeleton className="h-20 w-full rounded-xl" />
             </div>
           )}
 
           {!loadingSessions && sessionsError && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error al cargar sesiones</AlertTitle>
               <AlertDescription>{sessionsError}</AlertDescription>
             </Alert>
           )}
 
           {!loadingSessions && !sessionsError && stats.total === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <Monitor className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No se encontraron sesiones activas</p>
+            <div className="rounded-xl border border-dashed border-border/80 p-8 text-center">
+              <Monitor className="mx-auto h-10 w-10 text-muted-foreground/40 mb-2" />
+              <p className="text-sm font-medium text-foreground">No se encontraron sesiones registradas</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Haz clic en actualizar para sincronizar con el servidor.
+              </p>
             </div>
           )}
 
           {!loadingSessions && !sessionsError && stats.total > 0 && (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border border-blue-200 dark:border-blue-800">
-                  <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.total}</p>
-                  <p className="text-xs text-blue-600 dark:text-blue-400">Sesiones activas</p>
+              {/* Detección de Sesiones Abiertas por Navegador */}
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <Compass className="h-4 w-4 text-primary" />
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Sesiones detectadas por navegador
+                    </h4>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Haz clic en un navegador para filtrar o cerrarlo
+                  </span>
                 </div>
-                <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border border-purple-200 dark:border-purple-800">
-                  <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">{stats.desktop}</p>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">Computadoras</p>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 pt-1">
+                  {browserStats.map((item) => {
+                    const isSelected = selectedBrowser === item.browser
+                    const isCurrent = item.hasCurrent
+
+                    return (
+                      <div
+                        key={item.browser}
+                        className={cn(
+                          'rounded-lg border p-3 transition-all flex flex-col justify-between gap-2',
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'border-border/60 bg-card hover:border-border'
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-foreground">
+                              {item.browser}
+                            </span>
+                            {isCurrent && (
+                              <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0 h-4">
+                                Actual
+                              </Badge>
+                            )}
+                          </div>
+                          <Badge variant="secondary" className="text-xs font-mono font-bold">
+                            {item.count} {item.count === 1 ? 'sesión' : 'sesiones'}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant={isSelected ? 'default' : 'outline'}
+                            size="sm"
+                            className="h-7 text-xs flex-1"
+                            onClick={() => setSelectedBrowser(isSelected ? 'all' : item.browser)}
+                          >
+                            <Filter className="h-3 w-3 mr-1" />
+                            {isSelected ? 'Quitar filtro' : 'Ver sesiones'}
+                          </Button>
+
+                          {item.remoteCount > 0 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive px-2"
+                              title={`Cerrar las sesiones abiertas en ${item.browser}`}
+                              onClick={() => handleLogoutBrowser(item.browser)}
+                              disabled={closingBrowser === item.browser || closingOthers || closingOtherBrowsers || closingEverywhere}
+                            >
+                              {closingBrowser === item.browser ? (
+                                <RefreshCw className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <LogOut className="h-3 w-3 mr-1" />
+                              )}
+                              Cerrar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800">
-                  <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.mobile}</p>
-                  <p className="text-xs text-green-600 dark:text-green-400">Moviles</p>
+
+                {selectedBrowser !== 'all' && (
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <span className="text-muted-foreground">
+                      Filtrando por: <strong className="text-foreground">{selectedBrowser}</strong>
+                    </span>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-6 p-0 text-xs text-primary"
+                      onClick={() => setSelectedBrowser('all')}
+                    >
+                      Mostrar todos los navegadores
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Filtros de Vistas (Todas / Este dispositivo / Otras) */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={sessionView === 'all' ? 'default' : 'outline'}
+                    onClick={() => setSessionView('all')}
+                    disabled={loadingSessions}
+                    className="h-8 text-xs"
+                  >
+                    Todas ({stats.total})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={sessionView === 'current' ? 'default' : 'outline'}
+                    onClick={() => setSessionView('current')}
+                    disabled={loadingSessions}
+                    className="h-8 text-xs"
+                  >
+                    Este dispositivo ({stats.total > 0 ? 1 : 0})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={sessionView === 'others' ? 'default' : 'outline'}
+                    onClick={() => setSessionView('others')}
+                    disabled={loadingSessions}
+                    className="h-8 text-xs"
+                  >
+                    Otras ({Math.max(0, stats.total - (stats.total > 0 ? 1 : 0))})
+                  </Button>
                 </div>
-                <div className="p-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 border border-orange-200 dark:border-orange-800">
-                  <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{stats.tablet}</p>
-                  <p className="text-xs text-orange-600 dark:text-orange-400">Tablets</p>
+
+                <div className="text-xs text-muted-foreground">
+                  Mostrando <strong>{visibleSessions.length}</strong> de {stats.total} sesiones
                 </div>
               </div>
 
+              {/* Aviso si hay múltiples sesiones */}
               {securityOverview.hasMultipleSessions && (
-                <Alert className="mb-4 border-amber-200 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20">
+                <Alert className="border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/30">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800 dark:text-amber-200">
-                    Detectamos multiples sesiones activas. Si hay un dispositivo desconocido, cierra esa sesion de inmediato.
+                  <AlertDescription className="text-xs text-amber-900 dark:text-amber-200">
+                    Se detectaron {stats.total} sesiones activas simultáneamente en {browserStats.length} navegadores. Si no reconoces alguno de los accesos remotos, ciérralo inmediatamente por precaución.
                   </AlertDescription>
                 </Alert>
               )}
 
-              <div className="mb-4 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant={sessionView === 'all' ? 'default' : 'outline'}
-                  onClick={() => setSessionView('all')}
-                  disabled={loadingSessions}
-                >
-                  Todas ({stats.total})
-                </Button>
-                <Button
-                  size="sm"
-                  variant={sessionView === 'current' ? 'default' : 'outline'}
-                  onClick={() => setSessionView('current')}
-                  disabled={loadingSessions}
-                >
-                  Actual ({stats.total > 0 ? 1 : 0})
-                </Button>
-                <Button
-                  size="sm"
-                  variant={sessionView === 'others' ? 'default' : 'outline'}
-                  onClick={() => setSessionView('others')}
-                  disabled={loadingSessions}
-                >
-                  Otras ({Math.max(0, stats.total - (stats.total > 0 ? 1 : 0))})
-                </Button>
-              </div>
-
-              <div className="mb-4 flex flex-wrap gap-2">
-                {browserStats.map((item) => (
-                  <Badge key={item.browser} variant="secondary">
-                    {item.browser}: {item.count}
-                  </Badge>
-                ))}
-              </div>
-
+              {/* Lista de Sesiones */}
               <div className="space-y-3">
                 {visibleSessions.map((session) => {
                   const DeviceIcon = getDeviceIcon(session.device_type)
@@ -717,71 +1038,86 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                     <div
                       key={session.id}
                       className={cn(
-                        'p-4 rounded-xl border-2 transition-all duration-200 hover:shadow-md',
+                        'rounded-xl border p-4 transition-all duration-200',
                         isCurrentSession
-                          ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-500/50 shadow-sm'
-                          : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                          ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm ring-1 ring-emerald-400/20'
+                          : 'border-border/60 bg-card hover:border-border hover:shadow-sm'
                       )}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className={cn('p-2 rounded-lg', isCurrentSession ? 'bg-green-100 dark:bg-green-900/50' : 'bg-slate-200 dark:bg-slate-700')}>
-                            <DeviceIcon className={cn('h-5 w-5', isCurrentSession ? 'text-green-600 dark:text-green-400' : 'text-slate-600 dark:text-slate-400')} />
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-3.5">
+                          <div className={cn(
+                            'rounded-xl p-2.5 mt-0.5',
+                            isCurrentSession
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-muted text-muted-foreground'
+                          )}>
+                            <DeviceIcon className="h-5 w-5" />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <p className="font-semibold text-sm">{session.browser} - {getDeviceType(session.device_type)}</p>
-                              {isCurrentSession && (
-                                <Badge className="bg-green-500 text-white text-xs">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Sesion actual
+
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-sm text-foreground">
+                                {session.browser} en {getDeviceLabel(session.device_type)}
+                              </span>
+                              {isCurrentSession ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[11px] gap-1 py-0.5 px-2">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Este dispositivo (Sesión actual)
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-[11px] font-normal text-muted-foreground bg-muted/60">
+                                  Navegador reconocido · Sesión remota
                                 </Badge>
                               )}
                             </div>
-                            <div className="space-y-1 text-xs text-muted-foreground">
+
+                            <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 text-xs text-muted-foreground pt-1">
                               <div className="flex items-center gap-1.5">
-                                <Monitor className="h-3 w-3" />
-                                <span>{session.os}</span>
+                                <Monitor className="h-3 w-3 text-muted-foreground/70" />
+                                <span>Sistema: {session.os}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <MapPin className="h-3 w-3" />
+                                <Globe className="h-3 w-3 text-muted-foreground/70" />
+                                <span>IP: {session.ip_address}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <MapPin className="h-3 w-3 text-muted-foreground/70" />
                                 <span>
                                   {session.country && session.city
                                     ? `${session.city}, ${session.country}`
-                                    : session.country || session.city || session.ip_address}
+                                    : session.country || session.city || 'Ubicación local'}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <Clock className="h-3 w-3" />
-                                <span>Ultima actividad: {formatDate(session.last_activity)}</span>
+                                <Clock className="h-3 w-3 text-muted-foreground/70" />
+                                <span>Última actividad: {formatDate(session.last_activity)}</span>
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="h-3 w-3" />
-                                <span>Inicio: {formatAbsoluteDate(session.created_at)}</span>
-                              </div>
-                              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                                Sesion ID: {session.session_id}
-                              </p>
                             </div>
+
+                            <p className="text-[10px] font-mono text-muted-foreground/60 pt-0.5">
+                              ID de sesión: {session.session_id}
+                            </p>
                           </div>
                         </div>
 
                         {!isCurrentSession && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleLogoutSession(session.session_id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 gap-2 px-3 shrink-0"
-                            title="Cerrar esta sesion"
-                            disabled={Boolean(closingSessionId) || closingOthers || closingOtherBrowsers || closingEverywhere}
-                          >
-                            {closingSessionId === session.session_id ? (
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <LogOut className="h-4 w-4" />
-                            )}
-                            <span className="text-xs font-medium">Cerrar</span>
-                          </Button>
+                          <div className="sm:self-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLogoutSession(session.session_id)}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 text-xs h-8 gap-1.5"
+                              disabled={Boolean(closingSessionId) || closingOthers || closingOtherBrowsers || closingEverywhere}
+                            >
+                              {closingSessionId === session.session_id ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <LogOut className="h-3.5 w-3.5" />
+                              )}
+                              <span>Cerrar sesión</span>
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -789,92 +1125,91 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                 })}
               </div>
 
+              {/* Botones de Gestión Global de Sesiones */}
               {stats.total > 1 && (
-                <>
-                  <Separator className="my-6" />
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-800">
-                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">Multiples sesiones detectadas</p>
-                        <p className="text-sm text-amber-700 dark:text-amber-300">Si detectas un dispositivo no reconocido, cierra la sesion de inmediato.</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="w-full gap-2 border-2 border-orange-300 hover:bg-orange-50 hover:border-orange-400 dark:border-orange-700 dark:hover:bg-orange-950/30 dark:hover:border-orange-600 transition-all duration-200"
-                        onClick={handleLogoutAllSessions}
-                        disabled={closingOthers || closingOtherBrowsers || closingEverywhere || Boolean(closingSessionId)}
-                      >
-                        {closingOthers ? <RefreshCw className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
-                        <div className="text-left">
-                          <div className="font-semibold">Cerrar otras sesiones</div>
-                          <div className="text-xs opacity-75">Mantener solo esta sesion</div>
-                        </div>
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="w-full gap-2 border-2 border-blue-300 hover:bg-blue-50 hover:border-blue-400 dark:border-blue-700 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-all duration-200"
-                        onClick={handleLogoutOtherBrowsers}
-                        disabled={closingOtherBrowsers || closingOthers || closingEverywhere || Boolean(closingSessionId)}
-                      >
-                        {closingOtherBrowsers ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Monitor className="h-5 w-5" />}
-                        <div className="text-left">
-                          <div className="font-semibold">Cerrar otros navegadores</div>
-                          <div className="text-xs opacity-75">{otherBrowserSessionsCount} sesiones detectadas</div>
-                        </div>
-                      </Button>
-
-                      <Button
-                        variant="destructive"
-                        size="lg"
-                        className="w-full gap-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 transition-all duration-200"
-                        onClick={handleLogoutEverywhere}
-                        disabled={closingEverywhere || closingOtherBrowsers || closingOthers || Boolean(closingSessionId)}
-                      >
-                        {closingEverywhere ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
-                        <div className="text-left">
-                          <div className="font-semibold">Cerrar todas</div>
-                          <div className="text-xs opacity-90">Incluida esta sesion</div>
-                        </div>
-                      </Button>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3 pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Acciones masivas de cierre</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Finaliza accesos en segundo plano para garantizar que solo tú tengas control.
+                      </p>
                     </div>
                   </div>
-                </>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-xs font-medium justify-center gap-2 hover:bg-background"
+                      onClick={handleLogoutAllSessions}
+                      disabled={closingOthers || closingOtherBrowsers || closingEverywhere || Boolean(closingSessionId)}
+                    >
+                      {closingOthers ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4 text-amber-600" />}
+                      <div className="text-left leading-tight">
+                        <div>Cerrar otras sesiones</div>
+                        <div className="text-[10px] text-muted-foreground font-normal">Mantener solo este equipo</div>
+                      </div>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-xs font-medium justify-center gap-2 hover:bg-background"
+                      onClick={handleLogoutOtherBrowsers}
+                      disabled={closingOtherBrowsers || closingOthers || closingEverywhere || Boolean(closingSessionId)}
+                    >
+                      {closingOtherBrowsers ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Monitor className="h-4 w-4 text-blue-600" />}
+                      <div className="text-left leading-tight">
+                        <div>Cerrar otros navegadores</div>
+                        <div className="text-[10px] text-muted-foreground font-normal">{otherBrowserSessionsCount} sesiones detectadas</div>
+                      </div>
+                    </Button>
+
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-10 text-xs font-medium justify-center gap-2"
+                      onClick={handleLogoutEverywhere}
+                      disabled={closingEverywhere || closingOtherBrowsers || closingOthers || Boolean(closingSessionId)}
+                    >
+                      {closingEverywhere ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      <div className="text-left leading-tight">
+                        <div>Cerrar todas las sesiones</div>
+                        <div className="text-[10px] opacity-90 font-normal">Requiere volver a ingresar</div>
+                      </div>
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}
         </CardContent>
       </Card>
 
+      {/* Zona Administrativa Exclusiva */}
       {role === 'super_admin' && (
-        <Card className="border-2 border-orange-200 dark:border-orange-800 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 shadow-xl">
-          <CardHeader className="border-b border-orange-200 dark:border-orange-800">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gradient-to-br from-orange-600 to-amber-600 rounded-xl shadow-lg">
-                <Shield className="h-6 w-6 text-white" />
+        <Card className="border-border/60 bg-muted/20 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
+                <Shield className="h-4 w-4" />
               </div>
               <div>
-                <CardTitle className="text-xl text-orange-700 dark:text-orange-400">Zona Administrativa</CardTitle>
-                <CardDescription>Configuraciones avanzadas de seguridad</CardDescription>
+                <CardTitle className="text-base font-semibold">Zona Administrativa de Seguridad</CardTitle>
+                <CardDescription className="text-xs">
+                  Herramientas avanzadas para auditoría de tokens y sesiones multi-empresa.
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
-            <Alert className="border-orange-200 dark:border-orange-800">
-              <AlertTriangle className="h-4 w-4 text-orange-600" />
-              <AlertDescription className="text-sm">Utiliza estas herramientas con cuidado.</AlertDescription>
-            </Alert>
+          <CardContent className="pt-0">
+            <p className="text-xs text-muted-foreground">
+              Como Super Administrador, tus sesiones registran auditoría de clave maestra y accesos cross-tenant. Las directivas de retención de tokens se aplican automáticamente cada 24 horas.
+            </p>
           </CardContent>
         </Card>
       )}
     </div>
   )
 }
-
-

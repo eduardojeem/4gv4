@@ -143,6 +143,8 @@ export async function POST(request: NextRequest) {
         created_at,
         estimated_cost,
         final_cost,
+        paid_amount,
+        payment_status,
         warranty_months,
         warranty_type,
         estimated_completion,
@@ -281,6 +283,8 @@ export async function POST(request: NextRequest) {
       completedAt: repair.completed_at || null,
       estimatedCost: repair.estimated_cost || 0,
       finalCost: repair.final_cost,
+      paidAmount: repair.paid_amount,
+      paymentStatus: repair.payment_status,
       warrantyMonths: repair.warranty_months,
       warrantyType: repair.warranty_type,
       technician: technicianResult.data?.full_name ? {

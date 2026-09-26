@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useRepairs } from '@/contexts/RepairsContext'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,8 +16,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import {
-  User, Mail, Phone, MapPin, Shield, Calendar,
-  Trophy, Clock, CheckCircle2, Activity, Bell, Lock,
+  User, Shield, Calendar, Clock, CheckCircle2, Activity, Bell, Lock,
   Pencil, Save, X, Wrench, Star
 } from 'lucide-react'
 
@@ -379,7 +378,7 @@ export default function TechnicianProfilePage() {
                   <div>
                     <h4 className="font-medium text-amber-800 dark:text-amber-300 text-sm">Cambiar contraseña</h4>
                     <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-1">
-                      Para cambiar tu contraseña, usá la opción "Olvidé mi contraseña" en la pantalla de login o contactá al administrador.
+                      Para cambiar tu contraseña, usá la opción &quot;Olvidé mi contraseña&quot; en la pantalla de login o contactá al administrador.
                     </p>
                   </div>
                 </div>

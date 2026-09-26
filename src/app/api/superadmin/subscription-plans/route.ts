@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
+import { computePlanStats, type PlanPriceRow, type SubscriptionRow } from '@/lib/saas/plan-stats'
 
 // ---------------------------------------------------------------------------
 // GET — Stats por plan: cantidad de orgs y MRR estimado
@@ -15,57 +16,20 @@ export async function GET() {
   const admin = createAdminSupabase()
 
   const [{ data: plans }, { data: subs }] = await Promise.all([
-    admin.from('subscription_plans').select('tier, price, is_active').eq('is_active', true),
+    // Se leen TODOS los planes, no solo los activos. Desactivar un plan sirve
+    // para dejar de venderlo pero conservar a quienes ya lo pagan: si su precio
+    // no estuviera aca, esas organizaciones aportarian 0 y el MRR mostraria
+    // menos facturacion de la real.
+    admin.from('subscription_plans').select('tier, price, is_active'),
     admin.from('subscriptions').select('plan, status'),
   ])
 
-  const priceByTier = new Map<string, number>()
-  ;((plans ?? []) as Array<{ tier: string; price: number }>).forEach((p) => {
-    priceByTier.set(p.tier.toUpperCase(), Number(p.price) || 0)
-  })
-
-  // Count orgs and MRR by plan
-  const orgsByPlan = new Map<string, number>()
-  const activeByPlan = new Map<string, number>()
-  let mrr = 0
-  let activeSubs = 0
-  let trialingSubs = 0
-
-  ;((subs ?? []) as Array<{ plan: string | null; status: string | null }>).forEach((s) => {
-    const tier = (s.plan ?? 'FREE').toUpperCase()
-    orgsByPlan.set(tier, (orgsByPlan.get(tier) ?? 0) + 1)
-
-    if (s.status === 'active') {
-      activeByPlan.set(tier, (activeByPlan.get(tier) ?? 0) + 1)
-      mrr += priceByTier.get(tier) ?? 0
-      activeSubs++
-    }
-    if (s.status === 'trialing') trialingSubs++
-  })
-
-  // Most used plan
-  let mostUsedPlan: string | null = null
-  let mostUsedCount = 0
-  orgsByPlan.forEach((count, tier) => {
-    if (count > mostUsedCount) {
-      mostUsedCount = count
-      mostUsedPlan = tier
-    }
-  })
-
-  const totalOrgs = Array.from(orgsByPlan.values()).reduce((a, b) => a + b, 0)
-  const mostUsedPercent = totalOrgs > 0 ? Math.round((mostUsedCount / totalOrgs) * 100) : 0
-
-  return NextResponse.json({
-    orgsByPlan: Object.fromEntries(orgsByPlan),
-    activeByPlan: Object.fromEntries(activeByPlan),
-    mrr,
-    activeSubs,
-    trialingSubs,
-    totalOrgs,
-    mostUsedPlan,
-    mostUsedPercent,
-  })
+  return NextResponse.json(
+    computePlanStats(
+      (plans ?? []) as PlanPriceRow[],
+      (subs ?? []) as SubscriptionRow[],
+    )
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +85,26 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  await admin
+  // El plan comercial (subscription_plans) es lo que se muestra y cobra; el
+  // tecnico (plans) es el que habilita modulos. Si esta sincronizacion no ocurre,
+  // el plan queda visible y vendible pero SIN funcionalidades, y antes eso pasaba
+  // en silencio: no se miraba ni el error ni si habia coincidido alguna fila.
+  const { error: modulesError, count: modulesCount } = await admin
     .from('plans')
-    .update({ modules: deriveTechnicalModules(tier, plan.features) })
+    .update({ modules: deriveTechnicalModules(tier, plan.features) }, { count: 'exact' })
     .eq('code', tier.toUpperCase())
+
+  if (modulesError || !modulesCount) {
+    return NextResponse.json(
+      {
+        error: modulesError
+          ? `El plan se creó, pero no se pudieron sincronizar sus módulos: ${modulesError.message}`
+          : `El plan se creó, pero no existe el plan técnico con código ${tier.toUpperCase()}: las organizaciones que lo contraten no tendrán módulos habilitados.`,
+        plan,
+      },
+      { status: 500 }
+    )
+  }
 
   await admin.from('tenant_audit_log').insert({
     user_id: user.id,

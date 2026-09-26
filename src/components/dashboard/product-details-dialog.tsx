@@ -178,7 +178,7 @@ export function ProductDetailsDialog({ open, product, onClose, onEdit, onQuickSt
               <CardContent className="p-4 space-y-2">
                 <div className="text-sm font-medium">Actividad reciente</div>
                 <div className="space-y-2">
-                  {product.recent_movements.slice(0, 3).map((m: any) => (
+                  {(product.recent_movements as Array<{ id: string; created_at: string; movement_type: string; quantity: number }>).slice(0, 3).map((m) => (
                     <div key={m.id} className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">{new Date(m.created_at).toLocaleString()}</span>
                       <span className="font-medium">{m.movement_type}</span>

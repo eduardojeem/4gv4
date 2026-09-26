@@ -315,17 +315,18 @@ export function useErrorHandler() {
     return notificationError
   }
 
-  const handleAsyncError = async (
-    operation: () => Promise<any>,
+  const handleAsyncError = async <T>(
+    operation: () => Promise<T>,
     context?: string,
     retryConfig?: Partial<RetryConfig>
-  ) => {
+  ): Promise<T> => {
     const retryHandler = new RetryHandler(retryConfig)
     
     try {
       return await retryHandler.execute(operation, context)
     } catch (error) {
-      return handleError(error, context)
+      handleError(error, context)
+      throw error
     }
   }
 
@@ -346,7 +347,7 @@ export function createError(
   type: ErrorType,
   options?: {
     code?: string
-    context?: Record<string, any>
+    context?: Record<string, unknown>
     retryable?: boolean
   }
 ): NotificationError {

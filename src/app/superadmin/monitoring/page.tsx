@@ -23,7 +23,12 @@ async function getMonitoringData(): Promise<MonitoringData> {
 
     // Recent activity
     admin.from('audit_log').select('id, action, severity, created_at, user_id').order('created_at', { ascending: false }).limit(50),
-    admin.from('audit_log').select('id, action, severity, created_at').gte('severity', 'high').order('created_at', { ascending: false }).limit(20),
+    // `severity` es texto libre ('low'|'medium'|'high'|'critical'), sin orden
+    // numerico. `.gte('severity', 'high')` comparaba alfabeticamente, y
+    // 'critical' queda ANTES que 'high' en el alfabeto -la 'c' es menor que
+    // la 'h'-, asi que el filtro dejaba afuera justo los eventos mas graves.
+    // El contador de "errores 24h" del dashboard los subestimaba en silencio.
+    admin.from('audit_log').select('id, action, severity, created_at').in('severity', ['high', 'critical']).order('created_at', { ascending: false }).limit(20),
     admin.from('audit_log').select('id, action, created_at').eq('action', 'suspicious_activity').gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).limit(20),
 
     // Subscription health

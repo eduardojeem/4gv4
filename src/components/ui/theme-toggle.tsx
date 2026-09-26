@@ -1,6 +1,5 @@
 'use client'
 
-import React from 'react'
 import { Moon, Sun, Monitor } from 'lucide-react'
 import { useTheme } from '@/contexts/theme-context'
 import { Button } from '@/components/ui/button'
@@ -64,7 +63,7 @@ export function ThemeToggle() {
 }
 
 export function ThemeToggleSimple() {
-  const { theme, setTheme, isDark } = useTheme()
+  const { theme: _theme, setTheme, isDark } = useTheme()
 
   const toggleTheme = () => {
     setTheme(isDark ? 'light' : 'dark')

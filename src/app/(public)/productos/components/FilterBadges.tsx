@@ -2,25 +2,43 @@
 
 import { useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
-import { X } from 'lucide-react'
+import { Flame, Package, Smartphone, X } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { readActiveProductFilters, clearAllProductFilters } from '@/lib/utils/product-filters'
 import type { Category } from '@/types/public'
+import { FASHION_AUDIENCES } from '@/lib/products/fashion-filters'
 
-export function FilterBadges({ categories }: { categories: Category[] }) {
+interface Branch {
+  id: string
+  name: string
+  city: string | null
+}
+
+export function FilterBadges({
+  categories,
+  branches = [],
+}: {
+  categories: Category[]
+  branches?: Branch[]
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const { query, categoryId, brand, inStock, minPrice, maxPrice } = readActiveProductFilters(
+  const { query, categoryId, brand, branchId, audience, size, color, deviceBrand, deviceModel, inStock, minPrice, maxPrice } = readActiveProductFilters(
     new URLSearchParams(searchParams.toString())
   )
+  const isOnlyOffers = searchParams.get('offers') === 'true'
 
   const removeFilter = (key: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.delete(key)
+    if (key === 'brand') params.delete('marca')
+    if (key === 'category_id') params.delete('categoria')
+    if (key === 'query') params.delete('q')
+    // Sin marca de celular, el modelo suelto no filtra nada util.
+    if (key === 'celular') params.delete('modelo')
     params.set('page', '1')
     startTransition(() => {
       router.push(`?${params.toString()}`, { scroll: false })
@@ -29,105 +47,177 @@ export function FilterBadges({ categories }: { categories: Category[] }) {
 
   const clearAll = () => {
     const params = clearAllProductFilters(new URLSearchParams(searchParams.toString()))
+    params.delete('offers')
     startTransition(() => {
       router.push(`?${params.toString()}`, { scroll: false })
     })
   }
 
   const hasActiveFilters =
-    !!query || !!categoryId || !!brand || inStock || minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE
+    !!query ||
+    !!categoryId ||
+    !!brand ||
+    !!branchId ||
+    !!audience ||
+    !!size ||
+    !!color ||
+    !!deviceBrand ||
+    !!deviceModel ||
+    inStock ||
+    isOnlyOffers ||
+    minPrice > 0 ||
+    maxPrice < PRODUCTS_MAX_PRICE
 
   if (!hasActiveFilters) return null
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/60">
+      <span className="text-[11px] font-semibold text-muted-foreground">Filtros activos:</span>
+
+      {/* Búsqueda */}
       {query && (
-        <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
-          Busqueda: {query}
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => removeFilter('query')}
-            aria-label="Quitar filtro de busqueda"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
+        <button
+          type="button"
+          onClick={() => removeFilter('query')}
+          className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-bold text-foreground transition-colors hover:bg-muted/80"
+        >
+          <span>Texto: &ldquo;{query}&rdquo;</span>
+          <X className="h-3 w-3" />
+        </button>
       )}
+
+      {/* Categoría */}
       {categoryId && (
-        <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
-          {(() => {
-            // El filtro puede apuntar a una subcategoría: buscar en ambos niveles.
-            for (const c of categories) {
-              if (c.id === categoryId) return c.name
-              const sub = c.subcategories?.find((s) => s.id === categoryId)
-              if (sub) return sub.name
-            }
-            return 'Categoría'
-          })()}
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => removeFilter('category_id')}
-            aria-label="Quitar filtro de categoria"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
+        <button
+          type="button"
+          onClick={() => removeFilter('category_id')}
+          className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+        >
+          <span>
+            Categoría:{' '}
+            {(() => {
+              for (const c of categories) {
+                if (c.id === categoryId) return c.name
+                const sub = c.subcategories?.find((s) => s.id === categoryId)
+                if (sub) return sub.name
+              }
+              return 'Seleccionada'
+            })()}
+          </span>
+          <X className="h-3 w-3" />
+        </button>
       )}
+
+      {/* Celular al que pertenece el repuesto */}
+      {(deviceBrand || deviceModel) && (
+        <button
+          type="button"
+          onClick={() => removeFilter(deviceModel ? 'modelo' : 'celular')}
+          className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+        >
+          <Smartphone className="h-3 w-3" />
+          <span>{[deviceBrand, deviceModel].filter(Boolean).join(' ')}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Marca */}
       {brand && (
-        <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
-          {brand}
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => removeFilter('brand')}
-            aria-label="Quitar filtro de marca"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
+        <button
+          type="button"
+          onClick={() => removeFilter('brand')}
+          className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/40 dark:text-violet-300"
+        >
+          <span>Marca: {brand}</span>
+          <X className="h-3 w-3" />
+        </button>
       )}
+
+      {audience && (
+        <button type="button" onClick={() => removeFilter('audience')} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-bold text-stone-800 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+          <span>Público: {FASHION_AUDIENCES.find((option) => option.value === audience)?.label || audience}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {size && (
+        <button type="button" onClick={() => removeFilter('size')} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-bold text-stone-800 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+          <span>Talle: {size}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {color && (
+        <button type="button" onClick={() => removeFilter('color')} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-bold text-stone-800 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100">
+          <span>Color: {color}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Sucursal activa */}
+      {branchId && (
+        <button
+          type="button"
+          onClick={() => removeFilter('branch_id')}
+          className="flex items-center gap-1.5 rounded-full border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-800/40 dark:bg-sky-950/40 dark:text-sky-300"
+        >
+          <span>📍 {branches.find((b) => b.id === branchId)?.name ?? 'Sucursal'}</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Solo Ofertas */}
+      {isOnlyOffers && (
+        <button
+          type="button"
+          onClick={() => removeFilter('offers')}
+          className="flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-800/40 dark:bg-rose-950/40 dark:text-rose-300"
+        >
+          <Flame className="h-3 w-3" />
+          <span>Solo ofertas</span>
+          <X className="h-3 w-3" />
+        </button>
+      )}
+
+      {/* Stock */}
       {inStock && (
-        <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
-          En stock
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => removeFilter('in_stock')}
-            aria-label="Quitar filtro de stock"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
+        <button
+          type="button"
+          onClick={() => removeFilter('in_stock')}
+          className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300"
+        >
+          <Package className="h-3 w-3" />
+          <span>En stock</span>
+          <X className="h-3 w-3" />
+        </button>
       )}
+
+      {/* Rango de precio */}
       {(minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE) && (
-        <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
-          {formatPrice(minPrice)} - {formatPrice(maxPrice)}
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => {
-              const params = new URLSearchParams(searchParams.toString())
-              params.delete('min_price')
-              params.delete('max_price')
-              params.set('page', '1')
-              startTransition(() => {
-                router.push(`?${params.toString()}`, { scroll: false })
-              })
-            }}
-            aria-label="Quitar filtro de precio"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
+        <button
+          type="button"
+          onClick={() => {
+            const params = new URLSearchParams(searchParams.toString())
+            params.delete('min_price')
+            params.delete('max_price')
+            params.set('page', '1')
+            startTransition(() => {
+              router.push(`?${params.toString()}`, { scroll: false })
+            })
+          }}
+          className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+        >
+          <span>{formatPrice(minPrice)} - {formatPrice(maxPrice)}</span>
+          <X className="h-3 w-3" />
+        </button>
       )}
+
       <button
         onClick={clearAll}
         type="button"
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
+        className="text-xs font-semibold text-primary hover:underline ml-1"
       >
-        Limpiar
+        Limpiar todos
       </button>
     </div>
   )

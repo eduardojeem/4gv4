@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -29,7 +28,7 @@ export function WholesaleToggle({ profileId, customerName }: WholesaleToggleProp
       if (!res.ok) throw new Error('No se pudo obtener el estado')
       const data = await res.json()
       setIsWholesale(data.isWholesale)
-    } catch (e) {
+    } catch (_e) {
       setError('Error al cargar el estado de acceso mayorista')
       setIsWholesale(false)
     } finally {

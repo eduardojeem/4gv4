@@ -5,17 +5,15 @@ import { useProductsSupabase } from '../useProductsSupabase'
 import { useProducts } from '../useProducts'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
 import { useErrorHandler } from '@/lib/error-handling'
-import { useDebounce } from '@/lib/notification-performance'
-import { 
-  usePerformanceMetrics, 
-  useAdvancedMemoization, 
+import {
+  usePerformanceMetrics,
   PerformanceUtils,
   DEFAULT_PERFORMANCE_CONFIG,
   type PerformanceConfig
 } from '@/lib/performance-optimization'
-import type { 
-  ProductFilters, 
-  ProductSort, 
+import type {
+  ProductFilters,
+  ProductSort,
   PaginationOptions,
   LoadingState,
   OperationResult
@@ -27,29 +25,27 @@ import { Product } from '@/types/product-unified'
  * Combina datos, filtros, CRUD y operaciones en lote con optimizaciones de rendimiento
  */
 export function useProductManagement(
-  initialFilters: ProductFilters = {},
-  initialSort: ProductSort = { field: 'name', direction: 'asc' },
-  initialPagination: PaginationOptions = { page: 1, limit: 20 },
+  _initialFilters: ProductFilters = {},
+  _initialSort: ProductSort = { field: 'name', direction: 'asc' },
+  _initialPagination: PaginationOptions = { page: 1, limit: 20 },
   performanceConfig: PerformanceConfig = DEFAULT_PERFORMANCE_CONFIG
 ) {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [bulkOperationLoading, setBulkOperationLoading] = useState(false)
   const [lastError, setLastError] = useState<ProductError | null>(null)
-  
+
   // Estado para productos procesados
   const [processedProducts, setProcessedProducts] = useState<Product[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
   // Hooks de rendimiento
   const { recordMetric, getMetrics, clearMetrics } = usePerformanceMetrics()
-  // No necesitamos usar memoize aquí directamente, solo la instancia
-  const { clear: clearMemoization } = useAdvancedMemoization(() => {}, [], performanceConfig.memoization || {})
-  
+
   // Hooks de manejo de errores
 
   // Hooks de manejo de errores
   const { handleProductError } = useProductErrorHandler()
-  const { handleAsyncError } = useErrorHandler()
+  const { handleAsyncError: _handleAsyncError } = useErrorHandler()
 
   // Usar el hook principal de productos
   const {
@@ -76,8 +72,8 @@ export function useProductManagement(
   const { loadProducts } = useProducts()
 
   // Validaciones
-  const validateProductData = useCallback((product: Partial<Product>): void => {
-    if (!product.name?.trim()) {
+  const validateProductData = useCallback((product: Partial<Product>, requireName = true): void => {
+    if ((requireName || product.name !== undefined) && !product.name?.trim()) {
       throw createProductError.productValidationFailed(
         { name: 'El nombre del producto es requerido' },
         product.id
@@ -105,62 +101,60 @@ export function useProductManagement(
 
   const validateProductIds = useCallback((productIds: string[]): void => {
     if (productIds.length === 0) {
-      // @ts-ignore
       throw createProductError.invalidProductData({ message: 'No se proporcionaron IDs de productos' }, undefined)
     }
 
     const existingIds = new Set(products.map(p => p.id))
     const invalidIds = productIds.filter(id => !existingIds.has(id))
-    
+
     if (invalidIds.length > 0) {
-      // @ts-ignore
       throw createProductError.productNotFound(invalidIds[0])
     }
   }, [products])
 
   // Estado de carga combinado
-  const loadingState: LoadingState = useMemo(() => ({
+  void (useMemo(() => ({
     loading: loading || bulkOperationLoading || isProcessing,
     error
-  }), [loading, bulkOperationLoading, isProcessing, error])
+  }), [loading, bulkOperationLoading, isProcessing, error]));
 
   // Productos filtrados y ordenados
   useEffect(() => {
     let mounted = true
-    
+
     const processProducts = async () => {
       if (!mounted) return
-      
+
       const startTime = performance.now()
       setIsProcessing(true)
-      
+
       try {
         if (!products.length) {
           setProcessedProducts([])
           return
         }
-        
+
         let result = [...products]
 
         // Aplicar filtros adicionales si es necesario
         if (filters.search) {
           const searchTerm = filters.search.toLowerCase()
-          result = result.filter(product => 
+          result = result.filter(product =>
             product.name?.toLowerCase().includes(searchTerm) ||
             product.sku?.toLowerCase().includes(searchTerm) ||
             product.description?.toLowerCase().includes(searchTerm)
           )
         }
-        
+
         // Aplicar filtros básicos de manera optimizada
         if (filters.category) {
           result = result.filter(product => product.category_id === filters.category)
         }
-        
+
         if (filters.supplier) {
           result = result.filter(product => product.supplier_id === filters.supplier)
         }
-        
+
         if (filters.priceMin !== undefined) {
           result = result.filter(product => product.sale_price >= filters.priceMin!)
         }
@@ -168,7 +162,7 @@ export function useProductManagement(
         if (filters.priceMax !== undefined) {
           result = result.filter(product => product.sale_price <= filters.priceMax!)
         }
-        
+
         if (filters.stockStatus) {
           result = result.filter(product => {
             switch (filters.stockStatus) {
@@ -183,16 +177,15 @@ export function useProductManagement(
             }
           })
         }
-        
+
         if (typeof filters.isActive === 'boolean') {
           result = result.filter(product => product.is_active === filters.isActive)
         }
-        
+
         if (typeof filters.featured === 'boolean') {
-          // @ts-ignore
           result = result.filter(product => product.featured === filters.featured)
         }
-        
+
         // Aplicar ordenamiento optimizado
         const largeDatasetThreshold = performanceConfig.optimization?.largeDatasetThreshold || 1000
         if (result.length > largeDatasetThreshold) {
@@ -203,19 +196,19 @@ export function useProductManagement(
         result.sort((a, b) => {
           const aValue = a[sort.field as keyof Product]
           const bValue = b[sort.field as keyof Product]
-          
+
           if (aValue === bValue) return 0
           if (aValue === null || aValue === undefined) return 1
           if (bValue === null || bValue === undefined) return -1
-          
+
           if (aValue < bValue) return sort.direction === 'asc' ? -1 : 1
           if (aValue > bValue) return sort.direction === 'asc' ? 1 : -1
           return 0
         })
-        
+
         if (mounted) {
           setProcessedProducts(result)
-          
+
           const duration = performance.now() - startTime
           recordMetric({
             operationName: 'product_processing',
@@ -223,7 +216,7 @@ export function useProductManagement(
             timestamp: Date.now(),
             itemCount: products.length
           })
-          
+
           // Alertar si el procesamiento es lento
           const slowOperationThreshold = performanceConfig.optimization?.slowOperationThreshold || 100
           if (duration > slowOperationThreshold) {
@@ -240,7 +233,7 @@ export function useProductManagement(
     }
 
     processProducts()
-    
+
     return () => {
       mounted = false
     }
@@ -248,8 +241,8 @@ export function useProductManagement(
 
   // Selección de productos
   const selectProduct = useCallback((productId: string) => {
-    setSelectedProducts(prev => 
-      prev.includes(productId) 
+    setSelectedProducts(prev =>
+      prev.includes(productId)
         ? prev.filter(id => id !== productId)
         : [...prev, productId]
     )
@@ -274,7 +267,7 @@ export function useProductManagement(
 
       // Validaciones
       validateProductIds(productIds)
-      validateProductData(updates)
+      validateProductData(updates, false)
 
       // Verificar rendimiento para datasets grandes
       const largeDatasetThreshold = performanceConfig.optimization?.largeDatasetThreshold || 1000
@@ -288,28 +281,20 @@ export function useProductManagement(
       // Procesar en chunks para mejor rendimiento
       const results = await PerformanceUtils.processArrayAsync(
         productIds,
-        async (chunk) => {
-          // @ts-ignore
-          const promises = chunk.map(async (id: string) => {
-            try {
-              // Cast updates to any to bypass Partial<Product> vs Update type mismatch
-              // Supabase client should handle the partial update correctly
-              return await updateProduct(id, updates as any)
-            } catch (error) {
-              const productError = handleProductError(error, `bulk update product ${id}`)
-              return { success: false, error: productError.message, productId: id }
-            }
-          })
-          return Promise.all(promises)
+        async (id) => {
+          try {
+            const result = await updateProduct(id, updates as Parameters<typeof updateProduct>[1])
+            return { ...result, productId: id }
+          } catch (error) {
+            const productError = handleProductError(error, `bulk update product ${id}`)
+            return { success: false, error: productError.message, productId: id }
+          }
         },
         performanceConfig.optimization?.chunkSize || 100
       )
 
-      // Process the nested arrays manually to avoid TypeScript confusion
-      const chunkResults = results as unknown as any[][]
-      const flatResults = chunkResults.flat()
       const duration = performance.now() - startTime
-      
+
       recordMetric({
         operationName: 'bulk_update',
         duration,
@@ -323,12 +308,10 @@ export function useProductManagement(
         console.warn('Performance warning:', warning.message)
       }
 
-      // @ts-ignore
-      const failedUpdates = flatResults.filter(result => !result.success)
+      const failedUpdates = results.filter(result => !result.success)
       const failedProductIds = failedUpdates
-        .map((result: any) => result.productId || result.data?.id)
-        .filter(Boolean)
-      
+        .map(result => result.productId)
+
       if (failedUpdates.length > 0) {
         const error = createProductError.bulkOperationFailed(
           'actualización',
@@ -336,11 +319,11 @@ export function useProductManagement(
           productIds.length
         )
         setLastError(error)
-        
+
         return {
           success: false,
           error: error.message,
-          data: { 
+          data: {
             failedCount: failedUpdates.length,
             successCount: productIds.length - failedUpdates.length,
             failedProducts: failedProductIds
@@ -350,7 +333,7 @@ export function useProductManagement(
 
       await refreshData()
       clearSelection()
-      
+
       return {
         success: true,
         data: { updatedCount: productIds.length }
@@ -358,7 +341,7 @@ export function useProductManagement(
     } catch (error) {
       const productError = handleProductError(error, 'bulk update products')
       setLastError(productError)
-      
+
       return {
         success: false,
         error: productError.message
@@ -390,26 +373,20 @@ export function useProductManagement(
       // Procesar en chunks para mejor rendimiento
       const results = await PerformanceUtils.processArrayAsync(
         productIds,
-        async (chunk) => {
-          // @ts-ignore
-          const promises = chunk.map(async (id: string) => {
-            try {
-              return await deleteProduct(id)
-            } catch (error) {
-              const productError = handleProductError(error, `bulk delete product ${id}`)
-              return { success: false, error: productError.message, productId: id }
-            }
-          })
-          return Promise.all(promises)
+        async (id) => {
+          try {
+            const result = await deleteProduct(id)
+            return { ...result, productId: id }
+          } catch (error) {
+            const productError = handleProductError(error, `bulk delete product ${id}`)
+            return { success: false, error: productError.message, productId: id }
+          }
         },
         performanceConfig.optimization?.chunkSize || 100
       )
 
-      // Process the nested arrays manually to avoid TypeScript confusion
-      const chunkResults = results as unknown as any[][]
-      const flatResults = chunkResults.flat()
       const duration = performance.now() - startTime
-      
+
       recordMetric({
         operationName: 'bulk_delete',
         duration,
@@ -423,12 +400,10 @@ export function useProductManagement(
         console.warn('Performance warning:', warning.message)
       }
 
-      // @ts-ignore
-      const failedDeletes = flatResults.filter(result => !result.success)
+      const failedDeletes = results.filter(result => !result.success)
       const failedProductIds = failedDeletes
-        .map((result: any) => result.productId || result.data?.id)
-        .filter(Boolean)
-      
+        .map(result => result.productId)
+
       if (failedDeletes.length > 0) {
         const error = createProductError.bulkOperationFailed(
           'eliminación',
@@ -436,11 +411,11 @@ export function useProductManagement(
           productIds.length
         )
         setLastError(error)
-        
+
         return {
           success: false,
           error: error.message,
-          data: { 
+          data: {
             failedCount: failedDeletes.length,
             successCount: productIds.length - failedDeletes.length,
             failedProducts: failedProductIds
@@ -450,7 +425,7 @@ export function useProductManagement(
 
       await refreshData()
       clearSelection()
-      
+
       return {
         success: true,
         data: { deletedCount: productIds.length }
@@ -458,7 +433,7 @@ export function useProductManagement(
     } catch (error) {
       const productError = handleProductError(error, 'bulk delete products')
       setLastError(productError)
-      
+
       return {
         success: false,
         error: productError.message
@@ -498,7 +473,7 @@ export function useProductManagement(
     }
 
     setLastError(null)
-    
+
     // Aquí podrías implementar lógica específica para reintentar
     // basada en el tipo de error y operación
     try {
@@ -518,8 +493,7 @@ export function useProductManagement(
   // Funciones de limpieza de rendimiento
   const clearPerformanceData = useCallback(() => {
     clearMetrics()
-    clearMemoization()
-  }, [clearMetrics, clearMemoization])
+  }, [clearMetrics])
 
   const getPerformanceReport = useCallback(() => {
     const metrics = getMetrics()
@@ -543,10 +517,10 @@ export function useProductManagement(
     categories,
     suppliers,
     totalCount,
-    
+
     // Estados
     loadingState: enhancedLoadingState,
-    
+
     // Filtros y ordenamiento
     filters,
     sort,
@@ -555,34 +529,34 @@ export function useProductManagement(
     setSort,
     setPagination,
     applyAdvancedFilters,
-    
+
     // Operaciones CRUD
     createProduct,
     updateProduct,
     deleteProduct,
     refreshData,
-    
+
     // Selección
     selectedProducts,
     selectProduct,
     selectAllProducts,
     clearSelection,
-    
+
     // Operaciones en lote
     bulkUpdateProducts,
     bulkDeleteProducts,
-    
+
     // Manejo de errores
     lastError,
     retryLastOperation,
     clearError,
-    
+
     // Utilidades
     fetchProducts,
     loadProducts,
     validateProductData,
     validateProductIds,
-    
+
     // Rendimiento
     getPerformanceReport,
     clearPerformanceData

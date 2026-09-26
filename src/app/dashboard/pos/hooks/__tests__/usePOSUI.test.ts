@@ -2,26 +2,13 @@
  * Tests para usePOSUI hook
  */
 
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { usePOSUI } from '../usePOSUI'
 
-// Mock localStorage
-const localStorageMock = (() => {
-  let store: Record<string, string> = {}
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => { store[key] = value },
-    removeItem: (key: string) => { delete store[key] },
-    clear: () => { store = {} }
-  }
-})()
-
-Object.defineProperty(window, 'localStorage', { value: localStorageMock })
-
 describe('usePOSUI', () => {
   beforeEach(() => {
-    localStorageMock.clear()
+    localStorage.clear()
   })
 
   describe('Modal Management', () => {
@@ -128,23 +115,25 @@ describe('usePOSUI', () => {
       expect(result.current.state.sidebarCollapsed).toBe(true)
     })
 
-    it('should persist sidebar state in localStorage', () => {
+    it('should persist sidebar state in localStorage', async () => {
       const { result } = renderHook(() => usePOSUI())
       
       act(() => {
         result.current.actions.toggleSidebar()
       })
       
-      const saved = JSON.parse(localStorageMock.getItem('pos.ui') || '{}')
-      expect(saved.sidebarCollapsed).toBe(true)
+      await waitFor(() => {
+        const saved = JSON.parse(localStorage.getItem('pos.ui') || '{}')
+        expect(saved.sidebarCollapsed).toBe(true)
+      })
     })
 
-    it('should load sidebar state from localStorage', () => {
-      localStorageMock.setItem('pos.ui', JSON.stringify({ sidebarCollapsed: true }))
+    it('should load sidebar state from localStorage', async () => {
+      localStorage.setItem('pos.ui', JSON.stringify({ sidebarCollapsed: true }))
       
       const { result } = renderHook(() => usePOSUI())
       
-      expect(result.current.state.sidebarCollapsed).toBe(true)
+      await waitFor(() => expect(result.current.state.sidebarCollapsed).toBe(true))
     })
   })
 
@@ -284,7 +273,7 @@ describe('usePOSUI', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       
       // Mock localStorage to throw error
-      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
         throw new Error('Storage error')
       })
       

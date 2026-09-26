@@ -2,9 +2,12 @@
 import { correlateSymptoms, estimateDurations, recommendDiagnosis } from "@/lib/repair-predictive";
 import { RepairOrder } from "@/types/repairs";
 import { requireStaff, getAuthResponse } from "@/lib/auth/require-auth";
+import { isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 
 export async function POST(req: Request) {
   try {
+    const moduleContext = await resolveRepairModuleContext();
+    if (isNextResponse(moduleContext)) return moduleContext;
     const auth = await requireStaff();
     { const r = getAuthResponse(auth); if (r) return r };
     const body = await req.json();
@@ -18,4 +21,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 400 });
   }
 }
-

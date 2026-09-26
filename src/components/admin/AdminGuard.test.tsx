@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
-let AdminGuard: any
+import { render, screen } from '@testing-library/react'
+import { AdminGuard } from './AdminGuard'
 
 vi.mock('../../contexts/auth-context', () => {
   return {
@@ -9,17 +9,17 @@ vi.mock('../../contexts/auth-context', () => {
   }
 })
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+}))
+
 describe('AdminGuard', () => {
-  beforeEach(async () => {
-    const mod = await import('../../modules/admin/components/AdminGuard')
-    AdminGuard = mod.default
-  })
   it('renders children for admin users', () => {
-    const { container } = render(
+    render(
       <AdminGuard>
-        <div data-testid="admin-content">Contenido Admin</div>
+        <div>Contenido Admin</div>
       </AdminGuard>
     )
-    expect(container.querySelector('[data-testid="admin-content"]')).toBeTruthy()
+    expect(screen.getByText('Contenido Admin')).toBeInTheDocument()
   })
 })

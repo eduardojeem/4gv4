@@ -24,6 +24,7 @@ export type Permission =
   | 'repairs.orders.create'
   | 'repairs.orders.update'
   | 'repairs.orders.assign'
+  | 'repairs.orders.deliver'
   | 'crm.customers.read'
   | 'crm.customers.manage'
   | 'promotions.read'
@@ -52,6 +53,7 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'repairs.orders.create',
     'repairs.orders.update',
     'repairs.orders.assign',
+    'repairs.orders.deliver',
     'crm.customers.read',
     'crm.customers.manage',
     'promotions.read',
@@ -77,6 +79,7 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'repairs.orders.create',
     'repairs.orders.update',
     'repairs.orders.assign',
+    'repairs.orders.deliver',
     'crm.customers.read',
     'crm.customers.manage',
     'promotions.read',
@@ -99,6 +102,7 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'repairs.orders.create',
     'repairs.orders.update',
     'repairs.orders.assign',
+    'repairs.orders.deliver',
     'crm.customers.read',
     'crm.customers.manage',
     'promotions.read',
@@ -107,12 +111,21 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'ecommerce.orders.manage',
     'analytics.read',
   ],
-  cashier: ['products.read', 'pos.sales.read', 'pos.sales.create', 'pos.cash.manage', 'crm.customers.read'],
+  cashier: [
+    'products.read',
+    'pos.sales.read',
+    'pos.sales.create',
+    'pos.cash.manage',
+    'repairs.orders.read',
+    'repairs.orders.deliver',
+    'crm.customers.read',
+  ],
   technician: [
     'products.read',
     'inventory.stock.manage',
     'repairs.orders.read',
     'repairs.orders.update',
+    'repairs.orders.deliver',
     // Acceso a POS / Caja / Clientes (acorde a la matriz de acceso por sección).
     'pos.sales.read',
     'pos.sales.create',

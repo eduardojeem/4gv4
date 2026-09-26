@@ -19,6 +19,10 @@ const customerLinkMigration = readFileSync(
   resolve(workspace, 'supabase/migrations/20260802161753_link_public_customers_atomically.sql'),
   'utf8'
 )
+const lifecycleMigration = readFileSync(
+  resolve(workspace, 'supabase/migrations/20260903223832_harden_customer_order_lifecycle.sql'),
+  'utf8'
+)
 
 describe('public order inventory workflow', () => {
   it('rejects stock conflicts instead of silently reducing quantities', () => {
@@ -26,8 +30,25 @@ describe('public order inventory workflow', () => {
     expect(publicOrderRoute).toContain("code: 'STOCK_CHANGED'")
   })
 
+  it('reconciles browser prices before creating the order', () => {
+    expect(publicOrderRoute).toContain('unitPrice: z.number()')
+    expect(publicOrderRoute).toContain("code: 'PRICE_CHANGED'")
+    expect(publicOrderRoute).toContain('priceConflicts')
+  })
+
+  it('allows an unlisted delivery area when a default delivery cost is configured', () => {
+    expect(publicOrderRoute).toContain('checkout.delivery.defaultCost <= 0')
+    expect(publicOrderRoute).toContain('selectedZoneCost: selectedDeliveryZone?.cost')
+  })
+
+  it('rejects a configured zone when the submitted city and neighborhood do not match', () => {
+    expect(publicOrderRoute).toContain("code: 'DELIVERY_ZONE_MISMATCH'")
+    expect(publicOrderRoute).toContain('deliveryZoneMatchesLocation')
+  })
+
   it('creates public orders and reserves inventory in one transaction', () => {
-    expect(publicOrderRoute).toContain("'create_public_order_with_customer_account_atomic'")
+    expect(publicOrderRoute).toContain("'create_public_order_idempotent_atomic'")
+    expect(lifecycleMigration).toContain('public.create_public_order_with_store_credit_atomic(')
     expect(customerLinkMigration).toContain('function public.create_public_order_with_customer_account_atomic')
     expect(customerLinkMigration).toContain('public.create_public_order_atomic(')
     expect(migration).toContain('function public.create_public_order_atomic')

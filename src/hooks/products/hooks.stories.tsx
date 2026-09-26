@@ -1,12 +1,8 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { action } from '@storybook/addon-actions'
-import { useState } from 'react'
-import { 
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
+import {
   useProductManagement,
   useProductFiltering,
-  useProductAnalytics,
-  useProductOperations,
-  useProductSearch
+  useProductAnalytics
 } from './index'
 
 // Componente de demostración para useProductManagement
@@ -17,19 +13,19 @@ const ProductManagementDemo = () => {
     error,
     totalCount,
     selectedProducts,
-    sortConfig,
-    pagination,
+    sortConfig: _sortConfig,
+    pagination: _pagination,
     selectProduct,
     selectAllProducts,
     clearSelection,
-    setSortConfig,
-    setPagination,
+    setSortConfig: _setSortConfig,
+    setPagination: _setPagination,
     refreshProducts,
-    createProduct,
-    updateProduct,
-    deleteProduct,
+    createProduct: _createProduct,
+    updateProduct: _updateProduct,
+    deleteProduct: _deleteProduct,
     bulkDelete,
-    bulkUpdate
+    bulkUpdate: _bulkUpdate
   } = useProductManagement()
 
   return (
@@ -118,8 +114,8 @@ const ProductFilteringDemo = () => {
   const {
     filters,
     activePreset,
-    availableCategories,
-    availableSuppliers,
+    availableCategories: _availableCategories,
+    availableSuppliers: _availableSuppliers,
     priceRange,
     stockRange,
     marginRange,
@@ -127,7 +123,7 @@ const ProductFilteringDemo = () => {
     setPreset,
     clearFilters,
     exportFilters,
-    importFilters
+    importFilters: _importFilters
   } = useProductFiltering()
 
   return (
@@ -153,7 +149,7 @@ const ProductFilteringDemo = () => {
           {['all', 'low_stock', 'out_of_stock', 'best_sellers', 'new_products', 'high_margin'].map(preset => (
             <button
               key={preset}
-              onClick={() => setPreset(preset as any)}
+              onClick={() => (setPreset as (name: string) => void)?.(preset)}
               className={`px-3 py-1 rounded text-sm ${
                 activePreset === preset 
                   ? 'bg-blue-500 text-white' 
@@ -257,9 +253,9 @@ const ProductFilteringDemo = () => {
 const ProductAnalyticsDemo = () => {
   const {
     dashboardStats,
-    trends,
-    categoryAnalysis,
-    supplierAnalysis,
+    trends: _trends,
+    categoryAnalysis: _categoryAnalysis,
+    supplierAnalysis: _supplierAnalysis,
     inventoryAlerts,
     loading,
     error,
@@ -278,7 +274,7 @@ const ProductAnalyticsDemo = () => {
         {['7d', '30d', '90d', '1y'].map(range => (
           <button
             key={range}
-            onClick={() => setTimeRange(range as any)}
+            onClick={() => (setTimeRange as (range: string) => void)?.(range)}
             className={`px-3 py-1 rounded text-sm ${
               timeRange === range 
                 ? 'bg-blue-500 text-white' 

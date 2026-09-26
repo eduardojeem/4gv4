@@ -16,7 +16,7 @@ export function useAutoSave<T>({
   interval = 30000, // 30 segundos por defecto
   enabled = true,
   onSave,
-  onRestore
+  onRestore: _onRestore
 }: UseAutoSaveOptions<T>) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedRef = useRef<string>('')
@@ -27,16 +27,16 @@ export function useAutoSave<T>({
 
     try {
       const serialized = JSON.stringify(data)
-      
+
       // Solo guardar si hay cambios
       if (serialized === lastSavedRef.current) return
-      
+
       localStorage.setItem(`draft_${key}`, serialized)
       localStorage.setItem(`draft_${key}_timestamp`, new Date().toISOString())
       lastSavedRef.current = serialized
-      
+
       onSave?.(data)
-      
+
       // Toast sutil para confirmar guardado
       toast.success('Borrador guardado', {
         duration: 2000,
@@ -54,8 +54,8 @@ export function useAutoSave<T>({
       if (!saved) return null
 
       const parsed = JSON.parse(saved) as T
-      const timestamp = localStorage.getItem(`draft_${key}_timestamp`)
-      
+      void (localStorage.getItem(`draft_${key}_timestamp`));
+
       return parsed
     } catch (error) {
       console.error('Error restoring draft:', error)
@@ -68,7 +68,7 @@ export function useAutoSave<T>({
     try {
       const timestamp = localStorage.getItem(`draft_${key}_timestamp`)
       return timestamp ? new Date(timestamp) : null
-    } catch (error) {
+    } catch (_error) {
       return null
     }
   }, [key])
@@ -79,7 +79,7 @@ export function useAutoSave<T>({
       localStorage.removeItem(`draft_${key}`)
       localStorage.removeItem(`draft_${key}_timestamp`)
       lastSavedRef.current = ''
-      
+
       toast.success('Borrador eliminado', {
         duration: 2000,
         position: 'bottom-right'
@@ -145,18 +145,18 @@ export function useDraftRecovery<T>(key: string, onRestore: (data: T) => void) {
       try {
         const saved = localStorage.getItem(`draft_${key}`)
         const timestamp = localStorage.getItem(`draft_${key}_timestamp`)
-        
+
         if (saved && timestamp) {
           const draftDate = new Date(timestamp)
           const now = new Date()
           const hoursSince = (now.getTime() - draftDate.getTime()) / (1000 * 60 * 60)
-          
+
           // Solo mostrar si el borrador tiene menos de 24 horas
           if (hoursSince < 24) {
             const shouldRestore = window.confirm(
               `Se encontró un borrador guardado hace ${Math.round(hoursSince)} hora(s). ¿Desea recuperarlo?`
             )
-            
+
             if (shouldRestore) {
               const parsed = JSON.parse(saved) as T
               onRestore(parsed)

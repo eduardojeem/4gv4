@@ -1,7 +1,6 @@
 'use client'
 
-import React from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import { ShieldAlert, ArrowLeft, Home } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
@@ -10,7 +9,7 @@ interface AccessDeniedProps {
     className?: string
 }
 
-export function AccessDenied({ className }: AccessDeniedProps) {
+export function AccessDenied({ className: _className }: AccessDeniedProps) {
     const router = useRouter()
 
     return (

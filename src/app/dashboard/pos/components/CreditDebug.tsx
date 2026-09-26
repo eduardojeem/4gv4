@@ -42,7 +42,7 @@ export function CreditDebug() {
     )
   }
 
-  const summary = getCreditSummary(activeCustomer)
+  const summary = getCreditSummary(activeCustomer as unknown as Parameters<typeof getCreditSummary>[0])
 
   return (
     <Card className="border-blue-500">

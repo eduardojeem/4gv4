@@ -11,9 +11,10 @@ interface BreadcrumbItem {
 
 interface BreadcrumbsProps {
   items: BreadcrumbItem[]
+  homeHref?: string
 }
 
-export function Breadcrumbs({ items }: BreadcrumbsProps) {
+export function Breadcrumbs({ items, homeHref = '/' }: BreadcrumbsProps) {
   return (
     <nav aria-label="Breadcrumb" className="mb-6">
       {/*
@@ -25,7 +26,7 @@ export function Breadcrumbs({ items }: BreadcrumbsProps) {
         {/* Home icon */}
         <li className="shrink-0">
           <Link
-            href="/"
+            href={homeHref}
             className="flex items-center hover:text-foreground transition-colors"
             aria-label="Inicio"
           >

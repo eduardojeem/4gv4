@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { findAuthUserByEmail } from '@/lib/superadmin/find-auth-user'
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 // ---------------------------------------------------------------------------
-// POST: grant super_admin role to a user (by email)
+// POST: dar el rol de super administrador a un usuario, por correo
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
@@ -15,25 +18,45 @@ export async function POST(request: NextRequest) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return NextResponse.json({ error: 'Email inválido.' }, { status: 400 })
+    return NextResponse.json({ error: 'Escribí un correo válido.' }, { status: 400 })
   }
 
   const admin = createAdminSupabase()
 
-  // Find user by email (paginate up to 5 pages of 200 = 1000 users)
-  type AuthUser = { id: string; email?: string }
-  let targetUser: AuthUser | null = null
-  for (let page = 1; page <= 5 && !targetUser; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    const users = (data?.users ?? []) as AuthUser[]
-    targetUser = users.find((u) => u.email?.toLowerCase() === email) ?? null
-    if (users.length < 200) break
+  let lookup
+  try {
+    lookup = await findAuthUserByEmail(admin, email)
+  } catch {
+    return NextResponse.json({ error: 'No se pudo consultar los usuarios.' }, { status: 500 })
   }
 
-  if (!targetUser) {
-    return NextResponse.json({ error: `No existe un usuario con email ${email}.` }, { status: 404 })
+  // No es lo mismo «no existe» que «no lo encontre»: afirmar lo primero cuando
+  // lo unico que paso es que se agoto el barrido es decirle al usuario algo
+  // falso sobre su propia plataforma.
+  if (!lookup.user) {
+    return lookup.scanTruncated
+      ? NextResponse.json({
+          error: `No se pudo confirmar si existe una cuenta con ${email}. Pedile que inicie sesión una vez y volvé a intentar.`,
+          code: 'LOOKUP_INCOMPLETE',
+        }, { status: 503 })
+      : NextResponse.json({
+          error: `No hay ninguna cuenta registrada con ${email}.`,
+          code: 'USER_NOT_FOUND',
+        }, { status: 404 })
   }
+
+  const targetUser = lookup.user
+
+  // Ya lo era: el RPC hace `upsert` y devolvia exito, asi que la pantalla
+  // anunciaba una promocion que no ocurrio.
+  const { data: existingRole } = await admin
+    .from('user_roles')
+    .select('is_active')
+    .eq('user_id', targetUser.id)
+    .eq('role', 'super_admin')
+    .maybeSingle()
+
+  const wasActive = existingRole?.is_active === true
 
   const { error: roleError } = await admin.rpc('set_super_admin_role', {
     p_target_user_id: targetUser.id,
@@ -42,7 +65,12 @@ export async function POST(request: NextRequest) {
   })
 
   if (roleError) {
-    return NextResponse.json({ error: roleError.message || 'No se pudo asignar el rol.' }, { status: 500 })
+    // El mensaje crudo de Postgres no le sirve a nadie y puede filtrar detalle
+    // interno; los casos conocidos se traducen.
+    if (roleError.message?.includes('USER_NOT_FOUND')) {
+      return NextResponse.json({ error: `La cuenta de ${email} ya no existe.` }, { status: 404 })
+    }
+    return NextResponse.json({ error: 'No se pudo asignar el rol.' }, { status: 500 })
   }
 
   await logSuperAdminAction({
@@ -51,16 +79,22 @@ export async function POST(request: NextRequest) {
     action: 'role_change',
     resource: 'user_roles',
     resourceId: targetUser.id,
-    newValues: { role: 'super_admin', target_email: email },
+    newValues: { role: 'super_admin', target_email: email, reactivated: existingRole ? !wasActive : false },
     request,
     severity: 'critical',
   })
 
-  return NextResponse.json({ success: true, userId: targetUser.id, email: targetUser.email })
+  return NextResponse.json({
+    success: true,
+    userId: targetUser.id,
+    email: targetUser.email,
+    // Para que la pantalla diga lo que efectivamente paso.
+    outcome: wasActive ? 'already_active' : existingRole ? 'reactivated' : 'granted',
+  })
 }
 
 // ---------------------------------------------------------------------------
-// DELETE: revoke super_admin role
+// DELETE: quitar el rol de super administrador
 // ---------------------------------------------------------------------------
 
 export async function DELETE(request: NextRequest) {
@@ -68,10 +102,12 @@ export async function DELETE(request: NextRequest) {
   if (!me) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
 
   const userId = request.nextUrl.searchParams.get('userId')
-  if (!userId) return NextResponse.json({ error: 'userId requerido.' }, { status: 400 })
+  if (!userId || !UUID.test(userId)) {
+    return NextResponse.json({ error: 'Falta indicar a quién quitarle el rol.' }, { status: 400 })
+  }
 
   if (userId === me.id) {
-    return NextResponse.json({ error: 'No podés revocar tu propio rol de super_admin.' }, { status: 400 })
+    return NextResponse.json({ error: 'No podés quitarte el rol a vos mismo.' }, { status: 400 })
   }
 
   const admin = createAdminSupabase()
@@ -83,13 +119,20 @@ export async function DELETE(request: NextRequest) {
   })
 
   if (roleError) {
-    if (roleError.message.includes('LAST_SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Debe quedar al menos un super_admin activo.' }, { status: 400 })
+    if (roleError.message?.includes('LAST_SUPER_ADMIN')) {
+      return NextResponse.json({
+        error: 'Tiene que quedar al menos un super administrador activo.',
+      }, { status: 400 })
     }
-    if (roleError.message.includes('SUPER_ADMIN_NOT_FOUND')) {
-      return NextResponse.json({ error: 'El usuario no es un super_admin activo.' }, { status: 404 })
+    if (roleError.message?.includes('SUPER_ADMIN_NOT_FOUND')) {
+      return NextResponse.json({
+        error: 'Esta cuenta ya no tiene el rol activo.',
+      }, { status: 404 })
     }
-    return NextResponse.json({ error: roleError.message || 'No se pudo revocar el rol.' }, { status: 500 })
+    if (roleError.message?.includes('USER_NOT_FOUND')) {
+      return NextResponse.json({ error: 'La cuenta ya no existe.' }, { status: 404 })
+    }
+    return NextResponse.json({ error: 'No se pudo quitar el rol.' }, { status: 500 })
   }
 
   await logSuperAdminAction({

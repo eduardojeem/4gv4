@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { checkPlanPriceNote } from '@/lib/saas/plan-price-note'
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,9 @@ import {
   Wrench,
   TicketPercent,
   ShieldCheck,
+  ClipboardList,
+  Handshake,
+  Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCommercialFeatureValue } from '@/lib/saas/commercial-plan-features'
@@ -49,6 +53,9 @@ const FEATURE_LIST = [
   { key: 'users',     label: 'Gestión de usuarios',        icon: Users        },
   { key: 'branches',  label: 'Sucursales múltiples',       icon: Building2    },
   { key: 'repairs',   label: 'Módulo de Reparaciones',     icon: Wrench       },
+  { key: 'services',  label: 'Servicios',                  icon: Handshake    },
+  { key: 'orders',    label: 'Pedidos',                    icon: ClipboardList },
+  { key: 'delivery',  label: 'Entregas',                   icon: Truck        },
   { key: 'crm',       label: 'CRM / Clientes',             icon: Users        },
   { key: 'ecommerce', label: 'Ecommerce & Marketplace',    icon: Globe        },
   { key: 'analytics', label: 'Analytics avanzado',         icon: TrendingUp   },
@@ -219,6 +226,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
   const [highlights, setHighlights] = useState('')
   const [price, setPrice]           = useState('0')
   const [priceNote, setPriceNote]   = useState('por mes')
+  const [publicSlug, setPublicSlug] = useState('')
   const [trialDays, setTrialDays]   = useState('14')
 
   // Limits tab
@@ -243,6 +251,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
     setHighlights((plan.highlights ?? []).join('\n'))
     setPrice(String(plan.price ?? 0))
     setPriceNote(plan.price_note ?? 'por mes')
+    setPublicSlug(plan.public_slug ?? '')
     setTrialDays(String(plan.trial_days ?? 14))
     setLimUsers(String(plan.limits?.users ?? '5'))
     setLimProducts(String(plan.limits?.products ?? '100'))
@@ -292,6 +301,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
         name:        name.trim(),
         price:       Number(price) || 0,
         price_note:  priceNote,
+        public_slug: publicSlug.trim(),
         description: description,
         is_active:   isActive,
         is_popular:  isPopular,
@@ -317,6 +327,10 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
   }
 
   const priceNum = Number(price) || 0
+  // Se extrae el caso con problema para que TypeScript lo estreche: dentro de
+  // una expresion JSX, `!x.ok &&` no alcanza para acceder a los campos.
+  const revisionNota = checkPlanPriceNote(priceNum, priceNote)
+  const avisoNota = revisionNota.ok === false ? revisionNota : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -454,6 +468,23 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
                 </div>
 
                 <div className="space-y-1.5">
+                  <Label htmlFor="edit-slug" className="text-xs">URL pública del plan</Label>
+                  <Input
+                    id="edit-slug"
+                    value={publicSlug}
+                    onChange={(e) => setPublicSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                    placeholder="lite"
+                    className="h-9 font-mono"
+                  />
+                  {/* Es un campo propio y no se deduce del nombre: "Pro" y "PRO+"
+                      se limpiarian al mismo texto y la URL apuntaria a dos planes
+                      de precios distintos. */}
+                  <p className="text-[10px] text-slate-400">
+                    /register?plan=<span className="font-mono text-cyan-600 dark:text-cyan-400">{publicSlug || '…'}</span> · debe ser único
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
                   <Label htmlFor="edit-pnote" className="text-xs">Nota del precio</Label>
                   <Input
                     id="edit-pnote"
@@ -462,6 +493,22 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
                     placeholder="por mes"
                     className="h-9"
                   />
+                  {/* Cambiar el precio no revisa esta nota y el formulario la
+                      precarga, asi que sobrevive a cualquier edicion sin que
+                      nadie la mire. Avisa, no bloquea: "primer mes gratis" es
+                      legitimo en un plan pago. */}
+                  {avisoNota && (
+                    <div className="flex flex-wrap items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" role="alert">
+                      <span className="flex-1">{avisoNota.mensaje}</span>
+                      <button
+                        type="button"
+                        onClick={() => setPriceNote(avisoNota.sugerencia)}
+                        className="shrink-0 rounded border border-amber-400 px-1.5 py-0.5 font-medium transition-colors hover:bg-amber-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-700 dark:hover:bg-amber-900/40"
+                      >
+                        Usar «{avisoNota.sugerencia}»
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">

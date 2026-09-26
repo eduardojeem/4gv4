@@ -1,9 +1,15 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import Link from 'next/link'
-import { useState } from 'react'
+import { PublicFavorites } from './Favorites'
+import { useState, useEffect } from 'react'
 import {
+  Building2,
+  ChevronRight,
   Grid3X3,
+  Heart,
   Home,
   LayoutDashboard,
   LayoutGrid,
@@ -11,18 +17,18 @@ import {
   Menu,
   Package,
   Rocket,
-  Search,
-  ShoppingBag,
-  Store,
+  Search, Store,
   User,
-  X,
+  X, Wrench
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { useAuth } from '@/contexts/auth-context'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +39,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import type { PlatformBranding } from '@/lib/platform/branding'
+import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { AuthModal } from '@/components/public/AuthModal'
+import { canOpenDashboard } from '@/lib/auth/dashboard-access'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 const navItems = [
@@ -43,20 +52,45 @@ const navItems = [
   { href: '/marketplace/empresas', label: 'Tiendas', icon: Store, exact: false },
 ]
 
-// ─── Main Nav ─────────────────────────────────────────────────────────────────
-export function MarketplacePublicNav() {
+export function MarketplacePublicNav({ initialBranding }: { initialBranding?: PlatformBranding }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, signOut } = useAuth()
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
-  const { branding } = usePlatformBranding()
+  // Mientras se escribe en el buscador, la fila le hace lugar: se esconden los
+  // enlaces y el CTA para que el campo crezca en vez de quedar apretado.
+  const [searchFocused, setSearchFocused] = useState(false)
+  // En el telefono el buscador no entra en la fila del encabezado —logo,
+  // favoritos, tema y menu ya la llenan— y tampoco estaba en la barra de abajo:
+  // no habia forma de buscar. Se abre en una fila propia, bajo el encabezado.
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const { branding } = usePlatformBranding(initialBranding)
 
-  const canAccessDashboard =
-    user?.role === 'super_admin' ||
-    user?.role === 'admin' ||
-    user?.role === 'tecnico' ||
-    user?.role === 'vendedor'
+  // Cerrar drawer al cambiar de ruta
+  const [previousPathname, setPreviousPathname] = useState(pathname)
+  if (previousPathname !== pathname) {
+    setPreviousPathname(pathname)
+    setMobileDrawerOpen(false)
+    setMobileSearchOpen(false)
+  }
+
+  // Bloquear scroll cuando el drawer está abierto
+  useEffect(() => {
+    if (mobileDrawerOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileDrawerOpen])
+
+  // El negocio de la persona, si tiene uno. Con esto alcanza para ofrecerle su
+  // panel: el rol global podía decir «cliente» aunque fuera dueña de una tienda.
+  const business = user?.organization ?? null
+  const canAccessDashboard = canOpenDashboard(user)
 
   const userInitials = user?.profile?.name
     ? user.profile.name
@@ -71,48 +105,92 @@ export function MarketplacePublicNav() {
     return exact ? pathname === href : pathname.startsWith(href)
   }
 
+  // Tamaño del logo: definicion unica compartida con el nav de la landing.
+  const logoSize = resolveLogoSize(branding)
+
   async function handleLogout() {
     await signOut()
-    setMobileOpen(false)
+    setMobileDrawerOpen(false)
     router.push('/marketplace')
     router.refresh()
   }
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90">
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
 
           {/* Logo */}
-          <Link href="/marketplace" className="flex shrink-0 items-center gap-3">
-            {branding.logoUrl ? (
-              <div className="flex h-10 items-center">
-                <img
-                  src={branding.logoUrl}
-                  alt={branding.platformName}
-                  className="h-10 w-auto max-w-[180px] object-contain"
-                />
+          <Link href="/marketplace" className="flex shrink-0 items-center gap-3 group">
+            {branding.logoUrl || branding.logoDarkUrl ? (
+              <div className="flex items-center transition-transform duration-200 group-hover:scale-[1.02]">
+                {branding.logoDarkUrl && branding.logoUrl ? (
+                  <>
+                    <AppImage
+                      src={branding.logoUrl}
+                      alt={branding.platformName}
+                      className={`${
+                        logoSize.className
+                      } w-auto object-contain dark:hidden drop-shadow-xs`}
+                      style={logoSize.style}
+                    />
+                    <AppImage
+                      src={branding.logoDarkUrl}
+                      alt={branding.platformName}
+                      className={`${
+                        logoSize.className
+                      } w-auto object-contain hidden dark:block ${branding.logoGlowDark !== false ? 'drop-shadow-[0_2px_14px_rgba(6,182,212,0.35)]' : ''}`}
+                      style={logoSize.style}
+                    />
+                  </>
+                ) : (
+                  <AppImage
+                    src={branding.logoUrl || branding.logoDarkUrl}
+                    alt={branding.platformName}
+                    className={`${
+                      logoSize.className
+                    } w-auto object-contain`}
+                    style={logoSize.style}
+                  />
+                )}
               </div>
             ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
                 <LayoutGrid className="h-5 w-5" />
               </div>
             )}
-            <div className="hidden sm:block">
-              <div className="text-sm font-bold leading-none text-slate-900 dark:text-slate-50">
-                {branding.marketplaceName}
+            {!branding.hideNavBrandText && (
+              <div className="hidden sm:block">
+                <div className="text-sm font-bold leading-none text-foreground">
+                  {branding.marketplaceName}
+                </div>
+                {!branding.hideNavTagline && (
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{branding.marketplaceTagline}</div>
+                )}
               </div>
-              <div className="mt-0.5 text-[11px] text-slate-400">{branding.marketplaceTagline}</div>
-            </div>
+            )}
           </Link>
 
           {/* Search — desktop */}
           <div className="hidden min-w-0 flex-1 justify-center px-2 xl:flex">
-            <MarketplaceSearchBox compact className="w-full max-w-sm" buttonClassName="hidden" />
+            <MarketplaceSearchBox
+              compact
+              className={cn(
+                'w-full transition-[max-width] duration-300 ease-out',
+                searchFocused ? 'max-w-3xl' : 'max-w-sm'
+              )}
+              buttonClassName="hidden"
+              onFocusChange={setSearchFocused}
+            />
           </div>
 
           {/* Desktop nav links */}
-          <nav className="hidden items-center gap-0.5 lg:flex">
+          {/*
+            El colapso va con `xl:` a proposito: por debajo de ese ancho el
+            buscador no esta en la fila, asi que no habria nada que ganar
+            escondiendo los enlaces.
+          */}
+          <nav className={cn('hidden items-center gap-0.5 lg:flex', searchFocused && 'xl:hidden')}>
             {navItems.map((item) => {
               const active = isActive(item.href, item.exact)
               const Icon = item.icon
@@ -121,10 +199,10 @@ export function MarketplacePublicNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
                     active
-                      ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -136,214 +214,451 @@ export function MarketplacePublicNav() {
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
+            {/* Buscar — solo donde el buscador no esta en la fila. */}
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen((abierto) => !abierto)}
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-xl border transition-colors xl:hidden',
+                mobileSearchOpen
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border/80 bg-background text-foreground hover:bg-muted'
+              )}
+              aria-label={mobileSearchOpen ? 'Cerrar la búsqueda' : 'Buscar en el marketplace'}
+              aria-expanded={mobileSearchOpen}
+              aria-controls="marketplace-mobile-search"
+            >
+              {mobileSearchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            </button>
+
+            {/* Misma geometria que la lupa y el resto de la fila: era el unico
+                con forma de boton de texto entre iconos de 9x9. */}
+            <InstallPrompt
+              variant="icon"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <PublicFavorites />
             <ThemeToggle />
 
-            {/* SaaS CTA — desktop */}
+            {/* SaaS CTA — desktop (Resaltado) */}
             <Link
               href="/saas"
-              className="hidden items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70 lg:flex"
+              className={cn(
+                'hidden items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition-all duration-200 active:scale-[0.97] lg:flex',
+                'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:via-indigo-500 hover:to-cyan-500',
+                'shadow-md shadow-blue-600/25 hover:shadow-lg hover:shadow-blue-600/35 border border-white/15',
+                searchFocused && 'xl:hidden'
+              )}
             >
-              <Rocket className="h-3.5 w-3.5" />
-              ¿Tenés un negocio?
+              <Rocket className="h-3.5 w-3.5 text-cyan-200 animate-pulse" />
+              <span>¿Tenés un negocio?</span>
             </Link>
 
             {user ? (
               /* Avatar dropdown cuando está logueado */
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
-                    <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
+                  <Button variant="ghost" className="h-9 w-9 rounded-full p-0" aria-label="Abrir menú de la cuenta">
+                    <Avatar className="h-8 w-8 border border-border">
                       <AvatarImage
                         src={user.profile?.avatar_url || ''}
                         alt={user.profile?.name || 'Usuario'}
                       />
-                      <AvatarFallback className="bg-cyan-50 text-xs font-semibold text-cyan-700 dark:bg-cyan-950 dark:text-cyan-200">
+                      <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                         {userInitials}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel className="font-normal">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold">{user.profile?.name || 'Usuario'}</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold truncate">{user.profile?.name || 'Usuario'}</p>
+                        {canAccessDashboard ? (
+                          <Badge className="bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30 text-[10px] font-bold shrink-0">
+                            🏢 Empresa
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground font-semibold shrink-0">
+                            👤 Cliente
+                          </Badge>
+                        )}
+                      </div>
                       <p className="break-all text-xs text-muted-foreground">{user.email}</p>
                     </div>
                   </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {canAccessDashboard && (
-                    <DropdownMenuItem asChild>
-                      <Link href="/dashboard" className="cursor-pointer">
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        Panel administrativo
-                      </Link>
-                    </DropdownMenuItem>
+
+                  {canAccessDashboard ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Gestión Comercial
+                      </p>
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard" className="cursor-pointer font-semibold text-primary">
+                          <LayoutDashboard className="mr-2 h-4 w-4 shrink-0" />
+                          <span className="min-w-0">
+                            Ir al panel de administración
+                            {business && (
+                              <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                                {business.name}
+                              </span>
+                            )}
+                          </span>
+                        </Link>
+                      </DropdownMenuItem>
+                      {business && (
+                        <DropdownMenuItem asChild>
+                          <Link href={`/${business.slug}/inicio`} className="cursor-pointer">
+                            <Store className="mr-2 h-4 w-4 text-muted-foreground" />
+                            Ver mi tienda
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+
+                      <DropdownMenuSeparator />
+                      <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Mi Cuenta Comprador
+                      </p>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil" className="cursor-pointer font-medium">
+                          <User className="mr-2 h-4 w-4 text-primary" />
+                          Mi Perfil
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil#pedidos" className="cursor-pointer">
+                          <Package className="mr-2 h-4 w-4 text-muted-foreground" />
+                          Mis Compras en Tiendas
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/favoritos" className="cursor-pointer">
+                          <Heart className="mr-2 h-4 w-4 text-rose-500 fill-rose-500/20" />
+                          Mis Favoritos
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/mis-reparaciones" className="cursor-pointer">
+                          <Wrench className="mr-2 h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                          Mis Reparaciones
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuSeparator />
+                      <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Mi Cuenta Cliente
+                      </p>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil" className="cursor-pointer font-medium">
+                          <User className="mr-2 h-4 w-4 text-primary" />
+                          Mi Perfil
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/perfil#pedidos" className="cursor-pointer">
+                          <Package className="mr-2 h-4 w-4 text-muted-foreground" />
+                          Mis Compras en Tiendas
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/favoritos" className="cursor-pointer">
+                          <Heart className="mr-2 h-4 w-4 text-rose-500 fill-rose-500/20" />
+                          Mis Favoritos
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/marketplace/mis-reparaciones" className="cursor-pointer">
+                          <Wrench className="mr-2 h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                          Mis Reparaciones
+                        </Link>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/saas" className="cursor-pointer text-cyan-600 dark:text-cyan-400 font-semibold">
+                          <Building2 className="mr-2 h-4 w-4" />
+                          ¿Tenés un negocio? Publicar tienda
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
-                  <DropdownMenuItem asChild>
-                    <Link href="/marketplace" className="cursor-pointer">
-                      <ShoppingBag className="mr-2 h-4 w-4" />
-                      Marketplace
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/saas" className="cursor-pointer">
-                      <Rocket className="mr-2 h-4 w-4" />
-                      Planes SaaS
-                    </Link>
-                  </DropdownMenuItem>
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleLogout}
                     className="cursor-pointer text-destructive focus:text-destructive"
                   >
                     <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar sesion
+                    Cerrar sesión
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <>
-                {/* Botón "Acceder" — desktop */}
+                {/* Botón "Mi cuenta" — desktop */}
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => setAuthOpen(true)}
-                  className="group hidden gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 pl-1.5 pr-4 text-white shadow-md shadow-cyan-600/25 transition-all duration-200 hover:from-cyan-500 hover:to-sky-500 hover:shadow-lg hover:shadow-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 active:scale-[0.97] dark:focus-visible:ring-offset-slate-950 sm:inline-flex"
+                  className="group hidden gap-2 rounded-full bg-primary text-primary-foreground shadow-xs transition-all hover:bg-primary/90 sm:inline-flex"
                 >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 transition-transform duration-200 group-hover:scale-110">
-                    <User className="h-3.5 w-3.5" />
-                  </span>
+                  <User className="h-3.5 w-3.5" />
                   Mi cuenta
-                </Button>
-                {/* Icono acceder — mobile */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setAuthOpen(true)}
-                  className="h-9 w-9 rounded-full border border-cyan-200 bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 hover:text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70 sm:hidden"
-                  aria-label="Mi cuenta"
-                >
-                  <User className="h-4 w-4" />
                 </Button>
               </>
             )}
 
-            {/* Search icon — mobile */}
-            <Button asChild variant="outline" size="icon" className="lg:hidden">
-              <Link href="/marketplace/buscar" aria-label="Buscar en marketplace">
-                <Search className="h-4 w-4" />
-              </Link>
-            </Button>
-
-            {/* Hamburger */}
+            {/* Botón de Menú Drawer para Mobile y Tablet */}
             <button
-              onClick={() => setMobileOpen((v) => !v)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
-              aria-label="Abrir menú"
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground hover:bg-muted transition-colors lg:hidden"
+              aria-label="Abrir menú de navegación"
             >
-              {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              <Menu className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileOpen && (
-          <div className="border-t border-slate-200 bg-white px-4 pb-4 pt-2 dark:border-slate-800 dark:bg-slate-950 lg:hidden">
-            <nav className="flex flex-col gap-1">
-              <MarketplaceSearchBox compact className="mb-2" buttonClassName="hidden" />
-              {navItems.map((item) => {
-                const active = isActive(item.href, item.exact)
-                const Icon = item.icon
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                      active
-                        ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300'
-                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                )
-              })}
-
-              <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-800">
-                {user ? (
-                  <div className="space-y-2">
-                    <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                      <p className="font-semibold">{user.profile?.name || 'Usuario'}</p>
-                      <p className="break-all text-xs text-slate-500 dark:text-slate-400">
-                        {user.email}
-                      </p>
-                    </div>
-                    {canAccessDashboard && (
-                      <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2">
-                        <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
-                          <LayoutDashboard className="h-4 w-4" />
-                          Panel administrativo
-                        </Link>
-                      </Button>
-                    )}
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300"
-                    >
-                      <Link href="/saas" onClick={() => setMobileOpen(false)}>
-                        <Rocket className="h-4 w-4" />
-                        Planes SaaS
-                      </Link>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2 text-destructive"
-                      onClick={handleLogout}
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Cerrar sesion
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid gap-2">
-                    {/* Botón único que abre modal — también en mobile */}
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="w-full gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-600/20 transition-all hover:from-cyan-500 hover:to-sky-500 active:scale-[0.99]"
-                      onClick={() => { setMobileOpen(false); setAuthOpen(true) }}
-                    >
-                      <User className="h-4 w-4" />
-                      Mi cuenta
-                    </Button>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300"
-                    >
-                      <Link href="/saas" onClick={() => setMobileOpen(false)}>
-                        <Rocket className="h-4 w-4" />
-                        ¿Tenés un negocio?
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </nav>
+        {/* Fila del buscador en telefono y tablet.
+            Va dentro del `<header>` sticky para que siga a mano al desplazarse,
+            que es cuando mas se busca. `autoFocus` abre el teclado directo: si
+            hay que tocar el campo despues de tocar la lupa, son dos toques para
+            lo mismo. */}
+        {mobileSearchOpen && (
+          <div
+            id="marketplace-mobile-search"
+            className="border-t border-border/60 bg-background/95 px-4 py-2.5 sm:px-6 xl:hidden"
+          >
+            <MarketplaceSearchBox
+              compact
+              autoFocus
+              className="w-full"
+              placeholder="Buscar productos, tiendas, marcas…"
+            />
           </div>
         )}
       </header>
 
-      {/* Auth modal — fuera del header para no tener z-index issues */}
+      {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET) ─────────────────────────── */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop Difuminado */}
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+            onClick={() => setMobileDrawerOpen(false)}
+          />
+
+          {/* Panel Deslizante Lateral Derecho */}
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right">
+            
+            {/* Cabecera del Drawer con Logo y Botón Cerrar */}
+            <div className="flex items-center justify-between pb-5 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
+                  <LayoutGrid className="h-4 w-4" />
+                </div>
+                <span className="font-bold text-sm text-foreground">
+                  {branding.marketplaceName}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Cerrar menú"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Sección de Usuario / Cuenta */}
+            <div className="py-4 border-b border-border/60">
+              {user ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border border-border">
+                      <AvatarImage src={user.profile?.avatar_url || ''} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <p className="truncate text-sm font-bold text-foreground">
+                          {user.profile?.name || 'Usuario'}
+                        </p>
+                        {canAccessDashboard ? (
+                          <Badge className="bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30 text-[9px] font-bold shrink-0">
+                            🏢 Empresa
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] text-muted-foreground font-semibold shrink-0">
+                            👤 Cliente
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </div>
+
+                  {canAccessDashboard && (
+                    <div className="space-y-2">
+                      <Button asChild size="sm" className="w-full justify-start gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-xs text-xs">
+                        <Link href="/dashboard" onClick={() => setMobileDrawerOpen(false)}>
+                          <LayoutDashboard className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">
+                            Ir al panel de administración
+                            {business ? ` · ${business.name}` : ''}
+                          </span>
+                        </Link>
+                      </Button>
+                      {business && (
+                        <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl text-xs font-semibold">
+                          <Link href={`/${business.slug}/inicio`} onClick={() => setMobileDrawerOpen(false)}>
+                            <Store className="h-3.5 w-3.5 text-muted-foreground" />
+                            Ver mi tienda
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/perfil" onClick={() => setMobileDrawerOpen(false)}>
+                        <User className="h-3.5 w-3.5 text-primary" />
+                        Mi Perfil
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/perfil#pedidos" onClick={() => setMobileDrawerOpen(false)}>
+                        <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                        Mis Compras
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/favoritos" onClick={() => setMobileDrawerOpen(false)}>
+                        <Heart className="h-3.5 w-3.5 text-rose-500" />
+                        Favoritos
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="h-8 justify-start gap-1.5 rounded-lg text-xs font-semibold">
+                      <Link href="/marketplace/mis-reparaciones" onClick={() => setMobileDrawerOpen(false)}>
+                        <Wrench className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                        Reparaciones
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Accedé a tu cuenta o registrate para comprar:</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full gap-2 rounded-xl bg-primary text-primary-foreground font-semibold shadow-xs"
+                    onClick={() => {
+                      setMobileDrawerOpen(false)
+                      setAuthOpen(true)
+                    }}
+                  >
+                    <User className="h-4 w-4" />
+                    Iniciar sesión / Registro
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Enlaces de Navegación Principal */}
+            <nav className="flex-1 overflow-y-auto py-4 space-y-1">
+              <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Secciones del Marketplace
+              </p>
+
+              {navItems.map((item) => {
+                const Icon = item.icon
+                const active = isActive(item.href, item.exact)
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileDrawerOpen(false)}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                      active
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground hover:bg-muted'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 opacity-50" />
+                  </Link>
+                )
+              })}
+
+              <Link
+                href="/marketplace/favoritos"
+                onClick={() => setMobileDrawerOpen(false)}
+                className={cn(
+                  'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                  pathname === '/marketplace/favoritos'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold'
+                    : 'text-foreground hover:bg-muted'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Heart className={cn('h-4 w-4', pathname === '/marketplace/favoritos' ? 'fill-rose-500 text-rose-500' : 'text-rose-500')} />
+                  <span>Mis Favoritos</span>
+                </div>
+                <ChevronRight className="h-4 w-4 opacity-50" />
+              </Link>
+
+              <div className="pt-3">
+                <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Para Comerciantes
+                </p>
+                <Link
+                  href="/saas"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="flex items-center justify-between rounded-xl p-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 shadow-md shadow-blue-600/20 hover:from-blue-500 hover:to-cyan-500 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <Rocket className="h-4 w-4 text-cyan-200" />
+                    <span>¿Tenés un negocio? Empezá aquí</span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-white/80" />
+                </Link>
+              </div>
+            </nav>
+
+            {/* Pie del Drawer */}
+            <div className="pt-4 border-t border-border/60 space-y-3">
+              {user && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesión
+                </button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Auth modal */}
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   )

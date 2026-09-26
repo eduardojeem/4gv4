@@ -3,14 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Users, 
-  DollarSign, 
-  Percent,
-  Clock,
-  Target,
+import {
+  TrendingUp, Percent, Target,
   Zap
 } from 'lucide-react'
 import { usePromotions } from '@/hooks/use-promotions'
@@ -18,7 +12,7 @@ import { formatCurrency } from '@/lib/currency'
 import { useMemo } from 'react'
 
 export function PromotionQuickStats() {
-  const { promotions, stats } = usePromotions()
+  const { promotions, stats: _stats } = usePromotions()
 
   const quickStats = useMemo(() => {
     const activePromotions = promotions.filter(p => p.is_active)

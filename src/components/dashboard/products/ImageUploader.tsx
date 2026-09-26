@@ -1,7 +1,9 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useCallback, useState } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useDropzone, type FileRejection, type FileError } from 'react-dropzone'
 import { X, Upload, Image as ImageIcon, Loader2, AlertCircle, Link as LinkIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import imageCompression from 'browser-image-compression'
+import { getImageSourceValidationMessage } from '@/lib/image-url-policy'
 
 interface ImageUploaderProps {
   images: string[]
@@ -20,7 +23,29 @@ interface ImageUploaderProps {
   onUploadFiles?: (files: File[]) => Promise<string[]>
   onRemoveImage?: (url: string) => Promise<void> | void
   onUploadingChange?: (uploading: boolean) => void
+  /**
+   * Version baja para formularios donde el cargador se repite. En la ficha de
+   * reparacion hay uno por equipo: con tres equipos el dropzone grande sumaba
+   * unos 700px de alto y empujaba el resto del formulario fuera de la pantalla.
+   */
+  compact?: boolean
+  /**
+   * Los consejos de abajo. El texto por defecto habla de productos —«la primera
+   * imagen sera la principal del producto»— y no aplica en todos lados: en una
+   * reparacion las fotos son el estado con el que entro el equipo, que es lo que
+   * respalda al taller si despues hay un reclamo.
+   */
+  tips?: string[]
+  tipsTitle?: string
 }
+
+const CONSEJOS_POR_DEFECTO = [
+  'Usá imágenes de alta calidad y bien iluminadas',
+  'La primera imagen será la principal del producto',
+  'Las imágenes se comprimen automáticamente',
+  'Podés agregar imágenes desde tu computadora o por URL',
+  'Podés eliminar imágenes haciendo clic en la X',
+]
 
 export function ImageUploader({ 
   images = [], 
@@ -31,9 +56,13 @@ export function ImageUploader({
   onUploadFiles,
   onRemoveImage,
   onUploadingChange,
+  compact = false,
+  tips,
+  tipsTitle,
 }: ImageUploaderProps) {
+  const listaDeConsejos = tips ?? CONSEJOS_POR_DEFECTO
   const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  const [_uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [loadingUrl, setLoadingUrl] = useState(false)
@@ -57,7 +86,7 @@ export function ImageUploader({
     }
   }
 
-  const uploadImage = async (file: File): Promise<string> => {
+  const uploadImage = useCallback(async (file: File): Promise<string> => {
     if (onUploadFiles) {
       const urls = await onUploadFiles([file])
       return urls[0]
@@ -69,15 +98,15 @@ export function ImageUploader({
       }
       reader.readAsDataURL(file)
     })
-  }
+  }, [onUploadFiles])
 
-  const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: any[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
     if (disabled) return
 
     // Validar archivos rechazados
     if (rejectedFiles.length > 0) {
       rejectedFiles.forEach(({ file, errors }) => {
-        errors.forEach((error: any) => {
+        errors.forEach((error: FileError) => {
           if (error.code === 'file-too-large') {
             toast.error(`${file.name} es muy grande`, {
               description: `Tamaño máximo: ${maxSize / 1024 / 1024}MB`
@@ -125,7 +154,7 @@ export function ImageUploader({
       onUploadingChange?.(false)
       setUploadProgress({})
     }
-  }, [images, onChange, maxImages, maxSize, disabled, onUploadingChange])
+  }, [disabled, images, maxImages, maxSize, onChange, onUploadingChange, uploadImage])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -144,28 +173,6 @@ export function ImageUploader({
     toast.success('Imagen eliminada')
   }
 
-  const moveImage = (fromIndex: number, toIndex: number) => {
-    if (disabled) return
-    const newImages = [...images]
-    const [removed] = newImages.splice(fromIndex, 1)
-    newImages.splice(toIndex, 0, removed)
-    onChange(newImages)
-  }
-
-  const validateImageUrl = (url: string): boolean => {
-    try {
-      const urlObj = new URL(url)
-      const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
-      const pathname = urlObj.pathname.toLowerCase()
-      return validExtensions.some(ext => pathname.endsWith(ext)) || 
-             pathname.includes('/image') ||
-             url.includes('unsplash.com') ||
-             url.includes('cloudinary.com') ||
-             url.includes('imgur.com')
-    } catch {
-      return false
-    }
-  }
 
   const addImageFromUrl = async () => {
     if (!imageUrl.trim()) {
@@ -173,9 +180,10 @@ export function ImageUploader({
       return
     }
 
-    if (!validateImageUrl(imageUrl)) {
+    const validationMessage = getImageSourceValidationMessage(imageUrl)
+    if (validationMessage) {
       toast.error('URL inválida', {
-        description: 'La URL debe ser una imagen válida (JPG, PNG, WebP, GIF)'
+        description: validationMessage,
       })
       return
     }
@@ -201,7 +209,7 @@ export function ImageUploader({
       })
 
       // Agregar la URL a las imágenes
-      onChange([...images, imageUrl])
+      onChange([...images, imageUrl.trim()])
       toast.success('Imagen agregada desde URL')
       setImageUrl('')
       setShowUrlInput(false)
@@ -224,7 +232,11 @@ export function ImageUploader({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            className={compact
+              // Miniaturas mas chicas: con un cargador por equipo, la grilla de
+              // cuatro columnas cuadradas ocupaba tanto como el dropzone.
+              ? 'grid grid-cols-4 sm:grid-cols-6 gap-2'
+              : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'}
           >
             {images.map((url, index) => (
               <motion.div
@@ -237,7 +249,7 @@ export function ImageUploader({
               >
                 <Card className="overflow-hidden border-2 hover:border-blue-300 transition-colors">
                   <div className="aspect-square relative">
-                    <img
+                    <AppImage
                       src={url}
                       alt={`Imagen ${index + 1}`}
                       className="w-full h-full object-cover"
@@ -288,10 +300,11 @@ export function ImageUploader({
           <div
             {...getRootProps()}
             className={`
-              border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
+              border-2 border-dashed rounded-xl text-center cursor-pointer transition-all
+              ${compact ? 'p-3' : 'p-8'}
               ${isDragActive 
-                ? 'border-blue-500 bg-blue-50 scale-105' 
-                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 scale-105' 
+                : 'border-slate-300 dark:border-slate-700/80 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-slate-50/50 dark:bg-slate-900/40'
               }
               ${disabled || uploading ? 'opacity-50 cursor-not-allowed' : ''}
             `}
@@ -299,15 +312,43 @@ export function ImageUploader({
             <input {...getInputProps()} />
             
             {uploading ? (
-              <div className="space-y-3">
-                <Loader2 className="h-12 w-12 text-blue-500 mx-auto animate-spin" />
-                <p className="text-gray-600 font-medium">Subiendo imágenes...</p>
-                <p className="text-xs text-gray-500">Comprimiendo y optimizando</p>
+              compact ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  Subiendo imágenes…
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Loader2 className="h-12 w-12 text-blue-500 mx-auto animate-spin" />
+                  <p className="text-slate-600 dark:text-slate-300 font-medium">Subiendo imágenes...</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Comprimiendo y optimizando</p>
+                </div>
+              )
+            ) : compact ? (
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+                <Upload className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="font-medium">
+                  {isDragActive ? '¡Soltá las fotos acá!' : 'Arrastrá fotos o hacé clic'}
+                </span>
+                <span className="text-slate-400 dark:text-slate-500">
+                  hasta {maxImages} · {maxSize / 1024 / 1024}MB
+                </span>
+                {/* Sin esto la carga por URL quedaba inalcanzable en compacto:
+                    el boton que abre el panel vive en la version grande. */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setShowUrlInput(!showUrlInput) }}
+                  disabled={disabled || uploading}
+                  className="inline-flex items-center gap-1 rounded px-1 font-medium text-blue-600 dark:text-blue-400 underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  <LinkIcon className="h-3 w-3" />
+                  URL
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="relative inline-block">
-                  <Upload className="h-12 w-12 text-gray-400 mx-auto" />
+                  <Upload className="h-12 w-12 text-slate-400 dark:text-slate-500 mx-auto" />
                   {isDragActive && (
                     <motion.div
                       initial={{ scale: 0 }}
@@ -318,15 +359,15 @@ export function ImageUploader({
                 </div>
                 
                 <div>
-                  <p className="text-gray-700 font-medium mb-1">
+                  <p className="text-slate-700 dark:text-slate-200 font-medium mb-1">
                     {isDragActive
                       ? '¡Suelta las imágenes aquí!'
                       : 'Arrastra imágenes o haz clic para seleccionar'}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Máximo {maxImages} imágenes • {maxSize / 1024 / 1024}MB cada una
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Formatos: JPG, PNG, WebP
                   </p>
                 </div>
@@ -363,9 +404,9 @@ export function ImageUploader({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <Card className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 border-blue-200">
+                <Card className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800/60">
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-blue-700">
+                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
                       <LinkIcon className="h-4 w-4" />
                       <Label className="text-sm font-medium">Agregar imagen desde URL</Label>
                     </div>
@@ -419,8 +460,8 @@ export function ImageUploader({
                       </Button>
                     </div>
 
-                    <p className="text-xs text-blue-600">
-                      💡 Puedes usar URLs de Unsplash, Cloudinary, Imgur o cualquier imagen pública
+                    <p className="text-xs text-blue-600 dark:text-blue-300/80">
+                      Usá una URL HTTPS de un proveedor habilitado. El sistema validará el dominio y que la imagen cargue correctamente.
                     </p>
                   </div>
                 </Card>
@@ -432,7 +473,7 @@ export function ImageUploader({
 
       {/* Información adicional */}
       {images.length > 0 && (
-        <div className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+        <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 p-3 rounded-xl">
           <div className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4" />
             <span>
@@ -440,7 +481,7 @@ export function ImageUploader({
             </span>
           </div>
           {images.length === maxImages && (
-            <div className="flex items-center gap-2 text-amber-600">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <AlertCircle className="h-4 w-4" />
               <span className="text-xs">Límite alcanzado</span>
             </div>
@@ -449,22 +490,33 @@ export function ImageUploader({
       )}
 
       {/* Ayuda */}
-      {images.length === 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex gap-3">
-            <ImageIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-blue-900 mb-1">Consejos para mejores imágenes:</p>
-              <ul className="text-blue-700 space-y-1 text-xs">
-                <li>• Usa imágenes de alta calidad y bien iluminadas</li>
-                <li>• La primera imagen será la principal del producto</li>
-                <li>• Las imágenes se comprimen automáticamente</li>
-                <li>• Puedes agregar imágenes desde tu computadora o por URL</li>
-                <li>• Puedes eliminar imágenes haciendo clic en la X</li>
-              </ul>
+      {images.length === 0 && listaDeConsejos.length > 0 && (
+        compact ? (
+          // Una sola linea: este bloque se repite por equipo y aparece
+          // justo cuando el formulario esta vacio, que es cuando mas estorba.
+          // El resto de los consejos queda en el `title`.
+          <p
+            className="flex items-start gap-1.5 text-[11px] leading-snug text-blue-700 dark:text-blue-300"
+            title={listaDeConsejos.join('\n')}
+          >
+            <ImageIcon className="mt-px h-3 w-3 shrink-0" />
+            <span>{listaDeConsejos[0]}</span>
+          </p>
+        ) : (
+          <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/50 rounded-xl p-4">
+            <div className="flex gap-3">
+              <ImageIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-blue-900 dark:text-blue-200 mb-1">{tipsTitle ?? 'Consejos para mejores imágenes:'}</p>
+                <ul className="text-blue-700 dark:text-blue-300/80 space-y-1 text-xs">
+                  {listaDeConsejos.map((consejo) => (
+                    <li key={consejo}>• {consejo}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
     </div>
   )

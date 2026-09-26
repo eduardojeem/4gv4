@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useBranch } from '@/contexts/branch-context'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 
 interface OpenCashRegisterDialogProps {
   open: boolean
@@ -110,16 +110,14 @@ export function OpenCashRegisterDialog({
                 <Banknote className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <Input
                   id="cash-register-opening-amount"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="any"
+                  type="text"
+                  inputMode="numeric"
                   autoFocus
-                  value={amount}
-                  onChange={(event) => onAmountChange(event.target.value)}
+                  value={formatThousands(amount)}
+                  onChange={(event) => onAmountChange(parseThousands(event.target.value).toString())}
                   placeholder="0"
                   aria-describedby="cash-register-opening-help"
-                  className="h-12 pl-11 text-lg font-semibold tabular-nums"
+                  className="h-12 pl-11 text-lg font-semibold font-mono tabular-nums"
                 />
               </div>
               <div className="space-y-2 pt-1">

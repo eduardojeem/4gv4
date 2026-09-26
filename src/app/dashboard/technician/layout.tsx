@@ -1,15 +1,8 @@
-import { TechnicianLayout } from '@/components/technician/layout/TechnicianLayout'
-import { RouteGuard } from '@/components/auth/permission-guard'
-import { ReactNode } from 'react'
+'use client'
 
-export default function TechnicianSectionLayout({
-    children,
-}: {
-    children: ReactNode
-}) {
-    return (
-        <RouteGuard route="/dashboard/technician" redirectTo="/dashboard">
-            <TechnicianLayout>{children}</TechnicianLayout>
-        </RouteGuard>
-    )
+import type { ReactNode } from 'react'
+import { OrganizationModuleGate } from '@/components/admin/OrganizationModuleGate'
+
+export default function TechnicianLayout({ children }: { children: ReactNode }) {
+  return <OrganizationModuleGate module="repairs">{children}</OrganizationModuleGate>
 }

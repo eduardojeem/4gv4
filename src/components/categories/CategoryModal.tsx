@@ -1,14 +1,13 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
 import { validateCategoryInput } from '@/hooks/useCategories'
 import type { Category } from '@/hooks/useCategories'
 import { Loader2, FolderOpen, FolderTree, ChevronRight, Sparkles, X } from 'lucide-react'
@@ -147,9 +146,9 @@ export function CategoryModal({
                             <DialogTitle className="text-lg">
                                 {category ? 'Editar Categoría' : 'Nueva Categoría'}
                             </DialogTitle>
-                            <p className="text-xs text-muted-foreground mt-0.5">
+                            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                                 {category ? `Editando: ${category.name}` : 'Completá los datos para crear la categoría'}
-                            </p>
+                            </DialogDescription>
                         </div>
                     </div>
                 </DialogHeader>

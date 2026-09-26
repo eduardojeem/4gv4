@@ -4,19 +4,15 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
-import { 
-  Shield, Users, Key, Lock, Unlock, Plus, Edit, Trash2, 
-  Search, Filter, Eye, Settings, UserCheck, UserX,
-  Crown, Star, AlertTriangle, CheckCircle, XCircle,
-  Database, FileText, ShoppingCart, BarChart3, Cog
+import {
+  Shield, Users, Key, Lock, Plus, Edit, Trash2,
+  Search, Eye, UserCheck, UserX,
+  Crown, Star, Database, FileText, ShoppingCart, BarChart3, Cog
 } from 'lucide-react'
 
 interface Permission {
@@ -195,7 +191,8 @@ export default function RolesPermissions() {
   const [permissionSearch, setPermissionSearch] = useState('')
   const [permissionSearchDebounced, setPermissionSearchDebounced] = useState('')
   const [permissionCategory, setPermissionCategory] = useState<string>('all')
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null)
+  const [selectedRoleSnapshot, setSelectedRole] = useState<Role | null>(null)
+  const selectedRole = roles.find(role => role.id === selectedRoleSnapshot?.id) ?? null
   const [isCreateRoleOpen, setIsCreateRoleOpen] = useState(false)
   const [isAssignRoleOpen, setIsAssignRoleOpen] = useState(false)
 
@@ -240,14 +237,6 @@ export default function RolesPermissions() {
     }))
   }
 
-  // Mantener el modal del rol sincronizado con cambios en roles
-  useEffect(() => {
-    if (!selectedRole) return
-    const updated = roles.find(r => r.id === selectedRole.id)
-    if (updated && updated !== selectedRole) {
-      setSelectedRole(updated)
-    }
-  }, [roles, selectedRole])
 
   const getRoleColor = (color: string) => {
     const colors = {

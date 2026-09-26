@@ -15,36 +15,26 @@ interface AccessibilityContextType {
 
 const AccessibilityContext = createContext<AccessibilityContextType | undefined>(undefined)
 
+const storedBoolean = (key: string, fallback = false) => {
+  if (typeof window === 'undefined') return fallback
+  const saved = localStorage.getItem(key)
+  if (saved !== null) return saved === 'true'
+  return fallback
+}
+
+const storedFontSize = (): 'normal' | 'large' | 'extra-large' => {
+  if (typeof window === 'undefined') return 'normal'
+  const saved = localStorage.getItem('accessibility-font-size')
+  return saved === 'large' || saved === 'extra-large' ? saved : 'normal'
+}
+
 export function AccessibilityProvider({ children }: { children: React.ReactNode }) {
-  const [highContrast, setHighContrast] = useState(false)
-  const [fontSize, setFontSize] = useState<'normal' | 'large' | 'extra-large'>('normal')
-  const [reducedMotion, setReducedMotion] = useState(false)
-  const [screenReaderMode, setScreenReaderMode] = useState(false)
-
-  // Cargar preferencias guardadas
-  useEffect(() => {
-    const savedHighContrast = localStorage.getItem('accessibility-high-contrast') === 'true'
-    const savedFontSize = localStorage.getItem('accessibility-font-size') as 'normal' | 'large' | 'extra-large' || 'normal'
-    const savedReducedMotion = localStorage.getItem('accessibility-reduced-motion') === 'true'
-    const savedScreenReaderMode = localStorage.getItem('accessibility-screen-reader') === 'true'
-
-    setHighContrast(savedHighContrast)
-    setFontSize(savedFontSize)
-    setReducedMotion(savedReducedMotion)
-    setScreenReaderMode(savedScreenReaderMode)
-
-    // Detectar preferencias del sistema
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const prefersHighContrast = window.matchMedia('(prefers-contrast: high)').matches
-
-    if (prefersReducedMotion && !localStorage.getItem('accessibility-reduced-motion')) {
-      setReducedMotion(true)
-    }
-
-    if (prefersHighContrast && !localStorage.getItem('accessibility-high-contrast')) {
-      setHighContrast(true)
-    }
-  }, [])
+  const [highContrast, setHighContrast] = useState(() => storedBoolean(
+    'accessibility-high-contrast', typeof window !== 'undefined' && window.matchMedia('(prefers-contrast: high)').matches))
+  const [fontSize, setFontSize] = useState(storedFontSize)
+  const [reducedMotion, setReducedMotion] = useState(() => storedBoolean(
+    'accessibility-reduced-motion', typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches))
+  const [screenReaderMode, setScreenReaderMode] = useState(() => storedBoolean('accessibility-screen-reader'))
 
   // Aplicar clases CSS cuando cambian las preferencias
   useEffect(() => {

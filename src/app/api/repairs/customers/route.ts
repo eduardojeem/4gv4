@@ -4,32 +4,132 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 import { logger } from '@/lib/logger'
+import { getCustomerWriteErrorResponse } from './customer-api-errors'
+import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
 
 const repairCustomerSchema = z.object({
   name: z.string().trim().min(1).max(200),
+  first_name: z.string().trim().max(120).optional().nullable(),
+  last_name: z.string().trim().max(120).optional().nullable(),
+  company_name: z.string().trim().max(200).optional().nullable(),
   email: z.string().trim().email().optional().or(z.literal('')).nullable(),
   phone: z.string().trim().max(50).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   ruc: z.string().trim().max(50).optional().nullable(),
+  customer_type: z.string().trim().max(50).optional().nullable(),
+  is_wholesale: z.boolean().optional(),
+  // Contacto de un tercero: el celular del cliente suele ser el equipo que dejo
+  // en el taller, asi que ahi no se lo puede ubicar. Sin estos campos en el
+  // esquema, Zod los descartaba en silencio y el dato nunca llegaba al insert.
+  alternate_phone: z.string().trim().max(50).optional().nullable(),
+  alternate_phone_label: z.string().trim().max(60).optional().nullable(),
 })
 
 const repairCustomerUpdateSchema = repairCustomerSchema.partial().extend({
   id: z.string().uuid(),
 })
 
+const CUSTOMER_COLUMNS: string = 'id, customer_code, name, first_name, last_name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at'
+const CUSTOMER_COLUMNS_WITH_COMPANY: string = 'id, customer_code, name, first_name, last_name, company_name, email, phone, alternate_phone, alternate_phone_label, address, city, ruc, customer_type, status, created_at, updated_at'
+
+/**
+ * `customers.company_name` llega con una migración. Pedirla en una base que
+ * todavía no la tiene hacía fallar toda la consulta: el selector de clientes
+ * de reparaciones quedaba vacío con «No se pudieron cargar los clientes».
+ */
+function isMissingCompanyColumn(error: unknown) {
+  const { code, message } = (error ?? {}) as { code?: string; message?: string }
+  return (code === '42703' || code === 'PGRST204') && String(message ?? '').includes('company_name')
+}
+
 function normalizeCustomerPayload(payload: z.infer<typeof repairCustomerSchema>) {
+  const isWholesale = Boolean(payload.is_wholesale || payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
+  const customerType = isWholesale ? 'wholesale' : (payload.customer_type || 'regular')
+  const { is_wholesale, alternate_phone, alternate_phone_label, company_name, ...rest } = payload
+  void is_wholesale
+  // Las columnas del contacto alternativo solo se mandan si hay algo que
+  // guardar. Asi un despliegue sin la migracion sigue creando clientes como
+  // siempre, y solo falla -con motivo- si alguien intenta usar el campo nuevo.
+  const alternateContact = alternate_phone
+    ? {
+        alternate_phone,
+        // Sin telefono la aclaracion de quien atiende no significa nada.
+        alternate_phone_label: alternate_phone_label || null,
+      }
+    : {}
   return {
-    ...payload,
+    ...rest,
+    ...alternateContact,
     email: payload.email || null,
     phone: payload.phone || '',
     address: payload.address || null,
     city: payload.city || null,
     ruc: payload.ruc || null,
-    customer_type: 'regular',
+    first_name: payload.first_name || null,
+    last_name: payload.last_name || null,
+    ...(isWholesale && company_name ? { company_name } : {}),
+    customer_type: customerType,
+    segment: isWholesale ? 'wholesale' : 'regular',
     status: 'active' as const,
     updated_at: new Date().toISOString(),
   }
+}
+
+function normalizeCustomerUpdatePayload(payload: z.infer<typeof repairCustomerUpdateSchema>) {
+  const { id, is_wholesale, alternate_phone, alternate_phone_label, company_name, ...rest } = payload
+  const isWholesale = is_wholesale !== undefined
+    ? is_wholesale
+    : payload.customer_type !== undefined
+      ? Boolean(payload.customer_type === 'wholesale' || payload.customer_type === 'mayorista')
+      : undefined
+
+  const customerType = isWholesale !== undefined
+    ? (isWholesale ? 'wholesale' : 'regular')
+    : payload.customer_type
+
+  const alternateContact: Record<string, string | null> = {}
+  if (alternate_phone !== undefined) {
+    alternateContact.alternate_phone = alternate_phone || null
+    if (alternate_phone_label !== undefined) {
+      alternateContact.alternate_phone_label = alternate_phone ? (alternate_phone_label || null) : null
+    }
+  }
+
+  const updates: Record<string, unknown> = {
+    ...rest,
+    ...alternateContact,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (customerType !== undefined) {
+    updates.customer_type = customerType
+  }
+  if (isWholesale !== undefined) {
+    updates.segment = isWholesale ? 'wholesale' : 'regular'
+  }
+  if (payload.email !== undefined) {
+    updates.email = payload.email || null
+  }
+  if (payload.phone !== undefined) {
+    updates.phone = payload.phone || ''
+  }
+  if (payload.address !== undefined) {
+    updates.address = payload.address || null
+  }
+  if (payload.city !== undefined) {
+    updates.city = payload.city || null
+  }
+  if (payload.ruc !== undefined) {
+    updates.ruc = payload.ruc || null
+  }
+  // Solo si vino el dato: una edición que no toca la empresa no depende de que
+  // la columna exista. Al dejar de ser mayorista se limpia si se la manda vacía.
+  if (company_name !== undefined) {
+    updates.company_name = isWholesale === false ? null : (company_name || null)
+  }
+
+  return { id, updates }
 }
 
 const readPermissions = ['repairs.orders.read', 'crm.customers.read'] as const
@@ -46,27 +146,36 @@ export const GET = withTenantAuth({ permission: [...readPermissions], module: 'r
     const term = sanitizeSearchTerm(searchParams.get('q'))
 
     const supabase = await createClient()
-    let query = supabase
-      .from('customers')
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
-      .eq('organization_id', organization.id)
+    const search = (columns: string) => {
+      let query = supabase
+        .from('customers')
+        .select(columns)
+        .eq('organization_id', organization.id)
 
-    if (term) {
-      const digits = term.replace(/\D/g, '')
-      const orFilters = [
-        `name.ilike.%${term}%`,
-        `email.ilike.%${term}%`,
-        `customer_code.ilike.%${term}%`,
-      ]
-      // Buscar por teléfono solo si el término tiene dígitos: de lo
-      // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
-      if (digits) orFilters.push(`phone.ilike.%${digits}%`)
-      query = query.or(orFilters.join(','))
+      if (term) {
+        const digits = term.replace(/\D/g, '')
+        const orFilters = [
+          `name.ilike.%${term}%`,
+          `email.ilike.%${term}%`,
+          `customer_code.ilike.%${term}%`,
+          `ruc.ilike.%${term}%`,
+        ]
+        // Buscar por teléfono solo si el término tiene dígitos: de lo
+        // contrario `phone.ilike.%%` matchea todo y arruina el resto del filtro.
+        if (digits) orFilters.push(`phone.ilike.%${digits}%`)
+        query = query.or(orFilters.join(','))
+      }
+
+      return query
+        .order('created_at', { ascending: false })
+        .limit(term ? 50 : 20)
     }
 
-    const { data, error } = await query
-      .order('created_at', { ascending: false })
-      .limit(term ? 50 : 20)
+    let { data, error } = await search(CUSTOMER_COLUMNS_WITH_COMPANY)
+    if (error && isMissingCompanyColumn(error)) {
+      logger.warn('customers.company_name no existe: falta aplicar la migración add_customer_company_name')
+      ;({ data, error } = await search(CUSTOMER_COLUMNS))
+    }
 
     if (error) throw error
 
@@ -82,20 +191,38 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
     const validation = repairCustomerSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const supabase = await createClient()
+
+    // Telefono, correo y RUC no se pueden repetir dentro de la misma empresa:
+    // el mismo cliente cargado dos veces reparte su deuda, sus compras y sus
+    // reparaciones entre fichas distintas.
+    const duplicates = await findCustomerDuplicates(supabase, organization.id, {
+        phone: validation.data.phone,
+        email: validation.data.email,
+        ruc: validation.data.ruc,
+    })
+
+    if (duplicates.length > 0) {
+      return NextResponse.json(
+        { success: false, code: 'CUSTOMER_DUPLICATE', error: duplicatesMessage(duplicates), duplicates },
+        { status: 409 }
+      )
+    }
+
     const now = new Date().toISOString()
+    const row = normalizeCustomerPayload(validation.data)
     const { data, error } = await supabase
       .from('customers')
       .insert({
-        ...normalizeCustomerPayload(validation.data),
+        ...row,
         organization_id: organization.id,
         created_at: now,
         updated_at: now,
       })
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('company_name' in row ? CUSTOMER_COLUMNS_WITH_COMPANY : CUSTOMER_COLUMNS)
       .single()
 
     if (error) throw error
@@ -103,7 +230,8 @@ export const POST = withTenantAuth({ permission: [...writePermissions], module: 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error) {
     logger.error('Repair customers API POST error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo crear el cliente.' }, { status: 500 })
+    const response = getCustomerWriteErrorResponse(error as { code?: string; message?: string })
+    return NextResponse.json(response.body, { status: response.status })
   }
 })
 
@@ -112,27 +240,51 @@ export const PUT = withTenantAuth({ permission: [...writePermissions], module: '
     const validation = repairCustomerUpdateSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
-    const { id, ...updates } = validation.data
+    const { id, updates } = normalizeCustomerUpdatePayload(validation.data)
     const supabase = await createClient()
-    const { data, error } = await supabase
+
+    // Al editar, el propio cliente no cuenta como duplicado de si mismo.
+    const duplicates = await findCustomerDuplicates(supabase, organization.id, {
+      phone: validation.data.phone,
+      email: validation.data.email,
+      ruc: validation.data.ruc,
+      excludeId: id,
+    })
+
+    if (duplicates.length > 0) {
+      return NextResponse.json(
+        { success: false, code: 'CUSTOMER_DUPLICATE', error: duplicatesMessage(duplicates), duplicates },
+        { status: 409 }
+      )
+    }
+
+    const save = (row: Record<string, unknown>) => supabase
       .from('customers')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(row)
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .select('id, customer_code, name, email, phone, address, city, ruc, customer_type, status, created_at, updated_at')
+      .select('company_name' in row ? CUSTOMER_COLUMNS_WITH_COMPANY : CUSTOMER_COLUMNS)
       .single()
+
+    let { data, error } = await save(updates)
+    // El formulario manda la empresa vacía en cada edición de un cliente común.
+    // Sin la columna, vaciar un dato que no existe no es motivo para no guardar
+    // lo demás: el update falló entero, así que reintentarlo no duplica nada.
+    if (error && isMissingCompanyColumn(error) && !updates.company_name) {
+      const withoutCompany = { ...updates }
+      delete withoutCompany.company_name
+      ;({ data, error } = await save(withoutCompany))
+    }
 
     if (error) throw error
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
     logger.error('Repair customers API PUT error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo actualizar el cliente.' }, { status: 500 })
+    const response = getCustomerWriteErrorResponse(error as { code?: string; message?: string }, 'update')
+    return NextResponse.json(response.body, { status: response.status })
   }
 })

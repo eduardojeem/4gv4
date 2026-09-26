@@ -151,6 +151,38 @@ async function patchHandler(
 
     const supabase = createAdminSupabase()
 
+    // Mismo criterio que al crear: no permitir renombrar una sucursal al
+    // nombre de otra ya existente en la organización (la unicidad de la base
+    // solo cubre code/slug, no el nombre visible). Se resuelve el org de la
+    // propia sucursal para cubrir también al super_admin, que no trae
+    // ctx.organizationId fijado.
+    if (patch.name) {
+      const { data: target } = await supabase
+        .from('branches')
+        .select('organization_id')
+        .eq('id', id)
+        .maybeSingle()
+
+      const scopeOrgId = ctx.organizationId ?? target?.organization_id ?? null
+      if (scopeOrgId) {
+        const { data: nameClash } = await supabase
+          .from('branches')
+          .select('id')
+          .eq('organization_id', scopeOrgId)
+          .eq('is_active', true)
+          .ilike('name', String(patch.name))
+          .neq('id', id)
+          .maybeSingle()
+
+        if (nameClash) {
+          return NextResponse.json(
+            { error: `Ya existe otra sucursal llamada "${patch.name}". Usá un nombre distinto.` },
+            { status: 409 }
+          )
+        }
+      }
+    }
+
     // Desactivar la ultima sucursal activa deja a la organizacion sin lugar
     // operativo: caja, stock y reparaciones dependen de que exista una.
     if (isActive === false) {

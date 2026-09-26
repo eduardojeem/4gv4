@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import type { User } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/types'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
-  const [error, setError] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<Database['public']['Tables']['profiles']['Row'] | null>(null)
+  const [error, setError] = useState<unknown>(null)
   
   const supabase = createSupabaseClient()
   
@@ -17,11 +19,10 @@ export default function DebugPage() {
   }
   
   const testConnection = useCallback(async () => {
-    addLog('🔍 Testing Supabase connection...')
-    
     try {
       // Test basic connection
-      const { data, error } = await supabase.from('profiles').select('count').limit(1)
+      const { data: _data, error } = await supabase.from('profiles').select('count').limit(1)
+      addLog('🔍 Testing Supabase connection...')
       if (error) {
         addLog(`❌ Connection test failed: ${error.message}`)
         setError(error)
@@ -91,10 +92,6 @@ export default function DebugPage() {
     }
   }, [supabase])
   
-  useEffect(() => {
-    testConnection()
-  }, [testConnection])
-  
   return (
     <div className="p-8 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Debug Page - Auth & Profile</h1>
@@ -104,7 +101,7 @@ export default function DebugPage() {
           onClick={testConnection}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
         >
-          Run Test Again
+          Ejecutar diagnóstico
         </button>
         
         <div className="bg-gray-100 p-4 rounded">

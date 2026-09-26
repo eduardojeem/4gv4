@@ -47,25 +47,38 @@ function FeatureValue({ value }: { value: boolean | string }) {
 function PlanCard({
   plan,
   isCurrent,
+  isTarget,
   onSelect,
   isChanging,
   isBusy,
 }: {
   plan: CommercialPlan
   isCurrent: boolean
+  /** Es el plan que se eligio en la comparativa. */
+  isTarget: boolean
   onSelect: (code: string) => void
   isChanging: boolean
   isBusy: boolean
 }) {
   return (
     <div
+      id={`plan-${plan.code}`}
       className={cn(
         'relative flex flex-col rounded-xl border bg-card transition-shadow',
         isCurrent ? 'border-primary ring-2 ring-primary/30' : 'hover:shadow-md',
-        plan.is_popular && !isCurrent && 'border-violet-300 dark:border-violet-700',
+        isTarget && !isCurrent && 'border-primary ring-2 ring-primary/40 shadow-md',
+        plan.is_popular && !isCurrent && !isTarget && 'border-violet-300 dark:border-violet-700',
       )}
     >
-      {plan.is_popular && !isCurrent && (
+      {isTarget && !isCurrent && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <Badge className="gap-1 rounded-full bg-primary text-primary-foreground shadow">
+            <Check className="h-3 w-3" />
+            El que elegiste
+          </Badge>
+        </div>
+      )}
+      {plan.is_popular && !isCurrent && !isTarget && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge className="gap-1 rounded-full bg-violet-600 text-white shadow">
             <Star className="h-3 w-3" />
@@ -160,6 +173,23 @@ export default function ChangePlanPage() {
   const [conflicts, setConflicts] = useState<ConflictResource[]>([])
   const [success, setSuccess] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<PagoparPaymentMethod>('card')
+  // La comparativa manda el plan en la URL. Se resalta y se lleva a la vista,
+  // pero no se cambia nada solo: el cobro lo confirma la persona.
+  const [targetPlan, setTargetPlan] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      setTargetPlan(new URLSearchParams(window.location.search).get('plan'))
+    } catch {
+      setTargetPlan(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!targetPlan || !data) return
+    const card = document.getElementById(`plan-${targetPlan}`)
+    card?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [targetPlan, data])
 
   useEffect(() => {
     fetch('/api/admin/subscriptions/change-plan')
@@ -294,12 +324,22 @@ export default function ChangePlanPage() {
         </div>
       )}
 
-      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={cn(
+          'grid gap-6',
+          (data?.plans.length ?? 0) >= 4
+            ? 'sm:grid-cols-2 xl:grid-cols-4'
+            : (data?.plans.length ?? 0) === 3
+              ? 'sm:grid-cols-2 lg:grid-cols-3'
+              : 'sm:grid-cols-2',
+        )}
+      >
         {data?.plans.map((plan) => (
           <PlanCard
             key={plan.code}
             plan={plan}
             isCurrent={plan.code === data.currentPlan.code}
+            isTarget={plan.code === targetPlan}
             onSelect={handleSelect}
             isChanging={changingPlanCode === plan.code}
             isBusy={changingPlanCode !== null}

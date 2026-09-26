@@ -6,6 +6,8 @@ export type FulfillmentType = 'PICKUP' | 'DELIVERY'
 export type CustomerOrderItem = {
   id: string
   product_id: string | null
+  variant_id: string | null
+  variant_name: string | null
   product_name: string
   product_sku: string | null
   quantity: number
@@ -31,6 +33,10 @@ export type CustomerOrder = {
   shipping_cost: number
   discount_amount: number
   total: number
+  store_credit_reserved: number
+  store_credit_applied: number
+  collected_amount: number
+  amount_due: number
   notes: string | null
   created_at: string
   updated_at: string

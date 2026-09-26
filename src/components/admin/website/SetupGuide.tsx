@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { 
+import { Badge } from '@/components/ui/badge'
+import {
   CheckCircle2, Circle, Compass, ChevronDown, ChevronUp, Sparkles,
-  Building2, Tag, Briefcase, Footprints, ShoppingCart, Info
+  Building2, Tag, Briefcase, Footprints, ShoppingCart, GalleryHorizontalEnd, Lightbulb, ShieldCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isCustomHeroTitle } from '@/lib/website/template-hero-titles'
 
 interface SetupGuideProps {
   activeTab: string
@@ -17,33 +19,22 @@ interface SetupGuideProps {
 
 export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
   const { settings, isLoading } = useAdminWebsiteSettings()
-  const [isCollapsed, setIsCollapsed] = useState(false)
-
-  // Load state from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('website-setup-guide-collapsed')
-    if (stored) {
-      const isTrue = stored === 'true'
-      const timer = setTimeout(() => {
-        setIsCollapsed(isTrue)
-      }, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [])
+  const [isCollapsed, setIsCollapsed] = useState(true)
 
   const toggleCollapse = () => {
     const nextState = !isCollapsed
     setIsCollapsed(nextState)
-    localStorage.setItem('website-setup-guide-collapsed', String(nextState))
   }
 
   if (isLoading || !settings) {
     return null
   }
 
+  const trustBar = settings.trust_bar
   const company = settings.company_info
   const heroContent = settings.hero_content
   const offers = settings.offers_section
+  const carousel = settings.promotional_carousel
   const services = settings.services || []
   const processSteps = settings.process_steps || []
   const processFlows = settings.process_flows || []
@@ -55,53 +46,15 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       id: 'company',
       label: 'Datos de Empresa',
       icon: Building2,
-      description: 'Nombre, contacto y logo de tu negocio',
+      description: 'Nombre, eslogan, logo y WhatsApp comercial',
       isCompleted: !!(company?.name?.trim() && company?.phone?.trim() && company?.email?.trim() && company?.address?.trim()),
-      tip: 'Completa estos datos para que los clientes puedan contactarte y ver tu logo en el cabezal del sitio.'
-    },
-    {
-      id: 'hero',
-      label: 'Presentación (Hero)',
-      icon: Sparkles,
-      description: 'Título principal y estadísticas clave',
-      isCompleted: !!(heroContent?.title?.trim() && heroContent.title !== 'Reparación profesional para tu equipo'),
-      tip: 'Personaliza el mensaje principal del banner para llamar la atención del cliente al entrar al sitio.'
-    },
-    {
-      id: 'offers',
-      label: 'Ofertas y Promociones',
-      icon: Tag,
-      description: 'Banners de ofertas del catálogo',
-      isCompleted: !!(offers?.title?.trim() && offers.title !== 'Precios que vale la pena aprovechar'),
-      tip: 'Puedes cambiar el título y acento del bloque de ofertas destacadas. Los productos en oferta se toman automáticamente.'
-    },
-    {
-      id: 'services',
-      label: 'Servicios',
-      icon: Briefcase,
-      description: 'Catálogo de servicios y reparaciones',
-      isCompleted: services.length > 0 && services.some(s => s.active !== false),
-      tip: 'Registra al menos un servicio activo (con su precio estimado, beneficios y tiempos) para mostrarlo en el sitio.'
-    },
-    {
-      id: 'process',
-      label: 'Proceso de Trabajo',
-      icon: Footprints,
-      description: 'Cómo trabajas paso a paso',
-      isCompleted:
-        company?.processSectionEnabled === false ||
-        (
-          processFlows.length > 0
-            ? processFlows.some(flow => flow.active !== false && flow.steps.length > 0)
-            : processSteps.length > 0
-        ),
-      tip: 'Esta sección es opcional. Puedes ocultarla o elegir una plantilla y personalizar sus pasos.'
+      tip: 'Completa estos datos para que los clientes puedan contactarte directamente y ver tu logo oficial en el encabezado.',
     },
     {
       id: 'checkout',
       label: 'Pagos y Entregas',
       icon: ShoppingCart,
-      description: 'Habilitar checkout, delivery o retiro',
+      description: 'Métodos de pago, delivery o retiro en local',
       isCompleted: !!(
         checkout &&
         (
@@ -115,81 +68,155 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
           )
         )
       ),
-      tip: 'Elegí si la tienda venderá con carrito, recibirá consultas por WhatsApp o funcionará como catálogo.'
-    }
+      tip: 'Elige si la tienda venderá con carrito tradicional, recibirá pedidos automáticos por WhatsApp o funcionará como catálogo.',
+    },
+    {
+      id: 'hero',
+      label: 'Portada (Hero)',
+      icon: Sparkles,
+      description: 'Título principal y garantías de confianza',
+      isCompleted: isCustomHeroTitle(heroContent?.title),
+      tip: 'Personaliza el mensaje principal del banner para llamar la atención del cliente al entrar al sitio.',
+    },
+    {
+      id: 'trust_bar',
+      label: 'Beneficios y Garantías',
+      icon: ShieldCheck,
+      description: 'Barra de confianza: envíos, garantía y soporte',
+      isCompleted: trustBar?.enabled !== false && (trustBar?.items?.length ?? 0) > 0,
+      tip: 'La barra de confianza destaca que ofreces garantía, envíos seguros y atención personalizada para transmitir seguridad.',
+    },
+    {
+      id: 'carousel',
+      label: 'Carrusel de Promos',
+      icon: GalleryHorizontalEnd,
+      description: 'Banners promocionales destacados',
+      isCompleted: carousel?.enabled !== true || carousel.slides.some(slide => slide.active),
+      tip: 'El carrusel es opcional. Si lo activas, publica al menos un banner con imagen horizontal de alta calidad (12:5).',
+    },
+    {
+      id: 'offers',
+      label: 'Ofertas Especiales',
+      icon: Tag,
+      description: 'Bloque de rebajas del catálogo',
+      isCompleted: !!(offers?.title?.trim() && offers.title !== 'Precios que vale la pena aprovechar'),
+      tip: 'Puedes cambiar el título y color de acento. Los productos con precio de oferta configurado se mostrarán automáticamente.',
+    },
+    {
+      id: 'services',
+      label: 'Servicios Técnicos',
+      icon: Briefcase,
+      description: 'Catálogo de reparaciones y mano de obra',
+      isCompleted:
+        company?.servicesPageEnabled === false ||
+        (services.length > 0 && services.some(s => s.active !== false)),
+      tip: 'Registra al menos un servicio activo (con su precio estimado, beneficios y tiempos de entrega) para mostrarlo en el sitio.',
+    },
+    {
+      id: 'process',
+      label: 'Proceso de Atención',
+      icon: Footprints,
+      description: 'Flujo de trabajo paso a paso',
+      isCompleted:
+        company?.processSectionEnabled === false ||
+        (
+          processFlows.length > 0
+            ? processFlows.some(flow => flow.active !== false && flow.steps.length > 0)
+            : processSteps.length > 0
+        ),
+      tip: 'Esta sección es opcional. Puedes ocultarla o personalizar los pasos para generar máxima confianza al cliente.',
+    },
   ]
 
   const completedCount = steps.filter(s => s.isCompleted).length
   const progressPercent = Math.round((completedCount / steps.length) * 100)
   const allCompleted = completedCount === steps.length
 
+  const activeStepObj = steps.find(s => s.id === activeTab) || steps[0]
+
   return (
     <Card className={cn(
-      "relative overflow-hidden transition-all duration-300 shadow-md border bg-gradient-to-br",
+      'overflow-hidden rounded-2xl border transition-all shadow-xs',
       allCompleted 
-        ? "from-emerald-50/40 via-background to-background border-emerald-200 dark:from-emerald-950/10 dark:border-emerald-900/30" 
-        : "from-blue-50/40 via-background to-background border-border dark:from-blue-950/5"
+        ? 'border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/10' 
+        : 'border-border/80 bg-card'
     )}>
-      {/* Decorative glow */}
-      {allCompleted && (
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
-      )}
-      {!allCompleted && (
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 rounded-full bg-blue-500/10 blur-2xl pointer-events-none" />
-      )}
-
-      <CardHeader className="p-5 pb-3 flex flex-row items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-            allCompleted 
-              ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800" 
-              : "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800"
-          )}>
-            {allCompleted ? <Sparkles className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
+      <CardHeader className="p-3 sm:p-3.5 pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border shadow-2xs transition-colors",
+              allCompleted 
+                ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800" 
+                : "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800"
+            )}>
+              {allCompleted ? <Sparkles className="h-4 w-4" /> : <Compass className="h-4 w-4" />}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-xs sm:text-sm font-bold text-foreground truncate">
+                  Guía de Configuración
+                </CardTitle>
+                {allCompleted ? (
+                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-0 text-[9px] font-black uppercase px-1.5 py-0">
+                    100%
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground border-border px-1.5 py-0">
+                    {completedCount}/{steps.length}
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              Guía de Configuración
-              {allCompleted && (
-                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-                  Listo
-                </span>
-              )}
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {allCompleted 
-                ? "¡Felicitaciones! Tu portal público tiene configurados todos sus componentes esenciales." 
-                : "Sigue los pasos a continuación para configurar y poner a punto tu portal público de cara al cliente."}
-            </CardDescription>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Indicador de % compacto en el header */}
+            <div className="hidden sm:flex items-center gap-2 text-xs">
+              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500 ease-out",
+                    allCompleted ? "bg-emerald-500" : "bg-primary"
+                  )}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <span className="font-bold text-[11px] text-muted-foreground">{progressPercent}%</span>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={toggleCollapse}
+              aria-label={isCollapsed ? 'Expandir guía' : 'Contraer guía'}
+              aria-expanded={!isCollapsed}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground rounded-lg"
+            >
+              {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            </Button>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={toggleCollapse} className="h-8 w-8 text-muted-foreground rounded-lg">
-          {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-        </Button>
       </CardHeader>
 
-      <CardContent className="p-5 pt-0 space-y-4">
-        {/* Progress bar */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-muted-foreground">Progreso de configuración</span>
-            <span className="font-bold text-foreground">{progressPercent}% ({completedCount} de {steps.length})</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+      <CardContent className="p-3 sm:p-3.5 pt-0 space-y-2.5">
+        {/* Barra de Progreso Móvil cuando está colapsado */}
+        <div className="sm:hidden">
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
             <div 
               className={cn(
                 "h-full rounded-full transition-all duration-500 ease-out",
-                allCompleted ? "bg-emerald-500" : "bg-blue-600"
+                allCompleted ? "bg-emerald-500" : "bg-primary"
               )} 
               style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
 
-        {/* Steps Grid */}
+        {/* Grilla de Pasos Compacta */}
         {!isCollapsed && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-2">
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 pt-0.5">
             {steps.map((step) => {
               const StepIcon = step.icon
               const isActive = activeTab === step.id
@@ -199,32 +226,41 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
                   type="button"
                   onClick={() => onTabChange(step.id)}
                   className={cn(
-                    "text-left flex items-start gap-3 rounded-xl border p-3 transition-all hover:scale-[1.01] active:scale-[0.99]",
+                    "text-left flex flex-col justify-between gap-1.5 rounded-xl border p-2 transition-all relative group",
                     isActive 
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/10 shadow-sm" 
-                      : "border-border bg-card hover:bg-muted/30 hover:border-muted-foreground/30",
-                    step.isCompleted && !isActive && "border-emerald-100 dark:border-emerald-900/20 bg-emerald-50/5"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary shadow-2xs" 
+                      : "border-border/70 bg-card hover:bg-muted/40 hover:border-primary/40",
+                    step.isCompleted && !isActive && "border-emerald-200/50 dark:border-emerald-900/20 bg-emerald-50/5"
                   )}
                 >
-                  <div className="mt-0.5 shrink-0">
+                  <div className="flex items-center justify-between w-full">
+                    <div className={cn(
+                      "p-1 rounded-md",
+                      isActive ? "text-primary bg-primary/10" : "text-muted-foreground"
+                    )}>
+                      <StepIcon className="h-3.5 w-3.5" />
+                    </div>
                     {step.isCompleted ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-emerald-100 dark:fill-transparent" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                     ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground/60" />
+                      <Circle className="h-3.5 w-3.5 text-muted-foreground/30" />
                     )}
                   </div>
-                  <div className="space-y-1 min-w-0 flex-1">
+
+                  <div className="min-w-0 w-full">
                     <p className={cn(
-                      "text-xs font-bold leading-none flex items-center gap-1.5",
+                      "text-[11px] font-semibold leading-tight truncate",
                       step.isCompleted ? "text-emerald-700 dark:text-emerald-400" : "text-foreground",
-                      isActive && "text-primary"
+                      isActive && "text-primary font-bold"
                     )}>
-                      <StepIcon className="h-3.5 w-3.5 shrink-0" />
                       {step.label}
                     </p>
-                    <p className="text-[10px] text-muted-foreground leading-normal line-clamp-2">
-                      {step.description}
-                    </p>
+                    <span className={cn(
+                      "text-[9px] block",
+                      step.isCompleted ? "text-emerald-600/80 dark:text-emerald-400/80" : "text-amber-600 dark:text-amber-400 font-medium"
+                    )}>
+                      {step.isCompleted ? 'Listo' : 'Pendiente'}
+                    </span>
                   </div>
                 </button>
               )
@@ -232,18 +268,13 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
           </div>
         )}
 
-        {/* Selected tab tip card */}
-        {!isCollapsed && (
-          <div className="flex items-start gap-2.5 rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
-            <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <span className="font-semibold text-foreground">
-                Tip para pestaña {(steps.find(s => s.id === activeTab)?.label || '').toLowerCase()}:
-              </span>
-              <p className="leading-relaxed text-muted-foreground">
-                {steps.find(s => s.id === activeTab)?.tip}
-              </p>
-            </div>
+        {/* Consejo contextual compacto */}
+        {!isCollapsed && activeStepObj && (
+          <div className="flex items-center gap-2 rounded-xl border border-indigo-100 dark:border-indigo-950/60 bg-indigo-50/30 dark:bg-indigo-950/20 px-3 py-2 text-[11px] text-muted-foreground">
+            <Lightbulb className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <p className="truncate">
+              <strong className="text-foreground">{activeStepObj.label}:</strong> {activeStepObj.tip}
+            </p>
           </div>
         )}
       </CardContent>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, CreditCard, Loader2, RefreshCcw, Search, WalletCards } from 'lucide-react'
+import { AlertCircle, CheckCircle2, CreditCard, HelpCircle, Loader2, RefreshCcw, Search, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
+import { CashRegisterGuideDialog } from './CashRegisterGuideDialog'
+import { formatSaleDisplayCode } from '@/app/dashboard/pos/lib/formatters'
 
 type ReconciliationStatus = 'pending' | 'confirmed' | 'rejected' | 'refunded' | 'disputed'
 
@@ -56,7 +58,7 @@ const statusStyles: Record<ReconciliationStatus, string> = {
 
 function saleCode(payment: ElectronicPayment) {
   const sale = Array.isArray(payment.sales) ? payment.sales[0] : payment.sales
-  return sale?.code || payment.sale_id.slice(0, 8).toUpperCase()
+  return formatSaleDisplayCode(sale?.code, payment.sale_id)
 }
 
 function toLocalDateTime(value: string | null) {
@@ -69,6 +71,7 @@ function toLocalDateTime(value: string | null) {
 
 export function ElectronicPaymentsPanel() {
   const { selectedBranchId } = useBranch()
+  const [showGuide, setShowGuide] = useState(false)
   const [payments, setPayments] = useState<ElectronicPayment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -208,6 +211,15 @@ export function ElectronicPaymentsPanel() {
         <Button variant="outline" size="icon" onClick={() => void fetchPayments()} disabled={loading} aria-label="Actualizar cobros">
           <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowGuide(true)}
+          className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 text-xs font-semibold rounded-xl"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+          <span>¿Cómo funciona?</span>
+        </Button>
       </div>
 
       {loading ? (
@@ -252,6 +264,12 @@ export function ElectronicPaymentsPanel() {
           <DialogFooter><Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button><Button onClick={() => void saveReconciliation()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{saving ? 'Guardando...' : 'Guardar conciliación'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CashRegisterGuideDialog
+        open={showGuide}
+        onOpenChange={setShowGuide}
+        initialSection="electronic"
+      />
     </div>
   )
 }

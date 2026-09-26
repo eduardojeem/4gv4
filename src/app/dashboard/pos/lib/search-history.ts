@@ -69,13 +69,13 @@ class SearchHistory {
   addSearch(query: string, resultsCount: number): void {
     if (!query.trim()) return
 
-    const normalizedQuery = query.trim().toLowerCase()
+    const normalizedQuery = query.trim().slice(0, 100).toLowerCase()
 
     // Add to history
     this.history.unshift({
       query: normalizedQuery,
       timestamp: new Date(),
-      results_count: resultsCount,
+      results_count: Math.max(0, resultsCount),
     })
 
     // Keep only MAX_HISTORY entries
@@ -306,8 +306,9 @@ class SearchHistory {
       // Load history
       const historyJson = localStorage.getItem(this.STORAGE_KEY_HISTORY)
       if (historyJson) {
-        const parsed = JSON.parse(historyJson)
-        this.history = parsed.map((entry: any) => ({
+        type SerializedSearchHistoryEntry = Omit<SearchHistoryEntry, 'timestamp'> & { timestamp: string | number }
+        const parsed = JSON.parse(historyJson) as SerializedSearchHistoryEntry[]
+        this.history = parsed.map((entry) => ({
           ...entry,
           timestamp: new Date(entry.timestamp),
         }))
@@ -316,9 +317,10 @@ class SearchHistory {
       // Load frequent
       const frequentJson = localStorage.getItem(this.STORAGE_KEY_FREQUENT)
       if (frequentJson) {
-        const parsed = JSON.parse(frequentJson)
+        type SerializedFrequentSearch = Omit<FrequentSearch, 'last_used'> & { last_used: string | number }
+        const parsed = JSON.parse(frequentJson) as SerializedFrequentSearch[]
         this.frequent = new Map(
-          parsed.map((entry: any) => [
+          parsed.map((entry) => [
             entry.query,
             {
               ...entry,
@@ -331,9 +333,10 @@ class SearchHistory {
       // Load recent
       const recentJson = localStorage.getItem(this.STORAGE_KEY_RECENT)
       if (recentJson) {
-        const parsed = JSON.parse(recentJson)
+        type SerializedRecentProduct = Omit<RecentProduct, 'timestamp'> & { timestamp: string | number }
+        const parsed = JSON.parse(recentJson) as SerializedRecentProduct[]
         this.recent = new Map(
-          parsed.map((entry: any) => [
+          parsed.map((entry) => [
             entry.product_id,
             {
               ...entry,
@@ -399,6 +402,8 @@ class SearchHistory {
     }
   }
 }
+
+export { SearchHistory as SearchHistoryManager }
 
 // ============================================================================
 // Singleton Instance

@@ -1,17 +1,19 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { memo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { WorkStatusBadge } from '../WorkStatusBadge'
-import { 
-  ArrowLeft, 
-  Edit, 
-  UserPlus, 
-  Star, 
-  Clock, 
+import {
+  ArrowLeft,
+  Edit,
+  UserPlus,
+  Star,
+  Clock,
   Wrench,
   DollarSign,
   Target,
@@ -38,7 +40,7 @@ const workloadConfig = {
 }
 
 export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader({
-  id,
+  id: _id,
   name,
   avatar,
   specialty,
@@ -80,7 +82,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                 <div className="relative shrink-0">
                   <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-2xl sm:h-20 sm:w-20 sm:text-3xl">
                     {avatar ? (
-                      <img src={avatar} alt={name} className="h-full w-full rounded-full object-cover" />
+                      <AppImage src={avatar} alt={name} className="h-full w-full rounded-full object-cover" />
                     ) : (
                       name.charAt(0).toUpperCase()
                     )}

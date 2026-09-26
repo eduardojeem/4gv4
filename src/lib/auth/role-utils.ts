@@ -56,5 +56,16 @@ export function stripProductCost<T extends Record<string, unknown>>(
   for (const field of PRODUCT_COST_FIELDS) {
     delete clone[field]
   }
+  if (Array.isArray(clone.variants)) {
+    clone.variants = (clone.variants as Array<Record<string, unknown>>).map((v) => {
+      if (v && typeof v === 'object') {
+        const vClone = { ...v }
+        delete vClone.purchase_price
+        delete vClone.purchasePrice
+        return vClone
+      }
+      return v
+    })
+  }
   return clone as T
 }

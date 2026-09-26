@@ -1,57 +1,16 @@
 /**
- * Utilidades para generación y verificación de códigos QR de reparaciones
+ * Utilidades de URL para los códigos QR de reparaciones. Sirven en cliente y
+ * servidor.
+ *
+ * El hash de verificación vive en `repair-qr-hash.ts`, solo servidor: lleva un
+ * secreto y el `crypto` de Node. El cliente lo pide a POST /api/repairs/sign.
  */
-
-import { createHash } from 'crypto'
 
 export interface RepairQRData {
   ticketNumber: string
   customerName: string
   date: string
   hash: string
-}
-
-function getQRSecret(): string {
-  const secret = process.env.REPAIR_QR_SECRET
-  if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('REPAIR_QR_SECRET environment variable is required in production')
-  }
-  return secret || 'dev-only-qr-secret-not-for-production'
-}
-
-/**
- * Genera un hash de verificación para el comprobante de reparación
- * Usa SHA-256 con un salt basado en datos del ticket
- * 
- * NOTA: Esta función solo funciona en el servidor (Node.js)
- */
-export function generateRepairHash(
-  ticketNumber: string,
-  customerName: string,
-  date: Date
-): string {
-  const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
-  const data = `${ticketNumber}|${customerName}|${dateStr}`
-  const secret = getQRSecret()
-  const combined = `${data}|${secret}`
-
-  return createHash('sha256')
-    .update(combined)
-    .digest('hex')
-    .substring(0, 16) // Primeros 16 caracteres para mantenerlo compacto
-}
-
-/**
- * Verifica si un hash es válido para los datos proporcionados
- */
-export function verifyRepairHash(
-  ticketNumber: string,
-  customerName: string,
-  date: Date,
-  providedHash: string
-): boolean {
-  const expectedHash = generateRepairHash(ticketNumber, customerName, date)
-  return expectedHash === providedHash
 }
 
 /**
@@ -63,10 +22,10 @@ function getBaseURL(): string {
   if (typeof window !== 'undefined') {
     return window.location.origin
   }
-  
+
   // En el servidor, usar variable de entorno
-  return process.env.NEXT_PUBLIC_APP_URL || 
-         process.env.NEXT_PUBLIC_BASE_URL || 
+  return process.env.NEXT_PUBLIC_APP_URL ||
+         process.env.NEXT_PUBLIC_BASE_URL ||
          'http://localhost:3000'
 }
 
@@ -85,41 +44,22 @@ export function generateRepairTrackingURL(
 }
 
 /**
- * Genera los datos completos para el QR del comprobante
- */
-export function generateRepairQRData(
-  ticketNumber: string,
-  customerName: string,
-  date: Date
-): RepairQRData {
-  const hash = generateRepairHash(ticketNumber, customerName, date)
-  const dateStr = date.toISOString().split('T')[0]
-  
-  return {
-    ticketNumber,
-    customerName,
-    date: dateStr,
-    hash
-  }
-}
-
-/**
  * Genera la URL del QR usando la API de qrserver.com
- * Incluye el enlace de seguimiento con hash de verificación
+ * Incluye el enlace de seguimiento con hash de verificación.
+ *
+ * El hash es obligatorio: antes, sin él, se calculaba acá mismo, y en el
+ * navegador eso no tiene el secreto.
  */
 export function generateQRCodeURL(
   ticketNumber: string,
-  customerName: string,
-  date: Date,
-  size: number = 150,
-  precomputedHash?: string
+  hash: string,
+  size: number = 150
 ): string {
-  const hash = precomputedHash || generateRepairHash(ticketNumber, customerName, date)
   const trackingURL = generateRepairTrackingURL(ticketNumber, hash)
-  
+
   // Codificar la URL para el QR
   const qrData = encodeURIComponent(trackingURL)
-  
+
   return `https://api.qrserver.com/v1/create-qr-code/?data=${qrData}&size=${size}x${size}&margin=0&format=png`
 }
 
@@ -129,15 +69,15 @@ export function generateQRCodeURL(
 export function parseTrackingURL(url: string): { ticketNumber: string; hash: string } | null {
   try {
     const urlObj = new URL(url)
-    
+
     // Nuevo formato: /mis-reparaciones?ticket=XXX&verify=YYY
     const ticketNumber = urlObj.searchParams.get('ticket')
     const hash = urlObj.searchParams.get('verify')
-    
+
     if (!ticketNumber || !hash) {
       return null
     }
-    
+
     return { ticketNumber, hash }
   } catch {
     return null

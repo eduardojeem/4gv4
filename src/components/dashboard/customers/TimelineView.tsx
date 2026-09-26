@@ -1,11 +1,10 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
@@ -13,16 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Calendar,
   Clock,
-  User,
-  Phone,
-  Mail,
-  Star,
-  ChevronDown,
-  ChevronUp,
-  ShoppingCart,
-  Wrench,
-  Filter,
-  Search,
+  User, ShoppingCart,
+  Wrench, Search,
   RefreshCw,
   AlertCircle
 } from 'lucide-react'
@@ -57,7 +48,7 @@ interface TimelineViewProps {
 
 export const TimelineView: React.FC<TimelineViewProps> = ({
   customers,
-  onCustomerSelect,
+  onCustomerSelect: _onCustomerSelect,
   selectedCustomerId
 }) => {
   const [activities, setActivities] = useState<ActivityItem[]>([])
@@ -68,7 +59,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const { fetchRepairs } = useCustomerRepairs()
 
   // Fetch activity data for a specific customer
-  const fetchCustomerActivity = async (customerId: string) => {
+  const fetchCustomerActivity = useCallback(async (customerId: string) => {
     setLoading(true)
     try {
       const customer = customers.find(c => c.id === customerId)
@@ -80,20 +71,22 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       const salesResponse = await customerService.getCustomerSales(customerId)
       const salesData = salesResponse.success ? salesResponse.data || [] : []
 
-      // Fetch repairs data
-      const repairsData = await fetchRepairs(customerId, ['pending', 'received', 'in_progress', 'diagnosis'])
+      // Todas sus reparaciones. Se filtraba por 'pending', 'received'… en inglés,
+      // que el enum `repair_status` (en castellano) rechaza: la consulta fallaba
+      // y la línea de tiempo nunca mostraba reparaciones.
+      const repairsData = await fetchRepairs(customerId)
 
       // Combine and format activities
       const combinedActivities: ActivityItem[] = [
         // Sales activities
-        ...salesData.map((sale: any) => ({
-          id: `sale-${sale.id}`,
+        ...salesData.map((sale: Record<string, unknown>) => ({
+          id: `sale-${String(sale.id ?? '')}`,
           type: 'sale' as const,
-          date: sale.date || sale.created_at,
-          title: `Venta ${sale.invoiceNumber || sale.id}`,
-          description: `${sale.items?.length || 0} productos - ${sale.paymentMethod || 'Método no especificado'}`,
-          amount: sale.total,
-          status: sale.status || 'completada',
+          date: String(sale.date || sale.created_at || ''),
+          title: `Venta ${String(sale.invoiceNumber || sale.id || '')}`,
+          description: `${Array.isArray(sale.items) ? sale.items.length : 0} productos - ${String(sale.paymentMethod || 'Método no especificado')}`,
+          amount: Number(sale.total) || 0,
+          status: String(sale.status || 'completada'),
           customer: {
             id: customer.id,
             name: customer.name,
@@ -102,13 +95,13 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           }
         })),
         // Repairs activities
-        ...repairsData.map((repair: any) => ({
+        ...repairsData.map((repair) => ({
           id: `repair-${repair.id}`,
           type: 'repair' as const,
           date: repair.created_at,
           title: `Reparación ${repair.device_brand} ${repair.device_model}`,
           description: repair.problem_description,
-          amount: repair.final_cost || repair.estimated_cost,
+          amount: (repair.final_cost || repair.estimated_cost) ?? undefined,
           status: repair.status,
           customer: {
             id: customer.id,
@@ -121,7 +114,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
       // Sort by date (most recent first)
       combinedActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      
+
       setActivities(combinedActivities)
     } catch (error) {
       console.error('Error fetching customer activity:', error)
@@ -130,7 +123,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     } finally {
       setLoading(false)
     }
-  }
+  }, [customers, fetchRepairs])
 
   // Effect to load activity when selectedCustomerId changes
   useEffect(() => {
@@ -140,17 +133,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       setActivities([])
       setSelectedCustomer(null)
     }
-  }, [selectedCustomerId])
+  }, [fetchCustomerActivity, selectedCustomerId])
 
   // Filter activities based on search and type
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
-      const matchesSearch = searchTerm === '' || 
+      const matchesSearch = searchTerm === '' ||
         activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         activity.description.toLowerCase().includes(searchTerm.toLowerCase())
-      
+
       const matchesType = filterType === 'all' || activity.type === filterType
-      
+
       return matchesSearch && matchesType
     })
   }, [activities, searchTerm, filterType])
@@ -225,7 +218,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
             </Badge>
           )}
         </CardTitle>
-        
+
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3 mt-4">
           <div className="relative flex-1">
@@ -237,7 +230,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
               className="pl-10"
             />
           </div>
-          <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
+          <Select value={filterType} onValueChange={(value) => {
+            if (value === 'all' || value === 'sale' || value === 'repair') {
+              setFilterType(value)
+            }
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Filtrar por tipo" />
             </SelectTrigger>
@@ -297,7 +294,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                 >
                   <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
-                    {activities.length === 0 
+                    {activities.length === 0
                       ? 'No se encontró actividad para este cliente'
                       : 'No se encontraron actividades que coincidan con los filtros'
                     }

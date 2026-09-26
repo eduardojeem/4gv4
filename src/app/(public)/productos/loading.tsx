@@ -22,7 +22,7 @@ export default function ProductsLoading() {
         <div className="flex gap-6 xl:gap-8">
           {/* Sidebar skeleton — desktop only */}
           <aside className="hidden lg:block w-64 shrink-0">
-            <div className="rounded-2xl border border-border/60 bg-card/70 p-4 space-y-4">
+            <div className="space-y-4 rounded-lg border border-border/60 bg-card/70 p-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="space-y-2">
                   <div className="h-3.5 w-20 rounded bg-muted animate-pulse" />
@@ -35,7 +35,7 @@ export default function ProductsLoading() {
           {/* Product grid skeleton */}
           <div className="flex-1 min-w-0">
             {/* Toolbar skeleton */}
-            <div className="mb-5 rounded-2xl border border-border/60 bg-card/70 p-4">
+            <div className="mb-5 rounded-lg border border-border/60 bg-card/70 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="h-9 w-24 rounded-lg bg-muted animate-pulse lg:hidden" />
                 <div className="h-9 w-36 rounded-lg bg-muted animate-pulse ml-auto" />
@@ -43,14 +43,14 @@ export default function ProductsLoading() {
             </div>
 
             {/* Cards */}
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {Array.from({ length: 12 }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+                  className="flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
                 >
                   {/* Image placeholder */}
-                  <div className="aspect-square bg-muted animate-pulse" />
+                  <div className="aspect-[4/3] bg-muted animate-pulse" />
                   {/* Info */}
                   <div className="flex flex-col gap-2 px-3.5 pb-3.5 pt-3">
                     <div className="h-3 w-24 rounded bg-muted animate-pulse" />
@@ -58,8 +58,8 @@ export default function ProductsLoading() {
                     <div className="h-4 w-3/4 rounded bg-muted animate-pulse" />
                     <div className="mt-1 h-5 w-28 rounded bg-muted animate-pulse" />
                     <div className="mt-2 flex gap-2">
-                      <div className="h-9 flex-1 rounded-xl bg-muted animate-pulse" />
-                      <div className="h-9 flex-1 rounded-xl bg-muted animate-pulse" />
+                      <div className="h-9 flex-1 rounded-md bg-muted animate-pulse" />
+                      <div className="h-9 flex-1 rounded-md bg-muted animate-pulse" />
                     </div>
                   </div>
                 </div>

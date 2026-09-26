@@ -65,7 +65,7 @@ export function useProductOperations() {
 
     setOperations(prev => [...prev, operation])
     setCurrentOperation(operation)
-    
+
     return operation
   }, [])
 
@@ -74,10 +74,10 @@ export function useProductOperations() {
     operationId: string,
     updates: Partial<BulkOperation>
   ) => {
-    setOperations(prev => prev.map(op => 
+    setOperations(prev => prev.map(op =>
       op.id === operationId ? { ...op, ...updates } : op
     ))
-    
+
     if (currentOperation?.id === operationId) {
       setCurrentOperation(prev => prev ? { ...prev, ...updates } : null)
     }
@@ -94,7 +94,7 @@ export function useProductOperations() {
     }
   ): Promise<OperationResult<{ imported: number, updated: number, errors: string[] }>> => {
     const operation = createOperation('import')
-    
+
     try {
       updateOperation(operation.id, { status: 'running' })
 
@@ -124,7 +124,7 @@ export function useProductOperations() {
       const batchSize = 10
       for (let i = 0; i < products.length; i += batchSize) {
         const batch = products.slice(i, i + batchSize)
-        
+
         for (const productData of batch) {
           try {
             // Validar datos si está habilitado
@@ -208,14 +208,14 @@ export function useProductOperations() {
     }
   ): Promise<OperationResult<{ url: string, filename: string }>> => {
     const operation = createOperation('export', products.length)
-    
+
     try {
       updateOperation(operation.id, { status: 'running' })
 
       // Preparar datos para exportación
       const exportData = products.map((product, index) => {
-        const data: any = {}
-        
+        const data: Record<string, unknown> = {}
+
         options.fields.forEach(field => {
           switch (field) {
             case 'category':
@@ -287,20 +287,20 @@ export function useProductOperations() {
 
   // Sincronizar productos
   const syncProducts = useCallback(async (
-    options: SyncOptions = {
+    _options: SyncOptions = {
       source: 'external_api',
       batchSize: 50,
       validateBeforeSync: true
     }
   ): Promise<OperationResult<{ synced: number, errors: string[] }>> => {
     const operation = createOperation('sync')
-    
+
     try {
       updateOperation(operation.id, { status: 'running' })
 
       // Implementar lógica de sincronización según la fuente
       // Esto es un placeholder - se implementaría según las necesidades específicas
-      
+
       updateOperation(operation.id, {
         status: 'completed',
         endTime: new Date()
@@ -331,7 +331,7 @@ export function useProductOperations() {
       endTime: new Date(),
       errors: ['Operación cancelada por el usuario']
     })
-    
+
     if (currentOperation?.id === operationId) {
       setCurrentOperation(null)
     }
@@ -339,7 +339,7 @@ export function useProductOperations() {
 
   // Limpiar operaciones completadas
   const clearCompletedOperations = useCallback(() => {
-    setOperations(prev => prev.filter(op => 
+    setOperations(prev => prev.filter(op =>
       op.status === 'running' || op.status === 'pending'
     ))
   }, [])
@@ -348,16 +348,16 @@ export function useProductOperations() {
     // Estados
     operations,
     currentOperation,
-    
+
     // Operaciones principales
     importProducts,
     exportProducts,
     syncProducts,
-    
+
     // Control de operaciones
     cancelOperation,
     clearCompletedOperations,
-    
+
     // Utilidades
     createOperation,
     updateOperation
@@ -368,44 +368,45 @@ export function useProductOperations() {
 function parseCSV(content: string): Partial<Product>[] {
   const lines = content.split('\n')
   const headers = lines[0].split(',').map(h => h.trim())
-  
+
   return lines.slice(1).map(line => {
     const values = line.split(',').map(v => v.trim())
-    const product: any = {}
-    
+    const product: Record<string, unknown> = {}
+
     headers.forEach((header, index) => {
       product[header] = values[index]
     })
-    
-    return product
+
+    return product as Partial<Product>
   })
 }
 
-function generateCSV(data: any[]): string {
+function generateCSV(data: Record<string, unknown>[]): string {
   if (data.length === 0) return ''
-  
+
   const headers = Object.keys(data[0])
   const csvContent = [
     headers.join(','),
-    ...data.map(row => 
-      headers.map(header => 
-        typeof row[header] === 'string' && row[header].includes(',') 
-          ? `"${row[header]}"` 
-          : row[header]
-      ).join(',')
+    ...data.map(row =>
+      headers.map(header => {
+        const val = row[header]
+        return typeof val === 'string' && val.includes(',')
+          ? `"${val}"`
+          : String(val ?? '')
+      }).join(',')
     )
   ].join('\n')
-  
+
   return csvContent
 }
 
 function validateProductData(product: Partial<Product>): { valid: boolean, errors: string[] } {
   const errors: string[] = []
-  
+
   if (!product.name) errors.push('Nombre es requerido')
   if (!product.sku) errors.push('SKU es requerido')
   if (!product.sale_price || product.sale_price <= 0) errors.push('Precio debe ser mayor a 0')
-  
+
   return {
     valid: errors.length === 0,
     errors

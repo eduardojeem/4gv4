@@ -160,7 +160,7 @@ export function ProductFiltersSimple({
                       <div className="flex flex-wrap gap-2">
                         {searchTerm && (
                           <Badge variant="secondary" className="text-xs">
-                            Búsqueda: "{searchTerm}"
+                            Búsqueda: &quot;{searchTerm}&quot;
                             <Button
                               variant="ghost"
                               size="sm"

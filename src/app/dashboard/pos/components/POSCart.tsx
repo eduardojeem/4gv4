@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image';
 /**
  * POS Cart Component — Redesign Premium
  * Carrito de compras optimizado con diseño premium
@@ -7,28 +8,29 @@ import React, { memo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Plus, 
-  Minus, 
-  Trash2, 
-  ShoppingCart, 
+import {
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
   CreditCard,
   Tag,
   Percent,
-  Store,
-  AlertTriangle,
-  ChevronDown,
+  Store, ChevronDown,
   ChevronUp,
-  Sparkles
+  Sparkles,
+  PauseCircle,
+  Wrench
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import type { CheckoutEligibility } from '../lib/checkout-eligibility';
+import type { ReceiptDocumentKind } from '@/lib/receipt-utils';
 import { resolveProductImageUrl } from '@/lib/images';
 import {
   AlertDialog,
@@ -40,7 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 
 interface CartItem {
   id: string;
@@ -79,11 +81,16 @@ interface POSCartProps {
   cartTax: number;
   cartTotal: number;
   cartItemCount: number;
+  // Held sales & repair integration
+  onHoldSale?: () => void;
+  onOpenHeldSales?: () => void;
+  heldSalesCount?: number;
+  onOpenRepairModal?: () => void;
   // UI State
   isProcessing?: boolean;
   taxRate?: number;
-  canCheckout?: boolean;
-  checkoutDisabledReason?: string;
+  checkoutEligibility: CheckoutEligibility;
+  documentKind?: ReceiptDocumentKind;
 }
 
 const CartItemRow = memo<{
@@ -95,16 +102,16 @@ const CartItemRow = memo<{
 }>(({ item, isWholesale, onUpdateQuantity, onRemoveItem, onApplyDiscount }) => {
   const WHOLESALE_DISCOUNT_RATE = 10;
   const isService = item.isService === true;
-  
+
   const unitPrice = (isWholesale && !isService)
-    ? (item.wholesalePrice ?? (item.price * (1 - WHOLESALE_DISCOUNT_RATE / 100))) 
+    ? (item.wholesalePrice ?? (item.price * (1 - WHOLESALE_DISCOUNT_RATE / 100)))
     : item.price;
-    
+
   const itemTotal = unitPrice * item.quantity;
   const itemDiscountRate = item.discount || 0;
   const itemDiscountValue = itemTotal * (itemDiscountRate / 100);
   const finalTotal = itemTotal - itemDiscountValue;
-  
+
   const [localQty, setLocalQty] = useState(item.quantity.toString());
   const imageSrc = typeof item.image === 'string' && item.image.trim().length > 0
     ? resolveProductImageUrl(item.image.trim())
@@ -114,27 +121,27 @@ const CartItemRow = memo<{
     setLocalQty(item.quantity.toString());
   }, [item.quantity]);
 
-  const isLowStock = typeof item.stock === 'number' && !isService && item.stock <= 5;
+  void (typeof item.stock === 'number' && !isService && item.stock <= 5);
 
   return (
-    <motion.div 
+    <motion.div
       layout
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20, height: 0 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "relative transition-all rounded-xl mb-2 overflow-hidden group", 
-        isService 
-          ? "bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30" 
+        "relative transition-all rounded-xl mb-2 overflow-hidden group",
+        isService
+          ? "bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30"
           : "bg-card border border-border/40 hover:border-primary/20 hover:shadow-sm"
       )}
-    > 
+    >
       <div className="grid grid-cols-[48px_1fr_auto] gap-2.5 p-2.5 items-center">
         {/* Image */}
         <div className="h-12 w-12 rounded-lg bg-muted/30 border border-border/30 overflow-hidden flex items-center justify-center shrink-0">
           {imageSrc ? (
-            <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
+            <AppImage src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
           ) : (
             <ShoppingCart className="h-5 w-5 text-muted-foreground/20" />
           )}
@@ -180,11 +187,16 @@ const CartItemRow = memo<{
                   size="icon"
                   onClick={() => onUpdateQuantity(item.id, Math.max(0, item.quantity - 1))}
                   className="h-6 w-6 hover:bg-background hover:text-destructive rounded-md"
+                  aria-label={`Reducir cantidad de ${item.name}`}
                 >
                   <Minus className="h-3 w-3" />
                 </Button>
-                
+
                 <Input
+                  type="number"
+                  min={1}
+                  max={item.stock}
+                  aria-label={`Cantidad de ${item.name}`}
                   className="h-6 w-9 p-0 text-center border-none bg-transparent text-xs font-bold tabular-nums focus-visible:ring-0 shadow-none"
                   value={localQty}
                   onChange={(e) => setLocalQty(e.target.value)}
@@ -198,13 +210,14 @@ const CartItemRow = memo<{
                   }}
                   onFocus={(e) => e.target.select()}
                 />
-                
+
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                   className="h-6 w-6 hover:bg-background hover:text-primary rounded-md"
                   disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
+                  aria-label={`Aumentar cantidad de ${item.name}`}
                 >
                   <Plus className="h-3 w-3" />
                 </Button>
@@ -219,9 +232,9 @@ const CartItemRow = memo<{
               {onApplyDiscount && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className={cn(
                         "h-6 w-6 rounded-full",
                         itemDiscountRate > 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
@@ -246,8 +259,8 @@ const CartItemRow = memo<{
                             }
                           }}
                         />
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="h-8 px-2 text-[10px]"
                           onClick={(e) => {
                             const input = e.currentTarget.previousElementSibling as HTMLInputElement;
@@ -268,6 +281,7 @@ const CartItemRow = memo<{
                 size="icon"
                 onClick={() => onRemoveItem(item.id)}
                 className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label={`Eliminar ${item.name}`}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -293,19 +307,25 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   onToggleWholesale,
   discount,
   onUpdateDiscount,
-  subtotalApplied,
+  subtotalApplied: _subtotalApplied,
   subtotalNonWholesale,
-  generalDiscountAmount,
-  wholesaleDiscountAmount,
+  generalDiscountAmount: _generalDiscountAmount,
+  wholesaleDiscountAmount: _wholesaleDiscountAmount,
   totalSavings,
   cartTax,
   cartTotal,
   cartItemCount,
+  onHoldSale,
+  onOpenHeldSales,
+  heldSalesCount = 0,
+  onOpenRepairModal,
   isProcessing = false,
   taxRate = 0.19,
-  canCheckout = true,
-  checkoutDisabledReason
+  checkoutEligibility,
+  documentKind = 'internal'
 }) => {
+  const canCheckout = checkoutEligibility.canConfirm;
+  const checkoutDisabledReason = checkoutEligibility.reason;
 
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [showPricingOptions, setShowPricingOptions] = useState(false);
@@ -314,20 +334,55 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   if (items.length === 0) {
     return (
       <Card className="h-full flex flex-col shadow-sm border-border/50 rounded-xl">
-        <CardHeader className="border-b bg-muted/10 py-3 px-4 rounded-t-xl">
+        <CardHeader className="border-b bg-muted/10 py-3 px-4 rounded-t-xl flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <ShoppingCart className="h-4 w-4" />
             Carrito de Compras
           </CardTitle>
+          <div className="flex items-center gap-1.5">
+            {heldSalesCount > 0 && onOpenHeldSales && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 gap-1 font-semibold"
+                onClick={onOpenHeldSales}
+              >
+                <PauseCircle className="h-3.5 w-3.5" />
+                En Espera ({heldSalesCount})
+              </Button>
+            )}
+            {onOpenRepairModal && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 gap-1 font-medium"
+                onClick={onOpenRepairModal}
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                Reparación
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <div className="bg-muted/30 p-5 rounded-2xl mb-5">
             <ShoppingCart className="h-12 w-12 text-muted-foreground/20" />
           </div>
           <h3 className="font-semibold text-base mb-1.5 text-foreground/70">Carrito vacío</h3>
-          <p className="text-sm text-muted-foreground max-w-[220px] leading-relaxed">
+          <p className="text-sm text-muted-foreground max-w-[220px] leading-relaxed mb-4">
             Seleccioná productos del catálogo o escaneá un código de barras para empezar.
           </p>
+          {onOpenRepairModal && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs text-indigo-600 dark:text-indigo-400 border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 gap-1.5"
+              onClick={onOpenRepairModal}
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              Cobrar una Reparación del Taller
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -337,16 +392,39 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   return (
     <Card className="h-full flex flex-col shadow-sm border-border/50 overflow-hidden rounded-xl bg-background/80 backdrop-blur-sm">
       {/* Header */}
-      <CardHeader className="py-2.5 px-4 border-b bg-muted/10">
+      <CardHeader className="py-2 px-3 border-b bg-muted/10">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-primary/10">
-              <ShoppingCart className="h-3.5 w-3.5 text-primary" />
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-center h-5 w-5 rounded-md bg-primary/10">
+              <ShoppingCart className="h-3 w-3 text-primary" />
             </div>
-            <span className="font-semibold text-sm">Carrito</span>
+            <span className="font-semibold text-xs sm:text-sm">Carrito</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="px-2 text-[10px] font-semibold tabular-nums">
+          <div className="flex items-center gap-1">
+            {onHoldSale && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5.5 px-1.5 text-[10.5px] text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 gap-1 font-medium"
+                onClick={onHoldSale}
+                title="Poner esta venta en espera (F8)"
+              >
+                <PauseCircle className="h-3 w-3" />
+                Pausar
+              </Button>
+            )}
+            {heldSalesCount > 0 && onOpenHeldSales && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-5.5 px-1.5 text-[9px] bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold"
+                onClick={onOpenHeldSales}
+                title="Ver ventas pausadas"
+              >
+                ({heldSalesCount})
+              </Button>
+            )}
+            <Badge variant="secondary" className="px-1.5 text-[9px] font-semibold tabular-nums h-5">
               {items.length} {items.length === 1 ? 'item' : 'items'} · {cartItemCount} un.
             </Badge>
             <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
@@ -355,7 +433,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                   variant="ghost"
                   size="icon"
                   disabled={isProcessing}
-                  className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                  className="h-5.5 w-5.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
                   title="Vaciar Carrito"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -370,7 +448,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
+                  <AlertDialogAction
                     onClick={() => {
                       onClearCart();
                       setIsClearDialogOpen(false);
@@ -406,7 +484,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
         {/* Bottom section: Controls + Totals + CTA */}
         <div className="bg-card border-t shadow-[0_-2px_8px_-3px_rgba(0,0,0,0.08)] z-10">
           <div className="max-h-[34vh] overflow-y-auto">
-          
+
             {/* Collapsible Controls: Wholesale, Discount, Promo */}
             <div className="px-4 pt-2">
               <Button
@@ -422,13 +500,18 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 </span>
                 {showPricingOptions ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </Button>
+              {!canCheckout && checkoutDisabledReason && (
+                <p className="text-center text-[11px] text-amber-700 dark:text-amber-300" role="status">
+                  {checkoutDisabledReason}
+                </p>
+              )}
             </div>
 
             {showPricingOptions && (
               <div className="px-4 py-3 bg-muted/10 grid grid-cols-2 gap-3 border-b border-border/30">
                 <div className="flex items-center space-x-2">
-                  <Switch 
-                    id="wholesale-mode" 
+                  <Switch
+                    id="wholesale-mode"
                     checked={isWholesale}
                     onCheckedChange={onToggleWholesale}
                     className="scale-90"
@@ -438,7 +521,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                     Mayorista
                   </Label>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
                   <div className="relative flex-1">
@@ -490,56 +573,58 @@ export const POSCart: React.FC<POSCartProps> = memo(({
             )}
 
             {/* Totals Breakdown */}
-            <div className="px-4 py-3 space-y-1.5">
-              <div className="flex justify-between text-xs text-muted-foreground">
+            <div className="px-3 py-2 space-y-1">
+              <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>Subtotal</span>
                 <span className="tabular-nums">{formatCurrency(subtotalNonWholesale)}</span>
               </div>
 
               {totalSavings > 0 && (
-                <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <div className="flex justify-between text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                   <span className="flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" /> Ahorro
+                    <Sparkles className="h-2.5 w-2.5" /> Ahorro
                   </span>
                   <span className="tabular-nums">-{formatCurrency(totalSavings)}</span>
                 </div>
               )}
 
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Impuesto ({(taxRate * 100).toFixed(0)}%)</span>
-                <span className="tabular-nums">{formatCurrency(cartTax)}</span>
-              </div>
+              {documentKind === 'fiscal' && cartTax > 0 && (
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Impuesto ({(taxRate * 100).toFixed(0)}%)</span>
+                  <span className="tabular-nums">{formatCurrency(cartTax)}</span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Sticky CTA — Single total + prominent button */}
-          <div className="p-4 border-t-2 border-primary/20 bg-gradient-to-t from-primary/5 to-background">
-            <div className="flex flex-col gap-2">
+          <div className="p-3 border-t border-primary/20 bg-gradient-to-t from-primary/5 to-background">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Total a cobrar</p>
-                <p className="text-2xl font-bold text-primary leading-tight tabular-nums">{formatCurrency(cartTotal)}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total a cobrar</p>
+                <p className="text-xl font-bold text-primary leading-tight tabular-nums">{formatCurrency(cartTotal)}</p>
               </div>
               <Button
                 onClick={onCheckout}
                 disabled={isProcessing || !canCheckout}
                 title={checkoutDisabledReason}
-                size="lg"
+                size="default"
                 className={cn(
-                  "w-full h-12 text-base font-bold rounded-xl shadow-lg transition-all",
+                  "w-full h-10 text-sm font-bold rounded-lg shadow-md transition-all",
                   "bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white",
-                  "hover:shadow-xl hover:scale-[1.01]",
+                  "hover:shadow-lg hover:scale-[1.01]",
                   "active:scale-[0.98]",
                   "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 )}
               >
                 {isProcessing ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white mr-1.5" />
                     Procesando...
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-5 w-5 mr-2" />
+                    <CreditCard className="h-4 w-4 mr-1.5" />
                     Cobrar ahora
                   </>
                 )}

@@ -26,13 +26,13 @@ describe('dashboard section access', () => {
     expect(canRoleAccessSection('vendedor', '/dashboard/products')).toBe(true)
     expect(canRoleAccessSection('vendedor', '/dashboard/categories')).toBe(true)
     expect(canRoleAccessSection('vendedor', '/dashboard/promotions')).toBe(true)
-    expect(canRoleAccessSection('vendedor', '/dashboard/reports')).toBe(true)
+    expect(canRoleAccessSection('vendedor', '/dashboard/reports')).toBe(false)
   })
 
   it('allows technicians to inspect products and reports without granting orders', () => {
     expect(canRoleAccessSection('tecnico', '/dashboard/products')).toBe(true)
     expect(canRoleAccessSection('tecnico', '/dashboard/categories')).toBe(true)
-    expect(canRoleAccessSection('tecnico', '/dashboard/reports')).toBe(true)
+    expect(canRoleAccessSection('tecnico', '/dashboard/reports')).toBe(false)
     expect(canRoleAccessSection('tecnico', '/dashboard/orders')).toBe(false)
   })
 })

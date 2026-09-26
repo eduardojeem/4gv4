@@ -1,13 +1,12 @@
-﻿import { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
-import { formatCurrency } from '@/lib/currency'
 
 interface UseCashRegisterReportReturn {
     reportStart: string
     setReportStart: (date: string) => void
     reportEnd: string
     setReportEnd: (date: string) => void
-    setPresetRange: (preset: 'today' | 'week' | 'month') => void
+    setPresetRange: (preset: 'today' | 'week' | 'month' | 'year') => void
     generateReport: () => Promise<void>
     exportReportCSV: () => void
     isGenerating: boolean
@@ -23,22 +22,26 @@ function toDateTimeLocalInput(date: Date): string {
     return `${y}-${m}-${d}T${h}:${min}`
 }
 
-function getTodayRange() {
-    const start = new Date()
-    start.setHours(0, 0, 0, 0)
+
+function getWeekRange() {
     const end = new Date()
+    const start = new Date()
+    const day = start.getDay()
+    const diff = (day + 6) % 7 // Lunes como inicio de semana laboral
+    start.setDate(start.getDate() - diff)
+    start.setHours(0, 0, 0, 0)
     end.setHours(23, 59, 59, 999)
     return { start, end }
 }
 
 export function useCashRegisterReport(): UseCashRegisterReportReturn {
     const { cashReport, generateCashReportForRange } = useCashRegisterContext()
-    const initialRange = getTodayRange()
+    const initialRange = getWeekRange()
     const [reportStart, setReportStart] = useState(toDateTimeLocalInput(initialRange.start))
     const [reportEnd, setReportEnd] = useState(toDateTimeLocalInput(initialRange.end))
     const [isGenerating, setIsGenerating] = useState(false)
 
-    const setPresetRange = useCallback((preset: 'today' | 'week' | 'month') => {
+    const setPresetRange = useCallback((preset: 'today' | 'week' | 'month' | 'year') => {
         const end = new Date()
         let start = new Date()
 
@@ -47,12 +50,15 @@ export function useCashRegisterReport(): UseCashRegisterReportReturn {
             end.setHours(23, 59, 59, 999)
         } else if (preset === 'week') {
             const day = start.getDay()
-            const diff = (day + 6) % 7 // Monday as start
+            const diff = (day + 6) % 7 // Lunes como inicio
             start.setDate(start.getDate() - diff)
             start.setHours(0, 0, 0, 0)
             end.setHours(23, 59, 59, 999)
-        } else {
+        } else if (preset === 'month') {
             start = new Date(start.getFullYear(), start.getMonth(), 1, 0, 0, 0, 0)
+            end.setHours(23, 59, 59, 999)
+        } else if (preset === 'year') {
+            start = new Date(start.getFullYear(), 0, 1, 0, 0, 0, 0)
             end.setHours(23, 59, 59, 999)
         }
 

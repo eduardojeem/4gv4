@@ -13,6 +13,10 @@ import { CategoryFilter } from './filters/CategoryFilter'
 import { BrandFilter } from './filters/BrandFilter'
 import { StockFilter } from './filters/StockFilter'
 import { PriceFilter } from './filters/PriceFilter'
+import { FashionFilter } from './filters/FashionFilter'
+import { DeviceFilter } from './filters/DeviceFilter'
+import type { DeviceOptions } from '@/lib/products/device-options'
+import { useStorefrontStyle } from './storefront-style-context'
 
 interface Category {
   id: string
@@ -27,6 +31,10 @@ interface ProductFiltersProps {
   brands?: string[]
   branches?: Array<{ id: string; name: string; city: string | null }>
   onCollapseChange?: (collapsed: boolean) => void
+  hideHeader?: boolean
+  fashionFacets?: { sizes: string[]; colors: string[] }
+  /** Marcas y modelos de celular con productos publicados; vacio en tiendas que no los usan. */
+  deviceFacets?: DeviceOptions
 }
 
 export function ProductFilters({
@@ -35,7 +43,11 @@ export function ProductFilters({
   brands = [],
   branches = [],
   onCollapseChange,
+  hideHeader = false,
+  fashionFacets = { sizes: [], colors: [] },
+  deviceFacets = { brands: [], modelsByBrand: {} },
 }: ProductFiltersProps) {
+  const storefrontStyle = useStorefrontStyle()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
@@ -44,6 +56,11 @@ export function ProductFilters({
   const brand = searchParams.get('brand') || ''
   const branchId = searchParams.get('branch_id') || ''
   const inStock = searchParams.get('in_stock') === 'true'
+  const audience = searchParams.get('audience') || ''
+  const size = searchParams.get('size') || ''
+  const color = searchParams.get('color') || ''
+  const deviceBrand = searchParams.get('celular') || ''
+  const deviceModel = searchParams.get('modelo') || ''
 
   // El slider opera dentro del rango real del catálogo (priceRange), no del
   // tope teórico PRODUCTS_MAX_PRICE: si el estado local usara el tope teórico,
@@ -96,6 +113,11 @@ export function ProductFilters({
     brand !== '',
     branchId !== '',
     inStock,
+    audience !== '',
+    size !== '',
+    color !== '',
+    deviceBrand !== '',
+    deviceModel !== '',
     hasPriceFilter,
   ].filter(Boolean).length
 
@@ -117,7 +139,7 @@ export function ProductFilters({
   return (
     <div className={`space-y-6 ${isPending ? 'opacity-60 pointer-events-none' : ''}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      {!hideHeader && <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-8 w-8 -ml-2 text-muted-foreground hover:text-foreground lg:flex hidden" title="Contraer panel lateral">
             <PanelLeftClose className="h-4 w-4" />
@@ -142,7 +164,7 @@ export function ProductFilters({
             Limpiar
           </Button>
         )}
-      </div>
+      </div>}
 
       {/* Collapsible content */}
       <div className={`space-y-6 transition-all duration-300 ease-in-out ${isFiltersCollapsed ? 'hidden opacity-0 h-0' : 'block opacity-100 h-auto'}`}>
@@ -161,6 +183,14 @@ export function ProductFilters({
                   return 'Categoria'
                 })()}
                 <button type="button" className="inline-flex items-center justify-center rounded-full hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" onClick={() => updateFilters({ category_id: null })} aria-label="Quitar filtro de categoria">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {(deviceBrand || deviceModel) && (
+              <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-background hover:bg-background shadow-sm">
+                {[deviceBrand, deviceModel].filter(Boolean).join(' ')}
+                <button type="button" className="inline-flex items-center justify-center rounded-full hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" onClick={() => updateFilters({ celular: null, modelo: null })} aria-label="Quitar filtro de celular">
                   <X className="h-3 w-3" />
                 </button>
               </Badge>
@@ -200,7 +230,18 @@ export function ProductFilters({
           </div>
         )}
 
-        <Accordion type="multiple" defaultValue={['category', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
+        <Accordion type="multiple" defaultValue={storefrontStyle === 'fashion' ? ['fashion', 'category', 'stock'] : ['device', 'category', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
+          {storefrontStyle === 'fashion' && (
+            <FashionFilter
+              audience={audience}
+              size={size}
+              color={color}
+              sizes={fashionFacets.sizes}
+              colors={fashionFacets.colors}
+              onChange={updateFilters}
+            />
+          )}
+          <DeviceFilter facets={deviceFacets} selectedBrand={deviceBrand} selectedModel={deviceModel} onChange={updateFilters} />
           <CategoryFilter categories={categories} selectedCategoryId={categoryId} onSelect={(id) => updateFilters({ category_id: id })} />
           <BrandFilter brands={brands} selectedBrand={brand} onSelect={(b) => updateFilters({ brand: b })} />
           <StockFilter inStock={inStock} onChange={(checked) => updateFilters({ in_stock: checked })} />

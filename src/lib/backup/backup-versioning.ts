@@ -290,7 +290,7 @@ class BackupVersioning {
     await this.loadDeduplicationIndex()
     await this.buildVersionTrees()
     this.startMaintenanceTasks()
-    
+
     this.isInitialized = true
   }
 
@@ -378,7 +378,7 @@ class BackupVersioning {
   private buildVersionTree(configurationId: string, versions: BackupVersion[]): VersionTree {
     const rootVersion = versions.find(v => !v.parentVersionId) || versions[0]
     const branches = this.organizeBranches(versions)
-    
+
     const totalSize = versions.reduce((sum, v) => sum + v.size, 0)
     const deduplicatedSize = versions.reduce((sum, v) => sum + v.deduplicatedSize, 0)
     const compressedSize = versions.reduce((sum, v) => sum + v.compressedSize, 0)
@@ -423,13 +423,13 @@ class BackupVersioning {
   }
 
   // Verificar si una versión está en la rama principal
-  private isInMainBranch(version: BackupVersion, allVersions: BackupVersion[]): boolean {
+  private isInMainBranch(_version: BackupVersion, _allVersions: BackupVersion[]): boolean {
     // Implementar lógica para determinar rama principal
     return true
   }
 
   // Verificar cumplimiento de retención
-  private checkRetentionCompliance(configurationId: string, versions: BackupVersion[]): 'compliant' | 'warning' | 'violation' {
+  private checkRetentionCompliance(configurationId: string, _versions: BackupVersion[]): 'compliant' | 'warning' | 'violation' {
     const policy = this.versioningPolicies.get(configurationId)
     if (!policy || !policy.retention.enabled) return 'compliant'
 
@@ -521,7 +521,7 @@ class BackupVersioning {
     try {
       // Fase 1: Análisis de datos
       const analysis = await this.analyzeSourceData(sourceData, version.parentVersionId)
-      
+
       // Actualizar metadata
       version.metadata.totalFiles = analysis.totalFiles
       version.metadata.changedFiles = analysis.changedFiles
@@ -574,7 +574,7 @@ class BackupVersioning {
   }
 
   // Analizar datos fuente
-  private async analyzeSourceData(sourceData: Record<string, unknown>, parentVersionId?: string): Promise<{
+  private async analyzeSourceData(_sourceData: Record<string, unknown>, _parentVersionId?: string): Promise<{
     totalFiles: number
     totalSize: number
     changedFiles: number
@@ -596,7 +596,7 @@ class BackupVersioning {
   // Crear chunks
   private async createChunks(sourceData: Record<string, unknown>, dedupSettings: DeduplicationSettings): Promise<BackupChunk[]> {
     const chunks: BackupChunk[] = []
-    
+
     // Implementar chunking basado en configuración
     switch (dedupSettings.algorithm) {
       case 'fixed_block':
@@ -615,49 +615,49 @@ class BackupVersioning {
   // Crear chunks de bloque fijo
   private async createFixedBlockChunks(sourceData: Record<string, unknown>, settings: DeduplicationSettings): Promise<BackupChunk[]> {
     const chunks: BackupChunk[] = []
-    const blockSize = settings.blockSize * 1024 // Convertir KB a bytes
-    
+    void (settings.blockSize * 1024); // Convertir KB a bytes
+
     // Implementar chunking de bloque fijo
     return chunks
   }
 
   // Crear chunks de bloque variable
-  private async createVariableBlockChunks(sourceData: Record<string, unknown>, settings: DeduplicationSettings): Promise<BackupChunk[]> {
+  private async createVariableBlockChunks(_sourceData: Record<string, unknown>, _settings: DeduplicationSettings): Promise<BackupChunk[]> {
     const chunks: BackupChunk[] = []
-    
+
     // Implementar chunking de bloque variable
     return chunks
   }
 
   // Crear chunks definidos por contenido
-  private async createContentDefinedChunks(sourceData: Record<string, unknown>, settings: DeduplicationSettings): Promise<BackupChunk[]> {
+  private async createContentDefinedChunks(_sourceData: Record<string, unknown>, _settings: DeduplicationSettings): Promise<BackupChunk[]> {
     const chunks: BackupChunk[] = []
-    
+
     // Implementar chunking definido por contenido
     return chunks
   }
 
   // Crear chunks híbridos
-  private async createHybridChunks(sourceData: Record<string, unknown>, settings: DeduplicationSettings): Promise<BackupChunk[]> {
+  private async createHybridChunks(_sourceData: Record<string, unknown>, _settings: DeduplicationSettings): Promise<BackupChunk[]> {
     const chunks: BackupChunk[] = []
-    
+
     // Implementar chunking híbrido
     return chunks
   }
 
   // Realizar deduplicación
-  private async performDeduplication(version: BackupVersion, settings: DeduplicationSettings): Promise<void> {
+  private async performDeduplication(version: BackupVersion, _settings: DeduplicationSettings): Promise<void> {
     let deduplicatedSize = 0
 
     for (const chunk of version.chunks) {
       const existingChunk = this.deduplicationIndex.get(chunk.checksum)
-      
+
       if (existingChunk) {
         // Chunk ya existe, incrementar referencias
         existingChunk.referenceCount++
         existingChunk.lastSeenAt = new Date()
         chunk.references = existingChunk.referenceCount
-        
+
         await this.updateDeduplicationIndex(existingChunk)
       } else {
         // Nuevo chunk, agregar al índice
@@ -675,7 +675,7 @@ class BackupVersioning {
 
         this.deduplicationIndex.set(chunk.checksum, indexEntry)
         await this.saveDeduplicationIndex(indexEntry)
-        
+
         deduplicatedSize += chunk.size
       }
     }
@@ -721,7 +721,7 @@ class BackupVersioning {
   }
 
   // Verificar versión
-  private async verifyVersion(version: BackupVersion): Promise<boolean> {
+  private async verifyVersion(_version: BackupVersion): Promise<boolean> {
     // Implementar verificación
     return true
   }
@@ -729,12 +729,12 @@ class BackupVersioning {
   // Calcular checksum de versión
   private async calculateVersionChecksum(version: BackupVersion): Promise<string> {
     const hash = crypto.createHash('sha256')
-    
+
     // Incluir checksums de todos los chunks
     for (const chunk of version.chunks) {
       hash.update(chunk.checksum)
     }
-    
+
     return hash.digest('hex')
   }
 
@@ -742,11 +742,11 @@ class BackupVersioning {
   private async generateVersionNumber(configurationId: string, type: string): Promise<string> {
     const tree = this.versionTrees.get(configurationId)
     const versionCount = tree ? tree.totalVersions : 0
-    
+
     const major = Math.floor(versionCount / 100) + 1
     const minor = Math.floor((versionCount % 100) / 10)
     const patch = versionCount % 10
-    
+
     return `${major}.${minor}.${patch}-${type}`
   }
 
@@ -778,9 +778,9 @@ class BackupVersioning {
   }
 
   // Calcular diferencias entre versiones
-  private async calculateDifferences(baseVersion: BackupVersion, compareVersion: BackupVersion): Promise<VersionDifference[]> {
+  private async calculateDifferences(_baseVersion: BackupVersion, _compareVersion: BackupVersion): Promise<VersionDifference[]> {
     const differences: VersionDifference[] = []
-    
+
     // Implementar cálculo de diferencias
     return differences
   }
@@ -955,7 +955,7 @@ class BackupVersioning {
   }
 
   // Obtener cumplimiento de retención
-  private async getRetentionCompliance(configurationId: string): Promise<{
+  private async getRetentionCompliance(_configurationId: string): Promise<{
     compliant: number
     warning: number
     violation: number
@@ -1002,7 +1002,7 @@ class BackupVersioning {
   }
 
   // Calcular versiones a eliminar
-  private calculateVersionsToDelete(versions: BackupVersion[], retention: RetentionSettings): BackupVersion[] {
+  private calculateVersionsToDelete(_versions: BackupVersion[], _retention: RetentionSettings): BackupVersion[] {
     // Implementar lógica de retención
     return []
   }

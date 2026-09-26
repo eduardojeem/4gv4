@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { slugifyTenantName } from '@/lib/saas/tenant'
 import { validatePassword } from '@/lib/auth/password-validation'
-
-const planTiers = ['free', 'basic', 'pro', 'enterprise'] as const
+import { captchaTokenSchema } from '@/lib/auth/captcha'
+import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
 
 export const registerCompanySchema = z.object({
   fullName: z.string().trim().min(2, 'El nombre completo es requerido').max(120),
@@ -12,11 +12,28 @@ export const registerCompanySchema = z.object({
   }),
   companyName: z.string().trim().min(2, 'El nombre de la empresa es requerido').max(120),
   companySlug: z.string().trim().max(64).optional(),
-  plan: z.enum(planTiers).optional().default('free'),
+  // El plan es obligatorio y se valida contra la base, no contra una lista fija.
+  //
+  // Antes era `z.enum(['free','basic','pro','enterprise']).default('free')`, con
+  // dos consecuencias: un plan creado desde el panel con otro tier no se podia
+  // elegir —el registro caia al default sin avisar— y quien llegaba sin plan
+  // quedaba inscripto en el tier `free`, que en esta plataforma es un plan PAGO.
+  // Aca solo se comprueba el formato; que exista y este activo lo decide la fila.
+  plan: z.string()
+    .trim()
+    .toLowerCase()
+    .min(1, 'Elegí un plan para continuar')
+    .max(48)
+    .regex(/^[a-z0-9][a-z0-9-]*$/, 'Plan invalido'),
+  captchaToken: captchaTokenSchema,
+  // Opcional para no romper integraciones que ya llaman a la API. Con el rubro
+  // desde el alta, la tienda arranca con sus categorías y sus textos, en vez de
+  // quedar como «general» hasta terminar la configuración.
+  businessVertical: z.enum(BUSINESS_VERTICALS).optional(),
 }).transform((value) => ({
   ...value,
   companySlug: slugifyTenantName(value.companySlug || value.companyName),
-  selectedPlan: value.plan.toUpperCase() as 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE',
+  selectedPlan: value.plan.toUpperCase(),
 }))
 
 export type RegisterCompanyInput = z.infer<typeof registerCompanySchema>

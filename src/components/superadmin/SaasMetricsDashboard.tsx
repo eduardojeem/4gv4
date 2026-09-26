@@ -9,7 +9,6 @@ import {
   Building2,
   CheckCircle2,
   ExternalLink,
-  Gauge,
   Package,
   RefreshCw,
   Search,
@@ -18,6 +17,7 @@ import {
   Users,
   Boxes,
   Minus,
+  ChevronDown,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,12 @@ import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import type { SaasMetricsData, OrgUsageRow, ResourceKey } from '@/lib/superadmin/saas-metrics'
 import { calculateUsagePercent } from '@/lib/superadmin/metrics-calculations'
 import { useUrlListState } from '@/hooks/useUrlListState'
+import {
+  filterAndSortOrganizations,
+  summarizeSaasHealth,
+  type SaasHealthFilter,
+  type SaasMetricsSort,
+} from './saas-metrics-presentation'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -359,10 +365,10 @@ function MobileOrgRow({ org }: { org: OrgUsageRow }) {
 // Main dashboard
 // ---------------------------------------------------------------------------
 
-type SortKey = 'name' | 'plan' | 'status' | 'overall'
-type FilterKey = 'all' | 'nearLimit' | 'atRisk' | 'trialing' | 'expired' | 'overLimit' | 'blocked' | 'noSub'
-const SORT_KEYS: SortKey[] = ['name', 'plan', 'status', 'overall']
-const FILTER_KEYS: FilterKey[] = ['all', 'nearLimit', 'atRisk', 'trialing', 'expired', 'overLimit', 'blocked', 'noSub']
+type SortKey = SaasMetricsSort
+type FilterKey = SaasHealthFilter
+const SORT_KEYS: SortKey[] = ['risk', 'name', 'plan', 'status', 'overall']
+const FILTER_KEYS: FilterKey[] = ['all', 'healthy', 'attention', 'intervention', 'trialing', 'expired', 'noSub']
 
 export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
   const router = useRouter()
@@ -370,13 +376,13 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
   const { state, setValue } = useUrlListState({
     q: '',
     filter: 'all',
-    sort: 'overall',
+    sort: 'risk',
     dir: 'desc',
     page: '1',
   })
   const search = state.q
   const filter = FILTER_KEYS.includes(state.filter as FilterKey) ? state.filter as FilterKey : 'all'
-  const sortKey = SORT_KEYS.includes(state.sort as SortKey) ? state.sort as SortKey : 'overall'
+  const sortKey = SORT_KEYS.includes(state.sort as SortKey) ? state.sort as SortKey : 'risk'
   const sortDir = state.dir === 'asc' ? 'asc' : 'desc'
   const page = Math.max(1, Number.parseInt(state.page, 10) || 1)
 
@@ -386,50 +392,24 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
     setValue('page', '1')
   }
 
-  const filtered = useMemo(() => {
-    let rows = data.orgs
-
-    // Text search
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      rows = rows.filter((o) => o.name.toLowerCase().includes(q) || o.slug.toLowerCase().includes(q))
-    }
-
-    // Filter
-    if (filter === 'atRisk') rows = rows.filter((o) => o.atRisk && !o.overLimit)
-    if (filter === 'nearLimit') rows = rows.filter((o) => o.nearLimit)
-    if (filter === 'overLimit') rows = rows.filter((o) => o.overLimit)
-    if (filter === 'blocked') rows = rows.filter((o) => o.subscriptionBlocked)
-    if (filter === 'trialing') rows = rows.filter((o) => o.subscriptionStatus === 'trialing')
-    if (filter === 'expired') rows = rows.filter((o) => o.subscriptionExpired)
-    if (filter === 'noSub') rows = rows.filter((o) => !o.subscriptionStatus)
-
-    // Sort
-    rows = [...rows].sort((a, b) => {
-      let cmp = 0
-      if (sortKey === 'name') cmp = a.name.localeCompare(b.name)
-      else if (sortKey === 'plan') cmp = a.plan.localeCompare(b.plan)
-      else if (sortKey === 'status') {
-        const leftStatus = a.subscriptionExpired ? 'expired' : a.subscriptionStatus ?? ''
-        const rightStatus = b.subscriptionExpired ? 'expired' : b.subscriptionStatus ?? ''
-        cmp = leftStatus.localeCompare(rightStatus)
-      }
-      else if (sortKey === 'overall') cmp = a.overallPercent - b.overallPercent
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-
-    return rows
-  }, [data.orgs, search, filter, sortDir, sortKey])
+  const filtered = useMemo(() => filterAndSortOrganizations(data.orgs, {
+    search,
+    filter,
+    sort: sortKey,
+    direction: sortDir,
+  }), [data.orgs, search, filter, sortDir, sortKey])
 
   const thClass = 'px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400'
   const thBtn = 'flex cursor-pointer select-none items-center hover:text-slate-700 dark:hover:text-slate-200'
 
-  const filterBtns: Array<{ key: FilterKey; label: string; count: number }> = [
+  const health = summarizeSaasHealth(data.orgs)
+  const primaryFilters: Array<{ key: FilterKey; label: string; count: number }> = [
     { key: 'all', label: 'Todos', count: data.orgs.length },
-    { key: 'nearLimit', label: 'Cerca del límite', count: data.summary.nearLimit },
-    { key: 'atRisk', label: 'En riesgo', count: data.summary.atRisk },
-    { key: 'overLimit', label: 'Sobre límite', count: data.summary.overLimit },
-    { key: 'blocked', label: 'Acceso bloqueado', count: data.summary.blocked },
+    { key: 'intervention', label: 'Intervención', count: health.intervention },
+    { key: 'attention', label: 'Atención', count: health.attention },
+    { key: 'healthy', label: 'Saludables', count: health.healthy },
+  ]
+  const secondaryFilters: Array<{ key: FilterKey; label: string; count: number }> = [
     { key: 'trialing', label: 'En prueba', count: data.orgs.filter((o) => o.subscriptionStatus === 'trialing').length },
     { key: 'expired', label: 'Vencidas', count: data.orgs.filter((o) => o.subscriptionExpired).length },
     { key: 'noSub', label: 'Sin suscripción', count: data.orgs.filter((o) => !o.subscriptionStatus).length },
@@ -445,12 +425,10 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Organizaciones" value={data.summary.total} sub="en la plataforma" icon={Building2} tone="default" />
-        <MetricCard label="Cerca del límite" value={data.summary.nearLimit} sub="entre 60% y 79%" icon={Gauge} tone={data.summary.nearLimit > 0 ? 'warning' : 'default'} />
-        <MetricCard label="En riesgo" value={data.summary.atRisk} sub="≥80% de algún límite" icon={AlertTriangle} tone={data.summary.atRisk > 0 ? 'warning' : 'default'} />
-        <MetricCard label="Sobre el límite" value={data.summary.overLimit} sub="superaron la cuota" icon={ShieldAlert} tone={data.summary.overLimit > 0 ? 'danger' : 'default'} />
-        <MetricCard label="Acceso bloqueado" value={data.summary.blocked} sub="requieren intervención" icon={Ban} tone={data.summary.blocked > 0 ? 'danger' : 'success'} />
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard label="Intervención" value={health.intervention} sub="bloqueadas o sobre el límite" icon={Ban} tone={health.intervention > 0 ? 'danger' : 'success'} />
+        <MetricCard label="Atención" value={health.attention} sub="vencidas, sin plan o cerca del límite" icon={AlertTriangle} tone={health.attention > 0 ? 'warning' : 'default'} />
+        <MetricCard label="Saludables" value={health.healthy} sub={`de ${data.summary.total} organizaciones`} icon={CheckCircle2} tone="success" />
       </div>
 
       {/* Plan distribution + most constrained */}
@@ -531,7 +509,7 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
 
           {/* Filter pills */}
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {filterBtns.map((f) => (
+            {primaryFilters.map((f) => (
               <button
                 key={f.key}
                 type="button"
@@ -556,6 +534,28 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
                 </span>
               </button>
             ))}
+            <details className="group relative">
+              <summary className="flex h-7 cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                Más filtros <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="absolute right-0 z-20 mt-2 min-w-48 space-y-1 rounded-lg border bg-background p-1.5 shadow-lg">
+                {secondaryFilters.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={cn('flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs hover:bg-muted', filter === item.key && 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30')}
+                    onClick={() => { setValue('filter', item.key); setValue('page', '1') }}
+                  >
+                    {item.label}<span className="font-bold tabular-nums">{item.count}</span>
+                  </button>
+                ))}
+              </div>
+            </details>
+            <div className="flex flex-wrap items-center gap-3 px-2 text-[11px] text-slate-500">
+              <span><span className="mr-1 inline-block h-2 w-3 rounded-full bg-amber-500" />60–79% atención</span>
+              <span><span className="mr-1 inline-block h-2 w-3 rounded-full bg-red-500" />≥80% riesgo</span>
+              <span><span className="mr-1 inline-block h-2 w-3 rounded-full bg-rose-600" />&gt;100% excedido</span>
+            </div>
           </div>
         </CardHeader>
 
@@ -632,15 +632,6 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
         )}
       </Card>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-dashed px-4 py-3 text-xs text-slate-500">
-        <span className="font-semibold">Leyenda:</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-emerald-500" /> &lt;60% OK</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-amber-500" /> 60-80% Atención</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-red-500" /> 80-100% En riesgo</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-rose-600" /> &gt;100% Sobre límite</span>
-        <span className="flex items-center gap-1.5"><span>∞</span> Límite ilimitado</span>
-      </div>
     </div>
   )
 }

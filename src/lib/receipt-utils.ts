@@ -1,4 +1,4 @@
-interface CartItem {
+export interface CartItem {
   id: string
   name: string
   sku: string
@@ -8,15 +8,21 @@ interface CartItem {
   isService?: boolean
 }
 
-interface PaymentSplit {
+export interface PaymentSplit {
   id: string
-  method: 'cash' | 'card' | 'transfer' | 'credit'
+  method: 'cash' | 'card' | 'transfer' | 'credit' | 'store_credit'
   amount: number
   reference?: string
   cardLast4?: string
 }
 
-interface ReceiptData {
+export interface ReceiptData {
+  /**
+   * Marca el ticket como reimpresion de una venta ya emitida. Se imprime
+   * visible para que una copia no se confunda con el original en una revision
+   * contable: el numero y la fecha son los de la venta original, no los de hoy.
+   */
+  isReprint?: boolean
   receiptNumber: string
   date: string
   time: string
@@ -45,6 +51,63 @@ interface ReceiptData {
     installmentAmount: number
     frequency: string
     interestRate: number
+    firstDueDate: string
+    firstInstallmentTiming?: 'at_start' | 'next_cycle'
+    startDate?: string
+    lastInstallmentAmount?: number
+    firstPayment?: { amount: number; method: 'cash' | 'transfer'; bank?: string; reference?: string; cashReceived?: number; change?: number; paymentId: string }
+    remainingBalance?: number
+    installments?: Array<{ number: number; dueDate: string; amount: number }>
+  }
+}
+
+export type ReceiptDocumentKind = 'internal' | 'fiscal'
+
+export interface ReceiptPaymentSummary {
+  cashPaid: number
+  nonCashPaid: number
+  change: number | null
+  financedPrincipal: number
+  financedTotal: number
+  installments: NonNullable<ReceiptData['creditInfo']>['installments']
+  firstDueDate: string | null
+  collectedToday: number
+  financedBalance: number
+  paymentState: 'PAGADO' | 'COBRO PARCIAL + CRÉDITO' | 'CRÉDITO REGISTRADO'
+}
+
+export function buildReceiptPaymentSummary(receiptData: ReceiptData): ReceiptPaymentSummary {
+  const creditInfo = receiptData.creditInfo
+  const immediatePayments = receiptData.payments.filter(payment => payment.method !== 'credit')
+  const firstPayment = creditInfo?.firstPayment
+  const cashPaid = immediatePayments
+    .filter(payment => payment.method === 'cash')
+    .reduce((total, payment) => total + payment.amount, 0)
+    + (firstPayment?.method === 'cash' ? firstPayment.amount : 0)
+  const nonCashPaid = immediatePayments
+    .filter(payment => payment.method !== 'cash')
+    .reduce((total, payment) => total + payment.amount, 0)
+    + (firstPayment && firstPayment.method !== 'cash' ? firstPayment.amount : 0)
+  const collectedToday = cashPaid + nonCashPaid
+  const financedBalance = creditInfo
+    ? creditInfo.remainingBalance ?? Math.max(0, creditInfo.financedTotal - (firstPayment?.amount || 0))
+    : 0
+
+  return {
+    cashPaid,
+    nonCashPaid,
+    change: !creditInfo && (receiptData.change ?? 0) > 0 ? receiptData.change! : null,
+    financedPrincipal: creditInfo?.baseTotal ?? 0,
+    financedTotal: creditInfo?.financedTotal ?? 0,
+    installments: creditInfo?.installments,
+    firstDueDate: creditInfo?.firstDueDate ?? null,
+    collectedToday,
+    financedBalance,
+    paymentState: !creditInfo
+      ? 'PAGADO'
+      : collectedToday > 0
+        ? 'COBRO PARCIAL + CRÉDITO'
+        : 'CRÉDITO REGISTRADO',
   }
 }
 
@@ -55,7 +118,7 @@ export const generateReceiptNumber = (): string => {
   const month = (now.getMonth() + 1).toString().padStart(2, '0')
   const day = now.getDate().toString().padStart(2, '0')
   const time = now.getTime().toString().slice(-6)
-  
+
   return `${year}${month}${day}-${time}`
 }
 
@@ -72,7 +135,7 @@ export const formatDateTime = () => {
     minute: '2-digit',
     second: '2-digit'
   })
-  
+
   return { date, time }
 }
 
@@ -104,7 +167,7 @@ export const createReceiptData = (
   shift?: string
 ): ReceiptData => {
   const { date, time } = formatDateTime()
-  
+
   return {
     receiptNumber: generateReceiptNumber(),
     date,
@@ -130,12 +193,34 @@ export const createReceiptData = (
   }
 }
 
+/** Absolutiza rutas relativas para que carguen en la ventana de impresion. */
+const toAbsoluteAssetUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined
+  const trimmed = url.trim()
+  if (!trimmed) return undefined
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed
+  if (typeof window === 'undefined') return trimmed
+  try {
+    return new URL(trimmed, window.location.origin).toString()
+  } catch {
+    return trimmed
+  }
+}
+
 export interface CompanyInfo {
   name: string
   address: string
   phone: string
   email: string
   ruc?: string
+  /**
+   * Logo de la organizacion. Sin esto el ticket cae al monograma de dos letras:
+   * el tipo no lo declaraba y la plantilla nunca lo dibujaba, asi que el logo
+   * no se imprimia nunca aunque estuviera configurado.
+   */
+  logoUrl?: string
+  /** Los termicos rinden mejor el logo en blanco y negro que en color. */
+  monochromeLogo?: boolean
 }
 
 const sanitizeUnsupportedColorFunctions = (raw: string): string => {
@@ -157,10 +242,47 @@ const sanitizeCloneStylesForHtml2Canvas = (clonedDoc: Document): void => {
 }
 
 // Imprimir ticket - Captura el contenido del modal directamente
+/**
+ * Imprime cuando la ventana termino de cargar, no a ciegas.
+ *
+ * Antes se disparaba `print()` con un setTimeout fijo: si el logo tardaba mas
+ * que ese plazo, el ticket salia sin logo. Ahora se espera al evento `load` —que
+ * ya incluye las imagenes— con el timeout como red de seguridad por si la
+ * imagen nunca resuelve.
+ */
+const printWhenReady = (printWindow: Window, fallbackDelay = 1500): void => {
+  let printed = false
+
+  const runPrint = () => {
+    if (printed) return
+    printed = true
+    try {
+      printWindow.focus()
+      printWindow.print()
+    } catch (error) {
+      console.error('Error printing:', error)
+      printWindow.close()
+    }
+  }
+
+  try {
+    if (printWindow.document.readyState === 'complete') {
+      // Ya cargo: un respiro minimo para que el layout se estabilice.
+      setTimeout(runPrint, 150)
+    } else {
+      printWindow.addEventListener('load', () => setTimeout(runPrint, 150))
+    }
+  } catch {
+    // Si no se puede escuchar el evento, queda el plazo de seguridad.
+  }
+
+  setTimeout(runPrint, fallbackDelay)
+}
+
 export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   // Intentar capturar el contenido del modal primero
   const receiptElement = document.getElementById('receipt-content')
-  
+
   if (receiptElement) {
     // Si existe el elemento del modal, clonar su contenido
     const printWindow = window.open('', '_blank')
@@ -176,7 +298,7 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
           return Array.from(styleSheet.cssRules)
             .map(rule => rule.cssText)
             .join('\n')
-        } catch (e) {
+        } catch (_e) {
           return ''
         }
       })
@@ -203,11 +325,11 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
               display: none !important;
             }
           }
-          
+
           * {
             box-sizing: border-box;
           }
-          
+
           body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 80mm;
@@ -216,9 +338,9 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
             background: white;
             color: black;
           }
-          
+
           ${styles}
-          
+
           /* Asegurar que los colores se impriman */
           * {
             -webkit-print-color-adjust: exact !important;
@@ -236,15 +358,7 @@ export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo
     printWindow.document.write(printContent)
     printWindow.document.close()
 
-    setTimeout(() => {
-      try {
-        printWindow.focus()
-        printWindow.print()
-      } catch (error) {
-        console.error('Error printing:', error)
-        printWindow.close()
-      }
-    }, 500)
+    printWhenReady(printWindow)
   } else {
     // Fallback: usar el HTML generado si no existe el modal
     printReceiptFallback(receiptData, companyInfo)
@@ -260,35 +374,52 @@ const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInf
   }
 
   const printContent = generatePrintHTML(receiptData, companyInfo)
-  
+
   printWindow.document.write(printContent)
   printWindow.document.close()
-  
-  setTimeout(() => {
-    try {
-      printWindow.focus()
-      printWindow.print()
-    } catch (error) {
-      console.error('Error printing:', error)
-      printWindow.close()
-    }
-  }, 250)
+
+  printWhenReady(printWindow)
 }
 
 // Generar HTML para impresión con diseño mejorado
-const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): string => {
-  
+export const generatePrintHTML = (
+  receiptData: ReceiptData,
+  companyInfo?: CompanyInfo,
+  documentKind: ReceiptDocumentKind = 'internal',
+): string => {
+
   const company = companyInfo || config.company
+
+  // El config global lo llama `logo` y CompanyInfo `logoUrl`: se acepta
+  // cualquiera de los dos para que el ticket no dependa de cual llego.
+  const rawLogoUrl =
+    ('logoUrl' in company ? company.logoUrl : undefined)
+    ?? ('logo' in company ? company.logo : undefined)
+    ?? undefined
+  // La ventana de impresion es `about:blank`, asi que una ruta relativa como
+  // `/uploads/logo.png` no resuelve contra nada y la imagen sale rota.
+  const companyLogoUrl = toAbsoluteAssetUrl(rawLogoUrl)
+  const monochromeLogo = 'monochromeLogo' in company ? company.monochromeLogo : false
 
   const getPaymentMethodLabel = (method: string) => {
     const labels = {
       cash: '💵 Efectivo',
       card: '💳 Tarjeta',
       transfer: '🏦 Transferencia',
-      credit: '📝 Crédito'
+      credit: '📝 Crédito',
+      store_credit: '💰 Saldo a favor'
     }
     return labels[method as keyof typeof labels] || method
   }
+
+  const creditInfo = receiptData.creditInfo
+  const summary = buildReceiptPaymentSummary(receiptData)
+  const settledNow = receiptData.payments
+    .filter(payment => payment.method !== 'credit')
+    .reduce((total, payment) => total + payment.amount, 0)
+  const collectedToday = summary.collectedToday
+  const financedBalance = summary.financedBalance
+  const paymentState = summary.paymentState
 
   return `
     <!DOCTYPE html>
@@ -306,12 +437,18 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
             margin: 0;
             padding: 5mm;
           }
+          /* Sin esto el navegador descarta fondos e imagenes al imprimir: es
+             la razon por la que ni el logo ni el circulo del monograma salian. */
+          body, .logo, .logo-img, .ticket-number {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
-        
+
         * {
           box-sizing: border-box;
         }
-        
+
         body {
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           font-size: 11px;
@@ -321,7 +458,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           padding: 8px;
           color: #000;
         }
-        
+
         .header {
           text-align: center;
           border-bottom: 2px dashed #333;
@@ -330,7 +467,16 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
           padding-top: 12px;
         }
-        
+
+        .logo-img {
+          display: block;
+          margin: 0 auto 8px auto;
+          max-height: 52px;
+          max-width: 180px;
+          object-fit: contain;
+          image-rendering: -webkit-optimize-contrast;
+        }
+
         .logo {
           width: 50px;
           height: 50px;
@@ -344,7 +490,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           font-weight: bold;
           margin-bottom: 8px;
         }
-        
+
         .header h1 {
           font-size: 18px;
           font-weight: bold;
@@ -352,20 +498,20 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
-        
+
         .header .subtitle {
           font-size: 11px;
           font-weight: 600;
           color: #666;
           margin: 2px 0;
         }
-        
+
         .header p {
           margin: 2px 0;
           font-size: 9px;
           color: #666;
         }
-        
+
         .ticket-number {
           background: #f0f0f0;
           border-left: 4px solid #000;
@@ -375,42 +521,42 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           justify-content: space-between;
           align-items: center;
         }
-        
+
         .ticket-number .label {
           font-size: 10px;
           color: #666;
         }
-        
+
         .ticket-number .number {
           font-size: 14px;
           font-weight: bold;
           font-family: 'Courier New', monospace;
         }
-        
+
         .info-section {
           margin: 10px 0;
         }
-        
+
         .info-row {
           display: flex;
           justify-content: space-between;
           margin: 3px 0;
           font-size: 10px;
         }
-        
+
         .info-row .label {
           color: #666;
         }
-        
+
         .info-row .value {
           font-weight: 600;
         }
-        
+
         .separator {
           border-top: 1px dashed #999;
           margin: 12px 0;
         }
-        
+
         .section-title {
           text-align: center;
           font-weight: bold;
@@ -420,17 +566,35 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           margin: 10px 0 8px 0;
           border-radius: 3px;
         }
-        
+
+        .products.compact .section-title {
+          font-size: 9px;
+          padding: 4px;
+          margin: 7px 0 5px;
+        }
+
+        .products.compact .item {
+          font-size: 9px;
+          margin-bottom: 6px;
+          padding-bottom: 5px;
+        }
+
+        .products.compact .item-header {
+          gap: 6px;
+          margin-bottom: 1px;
+          line-height: 1.2;
+        }
+
         .item {
           margin-bottom: 10px;
           padding-bottom: 8px;
           border-bottom: 1px dotted #ddd;
         }
-        
+
         .item:last-child {
           border-bottom: none;
         }
-        
+
         .item-header {
           display: flex;
           justify-content: space-between;
@@ -438,18 +602,18 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           font-weight: 600;
           margin-bottom: 3px;
         }
-        
+
         .item-name {
           flex: 1;
           line-height: 1.3;
         }
-        
+
         .item-price {
           font-weight: bold;
           white-space: nowrap;
           margin-left: 8px;
         }
-        
+
         .tag-service {
           display: inline-block;
           font-size: 8px;
@@ -461,7 +625,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           border-radius: 10px;
           margin-left: 6px;
         }
-        
+
         .item-details {
           display: flex;
           justify-content: space-between;
@@ -469,7 +633,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           color: #666;
           margin-top: 2px;
         }
-        
+
         .item-discount {
           display: flex;
           justify-content: space-between;
@@ -478,36 +642,52 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           font-weight: 600;
           margin-top: 2px;
         }
-        
+
         .totals {
           margin: 12px 0;
         }
-        
+
         .total-row {
           display: flex;
           justify-content: space-between;
           margin: 4px 0;
           font-size: 11px;
         }
-        
+
         .total-row.discount {
           color: #28a745;
           font-weight: 600;
         }
-        
+
         .total-row.final {
           background: #f0f0f0;
-          padding: 10px;
-          margin-top: 8px;
+          padding: 7px 8px;
+          margin-top: 6px;
           border-radius: 4px;
-          font-size: 14px;
+          font-size: 12px;
           font-weight: bold;
         }
-        
+
+        .total-row.final.financed {
+          align-items: center;
+          gap: 8px;
+          line-height: 1.15;
+        }
+
+        .total-row.final.financed span:first-child {
+          min-width: 0;
+          font-size: 10px;
+        }
+
+        .total-row.final.financed span:last-child {
+          flex: 0 0 auto;
+          white-space: nowrap;
+        }
+
         .payment-section {
           margin: 12px 0;
         }
-        
+
         .payment-item {
           background: #f8f8f8;
           padding: 8px 10px;
@@ -517,13 +697,13 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           justify-content: space-between;
           align-items: center;
         }
-        
+
         .payment-item.change {
           background: #e8f5e9;
           color: #2e7d32;
           font-weight: bold;
         }
-        
+
         .payment-status {
           text-align: center;
           background: #e8f5e9;
@@ -534,7 +714,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           font-weight: bold;
           font-size: 12px;
         }
-        
+
         .loyalty-box {
           background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
           border: 1px solid #ffc107;
@@ -543,13 +723,13 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           margin: 12px 0;
           border-radius: 4px;
         }
-        
+
         .loyalty-box .text {
           font-weight: bold;
           color: #856404;
           font-size: 11px;
         }
-        
+
         .warranty-box {
           background: #e3f2fd;
           border: 1px solid #2196f3;
@@ -558,19 +738,19 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           margin: 12px 0;
           border-radius: 4px;
         }
-        
+
         .warranty-box .title {
           font-weight: bold;
           color: #1565c0;
           font-size: 11px;
           margin-bottom: 3px;
         }
-        
+
         .warranty-box .subtitle {
           font-size: 9px;
           color: #1976d2;
         }
-        
+
         .footer {
           text-align: center;
           font-size: 9px;
@@ -579,18 +759,18 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           padding-top: 12px;
           color: #666;
         }
-        
+
         .footer .thanks {
           font-weight: bold;
           font-size: 11px;
           color: #000;
           margin-bottom: 5px;
         }
-        
+
         .footer .contact {
           margin: 3px 0;
         }
-        
+
         .footer .id {
           font-family: 'Courier New', monospace;
           font-size: 8px;
@@ -602,7 +782,9 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
     <body>
       <!-- Encabezado -->
       <div class="header">
-        <div class="logo">${company.name ? company.name.substring(0, 2).toUpperCase() : 'Mi'}</div>
+        ${companyLogoUrl
+          ? `<img src="${companyLogoUrl}" class="logo-img" alt="${company.name}"${monochromeLogo ? ' style="filter: grayscale(100%) contrast(240%);"' : ''} />`
+          : `<div class="logo">${company.name ? company.name.substring(0, 2).toUpperCase() : 'Mi'}</div>`}
         <h1>${company.name}</h1>
         <div class="subtitle">Reparación y Service</div>
         ${'ruc' in company && company.ruc ? `<p style="font-weight: bold; font-size: 10px;">RUC: ${company.ruc}</p>` : ''}
@@ -610,13 +792,19 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
         <p>☎ ${company.phone}</p>
         ${company.email ? `<p>📧 ${company.email}</p>` : ''}
       </div>
-      
+
+      ${receiptData.isReprint ? `
+      <div style="margin: 6px 0; padding: 4px; border: 2px dashed #000; text-align: center; font-weight: bold; letter-spacing: 2px; font-size: 12px;">
+        REIMPRESIÓN
+      </div>
+      ` : ''}
+
       <!-- Número de ticket -->
       <div class="ticket-number">
         <span class="label">Ticket N°</span>
         <span class="number">${receiptData.receiptNumber}</span>
       </div>
-      
+
       <!-- Información de la venta -->
       <div class="info-section">
         <div class="info-row">
@@ -655,12 +843,13 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           </div>
         ` : ''}
       </div>
-      
+
       <div class="separator"></div>
-      
+
       <!-- Productos -->
+      <div class="products compact">
       <div class="section-title">DETALLE DE PRODUCTOS</div>
-      
+
       ${receiptData.items.map(item => `
         <div class="item">
           <div class="item-header">
@@ -670,8 +859,8 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
             </span>
             <span class="item-price">${formatCurrency(item.price * item.quantity)}</span>
           </div>
-          <div class="item-details">
-            <span>SKU: ${item.sku}</span>
+           <div class="item-details">
+             ${item.sku ? `<span>SKU: ${item.sku}</span>` : '<span></span>'}
             <span>${item.quantity} × ${formatCurrency(item.price)}</span>
           </div>
           ${item.discount && item.discount > 0 ? `
@@ -682,27 +871,15 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
           ` : ''}
         </div>
       `).join('')}
-      
+      </div>
+
       <div class="separator"></div>
-      
+
       <!-- Totales -->
       <div class="totals">
         ${(() => {
-          const taxConfig = getTaxConfig()
-          const taxRate = taxConfig.rate
-          const pricesIncludeTax = config.pricesIncludeTax
-          
-          // Calculate tax breakdown
-          // If prices include tax: base = total / (1 + rate), tax = total - base
-          // If prices exclude tax: base = subtotal, tax = subtotal * rate
           const totalAmount = receiptData.total
-          const baseImponible = pricesIncludeTax
-            ? Math.round(totalAmount / (1 + taxRate))
-            : receiptData.subtotal
-          const ivaAmount = pricesIncludeTax
-            ? totalAmount - baseImponible
-            : Math.round(receiptData.subtotal * taxRate)
-          
+
           return `
             <div class="total-row">
               <span>Subtotal (${receiptData.items.length} ${receiptData.items.length === 1 ? 'item' : 'items'}):</span>
@@ -714,25 +891,30 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
                 <span>-${formatCurrency(receiptData.totalDiscount)}</span>
               </div>
             ` : ''}
-            <div style="border-top: 1px dashed #ccc; margin: 8px 0; padding-top: 8px;">
-              <div class="total-row" style="font-size: 10px; color: #555;">
-                <span>${taxConfig.label} ${taxConfig.percentage}% incluido:</span>
-                <span>${formatCurrency(ivaAmount)}</span>
+            ${creditInfo ? `
+              <div style="border: 1px solid #bbb; border-radius: 4px; margin: 8px 0; padding: 8px;">
+                <div class="total-row"><span>Capital financiado:</span><span>${formatCurrency(creditInfo.baseTotal)}</span></div>
+                <div class="total-row"><span>Costo financiero:</span><span>+${formatCurrency(creditInfo.interestAmount)}</span></div>
+                <div class="total-row"><strong>Total financiado:</strong><strong>${formatCurrency(creditInfo.financedTotal)}</strong></div>
+                <div style="font-size: 9px; margin-top: 4px;">${creditInfo.installmentCount} cuotas desde ${formatCurrency(creditInfo.installmentAmount)} · Primera cuota: ${formatPosCreditDueDate(creditInfo.firstDueDate)}</div>
               </div>
-            </div>
-            <div class="total-row final">
-              <span>TOTAL:</span>
-              <span>${formatCurrency(totalAmount)}</span>
-            </div>
-            <div style="text-align: center; font-size: 8px; color: #888; margin-top: 4px;">
-              ${pricesIncludeTax ? 'Precios con IVA incluido' : 'IVA calculado sobre el subtotal'}
+            ` : ''}
+            ${documentKind === 'fiscal' && receiptData.tax > 0 ? `
+              <div class="total-row" style="font-size: 10px; color: #555;">
+                <span>IVA incluido:</span>
+                <span>${formatCurrency(receiptData.tax)}</span>
+              </div>
+            ` : ''}
+            <div class="total-row final${creditInfo ? ' financed' : ''}">
+               <span>${creditInfo ? 'TOTAL CON FINANCIACIÓN:' : 'TOTAL:'}</span>
+               <span>${formatCurrency(creditInfo ? settledNow + creditInfo.financedTotal : totalAmount)}</span>
             </div>
           `
         })()}
       </div>
-      
+
       <div class="separator"></div>
-      
+
       <!-- Métodos de pago -->
       <div class="section-title">FORMA DE PAGO</div>
       <div class="payment-section">
@@ -746,30 +928,28 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
             <span style="font-weight: bold;">${formatCurrency(payment.amount)}</span>
           </div>
         `).join('')}
-        ${receiptData.change && receiptData.change > 0 ? `
+        ${!creditInfo && receiptData.change && receiptData.change > 0 ? `
           <div class="payment-item change">
             <span>💰 Cambio:</span>
             <span>${formatCurrency(receiptData.change)}</span>
           </div>
         ` : ''}
-        <div class="payment-status">✅ PAGADO</div>
+        ${creditInfo ? `
+          <div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 6px;">
+            <div class="payment-item"><span>Cobrado hoy:</span><strong>${formatCurrency(collectedToday)}</strong></div>
+            <div class="payment-item"><span>Saldo financiado:</span><strong>${formatCurrency(financedBalance)}</strong></div>
+          </div>
+        ` : ''}
+        <div class="payment-status">✅ ${paymentState}</div>
       </div>
-      
+
       ${receiptData.loyaltyPoints && receiptData.loyaltyPoints > 0 ? `
         <div class="separator"></div>
         <div class="loyalty-box">
           <div class="text">🎉 ¡Ganaste ${receiptData.loyaltyPoints} puntos de lealtad! 🎉</div>
         </div>
       ` : ''}
-      
-      <div class="separator"></div>
-      
-      <!-- Garantía -->
-      <div class="warranty-box">
-        <div class="title">🛡️ GARANTÍA: 30 días</div>
-        <div class="subtitle">Válido para cambios y reparaciones</div>
-      </div>
-      
+
       <!-- Pie del ticket -->
       <div class="footer">
         <div class="thanks">¡Gracias por su compra!</div>
@@ -777,14 +957,17 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
         <div class="contact">📱 Consultas: ${company.phone}</div>
         <div class="contact">📧 ${company.email}</div>
         <div class="separator"></div>
-        <div style="font-size: 8px; color: #999; margin: 6px 0; padding: 6px; border: 1px solid #eee; border-radius: 3px;">
+        ${documentKind === 'internal' ? `<div style="font-size: 8px; color: #999; margin: 6px 0; padding: 6px; border: 1px solid #eee; border-radius: 3px;">
           <strong style="display: block; margin-bottom: 2px; color: #666;">DOCUMENTO NO FISCAL</strong>
           Este ticket es un comprobante interno de venta y NO tiene validez
           tributaria ante la DNIT. No sustituye factura legal.<br>
           Solicite su factura con timbrado vigente si la necesita.
-        </div>
+        </div>` : ''}
         <div class="id">ID: ${receiptData.receiptNumber}</div>
-        <div class="id">Generado: ${new Date().toLocaleString('es-PY')}</div>
+        ${receiptData.isReprint
+          ? `<div class="id"><strong>REIMPRESIÓN</strong> del ${receiptData.date} ${receiptData.time}</div>
+             <div class="id">Reimpreso: ${new Date().toLocaleString('es-PY')}</div>`
+          : `<div class="id">Generado: ${new Date().toLocaleString('es-PY')}</div>`}
       </div>
     </body>
     </html>
@@ -797,7 +980,7 @@ export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: Co
     // Importar dinámicamente para evitar problemas de SSR
     const html2canvas = (await import('html2canvas')).default
     const jsPDF = (await import('jspdf')).default
-    
+
     const element = document.getElementById('receipt-content')
     if (!element) {
       console.error('Receipt element not found')
@@ -840,26 +1023,26 @@ const downloadReceiptHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo
   const printContent = generatePrintHTML(receiptData, companyInfo)
   const blob = new Blob([printContent], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
-  
+
   const link = document.createElement('a')
   link.href = url
   link.download = `ticket-${receiptData.receiptNumber}.html`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  
+
   URL.revokeObjectURL(url)
 }
 
 // Compartir ticket como imagen
 export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: CompanyInfo): Promise<void> => {
   const companyName = companyInfo?.name || config.company.name
-  
+
   try {
     // Intentar compartir como imagen
     const html2canvas = (await import('html2canvas')).default
     const element = document.getElementById('receipt-content')
-    
+
     if (element && navigator.share) {
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -941,7 +1124,7 @@ const showShareModal = (text: string): void => {
     justify-content: center;
     z-index: 10000;
   `
-  
+
   const content = document.createElement('div')
   content.style.cssText = `
     background: white;
@@ -950,7 +1133,7 @@ const showShareModal = (text: string): void => {
     max-width: 400px;
     width: 90%;
   `
-  
+
   content.innerHTML = `
     <h3 style="margin-top: 0;">Compartir Ticket</h3>
     <textarea readonly style="width: 100%; height: 150px; margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">${text}</textarea>
@@ -958,10 +1141,10 @@ const showShareModal = (text: string): void => {
       <button onclick="this.closest('[style*=fixed]').remove()" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Cerrar</button>
     </div>
   `
-  
+
   modal.appendChild(content)
   document.body.appendChild(modal)
-  
+
   // Cerrar al hacer clic fuera
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
@@ -969,5 +1152,6 @@ const showShareModal = (text: string): void => {
     }
   })
 }
-import { getTaxConfig, config } from './config'
+import { config } from './config'
 import { formatCurrency } from '@/lib/currency'
+import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'

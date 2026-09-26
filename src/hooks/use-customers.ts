@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { AppError } from '@/lib/errors'
-import { Customer, CustomerFilters } from './use-customer-state'
-export type { Customer, CustomerFilters }
+import { Customer, CustomerFilters, mapRawToCustomer } from './use-customer-state'
 import { useDebounce } from './use-debounce'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+export type { Customer, CustomerFilters }
 
 interface UseCustomersOptions {
   initialFilters?: Partial<CustomerFilters>
@@ -21,10 +21,11 @@ interface PaginationState {
 }
 
 export function useCustomers(options: UseCustomersOptions = {}) {
+    const { organization } = useActiveOrganization()
     const {
         initialFilters = {},
         pageSize = 50,
-        enableCache = true,
+        enableCache: _enableCache = true,
         autoRefresh = false
     } = options
 
@@ -129,6 +130,26 @@ export function useCustomers(options: UseCustomersOptions = {}) {
             )
         }
 
+        // Filtro inteligente: con deuda pendiente
+        if (filters.has_debt) {
+            filtered = filtered.filter(c => (c.pending_amount || 0) > 0 || (c.current_balance || 0) > 0)
+        }
+
+        // Filtro inteligente: con límite de crédito activo
+        if (filters.has_credit_limit) {
+            filtered = filtered.filter(c => (c.credit_limit || 0) > 0)
+        }
+
+        // Filtro inteligente: gasto mínimo
+        if (filters.spent_min && filters.spent_min > 0) {
+            filtered = filtered.filter(c => (c.lifetime_value || 0) >= filters.spent_min)
+        }
+
+        // Filtro inteligente: compras mínimas
+        if (filters.purchases_min && filters.purchases_min > 0) {
+            filtered = filtered.filter(c => (c.total_purchases || 0) >= filters.purchases_min)
+        }
+
         return filtered
     }, [customers, debouncedSearch, filters])
 
@@ -153,6 +174,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
     }, [filteredCustomers.length, pagination.itemsPerPage])
 
     const fetchCustomers = useCallback(async () => {
+        if (!organization?.id) return
         setIsLoading(true)
         setError(null)
 
@@ -161,53 +183,14 @@ export function useCustomers(options: UseCustomersOptions = {}) {
             const { data, error: fetchError } = await supabase
                 .from('customers')
                 .select('*')
+                .eq('organization_id', organization.id)
                 .order('created_at', { ascending: false })
 
             if (fetchError) throw fetchError
 
-            const transformedCustomers: Customer[] = (data || []).map((c: any) => ({
-                id: c.id,
-                customerCode: c.customer_code || `CLI-${c.id?.slice(0, 6)}`,
-                name: c.name || '',
-                email: c.email || '',
-                phone: c.phone || '',
-                ruc: c.ruc,
-                customer_type: c.customer_type || 'regular',
-                status: c.status || 'active',
-                total_purchases: c.total_purchases || 0,
-                total_repairs: c.total_repairs || 0,
-                registration_date: c.created_at,
-                created_at: c.created_at,
-                last_visit: c.last_visit || c.created_at,
-                last_activity: c.updated_at || c.created_at,
-                address: c.address || '',
-                city: c.city || '',
-                credit_score: c.credit_score || 0,
-                segment: c.segment || 'regular',
-                satisfaction_score: c.satisfaction_score || 0,
-                lifetime_value: c.lifetime_value || 0,
-                avg_order_value: c.avg_order_value || 0,
-                purchase_frequency: c.purchase_frequency || 'low',
-                preferred_contact: c.preferred_contact || 'email',
-                birthday: c.birthday || '',
-                loyalty_points: c.loyalty_points || 0,
-                credit_limit: c.credit_limit || 0,
-                current_balance: c.current_balance || 0,
-                pending_amount: c.pending_amount || 0,
-                notes: c.notes || '',
-                tags: c.tags || [],
-                whatsapp: c.whatsapp,
-                social_media: c.social_media,
-                company: c.company,
-                position: c.position,
-                referral_source: c.referral_source || '',
-                discount_percentage: c.discount_percentage || 0,
-                payment_terms: c.payment_terms || 'Contado',
-                assigned_salesperson: c.assigned_salesperson || 'Sin asignar',
-                last_purchase_amount: c.last_purchase_amount || 0,
-                total_spent_this_year: c.total_spent_this_year || 0,
-                avatar: c.avatar
-            }))
+            const transformedCustomers: Customer[] = (data || []).map((c) =>
+                mapRawToCustomer(c as Record<string, unknown>)
+            )
 
             setCustomers(transformedCustomers)
         } catch (err) {
@@ -217,7 +200,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         } finally {
             setIsLoading(false)
         }
-    }, [])
+    }, [organization?.id])
 
     // Acciones
     const actions = {
@@ -277,11 +260,12 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         refresh: fetchCustomers,
         
         createCustomer: async (customerData: Partial<Customer>) => {
+            if (!organization?.id) return { success: false, error: new Error('Organización activa no disponible') }
             try {
                 const supabase = createSupabaseClient()
                 const { data, error } = await supabase
                     .from('customers')
-                    .insert([customerData])
+                    .insert([{ ...customerData, organization_id: organization.id }])
                     .select()
                     .single()
 
@@ -298,12 +282,14 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         },
 
         updateCustomer: async (id: string, customerData: Partial<Customer>) => {
+            if (!organization?.id) return { success: false, error: new Error('Organización activa no disponible') }
             try {
                 const supabase = createSupabaseClient()
                 const { data, error } = await supabase
                     .from('customers')
                     .update(customerData)
                     .eq('id', id)
+                    .eq('organization_id', organization.id)
                     .select()
                     .single()
 
@@ -321,12 +307,14 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         },
 
         deleteCustomer: async (id: string) => {
+            if (!organization?.id) return { success: false, error: new Error('Organización activa no disponible') }
             try {
                 const supabase = createSupabaseClient()
                 const { error } = await supabase
                     .from('customers')
                     .delete()
                     .eq('id', id)
+                    .eq('organization_id', organization.id)
 
                 if (error) throw error
 

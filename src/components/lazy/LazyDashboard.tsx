@@ -92,7 +92,7 @@ export const LazyPOSPage = dynamic(
 )
 
 export const LazyReportsPage = dynamic(
-  () => import('@/app/dashboard/reports/page'),
+  () => import('@/app/admin/reports/page'),
   {
     loading: () => (
       <div className="p-6">

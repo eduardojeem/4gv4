@@ -1,41 +1,40 @@
 "use client"
 
-import React, { useState, useEffect, memo } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { 
-  Users, Activity, TrendingUp, TrendingDown, 
-  RefreshCw, Download, AlertTriangle, CheckCircle, Clock
+import {
+  Users, Activity, RefreshCw, Download, AlertTriangle, Clock
 } from 'lucide-react'
-import { LineChart as RechartsLineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
+import { LineChart as RechartsLineChart } from 'recharts/es6/chart/LineChart'
+import { Line } from 'recharts/es6/cartesian/Line'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { SystemMetrics } from '@/hooks/use-admin-dashboard'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { 
-  StandardGrid, 
-  KPICard, 
-  SectionHeader, 
-  Container, 
-  FlexContainer, 
-  IconWrapper 
+import {
+  StandardGrid,
+  KPICard,
+  SectionHeader,
+  Container,
+  FlexContainer,
+  IconWrapper
 } from '@/components/ui/standardized-components'
 
 interface EnhancedOverviewProps {
   metrics: SystemMetrics
-  users: any[]
-  securityLogs: any[]
+  users: unknown[]
+  securityLogs: unknown[]
 }
 
 interface ChartData {
@@ -60,15 +59,6 @@ interface AlertItem {
 }
 
 // Datos simplificados para el gráfico principal
-const salesData = [
-  { name: 'Ene', ventas: 4000 },
-  { name: 'Feb', ventas: 3000 },
-  { name: 'Mar', ventas: 2000 },
-  { name: 'Abr', ventas: 2780 },
-  { name: 'May', ventas: 1890 },
-  { name: 'Jun', ventas: 2390 },
-  { name: 'Jul', ventas: 3490 }
-]
 
 // Actividades críticas únicamente
 const criticalActivities = [
@@ -83,25 +73,22 @@ const systemAlerts = [
   { id: 2, type: 'error', message: 'Intentos de acceso fallidos detectados', priority: 'high' }
 ]
 
-function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOverviewProps) {
+function EnhancedOverviewComponent({ metrics, users: _users, securityLogs: _securityLogs }: EnhancedOverviewProps) {
   const [timeRange, setTimeRange] = useState('7d')
   const [isRealTime, setIsRealTime] = useState(true)
-  const [currentTime, setCurrentTime] = useState<Date | null>(null)
-  const [isClient, setIsClient] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => new Date())
+  const isClient = useHydrated()
   const [salesData, setSalesData] = useState<ChartData[]>([])
-  const [activities, setActivities] = useState<ActivityItem[]>([])
-  const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const [_activities, setActivities] = useState<ActivityItem[]>([])
+  const [_alerts, setAlerts] = useState<AlertItem[]>([])
   const supabase = createClient()
 
   useEffect(() => {
-    setIsClient(true)
-    setCurrentTime(new Date())
-    
     const interval = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -138,7 +125,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
           const newActivities: ActivityItem[] = recentSales.map(sale => ({
             id: sale.id,
             user: (() => {
-              const clientData = (sale as any)?.client
+              const clientData = (sale as { client?: { name?: string } | Array<{ name?: string }> }).client
               if (Array.isArray(clientData)) return clientData[0]?.name || 'Cliente Casual'
               return clientData?.name || 'Cliente Casual'
             })(),
@@ -154,7 +141,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
         const { data: lowStockProducts } = await supabase
           .from('products')
           .select('id, name, stock_quantity, min_stock')
-          
+
         if (lowStockProducts) {
           const stockAlerts = lowStockProducts
             .filter(p => (p.stock_quantity || 0) <= (p.min_stock || 0))
@@ -174,28 +161,28 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
     }
 
     fetchData()
-  }, [])
+  }, [supabase])
 
-  
+
 
   return (
     <Container variant="section" className="min-h-screen bg-gray-50 p-6">
       <Container variant="content" maxWidth="2xl" className="mx-auto space-y-8">
-        
+
         {/* Header minimalista */}
         <Card className="bg-white rounded-xl shadow-sm border border-gray-200">
           <CardContent className="p-6">
-            <FlexContainer 
-              direction="col" 
+            <FlexContainer
+              direction="col"
               className="lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0"
             >
               <SectionHeader
                 title="Panel de Administración"
                 description="Resumen ejecutivo y métricas clave"
               />
-              
-              <FlexContainer 
-                direction="col" 
+
+              <FlexContainer
+                direction="col"
                 className="sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4"
               >
                 <FlexContainer variant="tight" className="text-sm text-gray-600">
@@ -207,7 +194,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
                   </span>
                   <div className={`w-2 h-2 rounded-full ${isRealTime ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
                 </FlexContainer>
-                
+
                 <Select value={timeRange} onValueChange={setTimeRange}>
                   <SelectTrigger className="w-32">
                     <SelectValue />
@@ -218,9 +205,9 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
                     <SelectItem value="30d">30 días</SelectItem>
                   </SelectContent>
                 </Select>
-                
-                <Button 
-                  variant="outline" 
+
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => setIsRealTime(!isRealTime)}
                 >
@@ -231,7 +218,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
                     <span>{isRealTime ? 'Pausar' : 'Reanudar'}</span>
                   </FlexContainer>
                 </Button>
-                
+
                 <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
                   <FlexContainer variant="tight">
                     <IconWrapper size="sm">
@@ -299,16 +286,16 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsLineChart data={salesData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="name" 
+                  <XAxis
+                    dataKey="name"
                     stroke="#6b7280"
                     fontSize={12}
                   />
-                  <YAxis 
+                  <YAxis
                     stroke="#6b7280"
                     fontSize={12}
                   />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{
                       backgroundColor: 'white',
                       border: '1px solid #e5e7eb',
@@ -316,10 +303,10 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                     }}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="ventas" 
-                    stroke="#3b82f6" 
+                  <Line
+                    type="monotone"
+                    dataKey="ventas"
+                    stroke="#3b82f6"
                     strokeWidth={3}
                     dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
                     activeDot={{ r: 6, stroke: '#3b82f6', strokeWidth: 2 }}
@@ -332,7 +319,7 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
 
         {/* Sección inferior: Actividad reciente y Alertas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
+
           {/* Actividad reciente crítica */}
           <Card className="bg-white border border-gray-200">
             <CardHeader className="pb-4">

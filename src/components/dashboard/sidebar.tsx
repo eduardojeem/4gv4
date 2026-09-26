@@ -11,11 +11,13 @@ import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import type { OrganizationModule } from '@/lib/organization/business-profile'
+import { isNavigationModuleAvailable } from '@/lib/navigation/dashboard-navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
-import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { fetchOnboardingStatus } from '@/lib/onboarding/status-cache'
+import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { LucideIcon } from 'lucide-react'
@@ -27,9 +29,7 @@ import {
   ShoppingCart,
   ShoppingBag,
   Wrench,
-  RotateCcw,
-  BarChart3,
-  Settings,
+  RotateCcw, Settings,
   ChevronLeft,
   ChevronRight,
   Archive,
@@ -43,59 +43,102 @@ import {
   Rocket
 } from 'lucide-react'
 
-type NavItem = { name: string; href: string; icon: LucideIcon; roles?: UserRole[]; permission?: string; description?: string }
+type NavItem = { name: string; href: string; icon: LucideIcon; roles?: UserRole[]; permission?: string; description?: string; requiredModule?: OrganizationModule }
 
 const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Principal',
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
-      { name: 'Onboarding', href: '/dashboard/onboarding', icon: Rocket, roles: ['admin', 'vendedor', 'tecnico'], description: 'Configuracion inicial' },
-      { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read' },
-      { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read' },
-      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, permission: 'pos.read' },
+      // La pagina exige ser dueño o administrador de la organizacion y devuelve
+      // al panel a cualquier otro con un redirect mudo. Ofrecersela a vendedores
+      // y tecnicos era una puerta que no abre.
+      //
+      // Mientras falta configurar es una TAREA y vive aca. Una vez completa es
+      // una CONFIGURACION: se filtra de este menu y queda en Administración,
+      // junto a «Sitio Web».
+      { name: 'Configuración del negocio', href: '/dashboard/onboarding', icon: Rocket, roles: ['super_admin', 'admin'], description: 'Datos, rubro y tienda pública' },
+      { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read', requiredModule: 'pos' },
+      { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read', requiredModule: 'pos' },
+      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin'], description: 'Analíticas y ganancias', requiredModule: 'pos' },
     ],
   },
   {
     label: 'Operaciones',
     items: [
       { name: 'Clientes', href: '/dashboard/customers', icon: Users, permission: 'customers.read' },
-      { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, permission: 'credits.read' },
-      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read' },
-      { name: 'Productos', href: '/dashboard/products', icon: Package, permission: 'products.read' },
+      { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, permission: 'credits.read', requiredModule: 'credits' },
+      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read', requiredModule: 'orders' },
+      { name: 'Productos', href: '/dashboard/products', icon: Package, permission: 'products.read', requiredModule: 'inventory' },
       { name: 'Marcas', href: '/dashboard/brands', icon: Building2, permission: 'products.manage' },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, permission: 'products.read' },
-      { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read' },
-      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
-      { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read' },
+      { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read', requiredModule: 'promotions' },
+      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['super_admin', 'admin'] },
+      { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read', requiredModule: 'repairs' },
       { name: 'Posventa', href: '/dashboard/after-sales', icon: RotateCcw, permission: 'customers.read', description: 'Garantias, cambios y devoluciones' },
-      { name: 'Inv. Taller', href: '/dashboard/repairs/inventory', icon: Archive, permission: 'repairs.read' },
-      { name: 'Panel Técnico', href: '/dashboard/technician', icon: Activity, roles: ['admin', 'tecnico'], description: 'Operativo para técnicos' },
+      { name: 'Inv. Taller', href: '/dashboard/repairs/inventory', icon: Archive, permission: 'repairs.read', requiredModule: 'repairs' },
+      { name: 'Panel Técnico', href: '/dashboard/technician', icon: Activity, roles: ['admin', 'tecnico'], description: 'Operativo para técnicos', requiredModule: 'repairs' },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, permission: 'reports.read' },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['super_admin', 'admin'] },
     ],
   },
 ]
+
+export function SidebarToggleButton({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean
+  onToggle: () => void
+}) {
+  const label = collapsed ? 'Expandir menú' : 'Contraer menú'
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={onToggle}
+      className="h-10 w-10 shrink-0 border border-primary/30 bg-primary/10 text-primary shadow-sm hover:border-primary/50 hover:bg-primary/20 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label={label}
+      title={label}
+    >
+      {collapsed ? (
+        <ChevronRight className="h-5 w-5" />
+      ) : (
+        <ChevronLeft className="h-5 w-5" />
+      )}
+    </Button>
+  )
+}
 
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { sidebarCollapsed: collapsed, toggleSidebar } = useDashboardLayout()
   const { user, signOut } = useAuth()
-  const { organizationName, organizationLogoUrl } = useSubscriptionStatus()
+  const { organizationName, organizationLogoUrl, effectiveModules } = useSubscriptionStatus()
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
-  const [onboardingDone, setOnboardingDone] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(false)
   const { hasPermission } = usePermissions()
 
   // Read role directly from auth context — single source of truth
   const userRole = (user?.role ?? 'vendedor') as UserRole
+
+  // Una vez completa, la configuracion inicial deja de ser una tarea del dia a
+  // dia y sale de este menu: sigue disponible desde Administración. La consulta
+  // comparte cache con DashboardGuard, asi que no agrega un pedido.
+  useEffect(() => {
+    if (!config.supabase.isConfigured) return
+    fetchOnboardingStatus().then((data) => {
+      if (data?.completed) setOnboardingDone(true)
+    })
+  }, [])
 
   // Load dynamic badge counts
   useEffect(() => {
@@ -103,8 +146,11 @@ export const Sidebar = memo(function Sidebar() {
     const fetchBadges = async () => {
       try {
         const supabase = createClient()
+        const repairsQuery = effectiveModules.includes('repairs')
+          ? supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES])
+          : Promise.resolve({ count: 0 })
         const [{ count: repairs }, { data: lowStockData }] = await Promise.all([
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES]),
+          repairsQuery,
           supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true)
         ])
         // Incluye agotados (stock 0): también requieren reposición.
@@ -120,15 +166,7 @@ export const Sidebar = memo(function Sidebar() {
     fetchBadges()
     const interval = setInterval(fetchBadges, 5 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [])
-
-  // Check onboarding completion once on mount to hide the sidebar item when done
-  useEffect(() => {
-    if (!config.supabase.isConfigured) return
-    fetchOnboardingStatus().then((data) => {
-      if (data?.completed) setOnboardingDone(true)
-    })
-  }, [])
+  }, [effectiveModules])
 
   const handleQuickLogout = async () => {
     setIsSigningOut(true)
@@ -146,8 +184,14 @@ export const Sidebar = memo(function Sidebar() {
 
   const filteredGroups = useMemo(() => {
     const filterFn = (item: NavItem) => {
-      // Hide onboarding link once setup is complete
+      // Completa, deja de ser una tarea diaria: sale del menu del dia a dia y
+      // sigue disponible desde Administración, que es donde se busca una
+      // configuracion. Esconderla en los dos lados dejaba el modo «revisita»
+      // inalcanzable; dejarla en «Principal» para siempre era ruido.
       if (item.href === '/dashboard/onboarding' && onboardingDone) return false
+
+
+      if (!isNavigationModuleAvailable(item.requiredModule, effectiveModules)) return false
 
       // Fuente única: acceso por sección según el rol (vendedor/tecnico restringidos).
       if (!canRoleAccessSection(userRole, item.href)) return false
@@ -161,7 +205,7 @@ export const Sidebar = memo(function Sidebar() {
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole, onboardingDone, hasPermission])
+  }, [userRole, onboardingDone, hasPermission, effectiveModules])
 
   return (
     <>
@@ -186,7 +230,10 @@ export const Sidebar = memo(function Sidebar() {
         collapsed ? "w-16 -translate-x-full lg:translate-x-0" : "w-72 sm:w-80 translate-x-0"
       )}>
         {/* Logo */}
-        <div className="flex items-center justify-between p-4 border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0">
+        <div className={cn(
+          "flex items-center border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0",
+          collapsed ? "justify-center p-3" : "justify-between p-4"
+        )}>
           {!collapsed && (
             <div className="flex items-center space-x-3 min-w-0">
               {organizationLogoUrl ? (
@@ -209,19 +256,7 @@ export const Sidebar = memo(function Sidebar() {
               </div>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleSidebar}
-            className="p-2 hover:bg-primary/10"
-            aria-label={collapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </Button>
+          <SidebarToggleButton collapsed={collapsed} onToggle={toggleSidebar} />
         </div>
 
         {/* Navigation */}

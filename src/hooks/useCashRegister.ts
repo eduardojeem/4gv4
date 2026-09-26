@@ -7,18 +7,11 @@ import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
 import { calculateExpectedCashBalance, isPhysicalManualMovement } from '@/app/dashboard/pos/lib/cash-balance'
+import type { CashMovement } from '@/app/dashboard/pos/types'
+import { summarizeCashMovements } from '@/app/dashboard/pos/lib/cash-report'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
-export interface CashMovement {
-    id: string
-    type: 'sale' | 'cash_in' | 'cash_out' | 'opening' | 'closing'
-    amount: number
-    reason?: string
-    payment_method?: 'cash' | 'card' | 'transfer' | 'mixed'
-    created_at: string
-    created_by?: string
-    userName?: string
-    userEmail?: string
-}
+export type { CashMovement } from '@/app/dashboard/pos/types'
 
 export interface CashRegisterSession {
     id: string
@@ -50,6 +43,7 @@ export function useCashRegister() {
     const [history, setHistory] = useState<CashRegisterSession[]>([])
     const [auditLog, setAuditLog] = useState<CashMovement[]>([])
     const { selectedBranchId } = useBranch()
+    const { organization } = useActiveOrganization()
 
     // Fix #4: memoize Supabase client — no instanciar en cada render
     const supabase = useMemo(() => {
@@ -72,7 +66,7 @@ export function useCashRegister() {
 
     // Load available registers
     const loadRegisters = useCallback(async () => {
-        if (!config.supabase.isConfigured || !supabase) {
+        if (!config.supabase.isConfigured || !supabase || !organization?.id) {
             setRegisters([])
             return []
         }
@@ -80,6 +74,7 @@ export function useCashRegister() {
         let query = supabase
             .from('cash_registers')
             .select('*')
+            .eq('organization_id', organization.id)
             .order('name')
 
         query = withBranchFilter(query, selectedBranchId)
@@ -95,11 +90,11 @@ export function useCashRegister() {
         }))
         setRegisters(nextRegisters)
         return nextRegisters
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Fetch history (closed sessions)
     const fetchHistory = useCallback(async (limit = 20) => {
-        if (!config.supabase.isConfigured || !supabase) {
+        if (!config.supabase.isConfigured || !supabase || !organization?.id) {
             return []
         }
 
@@ -107,6 +102,7 @@ export function useCashRegister() {
         let sessionsQuery = supabase
             .from('cash_closures')
             .select('*')
+            .eq('organization_id', organization.id)
             .not('date', 'is', null) // Closed sessions
             .order('date', { ascending: false })
             .limit(limit)
@@ -129,6 +125,7 @@ export function useCashRegister() {
         let movementsQuery = supabase
             .from('cash_movements')
             .select('*')
+            .eq('organization_id', organization.id)
             .in('session_id', sessionIds)
             .order('created_at', { ascending: true })
 
@@ -155,35 +152,81 @@ export function useCashRegister() {
             return acc
         }, {} as Record<string, CashMovement[]>)
 
-        const formatted = sessions.map(session => ({
-            ...session,
-            id: session.id,
-            register_id: session.register_id,
-            opened_by: session.opened_by || 'system',
-            closed_by: session.closed_by,
-            opening_balance: session.opening_balance,
-            closing_balance: session.closing_balance,
-            expected_balance: session.expected_balance || 0,
-            discrepancy: session.discrepancy || 0,
-            status: 'closed' as const,
-            opened_at: session.created_at, // Map created_at to opened_at
-            closed_at: session.date,       // Map date to closed_at
-            movements: movementsBySession[session.id] || []
-        }))
+        // Fetch user profiles for opened_by and closed_by in sessions
+        const sessionUserIds = [...new Set(
+            sessions.flatMap(s => [s.opened_by, s.closed_by]).filter(Boolean)
+        )] as string[]
+
+        let sessionUserMap: Record<string, string> = {}
+        if (sessionUserIds.length > 0) {
+            try {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .in('id', sessionUserIds)
+
+                if (profiles && profiles.length > 0) {
+                    sessionUserMap = (profiles as Array<{ id: string; full_name?: string | null; email?: string | null }>).reduce((acc, p) => {
+                        const displayName = p.full_name || (p.email ? p.email.split('@')[0] : '')
+                        if (displayName) {
+                            acc[p.id] = displayName
+                        }
+                        return acc
+                    }, {} as Record<string, string>)
+                }
+            } catch (err) {
+                console.warn('Could not load profiles for sessions:', err)
+            }
+        }
+
+        const formatted = sessions.map(session => {
+            const sessionMovements = movementsBySession[session.id] || []
+            const openingMov = sessionMovements.find(m => m.type === 'opening')
+            const closingMov = sessionMovements.find(m => m.type === 'closing')
+
+            // Resuelve el nombre del usuario de apertura
+            const openedByRaw = session.opened_by
+            const openedByName = openedByRaw
+                ? (sessionUserMap[openedByRaw] || openedByRaw)
+                : (openingMov?.userName || openingMov?.userEmail || '')
+
+            // Resuelve el nombre del usuario de cierre
+            const closedByRaw = session.closed_by
+            const closedByName = closedByRaw && closedByRaw !== 'system'
+                ? (sessionUserMap[closedByRaw] || closedByRaw)
+                : (closingMov?.userName || closingMov?.userEmail || (closedByRaw === 'system' ? 'Sistema' : ''))
+
+            return {
+                ...session,
+                id: session.id,
+                register_id: session.register_id,
+                opened_by: openedByName,
+                closed_by: closedByName,
+                opening_balance: session.opening_balance,
+                closing_balance: session.closing_balance,
+                expected_balance: session.expected_balance || 0,
+                discrepancy: session.discrepancy || 0,
+                status: 'closed' as const,
+                opened_at: session.created_at, // Map created_at to opened_at
+                closed_at: session.date,       // Map date to closed_at
+                movements: sessionMovements
+            }
+        })
 
         setHistory(formatted)
         return formatted
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Fetch audit log (all movements)
     const fetchAuditLog = useCallback(async (limit = 100) => {
-        if (!config.supabase.isConfigured || !supabase) {
+        if (!config.supabase.isConfigured || !supabase || !organization?.id) {
             return []
         }
 
         let query = supabase
             .from('cash_movements')
             .select('*')
+            .eq('organization_id', organization.id)
             .order('created_at', { ascending: false })
             .limit(limit)
 
@@ -199,36 +242,30 @@ export function useCashRegister() {
         const movements = data || []
         const userIds = [...new Set(movements.map(m => m.created_by).filter(Boolean))] as string[]
         let userMap: Record<string, string> = {}
-        
         let emailMap: Record<string, string> = {}
-        if (userIds.length > 0) {
-            const { data: profilesWithEmail, error: profilesWithEmailError } = await supabase
-                .from('profiles')
-                .select('id, full_name, email')
-                .in('id', userIds)
 
-            if (profilesWithEmailError) {
-                const { data: profilesFallback } = await supabase
+        if (userIds.length > 0) {
+            try {
+                const { data: profilesWithEmail } = await supabase
                     .from('profiles')
-                    .select('id, full_name')
+                    .select('id, full_name, email')
                     .in('id', userIds)
 
-                if (profilesFallback) {
-                    userMap = profilesFallback.reduce((acc, p) => {
-                        acc[p.id] = p.full_name || 'Usuario'
+                if (profilesWithEmail) {
+                    type ProfileEmailRow = { id: string; full_name?: string | null; email?: string | null }
+                    const typedProfiles = profilesWithEmail as ProfileEmailRow[]
+                    userMap = typedProfiles.reduce((acc, p) => {
+                        acc[p.id] = p.full_name || ''
+                        return acc
+                    }, {} as Record<string, string>)
+
+                    emailMap = typedProfiles.reduce((acc, p) => {
+                        acc[p.id] = p.email || ''
                         return acc
                     }, {} as Record<string, string>)
                 }
-            } else if (profilesWithEmail) {
-                userMap = profilesWithEmail.reduce((acc, p) => {
-                    acc[p.id] = p.full_name || ''
-                    return acc
-                }, {} as Record<string, string>)
-
-                emailMap = profilesWithEmail.reduce((acc, p) => {
-                    acc[p.id] = p.email || ''
-                    return acc
-                }, {} as Record<string, string>)
+            } catch (err) {
+                console.warn('Could not load profiles for audit log:', err)
             }
         }
 
@@ -238,14 +275,14 @@ export function useCashRegister() {
             const userEmail = userId ? (emailMap[userId] || '') : ''
             return {
                 ...item,
-                userName: userName || userEmail || (userId ? 'Usuario Desconocido' : 'Usuario no identificado'),
+                userName: userName || userEmail || (userId ? 'Usuario' : 'Usuario no identificado'),
                 userEmail
             }
         })
 
         setAuditLog(formatted)
         return formatted
-    }, [selectedBranchId, supabase])
+    }, [organization?.id, selectedBranchId, supabase])
 
     // Analytics — Fix #10: calcular datos reales desde movimientos
     const getDailyAnalytics = useCallback(async (date?: string) => {
@@ -409,7 +446,43 @@ export function useCashRegister() {
                 return false
             }
 
-            const normalizedRegisterId = registerId.trim()
+            let normalizedRegisterId = registerId.trim()
+
+            // `principal` is a UI alias used by payment dialogs. The atomic RPC
+            // only accepts a real register id belonging to the active branch.
+            if (normalizedRegisterId === 'principal') {
+                if (!selectedBranchId || selectedBranchId === 'all') {
+                    throw new Error('Selecciona una sucursal antes de abrir la caja.')
+                }
+
+                const availableRegisters = await loadRegisters()
+                normalizedRegisterId = availableRegisters[0]?.id || ''
+
+                if (!normalizedRegisterId) {
+                    const createResponse = await fetch('/api/pos/cash-registers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...branchHeaders(selectedBranchId),
+                        },
+                        body: JSON.stringify({
+                            name: 'Caja Principal',
+                            branch_id: selectedBranchId,
+                        }),
+                    })
+                    const createPayload = await createResponse.json().catch(() => null) as {
+                        success?: boolean
+                        error?: string
+                        data?: { id?: string }
+                    } | null
+
+                    if (!createResponse.ok || !createPayload?.success || !createPayload.data?.id) {
+                        throw new Error(createPayload?.error || 'No se pudo preparar la caja principal.')
+                    }
+
+                    normalizedRegisterId = createPayload.data.id
+                }
+            }
 
             // Check if already open
             const existingSession = await checkOpenSession(normalizedRegisterId)
@@ -484,7 +557,7 @@ export function useCashRegister() {
         } finally {
             setLoading(false)
         }
-    }, [checkOpenSession, resolveActorId, selectedBranchId, supabase])
+    }, [checkOpenSession, loadRegisters, resolveActorId, selectedBranchId, supabase])
 
     // Close cash register
     const closeRegister = useCallback(async (closingBalance: number, userId?: string) => {
@@ -710,36 +783,7 @@ export function useCashRegister() {
         const safeMovements = movements || []
 
         // Calculate totals
-        const report = safeMovements.reduce((acc, mov) => {
-            const amount = Number(mov.amount) || 0
-
-            if (mov.type === 'sale') {
-                acc.totalSales += amount
-
-                // Track by payment method
-                const method = mov.payment_method || 'cash'
-                if (method === 'cash') acc.cashSales += amount
-                else if (method === 'card') acc.cardSales += amount
-                else if (method === 'transfer') acc.transferSales += amount
-                else if (method === 'mixed') acc.mixedSales += amount
-
-                // Sales count as income
-                acc.incomes += amount
-            } else if (mov.type === 'cash_in') {
-                acc.incomes += amount
-            } else if (mov.type === 'cash_out') {
-                acc.expenses += amount
-            }
-            return acc
-        }, {
-            incomes: 0,
-            expenses: 0,
-            totalSales: 0,
-            cashSales: 0,
-            cardSales: 0,
-            transferSales: 0,
-            mixedSales: 0
-        })
+        const report = summarizeCashMovements(safeMovements as CashMovement[])
 
         // Fetch opening balance of the first session in the period
         let firstSessionQuery = supabase
@@ -763,23 +807,25 @@ export function useCashRegister() {
             closingBalance,
             incomes: report.incomes,
             expenses: report.expenses,
+            totalSales: report.totalSales,
             cashSales: report.cashSales,
             cardSales: report.cardSales,
             transferSales: report.transferSales,
             mixedSales: report.mixedSales,
+            paymentMethods: report.paymentMethods,
             discrepancy: 0
         }
     }, [selectedBranchId, supabase])
 
-    // Realtime subscription: sync movements added externally (e.g., credit payments)
+    // Realtime subscription: sync movements & session closures in real-time across terminals
     useEffect(() => {
         if (!config.supabase.isConfigured || !supabase || !currentSession) return
 
-        // Capture id so the subscription filter doesn't change on every movement insert
         const sessionId = currentSession.id
+        const channelName = `cash_session_${sessionId}_${Date.now()}`
 
         const channel = supabase
-            .channel('cash_movements_sync')
+            .channel(channelName)
             .on(
                 'postgres_changes',
                 {
@@ -789,10 +835,9 @@ export function useCashRegister() {
                     filter: `session_id=eq.${sessionId}`
                 },
                 (payload) => {
-                    // Only add if not already in local state (avoid duplicates from own inserts)
                     const newMovement = payload.new as CashMovement
                     setCurrentSession(prev => {
-                        if (!prev) return prev
+                        if (!prev || prev.id !== sessionId) return prev
                         const exists = prev.movements.some(m => m.id === newMovement.id)
                         if (exists) return prev
                         return {
@@ -802,12 +847,48 @@ export function useCashRegister() {
                     })
                 }
             )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'cash_movements',
+                    filter: `session_id=eq.${sessionId}`
+                },
+                (payload) => {
+                    const oldId = payload.old?.id
+                    if (!oldId) return
+                    setCurrentSession(prev => {
+                        if (!prev || prev.id !== sessionId) return prev
+                        return {
+                            ...prev,
+                            movements: prev.movements.filter(m => m.id !== oldId)
+                        }
+                    })
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'cash_closures',
+                    filter: `id=eq.${sessionId}`
+                },
+                (payload) => {
+                    const updated = payload.new as { date?: string | null; closed_at?: string | null; closing_balance?: number }
+                    if (updated && (updated.date || updated.closed_at)) {
+                        setCurrentSession(null)
+                        toast.info('El turno de caja ha sido cerrado.')
+                    }
+                }
+            )
             .subscribe()
 
         return () => {
-            supabase!.removeChannel(channel)
+            supabase?.removeChannel(channel)
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSession.id used via sessionId capture; full object excluded to avoid re-subscribing on every movement
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSession.id used via sessionId capture
     }, [selectedBranchId, supabase, currentSession?.id])
 
     return {

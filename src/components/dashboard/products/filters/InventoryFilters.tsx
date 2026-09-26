@@ -43,10 +43,10 @@ const InventoryFilters: React.FC<InventoryFiltersProps> = ({
     (Array.isArray(value) ? value.length > 0 : true)
   );
 
-  const updateFilter = (key: keyof InventoryFilters, value: any) => {
+  const updateFilter = (key: keyof InventoryFilters, value: unknown) => {
     onFiltersChange({
       ...filters,
-      [key]: value
+      [key]: value as InventoryFilters[keyof InventoryFilters]
     });
   };
 

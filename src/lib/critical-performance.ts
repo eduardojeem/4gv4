@@ -79,7 +79,7 @@ export function useProductCache(config: CriticalPerformanceConfig = CRITICAL_PER
     return null
   }, [])
 
-  const setProduct = useCallback((id: string, product: any) => {
+  const setProduct = useCallback((id: string, product: unknown) => {
     cacheRef.current.set(id, product)
     setCacheStats(prev => ({ ...prev, size: cacheRef.current.size() }))
   }, [])
@@ -193,45 +193,32 @@ export function useLazyImage(
   src: string,
   config: CriticalPerformanceConfig = CRITICAL_PERFORMANCE_CONFIG
 ) {
-  const [imageSrc, setImageSrc] = useState<string>('')
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [isError, setIsError] = useState(false)
-  const imgRef = useRef<HTMLImageElement | null>(null)
+  const [result, setResult] = useState<{ src: string; status: 'loaded' | 'error' } | null>(null)
 
   useEffect(() => {
-    if (!config.enableImageLazyLoading || !src) {
-      setImageSrc(src)
-      return
-    }
+    if (!config.enableImageLazyLoading || !src) return
 
     const img = new Image()
-    imgRef.current = img
-
     img.onload = () => {
-      setImageSrc(src)
-      setIsLoaded(true)
-      setIsError(false)
+      setResult({ src, status: 'loaded' })
     }
 
     img.onerror = () => {
-      setIsError(true)
-      setIsLoaded(false)
+      setResult({ src, status: 'error' })
     }
 
     img.src = src
 
     return () => {
-      if (imgRef.current) {
-        imgRef.current.onload = null
-        imgRef.current.onerror = null
-      }
+      img.onload = null
+      img.onerror = null
     }
   }, [src, config.enableImageLazyLoading])
 
   return {
-    src: imageSrc,
-    isLoaded,
-    isError
+    src: !config.enableImageLazyLoading ? src : result?.src === src && result.status === 'loaded' ? src : '',
+    isLoaded: result?.src === src && result.status === 'loaded',
+    isError: result?.src === src && result.status === 'error'
   }
 }
 
@@ -278,11 +265,11 @@ export function useCriticalPerformance(config: Partial<CriticalPerformanceConfig
     measureRender,
     
     // Hooks optimizados
-    useCriticalDebounce: (value: any, delay?: number) => 
+    useCriticalDebounce: <T>(value: T, delay?: number) => 
       useCriticalDebounce(value, delay || finalConfig.debounceMs),
-    useCriticalMemo: (factory: () => any, deps: React.DependencyList) => 
+    useCriticalMemo: <T>(factory: () => T, deps: React.DependencyList) => 
       useCriticalMemo(factory, deps, finalConfig),
-    useVirtualization: (items: any[], itemHeight?: number, containerHeight?: number) => 
+    useVirtualization: <T>(items: T[], itemHeight?: number, containerHeight?: number) => 
       useVirtualization(items, itemHeight, containerHeight, finalConfig),
     useLazyImage: (src: string) => 
       useLazyImage(src, finalConfig)
@@ -292,11 +279,11 @@ export function useCriticalPerformance(config: Partial<CriticalPerformanceConfig
 // Utilidades de rendimiento
 export const PerformanceUtils = {
   // Throttle para eventos de scroll
-  throttle: <T extends (...args: any[]) => any>(func: T, limit: number): T => {
+  throttle: <T extends (...args: unknown[]) => unknown>(func: T, limit: number): T => {
     let inThrottle: boolean
-    return ((...args: any[]) => {
+    return ((...args: unknown[]) => {
       if (!inThrottle) {
-        func.apply(null, args)
+        func.call(null, ...args)
         inThrottle = true
         setTimeout(() => inThrottle = false, limit)
       }
@@ -304,25 +291,26 @@ export const PerformanceUtils = {
   },
 
   // Debounce mejorado
-  debounce: <T extends (...args: any[]) => any>(func: T, wait: number): T => {
+  debounce: <T extends (...args: unknown[]) => unknown>(func: T, wait: number): T => {
     let timeout: NodeJS.Timeout
-    return ((...args: any[]) => {
+    return ((...args: unknown[]) => {
       clearTimeout(timeout)
-      timeout = setTimeout(() => func.apply(null, args), wait)
+      timeout = setTimeout(() => func.call(null, ...args), wait)
     }) as T
   },
 
   // Medición de memoria
   getMemoryUsage: () => {
     if ('memory' in performance) {
-      return (performance as any).memory.usedJSHeapSize
+      return (performance as Performance & { memory?: { usedJSHeapSize?: number } }).memory?.usedJSHeapSize ?? 0
     }
     return 0
   },
 
   // Verificar si el dispositivo es de bajo rendimiento
   isLowEndDevice: () => {
-    const connection = (navigator as any).connection
+    const nav = navigator as Navigator & { connection?: { effectiveType?: string } }
+    const connection = nav.connection
     if (connection) {
       return connection.effectiveType === 'slow-2g' || connection.effectiveType === '2g'
     }

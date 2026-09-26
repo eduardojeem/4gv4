@@ -34,7 +34,7 @@ interface SearchSuggestion {
   value: string
   label: string
   icon: React.ReactNode
-  data?: any
+  data?: Product
 }
 
 export function SmartSearch({ 
@@ -47,22 +47,20 @@ export function SmartSearch({
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+
+    try {
+      const saved = localStorage.getItem('product-search-recent')
+      const parsed: unknown = saved ? JSON.parse(saved) : []
+      return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+    } catch {
+      return []
+    }
+  })
   
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-
-  // Cargar búsquedas recientes del localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('product-search-recent')
-    if (saved) {
-      try {
-        setRecentSearches(JSON.parse(saved))
-      } catch (error) {
-        console.log('Error loading recent searches')
-      }
-    }
-  }, [])
 
   // Generar sugerencias basadas en la consulta
   const suggestions = useMemo(() => {
@@ -348,7 +346,7 @@ export function SmartSearch({
             ) : query.trim() ? (
               <div className="px-3 py-8 text-center text-muted-foreground">
                 <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No se encontraron resultados para "{query}"</p>
+                <p className="text-sm">No se encontraron resultados para &quot;{query}&quot;</p>
                 <p className="text-xs mt-1">Intenta con otros términos de búsqueda</p>
               </div>
             ) : (

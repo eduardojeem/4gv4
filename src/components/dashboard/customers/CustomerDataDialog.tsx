@@ -14,7 +14,7 @@
  * - Manejo de errores unificado
  */
 
-import React, { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Dialog,
@@ -32,7 +32,6 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -59,6 +58,8 @@ import { ExportPreviewModal } from './ExportPreviewModal'
 
 interface CustomerDataDialogProps {
   customers: Customer[]
+  totalCount?: number
+  loadAllCustomers?: () => Promise<Customer[]>
   isOpen: boolean
   onClose: () => void
   defaultTab?: 'export' | 'import'
@@ -86,6 +87,8 @@ const formatDescriptions = {
 
 export function CustomerDataDialog({ 
   customers, 
+  totalCount,
+  loadAllCustomers,
   isOpen, 
   onClose, 
   defaultTab = 'export',
@@ -124,10 +127,11 @@ export function CustomerDataDialog({
       // Mostrar toast de inicio
       toast.loading('Preparando exportación...', { id: 'export-toast' })
       
-      await exportCustomers(customers, options)
+      const exportRows = loadAllCustomers ? await loadAllCustomers() : customers
+      await exportCustomers(exportRows, options)
       
       // Actualizar toast de éxito
-      toast.success(`${customers.length} clientes exportados exitosamente como ${exportFormat.toUpperCase()}`, { 
+      toast.success(`${exportRows.length} clientes exportados exitosamente como ${exportFormat.toUpperCase()}`, {
         id: 'export-toast',
         duration: 4000 
       })
@@ -298,7 +302,7 @@ export function CustomerDataDialog({
                         </div>
                         <div className="flex items-center gap-6">
                           <div className="text-center">
-                            <div className="text-3xl font-bold text-blue-600">{customers.length}</div>
+                            <div className="text-3xl font-bold text-blue-600">{totalCount ?? customers.length}</div>
                             <div className="text-sm text-gray-500">Clientes</div>
                           </div>
                           <div className="text-center">
@@ -336,7 +340,7 @@ export function CustomerDataDialog({
                             <Label className="text-base font-medium mb-4 block">
                               Formato de exportación
                             </Label>
-                            <RadioGroup value={exportFormat} onValueChange={(value: any) => setExportFormat(value)}>
+                            <RadioGroup value={exportFormat} onValueChange={(value) => setExportFormat(value as typeof exportFormat)}>
                               <div className="space-y-3">
                                 {Object.entries(formatDescriptions).map(([format, description]) => {
                                   const Icon = formatIcons[format as keyof typeof formatIcons]
@@ -518,7 +522,7 @@ export function CustomerDataDialog({
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600 dark:text-gray-400">Registros:</span>
                               <Badge variant="secondary" className="text-sm px-3 py-1">
-                                {stats.totalRecords}
+                                {totalCount ?? stats.totalRecords}
                               </Badge>
                             </div>
                             <div className="flex justify-between items-center">
@@ -530,10 +534,15 @@ export function CustomerDataDialog({
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600 dark:text-gray-400">Tamaño:</span>
                               <Badge variant="outline" className="text-sm px-3 py-1">
-                                {stats.estimatedSize}
+                                {loadAllCustomers ? 'Se calcula al descargar' : stats.estimatedSize}
                               </Badge>
                             </div>
                           </div>
+                          {loadAllCustomers && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              La vista previa muestra una muestra de la página actual. La descarga incluirá todos los clientes que coinciden con los filtros.
+                            </p>
+                          )}
 
                           {/* Botones de Acción */}
                           <div className="space-y-4">
@@ -715,7 +724,7 @@ export function CustomerDataDialog({
                           <Alert className="p-6">
                             <Info className="h-5 w-5" />
                             <AlertDescription className="text-base">
-                              <strong>Formato esperado:</strong> El archivo debe contener columnas como 'nombre', 'email', 'teléfono', etc.
+                              <strong>Formato esperado:</strong> El archivo debe contener columnas como nombre, email, teléfono, etc.
                               La primera fila debe contener los nombres de las columnas.
                             </AlertDescription>
                           </Alert>

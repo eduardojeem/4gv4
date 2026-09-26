@@ -7,6 +7,7 @@ import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/rol
 import { normalizeRole } from '../lib/auth/role-utils'
 import { toast } from 'sonner'
 import { logAuthEventClient } from '@/lib/auth-event-client'
+import { shouldReuseAuthenticatedUser } from '@/lib/auth/auth-event-stability'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
@@ -18,11 +19,20 @@ export type DeliveryLocation = {
 }
 
 // Tipos para el contexto de autenticación
+/** El negocio del que la persona es parte, si tiene uno. */
+export interface AuthOrganization {
+  id: string
+  name: string
+  slug: string
+  role: string
+}
+
 export interface AuthUser extends SupabaseUser {
   role?: UserRole
   status?: ProfileStatus
   permissions?: string[]
   organizationPermissions?: boolean
+  organization?: AuthOrganization | null
   profile?: {
     name?: string
     avatar_url?: string
@@ -35,7 +45,19 @@ export interface AuthUser extends SupabaseUser {
 
 export interface AuthContextType {
   user: AuthUser | null
-  session: Session | null
+  /**
+   * La sesion NO se expone.
+   *
+   * Supabase refresca el token al volver a una pestaña y eso cambiaba el objeto
+   * de sesion, que estaba en el valor del contexto: cada vez que el usuario
+   * volvia al navegador se re-renderizaban los 70 archivos que leen useAuth(),
+   * incluida la grilla de productos. Ninguno leia `session` — se comprobo en
+   * todo el proyecto: cero consumidores.
+   *
+   * Si alguna pantalla la necesita, conviene un contexto aparte antes que
+   * devolverla aca: lo que se paga no es guardarla sino que su cambio arrastre
+   * a todos los consumidores.
+   */
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ error?: string }>
@@ -85,6 +107,17 @@ const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
 const AUTH_SESSION_TIMEOUT_MS = 5000
 const AUTH_PROFILE_TIMEOUT_MS = 4000
 
+/** Solo un negocio con id, nombre y dirección sirve para enlazar al panel. */
+const toAuthOrganization = (value: unknown): AuthOrganization | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const row = value as Record<string, unknown>
+  const id = typeof row.id === 'string' ? row.id : ''
+  const name = typeof row.name === 'string' ? row.name : ''
+  const slug = typeof row.slug === 'string' ? row.slug : ''
+  if (!id || !slug) return null
+  return { id, name: name || slug, slug, role: typeof row.role === 'string' ? row.role : '' }
+}
+
 const getDefaultAuthProfile = (): Partial<AuthUser> => ({
   role: toUserRole('cliente'),
   status: 'active',
@@ -101,6 +134,7 @@ const buildAuthUser = (
   status: userProfile.status ?? 'active',
   permissions: userProfile.permissions ?? [],
   organizationPermissions: userProfile.organizationPermissions ?? false,
+  organization: userProfile.organization ?? null,
   profile: userProfile.profile ?? {}
 })
 
@@ -112,6 +146,7 @@ const toStoredAuthProfile = (authUser: AuthUser | null): Partial<AuthUser> | nul
     status: authUser.status,
     permissions: authUser.permissions ?? [],
     organizationPermissions: authUser.organizationPermissions ?? false,
+    organization: authUser.organization ?? null,
     profile: authUser.profile ?? {},
   }
 }
@@ -165,6 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const latestUserRef = useRef<AuthUser | null>(null)
+  // La sesion vive tambien en un ref para que `refreshUser` no cambie de
+  // identidad con cada refresco de token: esta en las dependencias del valor del
+  // contexto, asi que si cambia arrastra a todos los consumidores igual que
+  // arrastraba el propio campo.
+  const sessionRef = useRef<Session | null>(null)
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
 
   const supabase = useMemo(() => createSupabaseClient(), [])
 
@@ -210,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         permissions?: unknown
         organizationPermissions?: unknown
+        organization?: unknown
       }
 
       const resolvedRole = toUserRole(profilePayload.role)
@@ -222,6 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         role: resolvedRole,
         status: resolvedStatus,
+        organization: toAuthOrganization(profilePayload.organization),
         profile: {
           name: typeof profileData.name === 'string' ? profileData.name : '',
           avatar_url: typeof profileData.avatar_url === 'string' ? profileData.avatar_url : '',
@@ -249,22 +295,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Función para refrescar los datos del usuario
+  // Lee la sesion del ref y no del estado: con `session` en las dependencias,
+  // esta funcion cambiaba de identidad en cada refresco de token y arrastraba al
+  // valor del contexto, que es lo que se queria dejar de mover.
   const refreshUser = useCallback(async () => {
-    if (!session?.user) return
+    const sessionUser = sessionRef.current?.user
+    if (!sessionUser) return
 
     try {
       const userProfile = await withTimeout(
-        fetchUserProfile(session.user.id),
+        fetchUserProfile(sessionUser.id),
         AUTH_PROFILE_TIMEOUT_MS,
         getDefaultAuthProfile()
       )
-      setUser(buildAuthUser(session.user, resolveStableProfile(session.user, userProfile)))
+      setUser(buildAuthUser(sessionUser, resolveStableProfile(sessionUser, userProfile)))
     } catch (error) {
       console.error('Error refreshing user:', error)
-      const fallbackProfile = resolveStableProfile(session.user, getDefaultAuthProfile())
-      setUser(buildAuthUser(session.user, fallbackProfile))
+      const fallbackProfile = resolveStableProfile(sessionUser, getDefaultAuthProfile())
+      setUser(buildAuthUser(sessionUser, fallbackProfile))
     }
-  }, [session, fetchUserProfile, resolveStableProfile])
+  }, [fetchUserProfile, resolveStableProfile])
 
   // Función para iniciar sesión
   const signIn = useCallback(async (email: string, password: string) => {
@@ -598,16 +648,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const nextUser = nextSession?.user
 
-        // Supabase refresca el token solo al volver a una pestaña (el SDK
-        // chequea visibilidad y refresca si corresponde), y eso dispara este
-        // mismo evento con event === 'TOKEN_REFRESHED'. Si sigue siendo el
-        // mismo usuario, no hay nada que recargar: antes esto pegaba a
-        // /api/auth/profile y armaba un `user` nuevo en cada cambio de
-        // pestaña, re-renderizando los 50+ componentes que leen useAuth()
-        // solo por eso. Se actualiza igual el token (session sí cambió de
-        // verdad), pero sin tocar perfil/rol/permisos, que no cambiaron.
-        if (event === 'TOKEN_REFRESHED' && nextUser && latestUserRef.current?.id === nextUser.id) {
-          setSession(nextSession)
+        // Al volver a la pestaña Supabase puede emitir TOKEN_REFRESHED o
+        // SIGNED_IN para la misma sesión. Conservar el perfil evita reconstruir
+        // el contexto y remostrar loaders; USER_UPDATED y otro usuario sí lo
+        // recargan. La sesión se actualiza igualmente para mantener el token.
+        if (shouldReuseAuthenticatedUser(
+          event,
+          nextUser?.id ?? null,
+          latestUserRef.current?.id ?? null,
+          Boolean(nextSession?.access_token && nextSession.access_token === sessionRef.current?.access_token),
+        )) {
+          if (nextSession && sessionRef.current?.access_token !== nextSession.access_token) {
+            sessionRef.current = nextSession
+            setSession(nextSession)
+          }
           return
         }
 
@@ -649,7 +703,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextType>(() => ({
     user,
-    session,
     loading,
     signIn,
     signUp,
@@ -664,7 +717,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser
   }), [
     user,
-    session,
     loading,
     signIn,
     signUp,

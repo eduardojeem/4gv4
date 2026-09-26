@@ -36,6 +36,8 @@ import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
 import { EditUserForm } from './EditUserForm'
+import { isProtectedOrganizationOwner } from '@/lib/auth/organization-owner-policy'
+import { UsersHelpDialog } from './users-help-dialog'
 
 // ── Simple email validation ───────────────────────────────────────────────────
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -94,6 +96,7 @@ export function UserManagement() {
     stats,
     isLoading: dataLoading,
     refreshUsers,
+    revealCustomerContact,
     createUser,
     updateUser,
     deleteUser,
@@ -341,6 +344,10 @@ export function UserManagement() {
 
   const handleDeleteSubmit = async () => {
     if (!selectedUser) return
+    if (isProtectedOrganizationOwner(selectedUser.role)) {
+      setDeleteError('El propietario no se puede desactivar desde la gestión de usuarios.')
+      return
+    }
     setIsSubmitting(true)
     setDeleteError(null)
     try {
@@ -369,6 +376,10 @@ export function UserManagement() {
   }
 
   const openEditDialog = useCallback((targetUser: SupabaseUser) => {
+    if (isProtectedOrganizationOwner(targetUser.role)) {
+      toast.info('El propietario se gestiona mediante una transferencia de propiedad.')
+      return
+    }
     const merged = { ...targetUser, permissions: targetUser.permissions || [] }
     setSelectedUser(merged)
     setIsEditDialogOpen(true)
@@ -435,6 +446,10 @@ export function UserManagement() {
     nextStatus: SupabaseUser['status'],
   ) => {
     if (targetUser.status === nextStatus) return
+    if (isProtectedOrganizationOwner(targetUser.role)) {
+      toast.info('El propietario no se puede activar o desactivar desde la gestión de usuarios.')
+      return
+    }
     if (targetUser.id === user?.id && nextStatus !== 'active') {
       toast.error('No puedes desactivar tu propia cuenta desde este modal')
       return
@@ -471,9 +486,10 @@ export function UserManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Gestión de Usuarios</h2>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Equipo y accesos</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Gestión de usuarios</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {stats.total} usuarios registrados ·{' '}
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">{stats.active} activos</span>
@@ -482,7 +498,10 @@ export function UserManagement() {
             )}
           </p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-shrink-0">
+          <div className="col-span-2 sm:col-span-1">
+            <UsersHelpDialog />
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -493,7 +512,7 @@ export function UserManagement() {
             disabled={dataLoading}
           >
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${dataLoading ? 'animate-spin' : ''}`} />
-            Sincronizar
+              Actualizar
           </Button>
           <Button
             size="sm"
@@ -508,10 +527,10 @@ export function UserManagement() {
             title={!canCreateUsers ? userQuota?.message : undefined}
           >
             <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-            Nuevo Usuario
+            Nuevo usuario
           </Button>
         </div>
-      </div>
+      </header>
 
       {showQuotaNotice ? (
         <div
@@ -572,21 +591,21 @@ export function UserManagement() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="h-9">
-          <TabsTrigger value="users" className="text-xs gap-1.5">
-            <Users className="h-3.5 w-3.5" />
+        <TabsList className="grid h-auto w-full grid-cols-4 sm:h-9 sm:w-auto">
+          <TabsTrigger value="users" className="gap-1 text-[11px] sm:gap-1.5 sm:text-xs">
+            <Users className="hidden h-3.5 w-3.5 sm:block" />
             Usuarios
           </TabsTrigger>
-          <TabsTrigger value="tree" className="text-xs gap-1.5">
-            <Network className="h-3.5 w-3.5" />
+          <TabsTrigger value="tree" className="gap-1 text-[11px] sm:gap-1.5 sm:text-xs">
+            <Network className="hidden h-3.5 w-3.5 sm:block" />
             Por rol
           </TabsTrigger>
-          <TabsTrigger value="customers" className="text-xs gap-1.5">
-            <UserRound className="h-3.5 w-3.5" />
+          <TabsTrigger value="customers" className="gap-1 text-[11px] sm:gap-1.5 sm:text-xs">
+            <UserRound className="hidden h-3.5 w-3.5 sm:block" />
             Clientes
           </TabsTrigger>
-          <TabsTrigger value="activity" className="text-xs gap-1.5">
-            <Activity className="h-3.5 w-3.5" />
+          <TabsTrigger value="activity" className="gap-1 text-[11px] sm:gap-1.5 sm:text-xs">
+            <Activity className="hidden h-3.5 w-3.5 sm:block" />
             Actividad
           </TabsTrigger>
         </TabsList>
@@ -621,6 +640,7 @@ export function UserManagement() {
                   setSelectedUser(user)
                   setIsViewDialogOpen(true)
                 }}
+                onRevealContact={(user) => { void revealCustomerContact(user.id) }}
               />
             </CardContent>
           </Card>
@@ -664,7 +684,8 @@ export function UserManagement() {
             <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <p>
               Clientes vinculados a la organización. Compran en la tienda pública y no ocupan
-              cupo de staff del plan.
+              cupo de staff del plan. Su correo y su teléfono se muestran tapados: se ven al
+              tocar «Mostrar», y esa consulta queda registrada.
             </p>
           </div>
 
@@ -701,6 +722,8 @@ export function UserManagement() {
                   setSelectedUser(user)
                   setIsViewDialogOpen(true)
                 }}
+                onRevealContact={(user) => { void revealCustomerContact(user.id) }}
+                activityColumn="purchase"
               />
             </CardContent>
           </Card>

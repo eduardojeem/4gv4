@@ -1,26 +1,22 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import React, { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Upload, 
-  X, 
-  Image as ImageIcon, 
-  Camera, 
-  FileImage, 
-  Eye,
-  Download,
+import {
+  Upload,
+  X,
+  Image as ImageIcon,
+  Camera,
+  FileImage, Download,
   RotateCw,
   Crop
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { Slider } from '@/components/ui/slider'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface ImageFile {
   id: string
@@ -65,10 +61,10 @@ export function ImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Opciones de procesado
-  const [quality, setQuality] = useState<number>(0.8)
-  const [maxWidth, setMaxWidth] = useState<number>(1280)
-  const [outputFormat, setOutputFormat] = useState<'image/webp' | 'image/jpeg' | 'image/png'>('image/webp')
-  const [defaultCropSquare, setDefaultCropSquare] = useState<boolean>(false)
+  const [quality, _setQuality] = useState<number>(0.8)
+  const [maxWidth, _setMaxWidth] = useState<number>(1280)
+  const [outputFormat, _setOutputFormat] = useState<'image/webp' | 'image/jpeg' | 'image/png'>('image/webp')
+  const [defaultCropSquare, _setDefaultCropSquare] = useState<boolean>(false)
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes'
@@ -201,7 +197,7 @@ export function ImageUpload({
 
     const preparedFiles: ImageFile[] = []
     for (const file of validFiles) {
-      const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+      const id = crypto.randomUUID()
       const { blob } = await processImage(file, {
         quality,
         maxWidth,
@@ -374,7 +370,7 @@ export function ImageUpload({
               <h4 className="font-medium">Vista Principal</h4>
               <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-black/5">
                 <div className="aspect-video">
-                  <img
+                  <AppImage
                     src={(imageFiles.find(i => i.isMain)?.url) || imageFiles[0].url}
                     alt={(imageFiles.find(i => i.isMain)?.name) || imageFiles[0].name}
                     className="w-full h-full object-cover"
@@ -418,7 +414,7 @@ export function ImageUpload({
                 {imageFiles.map((imageFile) => (
                   <Card key={imageFile.id} className="relative overflow-hidden hover:shadow-md transition-shadow">
                     <div className="aspect-square relative">
-                      <img
+                      <AppImage
                         src={imageFile.url}
                         alt={imageFile.name}
                         className="w-full h-full object-cover"

@@ -18,17 +18,30 @@ import { useServerInsertedHTML } from 'next/navigation'
 // Next.js expone para inyectar HTML directo en el stream de SSR (el mismo
 // que usan las libs de CSS-in-JS para inyectar <style>) sin que React lo
 // trate como un elemento reconciliable — por eso no dispara el warning.
+// El modo por defecto es claro: quien nunca eligio tema abre en claro, aunque
+// su sistema este en oscuro. Solo se va a oscuro con una decision explicita
+// —'dark', o 'system' con el sistema en oscuro—.
+//
+// Este script y `ThemeProvider` tienen que decidir igual: si uno pone claro y el
+// otro oscuro, se ve el parpadeo que este script existe para evitar.
 const THEME_INIT_SCRIPT = `
 (function() {
   try {
-    const theme = localStorage.getItem('theme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (theme === 'dark' || (!theme && systemPrefersDark)) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.add('light');
+    var theme = localStorage.getItem('theme');
+
+    // Clave vieja del panel admin, que el proveedor tambien respeta.
+    if (!theme) {
+      var legacy = localStorage.getItem('admin-dark-mode');
+      if (legacy !== null) theme = legacy === 'true' ? 'dark' : 'light';
     }
-  } catch (e) {}
+
+    var systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var dark = theme === 'dark' || (theme === 'system' && systemPrefersDark);
+
+    document.documentElement.classList.add(dark ? 'dark' : 'light');
+  } catch (e) {
+    document.documentElement.classList.add('light');
+  }
 })()
 `
 

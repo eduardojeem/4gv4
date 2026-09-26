@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   Table,
   TableBody,
@@ -29,6 +29,7 @@ import {
 import { SupabaseUser } from '@/hooks/use-users-supabase'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { isProtectedOrganizationOwner } from '@/lib/auth/organization-owner-policy'
 
 type SortDirection = 'asc' | 'desc' | null
 
@@ -43,6 +44,14 @@ interface UsersTableProps {
   onEdit: (user: SupabaseUser) => void
   onDelete: (user: SupabaseUser) => void
   onView: (user: SupabaseUser) => void
+  /** Pide el contacto completo de un cliente; sin esto no se ofrece mostrarlo. */
+  onRevealContact?: (user: SupabaseUser) => void
+  /**
+   * Qué muestra la última columna. Para el equipo, cuándo entró al sistema;
+   * para los clientes de la tienda, cuándo compró por última vez, que es lo
+   * que sirve para atenderlos.
+   */
+  activityColumn?: 'login' | 'purchase'
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,6 +64,10 @@ const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
   admin: {
     label: 'Administrador',
     className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+  },
+  owner: {
+    label: 'Propietario',
+    className: 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-800',
   },
   tecnico: {
     label: 'Técnico',
@@ -96,10 +109,15 @@ function getStatusConfig(status: string) {
   return STATUS_CONFIG[status] ?? { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700', dot: 'bg-gray-400' }
 }
 
-function formatLastLogin(value: string | null | undefined): { text: string; fullDate: string; activeTone: 'recent' | 'weekly' | 'old' | 'never' } {
-  if (!value) return { text: 'Nunca', fullDate: 'Sin registros de inicio de sesión', activeTone: 'never' }
+function formatLastLogin(
+  value: string | null | undefined,
+  isPurchase = false
+): { text: string; fullDate: string; activeTone: 'recent' | 'weekly' | 'old' | 'never' } {
+  const emptyLabel = isPurchase ? 'Sin compras' : 'Nunca'
+  const emptyDetail = isPurchase ? 'Todavía no compró en esta tienda' : 'Nunca inició sesión'
+  if (!value) return { text: emptyLabel, fullDate: emptyDetail, activeTone: 'never' }
   const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return { text: 'Nunca', fullDate: 'Sin registros', activeTone: 'never' }
+  if (!Number.isFinite(date.getTime())) return { text: emptyLabel, fullDate: emptyDetail, activeTone: 'never' }
 
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -152,8 +170,16 @@ export function UsersTable({
   onPageChange,
   onEdit,
   onDelete,
-  onView
+  onView,
+  onRevealContact,
+  activityColumn = 'login',
 }: UsersTableProps) {
+  const showsPurchases = activityColumn === 'purchase'
+  const activityLabel = showsPurchases ? 'Última compra' : 'Último acceso'
+  const activityOf = useCallback(
+    (user: SupabaseUser) => (showsPurchases ? user.lastPurchase ?? null : user.lastLogin),
+    [showsPurchases],
+  )
   const [sortDir, setSortDir] = useState<SortDirection>(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
@@ -162,11 +188,11 @@ export function UsersTable({
   const sortedUsers = useMemo(() => {
     if (!sortDir) return users
     return [...users].sort((a, b) => {
-      const ta = getLastLoginTimestamp(a.lastLogin)
-      const tb = getLastLoginTimestamp(b.lastLogin)
+      const ta = getLastLoginTimestamp(activityOf(a))
+      const tb = getLastLoginTimestamp(activityOf(b))
       return sortDir === 'asc' ? ta - tb : tb - ta
     })
-  }, [users, sortDir])
+  }, [users, sortDir, activityOf])
 
   const cycleSortDir = () => {
     setSortDir((prev) => {
@@ -202,10 +228,10 @@ export function UsersTable({
                 <button
                   onClick={cycleSortDir}
                   className="flex items-center gap-1.5 hover:text-foreground transition-colors group"
-                  title={sortDir === null ? 'Ordenar por último acceso' : sortDir === 'desc' ? 'Más reciente primero' : 'Más antiguo primero'}
+                  title={sortDir === null ? `Ordenar por ${activityLabel.toLowerCase()}` : sortDir === 'desc' ? 'Más reciente primero' : 'Más antiguo primero'}
                 >
                   <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                  Último acceso
+                  {activityLabel}
                   <SortIcon
                     className={`h-3.5 w-3.5 transition-colors ${sortDir ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}
                   />
@@ -242,6 +268,7 @@ export function UsersTable({
                 const statusConf = getStatusConfig(user.status)
                 const initials = user.name ? user.name.charAt(0).toUpperCase() : '?'
                 const isInactive = user.status !== 'active'
+                const isOwner = isProtectedOrganizationOwner(user.role)
 
                 return (
                   <TableRow
@@ -264,6 +291,18 @@ export function UsersTable({
                           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
                             <Mail className="h-3 w-3 flex-shrink-0" />
                             <span className="truncate">{user.email}</span>
+                            {user.contactMasked && onRevealContact ? (
+                              <button
+                                type="button"
+                                onClick={() => onRevealContact(user)}
+                                className="ml-0.5 inline-flex shrink-0 items-center gap-1 rounded px-1 text-[11px] font-medium text-primary hover:underline"
+                                aria-label={`Mostrar el contacto de ${user.name}`}
+                                title="El contacto de un cliente se muestra solo cuando se pide, y queda registrado"
+                              >
+                                <Eye className="h-3 w-3" />
+                                Mostrar
+                              </button>
+                            ) : null}
                           </p>
                         </div>
                       </div>
@@ -278,6 +317,11 @@ export function UsersTable({
                         >
                           {roleConf.label}
                         </Badge>
+                        {isOwner ? (
+                          <span className="text-[10px] text-muted-foreground" title="Responsable principal de la empresa; se gestiona mediante transferencia de propiedad">
+                            Responsable principal
+                          </span>
+                        ) : null}
                         {user.isWholesale ? (
                           <Badge
                             variant="outline"
@@ -364,7 +408,7 @@ export function UsersTable({
                     {/* Last login */}
                     <TableCell className="hidden lg:table-cell py-3 text-sm text-muted-foreground">
                       {(() => {
-                        const { text, fullDate, activeTone } = formatLastLogin(user.lastLogin)
+                        const { text, fullDate, activeTone } = formatLastLogin(activityOf(user), showsPurchases)
                         const dotColor =
                           activeTone === 'recent'
                             ? 'bg-emerald-500 animate-pulse'
@@ -394,24 +438,28 @@ export function UsersTable({
                         >
                           <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-md"
-                          onClick={() => onEdit(user)}
-                          title="Editar usuario"
-                        >
-                          <Edit className="h-3.5 w-3.5 text-blue-500" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-md"
-                          onClick={() => onDelete(user)}
-                          title="Desactivar usuario"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                        </Button>
+                        {!isOwner ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-md"
+                              onClick={() => onEdit(user)}
+                              title="Editar usuario"
+                            >
+                              <Edit className="h-3.5 w-3.5 text-blue-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-md"
+                              onClick={() => onDelete(user)}
+                              title="Desactivar usuario"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

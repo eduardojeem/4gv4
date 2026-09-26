@@ -48,7 +48,7 @@ export interface OptimizationCondition {
 export interface OptimizationAction {
   id: string
   type: 'scale_up' | 'scale_down' | 'cache_clear' | 'restart_service' | 'optimize_query' | 'compress_data' | 'cleanup_temp' | 'adjust_config' | 'notify_admin'
-  parameters: Record<string, any>
+  parameters: Record<string, unknown>
   timeout: number // seconds
   retryAttempts: number
   rollbackOnFailure: boolean
@@ -126,7 +126,7 @@ export interface RollbackStep {
   id: string
   description: string
   action: string
-  parameters: Record<string, any>
+  parameters: Record<string, unknown>
   order: number
 }
 
@@ -385,7 +385,7 @@ export class PerformanceOptimizer {
   private async checkOptimizationTriggers(): Promise<void> {
     try {
       const rules = await this.getActiveOptimizationRules()
-      
+
       for (const rule of rules) {
         if (await this.shouldTriggerRule(rule)) {
           await this.executeOptimizationRule(rule.id, {
@@ -423,9 +423,9 @@ export class PerformanceOptimizer {
     // Get recent metrics for the condition
     const endTime = new Date()
     const startTime = new Date(endTime.getTime() - condition.duration * 60000)
-    
+
     const metrics = await this.getMetrics(condition.metricName, startTime, endTime)
-    
+
     if (metrics.length === 0) return false
 
     // Calculate aggregated value
@@ -483,8 +483,8 @@ export class PerformanceOptimizer {
   }
 
   async getMetrics(
-    metricName: string, 
-    startTime: Date, 
+    metricName: string,
+    startTime: Date,
     endTime: Date
   ): Promise<PerformanceMetric[]> {
     const { data, error } = await this.supabase
@@ -590,14 +590,14 @@ export class PerformanceOptimizer {
 
   // Ejecución de optimizaciones
   async executeOptimizationRule(
-    ruleId: string, 
+    ruleId: string,
     trigger: OptimizationTrigger
   ): Promise<string> {
     const rule = await this.getOptimizationRule(ruleId)
     if (!rule) throw new Error(`Rule ${ruleId} not found`)
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const execution: OptimizationExecution = {
       id: executionId,
       ruleId,
@@ -625,7 +625,7 @@ export class PerformanceOptimizer {
   }
 
   private async executeOptimizationAsync(
-    execution: OptimizationExecution, 
+    execution: OptimizationExecution,
     rule: OptimizationRule
   ): Promise<void> {
     try {
@@ -638,7 +638,7 @@ export class PerformanceOptimizer {
       for (const action of rule.actions) {
         const actionExecution = await this.executeAction(action, execution.id)
         actionExecutions.push(actionExecution)
-        
+
         if (actionExecution.status === 'failed') {
           overallSuccess = false
           if (action.rollbackOnFailure) {
@@ -650,7 +650,7 @@ export class PerformanceOptimizer {
 
       // Calculate results
       const results = await this.calculateOptimizationResults(actionExecutions)
-      
+
       execution.actions = actionExecutions
       execution.results = results
       execution.endTime = new Date()
@@ -669,8 +669,8 @@ export class PerformanceOptimizer {
   }
 
   private async executeAction(
-    action: OptimizationAction, 
-    executionId: string
+    action: OptimizationAction,
+    _executionId: string
   ): Promise<ActionExecution> {
     const actionExecution: ActionExecution = {
       actionId: action.id,
@@ -690,7 +690,7 @@ export class PerformanceOptimizer {
 
     try {
       actionExecution.status = 'running'
-      
+
       // Capture before metrics
       const beforeMetrics = await this.captureActionMetrics('before')
       actionExecution.metrics = {
@@ -751,48 +751,48 @@ export class PerformanceOptimizer {
   }
 
   // Implementaciones de acciones específicas
-  private async executeScaleUp(parameters: Record<string, any>): Promise<void> {
+  private async executeScaleUp(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing scale up:', parameters)
     // Simular escalado
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
 
-  private async executeScaleDown(parameters: Record<string, any>): Promise<void> {
+  private async executeScaleDown(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing scale down:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1500))
   }
 
-  private async executeCacheClear(parameters: Record<string, any>): Promise<void> {
+  private async executeCacheClear(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing cache clear:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
 
-  private async executeServiceRestart(parameters: Record<string, any>): Promise<void> {
+  private async executeServiceRestart(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing service restart:', parameters)
     await new Promise(resolve => setTimeout(resolve, 3000))
   }
 
-  private async executeQueryOptimization(parameters: Record<string, any>): Promise<void> {
+  private async executeQueryOptimization(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing query optimization:', parameters)
     await new Promise(resolve => setTimeout(resolve, 2500))
   }
 
-  private async executeDataCompression(parameters: Record<string, any>): Promise<void> {
+  private async executeDataCompression(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing data compression:', parameters)
     await new Promise(resolve => setTimeout(resolve, 4000))
   }
 
-  private async executeTempCleanup(parameters: Record<string, any>): Promise<void> {
+  private async executeTempCleanup(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing temp cleanup:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1500))
   }
 
-  private async executeConfigAdjustment(parameters: Record<string, any>): Promise<void> {
+  private async executeConfigAdjustment(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing config adjustment:', parameters)
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
 
-  private async executeAdminNotification(parameters: Record<string, any>): Promise<void> {
+  private async executeAdminNotification(parameters: Record<string, unknown>): Promise<void> {
     console.log('Executing admin notification:', parameters)
     await new Promise(resolve => setTimeout(resolve, 500))
   }
@@ -906,7 +906,7 @@ export class PerformanceOptimizer {
   }
 
   private async updateExecutionStatus(
-    executionId: string, 
+    executionId: string,
     status: OptimizationExecution['status']
   ): Promise<void> {
     const { error } = await this.supabase
@@ -959,7 +959,7 @@ export class PerformanceOptimizer {
   }
 
   async generateOptimizationReport(
-    startDate: Date, 
+    startDate: Date,
     endDate: Date
   ): Promise<OptimizationReport> {
     // Implementation would generate comprehensive optimization report

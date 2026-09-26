@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
-import { Plus, Edit, Trash2, Save, X, Palette, Ruler, Type, Hash, Eye, EyeOff } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Plus, Edit, Trash2, Save, X, Palette, Ruler, Type, Hash } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
 import { useProductVariants } from '@/hooks/useProductVariants'
 import { VariantAttribute, VariantOption, ProductVariant, VariantAttributeValue } from '@/types/product-variants'
 import { toast } from 'sonner'
@@ -25,19 +24,19 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
   const {
     attributes,
     products,
-    loading,
+    loading: _loading,
     createAttribute,
     updateAttribute,
     deleteAttribute,
-    addAttributeOption,
+    addAttributeOption: _addAttributeOption,
     createProductVariant,
-    updateProductVariant,
+    updateProductVariant: _updateProductVariant,
     deleteProductVariant
   } = useProductVariants()
 
   const [activeTab, setActiveTab] = useState('attributes')
   const [editingAttribute, setEditingAttribute] = useState<VariantAttribute | null>(null)
-  const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null)
+  const [_editingVariant, setEditingVariant] = useState<ProductVariant | null>(null)
   const [showCreateAttribute, setShowCreateAttribute] = useState(false)
   const [showCreateVariant, setShowCreateVariant] = useState(false)
 
@@ -72,12 +71,12 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
     [products, productId]
   )
 
-  const availableAttributes = useMemo(() => 
+  void (useMemo(() =>
     currentProduct ? attributes.filter(attr => 
       currentProduct.variant_attributes.includes(attr.id)
     ) : attributes,
     [attributes, currentProduct]
-  )
+  ));
 
   const [createAttrError, setCreateAttrError] = useState<string | null>(null)
 
@@ -210,7 +209,7 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
               </div>
               <Select
                 value={editData.type}
-                onValueChange={(value: any) => setEditData(prev => ({ ...prev, type: value }))}
+                onValueChange={(value: VariantAttribute['type']) => setEditData(prev => ({ ...prev, type: value }))}
               >
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -416,7 +415,7 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
                     <Label>Tipo</Label>
                     <Select
                       value={newAttribute.type}
-                      onValueChange={(value: any) => setNewAttribute(prev => ({ ...prev, type: value }))}
+                      onValueChange={(value: VariantAttribute['type']) => setNewAttribute(prev => ({ ...prev, type: value }))}
                     >
                       <SelectTrigger>
                         <SelectValue />

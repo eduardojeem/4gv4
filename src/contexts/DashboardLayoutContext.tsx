@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react'
+import React, { createContext, useContext, useState, ReactNode, useMemo, useCallback } from 'react'
 
 interface DashboardLayoutContextValue {
     sidebarCollapsed: boolean
@@ -19,32 +19,9 @@ export function useDashboardLayout() {
 }
 
 export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-
-    // Load preferences from localStorage on mount
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            const savedCollapsed = localStorage.getItem('dashboard-sidebar-collapsed')
-            if (savedCollapsed !== null) {
-                setSidebarCollapsed(savedCollapsed === 'true')
-                return
-            }
-            // By default, keep sidebar closed on mobile to avoid overlaying content on first load.
-            if (window.innerWidth < 1024) {
-                setSidebarCollapsed(true)
-            }
-        }, 0)
-        return () => clearTimeout(timer)
-    }, [])
-
-    // Save sidebar collapsed state to localStorage
-    useEffect(() => {
-        try {
-            localStorage.setItem('dashboard-sidebar-collapsed', String(sidebarCollapsed))
-        } catch (error) {
-            console.error('Error saving sidebar state:', error)
-        }
-    }, [sidebarCollapsed])
+    // Cada entrada o recarga comienza contraída. El estado se conserva
+    // solamente mientras este layout sigue montado durante la navegación.
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
 
     const toggleSidebar = useCallback(() => {
         setSidebarCollapsed(prev => !prev)

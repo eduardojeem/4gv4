@@ -1,12 +1,10 @@
 'use client'
 
 import { useState, memo } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  Search, 
-  Filter, 
-  X, 
-  Grid, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  Search, X,
+  Grid,
   List,
   SlidersHorizontal,
   ChevronDown
@@ -288,7 +286,7 @@ export const ModernFilters = memo(({
                 <div className="flex flex-wrap gap-1 sm:gap-2">
                   {searchQuery && (
                     <Badge variant="secondary" className="gap-1 text-xs">
-                      <span className="hidden sm:inline">Búsqueda: </span>"{searchQuery}"
+                      <span className="hidden sm:inline">Búsqueda: </span>&quot;{searchQuery}&quot;
                       <button
                         onClick={() => onSearchChange("")}
                         className="ml-1 hover:bg-gray-200 rounded-full p-0.5"
@@ -339,3 +337,5 @@ export const ModernFilters = memo(({
     </motion.div>
   )
 })
+
+ModernFilters.displayName = 'ModernFilters'

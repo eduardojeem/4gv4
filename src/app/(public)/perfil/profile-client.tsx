@@ -13,7 +13,18 @@ import { ProfileForm } from '@/components/profile/profile-form'
 import { ProfileQuickActions } from '@/components/profile/profile-quick-actions'
 import { ProfileActivity } from '@/components/profile/profile-activity'
 import { ProfileOrders, type ProfileOrder } from '@/components/profile/profile-orders'
+import { ProfileOrderHistory } from '@/components/profile/profile-order-history'
+import { ProfileAccountSummary } from '@/components/profile/profile-account-summary'
+import { ProfileStoreCarts } from '@/components/profile/profile-store-carts'
+import { ProfileStores } from '@/components/profile/profile-stores'
+import { ProfileFavoritesWidget } from '@/components/profile/profile-favorites-widget'
+import { ProfileAccountTypeBanner, type UserOrganizationInfo } from '@/components/profile/profile-account-type-banner'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
+import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
+import type { CustomerStoreSummary } from '@/lib/profile/customer-stores'
+import type { StoreCreditByOrganization } from '@/components/profile/profile-account-summary'
+import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
+import { ProfileSettingsPanel } from '@/components/profile/profile-settings-panel'
 
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -22,24 +33,67 @@ const profileSchema = z.object({
   location: z.string().optional()
 })
 
-type ProfileData = z.infer<typeof profileSchema> & { email: string; createdAt?: string; role?: string }
+type ProfileData = z.infer<typeof profileSchema> & {
+  email: string
+  createdAt?: string
+  role?: string
+  organization?: UserOrganizationInfo | null
+}
 
 interface ProfileClientProps {
+  /** La tienda tiene el modulo de taller: sin el no se ofrece «Rastrear equipo». */
+  repairsAvailable?: boolean
   initialData: ProfileData
   userId: string
+  /** Tienda de la ruta. Vacio fuera de una: decide el alcance de los datos. */
   tenantPrefix: string
-  stats: { totalRepairs: number; activeRepairs: number; completedRepairs: number; totalOrders: number }
-  recentRepairs: Array<{ id: string; brand?: string; model?: string; device?: string; status: string; created_at: string; final_cost?: number }>
+  /**
+   * Prefijo de los enlaces. Coincide con `tenantPrefix` dentro de una tienda,
+   * pero en el marketplace es `/marketplace`: ahi no hay tenant y sin esto cada
+   * enlace salia del marketplace.
+   */
+  linkPrefix?: string
+  /** La cuenta abierta por tienda. Solo aporta con mas de una. */
+  stores?: CustomerStoreSummary[]
+  stats: { totalRepairs: number; activeRepairs: number; readyRepairs: number; deliveredRepairs: number; totalOrders: number }
+  accountSummary: CustomerAccountSummary
+  storeCredits?: StoreCreditByOrganization[]
+  recentRepairs: Array<{
+    id: string
+    ticket_number?: string | null
+    brand?: string
+    model?: string
+    device?: string
+    status: string
+    created_at: string
+    final_cost?: number | null
+    estimated_cost?: number | null
+    paid_amount?: number | null
+    payment_status?: string | null
+    organization?: {
+      id: string
+      name: string
+      slug: string
+      logo_url?: string | null
+    } | null
+  }>
   recentOrders: ProfileOrder[]
+  organization?: UserOrganizationInfo | null
 }
 
 export function ProfileClient({
   initialData,
   userId,
   tenantPrefix,
+  linkPrefix = tenantPrefix,
+  stores = [],
   stats,
+  accountSummary,
+  storeCredits = [],
   recentRepairs,
-  recentOrders
+  recentOrders,
+  organization,
+  repairsAvailable = true,
 }: ProfileClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -49,6 +103,7 @@ export function ProfileClient({
   const [initialProfile, setInitialProfile] = useState<ProfileData>(initialData)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const isMarketplaceProfile = linkPrefix === '/marketplace'
 
   const isDirty = useMemo(() => {
     return JSON.stringify(profile) !== JSON.stringify(initialProfile)
@@ -120,7 +175,7 @@ export function ProfileClient({
   }
 
   const handleLogout = async () => {
-    try { await supabase.auth.signOut(); toast.success('Sesion cerrada'); router.push(tenantPrefix ? `${tenantPrefix}/inicio` : '/login') }
+    try { await supabase.auth.signOut(); toast.success('Sesion cerrada'); router.push(tenantPrefix ? `${tenantPrefix}/inicio` : linkPrefix || '/login') }
     catch { toast.error('Error al cerrar sesion') }
   }
 
@@ -134,17 +189,136 @@ export function ProfileClient({
         avatarUrl={profile.avatarUrl}
         phone={profile.phone}
         userId={userId}
+        organizationName={profile.organization?.name || organization?.name}
         onAvatarChange={(url) => setProfile(p => ({ ...p, avatarUrl: url }))}
         onLogout={() => setShowLogoutConfirm(true)}
       />
 
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        {isMarketplaceProfile ? (
+          <>
+            {organization && (
+              <section aria-labelledby="store-management-title" className="mb-10">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">Para tu tienda</p>
+                  <h2 id="store-management-title" className="mt-1 text-xl font-bold tracking-tight">Administrar mi negocio</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Accesos de gestión separados de tus compras personales.</p>
+                </div>
+                <ProfileAccountTypeBanner organization={profile.organization || organization} userRole={profile.role} />
+              </section>
+            )}
+
+            <section aria-labelledby="marketplace-activity-title" className="mb-10">
+              <div className="mb-5 border-b border-border pb-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">Marketplace</p>
+                <h2 id="marketplace-activity-title" className="mt-1 text-xl font-bold tracking-tight">Mi actividad</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Compras, favoritos, carritos, créditos y reparaciones de todas las tiendas.</p>
+              </div>
+
+              <ProfileQuickActions
+                role={profile.role || 'cliente'}
+                tenantPrefix={linkPrefix}
+                variant="marketplace"
+                showAuthorizedPersons={false}
+              />
+              <div className="mt-4"><ProfileStats {...stats} variant="activity" /></div>
+              <div className="mt-6">
+                <ProfileAccountSummary summary={accountSummary} tenantPrefix={linkPrefix} storeCredits={storeCredits} />
+              </div>
+              {stores.length > 0 && <div className="mt-6"><ProfileStores stores={stores} /></div>}
+
+              <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="flex min-w-0 flex-col gap-6">
+                  <ProfileFavoritesWidget linkPrefix={linkPrefix} />
+                  <ProfileStoreCarts />
+                  <ProfileOrderHistory initialOrders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+                </div>
+                <div className="lg:sticky lg:top-24 lg:self-start">
+                  <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} hideWhenEmpty />
+                </div>
+              </div>
+            </section>
+
+            <section id="datos-personales" aria-labelledby="personal-info-title" className="mb-10 scroll-mt-20 border-t border-border pt-8">
+              <div className="mb-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mi cuenta</p>
+                <h2 id="personal-info-title" className="mt-1 text-xl font-bold tracking-tight">Datos personales y seguridad</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Actualizá tus datos de contacto o cambiá tu contraseña.</p>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <ProfileForm
+                  name={profile.name}
+                  phone={profile.phone || ''}
+                  email={profile.email}
+                  location={profile.location || ''}
+                  errors={errors}
+                  isDirty={isDirty}
+                  loading={loading}
+                  onNameChange={(v) => setProfile(p => ({ ...p, name: v }))}
+                  onPhoneChange={(v) => setProfile(p => ({ ...p, phone: v }))}
+                  onLocationChange={(v) => setProfile(p => ({ ...p, location: v }))}
+                  onSubmit={handleUpdateProfile}
+                />
+                <ProfileSettingsPanel hasStore={Boolean(organization)} />
+              </div>
+            </section>
+
+            {!organization && (
+              <section aria-labelledby="store-information-title" className="border-t border-border pt-8">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">Para quienes venden</p>
+                  <h2 id="store-information-title" className="mt-1 text-xl font-bold tracking-tight">Información para abrir una tienda</h2>
+                </div>
+                <ProfileAccountTypeBanner userRole={profile.role} />
+              </section>
+            )}
+          </>
+        ) : (
+          <>
+        <ProfileAccountTypeBanner
+          organization={profile.organization || organization}
+          userRole={profile.role}
+        />
+
         <div className="mb-8">
           <ProfileStats {...stats} />
         </div>
 
+        <div className="mb-8">
+          <ProfileAccountSummary
+            summary={accountSummary}
+            tenantPrefix={linkPrefix}
+            storeCredits={storeCredits}
+          />
+        </div>
+
+        {stores.length > 1 && (
+          <div className="mb-8">
+            <ProfileStores stores={stores} />
+          </div>
+        )}
+
+        {/* Este widget consulta el saldo de UNA organizacion: la de la ruta, y
+            si no hay, la de por defecto. Fuera de una tienda eso mostraba el
+            saldo de un comercio cualquiera al lado del total real del resumen,
+            dos numeros distintos para lo mismo. En el marketplace el desglose
+            por tienda vive en el resumen de cuenta. */}
+        {tenantPrefix && (
+          <div className="mb-8">
+            <PublicStoreCredit
+              authenticated
+              organizationSlug={tenantPrefix.replace(/^\//, '') || null}
+            />
+          </div>
+        )}
+
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-6">
+            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} showRepairs={repairsAvailable} />
+            <ProfileFavoritesWidget linkPrefix={linkPrefix} />
+            <ProfileStoreCarts />
+            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+
             <ProfileForm
               name={profile.name}
               phone={profile.phone || ''}
@@ -158,15 +332,14 @@ export function ProfileClient({
               onLocationChange={(v) => setProfile(p => ({ ...p, location: v }))}
               onSubmit={handleUpdateProfile}
             />
-
-            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={tenantPrefix} />
-            <ProfileOrders orders={recentOrders} tenantPrefix={tenantPrefix} />
           </div>
 
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <ProfileActivity repairs={recentRepairs} tenantPrefix={tenantPrefix} />
+            <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />
           </div>
         </div>
+          </>
+        )}
       </div>
 
       <LogoutDialog

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 import { action } from '@storybook/addon-actions'
 import { ProductAnalyticsDashboard } from './ProductAnalyticsDashboard'
 
@@ -197,7 +197,7 @@ export const MetricsOnly: Story = {
       }
     }
   },
-  render: (args) => (
+  render: (_args) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {/* Métricas principales */}
       <div className="bg-card p-6 rounded-lg border">

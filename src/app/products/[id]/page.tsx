@@ -1,28 +1,20 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence  } from '../../../components/ui/motion'
-import { 
-  ArrowLeft, 
-  Package, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  Minus,
-  TrendingUp,
+import { motion, AnimatePresence } from '../../../components/ui/motion'
+import {
+  ArrowLeft,
+  Package,
+  Edit,
+  Trash2,
+  Plus, TrendingUp,
   TrendingDown,
   Calendar,
-  User,
-  MapPin,
-  AlertTriangle,
+  User, AlertTriangle,
   CheckCircle,
   Clock,
-  BarChart3,
-  Download,
-  Share2,
-  Star,
-  Tag,
+  BarChart3, Share2, Tag,
   Truck
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
@@ -34,10 +26,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { useNotifications } from '@/components/dashboard/notification-system'
-import { formatDate } from '@/lib/utils'
 
 // Función helper para formatear números
 const formatNumber = (num: number): string => {
@@ -76,6 +66,25 @@ interface ProductHistory {
   created_at: string
 }
 
+interface ProductDetail {
+  id: string
+  name: string
+  description?: string | null
+  sale_price: number
+  wholesale_price?: number | null
+  purchase_price?: number | null
+  min_stock?: number | null
+  stock_quantity: number
+  category?: string | null
+  supplier?: string | null
+  sku?: string | null
+  created_at?: string
+  updated_at?: string
+  is_active?: boolean
+  images?: string[] | null
+  [key: string]: unknown
+}
+
 // Variantes de animación
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
@@ -109,7 +118,7 @@ export default function ProductDetailPage() {
   
   const { addNotification } = useNotifications()
   
-  const [product, setProduct] = useState<any | null>(null)
+  const [product, setProduct] = useState<ProductDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -187,7 +196,9 @@ export default function ProductDetailPage() {
             setStockMovements(movements.map(m => ({
               id: m.id,
               product_id: m.product_id,
-              type: m.movement_type as any,
+              type: (['entrada', 'salida', 'ajuste', 'venta', 'compra', 'devolucion'].includes(String(m.movement_type))
+                ? m.movement_type
+                : 'ajuste') as StockMovement['type'],
               quantity: m.quantity,
               previous_stock: m.previous_stock,
               new_stock: m.new_stock,
@@ -223,9 +234,9 @@ export default function ProductDetailPage() {
           console.warn('Tabla product_price_history no encontrada o error:', e)
         }
 
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error fetching product:', err)
-        setError(err.message || 'Error al cargar el producto')
+        setError(err instanceof Error ? err.message : 'Error al cargar el producto')
       } finally {
         setLoading(false)
       }
@@ -287,12 +298,12 @@ export default function ProductDetailPage() {
       })
 
       setIsEditModalOpen(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       addNotification({
         type: 'error',
         category: 'product',
         title: 'Error al actualizar',
-        message: error.message || 'Error desconocido',
+        message: error instanceof Error ? error.message : 'Error desconocido',
         actionable: false
       })
     }
@@ -341,12 +352,12 @@ export default function ProductDetailPage() {
       
       // Recargar página para ver cambios frescos
       window.location.reload() 
-    } catch (error: any) {
+    } catch (error: unknown) {
       addNotification({
         type: 'error',
         category: 'product',
         title: 'Error al ajustar stock',
-        message: error.message || 'Error desconocido',
+        message: error instanceof Error ? error.message : 'Error desconocido',
         actionable: false
       })
     }
@@ -373,12 +384,12 @@ export default function ProductDetailPage() {
         })
 
         router.push('/dashboard/products')
-      } catch (error: any) {
+      } catch (error: unknown) {
         addNotification({
           type: 'error',
           category: 'product',
           title: 'Error al eliminar',
-          message: error.message || 'Error desconocido',
+          message: error instanceof Error ? error.message : 'Error desconocido',
           actionable: false
         })
       }

@@ -3,7 +3,7 @@
  * Mejora la eficiencia del cajero con shortcuts intuitivos
  */
 
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useLayoutEffect, useCallback, useRef, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
 export interface KeyboardShortcuts {
@@ -43,58 +43,54 @@ interface UseKeyboardShortcutsOptions {
   onShortcutUsed?: (shortcut: string) => void
 }
 
+const MODAL_OPEN = 1
+const INPUT_FOCUSED = 2
+
+function getInteractionState() {
+  if (typeof document === 'undefined') return 0
+  const activeElement = document.activeElement as HTMLElement | null
+  const inputFocused = activeElement?.tagName === 'INPUT' ||
+    activeElement?.tagName === 'TEXTAREA' || activeElement?.contentEditable === 'true'
+  return (document.querySelector('[role="dialog"]') ? MODAL_OPEN : 0) |
+    (inputFocused ? INPUT_FOCUSED : 0)
+}
+
+function subscribeInteractionState(onChange: () => void) {
+  const observer = new MutationObserver(onChange)
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['role', 'contenteditable']
+  })
+  document.addEventListener('focusin', onChange)
+  document.addEventListener('focusout', onChange)
+  return () => {
+    observer.disconnect()
+    document.removeEventListener('focusin', onChange)
+    document.removeEventListener('focusout', onChange)
+  }
+}
+
 export function useKeyboardShortcuts(
   shortcuts: Partial<KeyboardShortcuts>,
   options: UseKeyboardShortcutsOptions = {}
 ) {
   const { enabled = true, showToasts = true, onShortcutUsed } = options
   const shortcutsRef = useRef(shortcuts)
-  const isModalOpenRef = useRef(false)
-  const isInputFocusedRef = useRef(false)
+  const interactionState = useSyncExternalStore(subscribeInteractionState, getInteractionState, () => 0)
 
   // Actualizar referencia de shortcuts
-  shortcutsRef.current = shortcuts
-
-  // Detectar si hay un modal abierto o input enfocado
-  useEffect(() => {
-    const checkModalState = () => {
-      const modals = document.querySelectorAll('[role="dialog"]')
-      isModalOpenRef.current = modals.length > 0
-      
-      const activeElement = document.activeElement
-      isInputFocusedRef.current = activeElement?.tagName === 'INPUT' || 
-                                   activeElement?.tagName === 'TEXTAREA' ||
-                                   (activeElement as HTMLElement)?.contentEditable === 'true'
-    }
-
-    // Verificar estado inicial
-    checkModalState()
-
-    // Observer para cambios en el DOM
-    const observer = new MutationObserver(checkModalState)
-    observer.observe(document.body, { 
-      childList: true, 
-      subtree: true, 
-      attributes: true,
-      attributeFilter: ['role', 'contenteditable']
-    })
-
-    // Listener para cambios de foco
-    document.addEventListener('focusin', checkModalState)
-    document.addEventListener('focusout', checkModalState)
-
-    return () => {
-      observer.disconnect()
-      document.removeEventListener('focusin', checkModalState)
-      document.removeEventListener('focusout', checkModalState)
-    }
-  }, [])
+  useLayoutEffect(() => {
+    shortcutsRef.current = shortcuts
+  }, [shortcuts])
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return
 
     // No procesar shortcuts si hay un input enfocado (excepto Escape)
-    if (isInputFocusedRef.current && event.key !== 'Escape') {
+    const currentInteraction = getInteractionState()
+    if ((currentInteraction & INPUT_FOCUSED) && event.key !== 'Escape') {
       return
     }
 
@@ -110,7 +106,7 @@ export function useKeyboardShortcuts(
         shortcutKey = key
       } else if (['Escape', 'Enter'].includes(key)) {
         shortcutKey = key
-      } else if (['1', '2', '3', '4'].includes(key) && !isModalOpenRef.current) {
+      } else if (['1', '2', '3', '4'].includes(key) && !(currentInteraction & MODAL_OPEN)) {
         // Números solo cuando no hay modal abierto
         shortcutKey = key
       }
@@ -247,8 +243,8 @@ Enter - Confirmar acción
 
   return {
     showShortcutsHelp,
-    isModalOpen: isModalOpenRef.current,
-    isInputFocused: isInputFocusedRef.current
+    isModalOpen: Boolean(interactionState & MODAL_OPEN),
+    isInputFocused: Boolean(interactionState & INPUT_FOCUSED)
   }
 }
 

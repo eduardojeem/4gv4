@@ -1,17 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Calendar, 
-  Eye, 
-  Heart, 
+import {
+  Calendar,
+  Eye,
+  Heart,
   MessageCircle,
-  ExternalLink,
-  Filter,
-  Grid3x3,
+  ExternalLink, Grid3x3,
   List
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -43,7 +41,7 @@ interface ContentGridProps {
 }
 
 function ContentCard({ item, showStats }: { item: ContentItem; showStats: boolean }) {
-  const [isHovered, setIsHovered] = useState(false)
+  const [_isHovered, setIsHovered] = useState(false)
   
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
@@ -219,7 +217,7 @@ export function ContentGrid({
     filter === 'all' || item.type === filter
   )
 
-  const categories = Array.from(new Set(items.map(item => item.category)))
+  void (Array.from(new Set(items.map(item => item.category))));
 
   return (
     <section className={cn("space-y-6", className)}>

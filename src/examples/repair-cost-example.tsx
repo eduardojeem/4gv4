@@ -138,7 +138,7 @@ export function RepairCostExample() {
         <h2 className="font-semibold text-yellow-900 mb-2">Casos de Uso</h2>
         <ul className="text-sm text-yellow-800 space-y-2">
           <li>
-            <strong>Costo Estimado:</strong> Dejar "Costo Final" vacío para usar el cálculo automático
+            <strong>Costo Estimado:</strong> Dejar &quot;Costo Final&quot; vacío para usar el cálculo automático
           </li>
           <li>
             <strong>Descuento:</strong> Ingresar un costo final menor al estimado (aparecerá en verde)

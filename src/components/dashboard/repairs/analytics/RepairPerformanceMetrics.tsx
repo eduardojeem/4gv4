@@ -3,17 +3,16 @@
 import { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Area } from 'recharts/es6/cartesian/Area';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
+import { Area } from 'recharts/es6/cartesian/Area'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import {
   Clock,
   TrendingUp,
@@ -27,8 +26,17 @@ import {
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useRepairs } from '@/contexts/RepairsContext'
-import { format, subDays, isWithinInterval, differenceInDays, startOfWeek, endOfWeek } from 'date-fns'
-import { es } from 'date-fns/locale'
+import type { Repair } from '@/types/repairs'
+import { format, subDays, isWithinInterval, differenceInDays } from 'date-fns'
+
+interface TechnicianStats {
+  name: string
+  totalRepairs: number
+  completedRepairs: number
+  avgTime: number
+  totalTime: number
+  efficiency: number
+}
 
 interface RepairPerformanceMetricsProps {
   className?: string
@@ -51,8 +59,8 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     const currentRange = ranges[timeFrame as keyof typeof ranges]
     
     // Optimizar filtrado con Map para mejor rendimiento
-    const currentPeriodRepairs: any[] = []
-    const previousPeriodRepairs: any[] = []
+    const currentPeriodRepairs: Repair[] = []
+    const previousPeriodRepairs: Repair[] = []
     
     // Período anterior para comparación
     const previousRange = {
@@ -88,7 +96,7 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     }
 
     // Calcular métricas actuales en una sola iteración
-    currentPeriodRepairs.forEach((r: any) => {
+    currentPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado') currentMetrics.completedRepairs++
       if (['recibido', 'diagnostico', 'reparacion', 'pausado'].includes(r.dbStatus || '')) {
         currentMetrics.inProgressRepairs++
@@ -98,16 +106,16 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     })
 
     // Calcular métricas del período anterior
-    previousPeriodRepairs.forEach((r: any) => {
+    previousPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado') previousMetrics.completedRepairs++
       previousMetrics.revenue += (r.finalCost || r.estimatedCost || 0)
     })
 
     // Calcular tiempo promedio de reparación y entregas a tiempo en una iteración
-    const completedWithTime: any[] = []
+    const completedWithTime: Repair[] = []
     let totalRepairTime = 0
     
-    currentPeriodRepairs.forEach((r: any) => {
+    currentPeriodRepairs.forEach((r) => {
       if (r.dbStatus === 'entregado' && r.completedAt && r.createdAt) {
         const repairTime = differenceInDays(new Date(r.completedAt), new Date(r.createdAt))
         completedWithTime.push(r)
@@ -179,16 +187,16 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
       }
       
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, TechnicianStats>)
 
     // Calcular eficiencia por técnico
-    Object.values(technicianPerformance).forEach((tech: any) => {
+    Object.values(technicianPerformance).forEach((tech) => {
       tech.avgTime = tech.completedRepairs > 0 ? tech.totalTime / tech.completedRepairs : 0
       tech.efficiency = tech.totalRepairs > 0 ? (tech.completedRepairs / tech.totalRepairs) * 100 : 0
     })
 
     const topTechnicians = Object.values(technicianPerformance)
-      .sort((a: any, b: any) => b.efficiency - a.efficiency)
+      .sort((a, b) => b.efficiency - a.efficiency)
       .slice(0, 5)
 
     return {
@@ -206,76 +214,6 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
     }
   }, [repairs, timeFrame])
 
-  const MetricCard = ({ 
-    title, 
-    value, 
-    change, 
-    icon: Icon, 
-    format = 'number',
-    colorScheme = 'blue' 
-  }: {
-    title: string
-    value: number | string
-    change?: number
-    icon: any
-    format?: 'number' | 'currency' | 'percentage' | 'days'
-    colorScheme?: 'blue' | 'green' | 'orange' | 'purple' | 'red'
-  }) => {
-    const formatValue = (val: number | string) => {
-      if (typeof val === 'string') return val
-      
-      switch (format) {
-        case 'currency':
-          return (
-            <div className="flex items-center gap-1">
-              <GSIcon className="h-5 w-5" />
-              {val.toLocaleString()}
-            </div>
-          )
-        case 'percentage':
-          return `${val}%`
-        case 'days':
-          return `${val} días`
-        default:
-          return val.toString()
-      }
-    }
-
-    const colors = {
-      blue: 'from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900 text-blue-700 dark:text-blue-300',
-      green: 'from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900 text-green-700 dark:text-green-300',
-      orange: 'from-orange-50 to-amber-50 border-orange-100 dark:from-orange-950/20 dark:to-amber-950/20 dark:border-orange-900 text-orange-700 dark:text-orange-300',
-      purple: 'from-purple-50 to-violet-50 border-purple-100 dark:from-purple-950/20 dark:to-violet-950/20 dark:border-purple-900 text-purple-700 dark:text-purple-300',
-      red: 'from-red-50 to-rose-50 border-red-100 dark:from-red-950/20 dark:to-rose-950/20 dark:border-red-900 text-red-700 dark:text-red-300'
-    }
-
-    return (
-      <Card className={`bg-gradient-to-br ${colors[colorScheme]}`}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
-          <Icon className="h-4 w-4" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold mb-1">
-            {formatValue(value)}
-          </div>
-          {change !== undefined && (
-            <div className="flex items-center gap-1 text-xs">
-              {change > 0 ? (
-                <TrendingUp className="h-3 w-3 text-green-600" />
-              ) : change < 0 ? (
-                <TrendingDown className="h-3 w-3 text-red-600" />
-              ) : null}
-              <span className={change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-500'}>
-                {change > 0 ? '+' : ''}{change}%
-              </span>
-              <span className="text-muted-foreground">vs período anterior</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
 
   if (isLoading) {
     return <div className="p-8 text-center">Cargando métricas...</div>
@@ -626,7 +564,7 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {performanceMetrics.topTechnicians.map((tech: any, index) => {
+            {performanceMetrics.topTechnicians.map((tech, index) => {
               const gradients = [
                 'from-yellow-400 via-orange-500 to-red-500', // 1st place - gold
                 'from-slate-300 via-slate-400 to-slate-500',   // 2nd place - silver

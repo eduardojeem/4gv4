@@ -1,6 +1,5 @@
 'use client'
 
-import React from 'react'
 import { useAccessibility } from '@/contexts/accessibility-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,11 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { 
-  Eye, 
-  Type, 
-  Zap, 
-  Volume2, 
+import {
+  Type,
+  Zap,
+  Volume2,
   Contrast,
   Settings,
   Accessibility

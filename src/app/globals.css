@@ -69,6 +69,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -135,6 +136,11 @@
   /* Azul corporativo profesional (levemente menos saturado) */
   --primary: oklch(0.5 0.14 240);
   --primary-foreground: oklch(0.99 0 0);
+  /* El mismo color de marca, pero legible como texto sobre el fondo claro.
+     Si el navegador no entiende `oklch(from ...)`, la segunda declaracion se
+     descarta y queda el color tal cual, que es como estaba antes. */
+  --primary-text: var(--primary);
+  --primary-text: oklch(from var(--primary) clamp(0.2, l, 0.52) c h);
   --secondary: oklch(0.955 0.008 240);
   --secondary-foreground: oklch(0.3 0.02 240);
   --muted: oklch(0.95 0.007 240);
@@ -142,6 +148,7 @@
   --accent: oklch(0.945 0.013 240);
   --accent-foreground: oklch(0.26 0.02 240);
   --destructive: oklch(0.56 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(0.915 0.007 240);
   --input: oklch(0.915 0.007 240);
   --ring: oklch(0.5 0.14 240);
@@ -218,6 +225,9 @@
   /* Primary: vibrant blue-indigo that pops on dark */
   --primary: oklch(0.68 0.2 245);
   --primary-foreground: oklch(0.1 0.01 240);
+  /* En oscuro el texto de marca va al reves: se aclara para separarse del fondo. */
+  --primary-text: var(--primary);
+  --primary-text: oklch(from var(--primary) clamp(0.74, l, 0.95) c h);
 
   /* Surfaces */
   --secondary: oklch(0.21 0.012 248);
@@ -229,6 +239,7 @@
 
   /* Danger / destructive */
   --destructive: oklch(0.62 0.22 22);
+  --destructive-foreground: oklch(0.99 0 0);
 
   /* Borders & inputs */
   --border: oklch(0.27 0.01 248);
@@ -332,8 +343,10 @@
   --chart-5: oklch(0.5 0.1 160);
 }
 
+.dark [data-color-scheme="corporate"],
 [data-color-scheme="corporate"].dark {
   --primary: oklch(0.65 0.2 220);
+  --primary-foreground: oklch(0.18 0 0);
   --secondary: oklch(0.25 0.05 220);
   --accent: oklch(0.7 0.22 200);
   --sidebar-primary: oklch(0.65 0.2 220);
@@ -345,53 +358,61 @@
 }
 
 [data-color-scheme="blue"] {
-  --primary: oklch(0.6 0.2 240);
+  --primary: oklch(0.53 0.2 240);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.2 240);
+  --sidebar-primary: oklch(0.53 0.2 240);
 }
 
+.dark [data-color-scheme="blue"],
 [data-color-scheme="blue"].dark {
   --primary: oklch(0.7 0.25 240);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.25 240);
 }
 
 [data-color-scheme="green"] {
-  --primary: oklch(0.6 0.2 120);
+  --primary: oklch(0.54 0.2 120);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.2 120);
+  --sidebar-primary: oklch(0.54 0.2 120);
 }
 
+.dark [data-color-scheme="green"],
 [data-color-scheme="green"].dark {
   --primary: oklch(0.7 0.25 120);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.25 120);
 }
 
 [data-color-scheme="purple"] {
-  --primary: oklch(0.6 0.2 300);
+  --primary: oklch(0.57 0.2 300);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.2 300);
+  --sidebar-primary: oklch(0.57 0.2 300);
 }
 
+.dark [data-color-scheme="purple"],
 [data-color-scheme="purple"].dark {
   --primary: oklch(0.7 0.25 300);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.25 300);
 }
 
 [data-color-scheme="orange"] {
-  --primary: oklch(0.6 0.2 60);
+  --primary: oklch(0.56 0.2 60);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.2 60);
+  --sidebar-primary: oklch(0.56 0.2 60);
 }
 
+.dark [data-color-scheme="orange"],
 [data-color-scheme="orange"].dark {
   --primary: oklch(0.7 0.25 60);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.25 60);
 }
 
 [data-color-scheme="red"] {
-  --primary: oklch(0.6 0.2 20);
+  --primary: oklch(0.57 0.2 20);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.2 20);
+  --sidebar-primary: oklch(0.57 0.2 20);
 }
 
 /* =========================
@@ -513,42 +534,50 @@
   }
 }
 
+.dark [data-color-scheme="red"],
 [data-color-scheme="red"].dark {
   --primary: oklch(0.7 0.25 20);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.25 20);
 }
 
 /* Additional Color Schemes */
 [data-color-scheme="indigo"] {
-  --primary: oklch(0.6 0.22 265);
+  --primary: oklch(0.56 0.22 265);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.22 265);
+  --sidebar-primary: oklch(0.56 0.22 265);
 }
 
+.dark [data-color-scheme="indigo"],
 [data-color-scheme="indigo"].dark {
   --primary: oklch(0.7 0.26 265);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.26 265);
 }
 
 [data-color-scheme="teal"] {
-  --primary: oklch(0.62 0.18 200);
+  --primary: oklch(0.5 0.18 200);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.62 0.18 200);
+  --sidebar-primary: oklch(0.5 0.18 200);
 }
 
+.dark [data-color-scheme="teal"],
 [data-color-scheme="teal"].dark {
   --primary: oklch(0.72 0.22 200);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.72 0.22 200);
 }
 
 [data-color-scheme="pink"] {
-  --primary: oklch(0.72 0.25 350);
+  --primary: oklch(0.58 0.25 350);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.25 350);
+  --sidebar-primary: oklch(0.58 0.25 350);
 }
 
+.dark [data-color-scheme="pink"],
 [data-color-scheme="pink"].dark {
   --primary: oklch(0.78 0.28 350);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.78 0.28 350);
 }
 
@@ -558,8 +587,10 @@
   --sidebar-primary: oklch(0.85 0.19 80);
 }
 
+.dark [data-color-scheme="amber"],
 [data-color-scheme="amber"].dark {
   --primary: oklch(0.7 0.22 80);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.7 0.22 80);
 }
 
@@ -569,42 +600,103 @@
   --sidebar-primary: oklch(0.78 0.16 195);
 }
 
+.dark [data-color-scheme="cyan"],
 [data-color-scheme="cyan"].dark {
   --primary: oklch(0.68 0.18 195);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.68 0.18 195);
 }
 
 [data-color-scheme="rose"] {
-  --primary: oklch(0.72 0.22 8);
+  --primary: oklch(0.58 0.22 8);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.22 8);
+  --sidebar-primary: oklch(0.58 0.22 8);
 }
 
+.dark [data-color-scheme="rose"],
 [data-color-scheme="rose"].dark {
   --primary: oklch(0.66 0.22 8);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.66 0.22 8);
 }
 
 [data-color-scheme="emerald"] {
-  --primary: oklch(0.68 0.18 160);
+  --primary: oklch(0.51 0.18 160);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.68 0.18 160);
+  --sidebar-primary: oklch(0.51 0.18 160);
 }
 
+.dark [data-color-scheme="emerald"],
 [data-color-scheme="emerald"].dark {
   --primary: oklch(0.62 0.18 160);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.62 0.18 160);
 }
 
 [data-color-scheme="sky"] {
-  --primary: oklch(0.72 0.16 235);
+  --primary: oklch(0.53 0.16 235);
   --primary-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.16 235);
+  --sidebar-primary: oklch(0.53 0.16 235);
 }
 
+.dark [data-color-scheme="sky"],
 [data-color-scheme="sky"].dark {
   --primary: oklch(0.66 0.18 235);
+  --primary-foreground: oklch(0.18 0 0);
   --sidebar-primary: oklch(0.66 0.18 235);
+}
+
+/* El texto de marca se recalcula con el --primary de cada esquema, tanto en el
+   panel (atributo en <html>) como en la tienda (atributo en su contenedor). */
+[data-color-scheme],
+[data-custom-brand] {
+  --primary-text: var(--primary);
+  --primary-text: oklch(from var(--primary) clamp(0.2, l, 0.52) c h);
+}
+
+.dark [data-color-scheme],
+[data-color-scheme].dark,
+.dark [data-custom-brand] {
+  --primary-text: var(--primary);
+  --primary-text: oklch(from var(--primary) clamp(0.74, l, 0.95) c h);
+}
+
+/* `text-primary` pinta texto: usa la version legible, no el color del boton.
+   El selector lleva `html` adelante solo para ganarle en especificidad a la
+   utilidad de Tailwind, que es una sola clase. */
+html .text-primary {
+  color: var(--primary-text);
+}
+
+/* =========================================================================
+   Enriquecimiento de Color en Modo Claro para la Sección Pública de Tiendas
+   ========================================================================= */
+
+/* Tonos secundarios y de acento derivados armoniosamente del color de marca */
+:root:not(.dark) [data-color-scheme] {
+  --ring: var(--primary);
+  --secondary: color-mix(in oklch, var(--primary) 10%, oklch(0.975 0.003 240));
+  --secondary-foreground: color-mix(in oklch, var(--primary) 70%, oklch(0.2 0.03 240));
+  --accent: color-mix(in oklch, var(--primary) 14%, oklch(0.965 0.004 240));
+  --accent-foreground: color-mix(in oklch, var(--primary) 85%, oklch(0.15 0.03 240));
+}
+
+:root:not(.dark) [data-custom-brand] {
+  --ring: var(--brand-primary);
+  --secondary: color-mix(in oklch, var(--brand-primary) 10%, oklch(0.975 0.003 240));
+  --secondary-foreground: color-mix(in oklch, var(--brand-primary) 70%, oklch(0.2 0.03 240));
+  --accent: color-mix(in oklch, var(--brand-primary) 14%, oklch(0.965 0.004 240));
+  --accent-foreground: color-mix(in oklch, var(--brand-primary) 85%, oklch(0.15 0.03 240));
+}
+
+/* Atmósfera de luz ambiental con gradientes sutiles que acompañan el color de marca */
+:root:not(.dark) [data-storefront-style] {
+  background-color: oklch(0.984 0.005 240);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% -10%, color-mix(in oklch, var(--primary) 11%, transparent), transparent 70%),
+    radial-gradient(ellipse 55% 40% at 95% 25%, color-mix(in oklch, var(--primary) 7%, transparent), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 5% 55%, color-mix(in oklch, var(--primary) 6%, transparent), transparent 65%);
+  background-attachment: fixed;
 }
 
 @layer base {
@@ -623,11 +715,24 @@
       color 0.3s ease;
   }
 
+  /* Acompaña el cambio de tema, y solo mientras dura: la clase la pone y la
+     saca quien cambia el tema. Cuando vivía fija en el <body>, cambiar de modo
+     bloqueaba el hilo 140-240 ms en vez de 40, porque animaba de una todos los
+     elementos de la página; y de paso le metía 300 ms a cada hover.
+     Sin `border-color` (es lo que más repinta y lo que menos se nota) y sin
+     `!important`, para no anular las transiciones propias de los componentes. */
+  .theme-transition,
   .theme-transition * {
     transition:
-      background-color 0.3s ease,
-      border-color 0.3s ease,
-      color 0.3s ease !important;
+      background-color 0.25s ease,
+      color 0.25s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .theme-transition,
+    .theme-transition * {
+      transition: none;
+    }
   }
 
   /* Safe area insets for mobile devices */

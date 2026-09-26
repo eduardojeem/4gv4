@@ -30,9 +30,36 @@ export const formatters = {
   }
 }
 
-export function formatValue(value: any, format: keyof typeof formatters): string {
-  const formatter = formatters[format]
-  return formatter ? formatter(value) : String(value)
+function toNumeric(val: unknown): number | null | undefined {
+  if (val === null) return null
+  if (val === undefined) return undefined
+  if (typeof val === 'number') return val
+  const parsed = Number(val)
+  return isNaN(parsed) ? undefined : parsed
+}
+
+export function formatValue(value: unknown, format: keyof typeof formatters): string {
+  const num = toNumeric(value)
+  switch (format) {
+    case 'currency':
+      return formatters.currency(num)
+    case 'percentage':
+      return formatters.percentage(num)
+    case 'number':
+      return formatters.number(num)
+    case 'compact':
+      return formatters.compact(num)
+    case 'decimal':
+      return formatters.decimal(num)
+    case 'date':
+      return formatters.date(value instanceof Date || typeof value === 'string' ? value : String(value ?? ''))
+    case 'time':
+      return formatters.time(value instanceof Date || typeof value === 'string' ? value : String(value ?? ''))
+    case 'datetime':
+      return formatters.datetime(value instanceof Date || typeof value === 'string' ? value : String(value ?? ''))
+    default:
+      return String(value ?? '')
+  }
 }
 
 // Configuración de colores para gráficos

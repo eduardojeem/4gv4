@@ -1,22 +1,23 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { Badge } from '@/components/ui/badge'
-import { Activity, ShoppingCart, Wrench, Users, Package, AlertTriangle, CheckCircle, Clock, RefreshCw } from 'lucide-react'
+import { Activity, ShoppingCart, Wrench, Users, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Tipos locales
-type SaleRow = { id: string; total_amount?: number | null; status: 'pendiente' | 'completada' | 'cancelada'; created_at: string }
-type RepairRow = {
+
+interface FeedItem {
   id: string
-  device_brand?: string | null
-  device_model?: string | null
-  status: 'recibido' | 'diagnostico' | 'reparacion' | 'listo' | 'entregado'
+  type: 'sale' | 'repair' | 'customer'
+  amount?: number | string | null
+  info_1?: string | null
+  info_2?: string | null
+  status?: string | null
   created_at: string
-  final_cost?: number | null
 }
-type CustomerRow = { id: string; name?: string | null; created_at: string }
 
 interface ActivityItem {
   id: string
@@ -54,7 +55,7 @@ export function RecentActivity() {
             console.warn('RPC get_recent_activity_feed failed, falling back to legacy fetch', error)
             // Fallback to legacy logic if RPC fails (e.g. migration not applied yet in dev)
             const from = (table: string) => supabase.from(table)
-            const [{ data: sales }, { data: repairs }, { data: customers }] = await Promise.all([
+            const [{ data: _sales }, { data: _repairs }, { data: _customers }] = await Promise.all([
               from('sales').select('id,total_amount,status,created_at').order('created_at', { ascending: false }).limit(5),
               from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').order('created_at', { ascending: false }).limit(5),
               from('customers').select('id,name,created_at').order('created_at', { ascending: false }).limit(5)
@@ -66,10 +67,10 @@ export function RecentActivity() {
             return
         }
 
-        const mappedItems: ActivityItem[] = (data || []).map((item: any) => {
+        const mappedItems: ActivityItem[] = ((data as FeedItem[] | null) || []).map((item) => {
             let description = ''
             let icon = <Activity className="h-4 w-4" />
-            let formattedAmount = item.amount ? formatCurrency(Number(item.amount)) : undefined
+            const formattedAmount = item.amount ? formatCurrency(Number(item.amount)) : undefined
 
             if (item.type === 'sale') {
                 description = 'Venta realizada'
@@ -85,7 +86,7 @@ export function RecentActivity() {
 
             return {
                 id: `${item.type}-${item.id}`,
-                type: item.type as any,
+                type: item.type,
                 description,
                 amount: formattedAmount,
                 timestamp: item.created_at,
@@ -111,7 +112,7 @@ export function RecentActivity() {
     load()
 
     // Suscripción a cambios en tiempo real
-    let channel: any = null
+    let channel: RealtimeChannel | null = null
     const setupRealtime = async () => {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()

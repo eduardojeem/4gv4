@@ -1,40 +1,160 @@
-﻿'use client'
+'use client'
 
-import { useCallback, useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import * as XLSX from 'xlsx'
-import { motion  } from '../ui/motion'
+import { useCallback, useState } from 'react'
+import { toast } from 'sonner'
 import { 
-  Download, 
-  FileImage, 
   FileText, 
-  BarChart3, 
   RefreshCw,
-  Camera,
-  Palette,
   Layout,
-  Zap
+  Table,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Card, CardContent } from '@/components/ui/card'
+import type { CreditReport } from '@/lib/reports/credit-report'
+import {
+  renderAreaChartCanvas,
+  renderBarChartCanvas,
+  renderDonutChartCanvas
+} from '@/lib/reports/canvas-chart-renderer'
+import { chartPointLabel, chartPointValue } from '@/lib/reports/chart-points'
+
+type ReportRow = Record<string, unknown>
+type ReportCell = unknown
+
+const toReportRows = (rows: object[] | undefined): ReportRow[] =>
+  (rows ?? []).map((row) => row as ReportRow)
+
+const asText = (value: unknown): string =>
+  typeof value === 'string' ? value : value == null ? '' : String(value)
+
+const asNumber = (value: unknown): number => Number(value) || 0
+
+const asColor = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined
+
+// ── Helpers de formato monetario y fechas ─────────────────────────────────────
+const formatGs = (amount: number | null | undefined): string => {
+  if (amount === null || amount === undefined || isNaN(amount)) return '0 Gs.'
+  return `${Math.round(amount).toLocaleString('es-PY')} Gs.`
+}
+
+const formatNumber = (num: number | null | undefined): string => {
+  if (num === null || num === undefined || isNaN(num)) return '0'
+  return Math.round(num).toLocaleString('es-PY')
+}
+
+const formatDateStr = (dateStr: string): string => {
+  if (!dateStr) return ''
+  try {
+    const parts = dateStr.split('T')[0].split('-')
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`
+    }
+    const d = new Date(dateStr)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    }
+  } catch {
+    // fallback
+  }
+  return dateStr
+}
+
+const getDayOfWeekStr = (dateStr: string): string => {
+  if (!dateStr) return ''
+  try {
+    const parts = dateStr.split('T')[0].split('-')
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+      const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+      return days[d.getDay()] || ''
+    }
+  } catch {
+    // fallback
+  }
+  return ''
+}
+
+// ── Librerias de exportacion, bajo demanda ────────────────────────────────────
+// html2canvas, jspdf, jspdf-autotable y xlsx-js-style se importaban arriba del
+// archivo. Como este componente esta en /admin/analytics y /admin/reports, las
+// cuatro viajaban en la primera carga de esas dos rutas —el chunk de 883 KB que
+// marcaba post-build-checks— aunque solo se usan al tocar «Exportar». Ahora se
+// piden recien en ese momento, y el navegador las cachea para el siguiente.
+async function loadPdfLibraries() {
+  const [pdf, table] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+  return { jsPDF: pdf.default, autoTable: table.default }
+}
+
+async function loadXlsxStyle() {
+  const mod = await import('xlsx-js-style')
+  return mod.default
+}
+
+// ── Helpers de estilos Excel (XLSXStyle) ──────────────────────────────────────
+const XL_C = {
+  navy:    '0F172A',
+  navyL:   'F1F5F9',
+  violet:  '6366F1',
+  violetL: 'EEF2FF',
+  blue:    '2563EB',
+  blueL:   'EFF6FF',
+  green:   '059669',
+  greenL:  'ECFDF5',
+  red:     'DC2626',
+  redL:    'FEF2F2',
+  amber:   'D97706',
+  amberL:  'FFFBEB',
+  gray:    '334155',
+  grayL:   'F8FAFC',
+  white:   'FFFFFF',
+  border:  'CBD5E1',
+}
+
+type XCellStyle = {
+  font?: { bold?: boolean; sz?: number; color?: { rgb: string }; name?: string; italic?: boolean }
+  fill?: { fgColor: { rgb: string } }
+  border?: Record<string, { style: string; color: { rgb: string } }>
+  alignment?: { horizontal?: string; vertical?: string; wrapText?: boolean }
+}
+
+const XL_BORDER = {
+  top:    { style: 'thin', color: { rgb: XL_C.border } },
+  bottom: { style: 'thin', color: { rgb: XL_C.border } },
+  left:   { style: 'thin', color: { rgb: XL_C.border } },
+  right:  { style: 'thin', color: { rgb: XL_C.border } },
+}
+
+const xlCell = (v: string | number, s: XCellStyle, t?: string) => ({
+  v, t: t ?? (typeof v === 'number' ? 'n' : 's'), s,
+})
+
+const xlHdr = (bgRgb: string): XCellStyle => ({
+  font:      { bold: true, sz: 10, color: { rgb: XL_C.white }, name: 'Calibri' },
+  fill:      { fgColor: { rgb: bgRgb } },
+  border:    XL_BORDER,
+  alignment: { horizontal: 'center', vertical: 'center' },
+})
+
+const xlData = (rowIdx: number, align = 'left', isBold = false): XCellStyle => ({
+  font:      { bold: isBold, sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' },
+  fill:      { fgColor: { rgb: rowIdx % 2 === 0 ? XL_C.white : XL_C.grayL } },
+  border:    XL_BORDER,
+  alignment: { horizontal: align, vertical: 'center' },
+})
+
+const xlNum = (rowIdx: number, isBold = false): XCellStyle => xlData(rowIdx, 'right', isBold)
+
+const xlTotal = (bgRgb = XL_C.navy): XCellStyle => ({
+  font:      { bold: true, sz: 10, color: { rgb: XL_C.white }, name: 'Calibri' },
+  fill:      { fgColor: { rgb: bgRgb } },
+  border:    XL_BORDER,
+  alignment: { horizontal: 'right', vertical: 'center' },
+})
 
 interface ChartExportOptions {
   includeCharts: boolean
@@ -47,13 +167,45 @@ interface ChartExportOptions {
   chartSize: 'small' | 'medium' | 'large'
 }
 
+/**
+ * Que es cada dataset que se exporta.
+ *
+ * Antes esto se deducia de la POSICION en el arreglo: el indice 2 era «estados
+ * de reparacion», el 3 «productos», etc. Solo la pagina de reportes ordenaba sus
+ * datos asi. El panel de admin manda otros seis, en otro orden y con otras
+ * claves, y el exportador les aplicaba igual el tipo de grafico y la tabla del
+ * indice: reventaba en uno y dibujaba los demas en cero.
+ *
+ * `generic` es para cualquier serie de `{ etiqueta, valor }` que no sea ninguna
+ * de las secciones conocidas: se dibuja con el `kind` que pida quien la manda y
+ * la tabla sale de dos columnas.
+ */
+export type ChartSectionId =
+  | 'sales'
+  | 'repairs-trend'
+  | 'repairs-status'
+  | 'products'
+  | 'selected-product'
+  | 'categories'
+  | 'generic'
+
+export interface ChartSection {
+  id: ChartSectionId
+  rows: object[]
+  /** Solo para `generic`. Por defecto, barras. */
+  kind?: 'area' | 'bar' | 'donut'
+  /** Como se escribe el valor en el grafico y en la tabla. Por defecto, guaranies. */
+  formatValue?: (value: number) => string
+}
+
 interface ChartExporterProps {
   title: string
-  data: any[]
-  metrics?: Record<string, any>
+  data: object[]
+  metrics?: Record<string, unknown>
   chartRefs: React.RefObject<HTMLDivElement | null>[]
   chartTitles: string[]
-  chartData?: any[][]
+  chartData?: ChartSection[]
+  creditReport?: CreditReport | null
   onExport?: (format: string, success: boolean) => void
   className?: string
 }
@@ -65,6 +217,7 @@ export function ChartExporter({
   chartRefs,
   chartTitles,
   chartData,
+  creditReport,
   onExport,
   className = ''
 }: ChartExporterProps) {
@@ -91,150 +244,14 @@ export function ChartExporter({
       .slice(0, 120) || 'reporte'
   }, [])
 
-  const sanitizeUnsupportedColorFunctions = useCallback((raw: string) => {
-    return raw
-      .replace(/\b(?:oklch|oklab|lch|lab)\([^)]+\)/gi, 'rgb(120, 120, 120)')
-      .replace(/\bcolor-mix\([^)]*\)/gi, 'rgb(120, 120, 120)')
-  }, [])
-
-  const buildSafeCaptureNode = useCallback((sourceRoot: HTMLElement) => {
-    const cloneRoot = sourceRoot.cloneNode(true) as HTMLElement
-    const sourceNodes = [sourceRoot, ...Array.from(sourceRoot.querySelectorAll('*'))]
-    const cloneNodes = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll('*'))]
-    const total = Math.min(sourceNodes.length, cloneNodes.length)
-
-    for (let i = 0; i < total; i++) {
-      const sourceNode = sourceNodes[i]
-      const cloneNode = cloneNodes[i]
-
-      cloneNode.removeAttribute('class')
-
-      if (cloneNode instanceof HTMLElement) {
-        const computed = window.getComputedStyle(sourceNode)
-        for (let j = 0; j < computed.length; j++) {
-          const property = computed.item(j)
-          const value = sanitizeUnsupportedColorFunctions(computed.getPropertyValue(property))
-          if (value) cloneNode.style.setProperty(property, value)
-        }
-      }
-
-      if (sourceNode instanceof HTMLCanvasElement && cloneNode instanceof HTMLCanvasElement) {
-        const ctx = cloneNode.getContext('2d')
-        if (ctx) {
-          ctx.clearRect(0, 0, cloneNode.width, cloneNode.height)
-          ctx.drawImage(sourceNode, 0, 0)
-        }
-      }
-    }
-
-    cloneRoot.style.width = `${sourceRoot.offsetWidth}px`
-    cloneRoot.style.height = `${sourceRoot.offsetHeight}px`
-
-    const wrapper = document.createElement('div')
-    wrapper.style.position = 'fixed'
-    wrapper.style.left = '-10000px'
-    wrapper.style.top = '0'
-    wrapper.style.background = '#ffffff'
-    wrapper.style.zIndex = '-1'
-    wrapper.style.pointerEvents = 'none'
-    wrapper.appendChild(cloneRoot)
-    document.body.appendChild(wrapper)
-
-    return {
-      target: cloneRoot,
-      cleanup: () => wrapper.remove()
-    }
-  }, [sanitizeUnsupportedColorFunctions])
-
-  // Función para capturar un gráfico como imagen
-  const captureChart = useCallback(async (chartRef: React.RefObject<HTMLDivElement | null>, title: string) => {
-    if (!chartRef.current) return null
-
-    const safeCapture = buildSafeCaptureNode(chartRef.current)
-
-    try {
-      const exportId = `chart-export-${Date.now()}-${Math.floor(Math.random() * 10000)}`
-      safeCapture.target.setAttribute('data-export-id', exportId)
-
-      const canvas = await html2canvas(safeCapture.target, {
-        backgroundColor: '#ffffff',
-        scale: options.chartQuality === 'high' ? 2.5 : options.chartQuality === 'medium' ? 2 : 1.5,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        onclone: (clonedDoc) => {
-          // Evita que html2canvas procese CSS global con color functions no soportadas.
-          clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach((node) => node.remove())
-          clonedDoc.body.style.background = '#ffffff'
-
-          const clonedTarget = clonedDoc.querySelector<HTMLElement>(`[data-export-id="${exportId}"]`)
-          if (clonedTarget) {
-            clonedTarget.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
-              const inline = el.getAttribute('style') || ''
-              const sanitized = sanitizeUnsupportedColorFunctions(inline)
-              if (sanitized !== inline) el.setAttribute('style', sanitized)
-            })
-          }
-        },
-        width: chartRef.current.offsetWidth,
-        height: chartRef.current.offsetHeight
-      })
-
-      return {
-        canvas,
-        title,
-        dataURL: canvas.toDataURL(`image/${options.chartFormat}`, 0.95),
-        width: canvas.width,
-        height: canvas.height
-      }
-    } catch (error) {
-      console.error(`Error capturando gráfico ${title}:`, error)
-      return null
-    } finally {
-      safeCapture.cleanup()
-    }
-  }, [options.chartQuality, options.chartFormat, buildSafeCaptureNode])
-
-  // Función para exportar como imagen individual
-  const exportAsImage = useCallback(async (format: 'png' | 'jpeg' | 'svg') => {
-    setIsExporting(true)
-    setExportProgress(0)
-
-    try {
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
-      const safeTitle = sanitizeFileName(title)
-      
-      for (let i = 0; i < chartRefs.length; i++) {
-        setExportProgress((i / chartRefs.length) * 100)
-        
-        const chartImage = await captureChart(chartRefs[i], chartTitles[i])
-        if (chartImage) {
-          // Crear enlace de descarga
-          const link = document.createElement('a')
-          link.download = `${safeTitle}_${sanitizeFileName(chartTitles[i])}_${timestamp}.${format}`
-          link.href = chartImage.dataURL
-          link.click()
-        }
-      }
-
-      setExportProgress(100)
-      onExport?.(format, true)
-      
-    } catch (error) {
-      console.error('Error exportando imágenes:', error)
-      onExport?.(format, false)
-    } finally {
-      setIsExporting(false)
-      setTimeout(() => setExportProgress(0), 2000)
-    }
-  }, [chartRefs, chartTitles, title, captureChart, onExport, sanitizeFileName])
-
-  // Función para exportar PDF con gráficos
+  // ── EXPORTACIÓN DE PDF CON DISEÑO EJECUTIVO Y DETALLE COMPLETO ──────────────
   const exportPDFWithCharts = useCallback(async () => {
     setIsExporting(true)
-    setExportProgress(0)
+    setExportProgress(5)
 
     try {
+      const { jsPDF, autoTable } = await loadPdfLibraries()
+      const isLandscape = options.pageLayout === 'landscape'
       const doc = new jsPDF({
         orientation: options.pageLayout,
         unit: 'pt',
@@ -243,632 +260,1311 @@ export function ChartExporter({
 
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()
-      const margin = 40
+      const margin = 32
       const contentWidth = pageWidth - (margin * 2)
-      const addFooter = () => {
-        const pageNo = doc.getCurrentPageInfo().pageNumber
-        doc.setFontSize(9)
-        doc.setTextColor(120, 120, 120)
-        doc.text(`Página ${pageNo}`, pageWidth - margin, pageHeight - 18, { align: 'right' })
-      }
+      const now = new Date()
+      const dateLabel = now.toLocaleString('es-PY', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      })
 
-      // Página de portada
-      doc.setFontSize(24)
-      doc.setTextColor(31, 78, 121)
-      doc.text(title, margin, 80, { maxWidth: contentWidth })
+      // Datasets reales recibidos de la vista
+      // Los dos tableros que usan este exportador traen los puntos con claves
+      // distintas: ver `lib/reports/chart-points`.
+      const pointLabel = chartPointLabel
+      const pointValue = chartPointValue
 
+      const sections: ChartSection[] = chartData ?? []
+      const rowsOf = (id: ChartSectionId) =>
+        toReportRows(sections.find((section) => section.id === id)?.rows)
+
+      // `data` sigue siendo el respaldo de ventas para quien no manda secciones.
+      const salesRows = rowsOf('sales')
+      const salesDataset = salesRows.length > 0 ? salesRows : toReportRows(data)
+      const repairsTrendDataset = rowsOf('repairs-trend')
+      const repairsStatusDataset = rowsOf('repairs-status')
+      const productsDataset = rowsOf('products')
+      const selectedProductDataset = rowsOf('selected-product')
+      const categoriesDataset = rowsOf('categories')
+
+      // Cálculos globales de resumen del período
+      const totalSalesSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.sales) || 0), 0)
+      const totalOrdersSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.orders) || 0), 0)
+      const totalProfitSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.profit) || 0), 0)
+      const avgTicketGlobal = totalOrdersSum > 0 ? totalSalesSum / totalOrdersSum : 0
+      const profitMarginPct = totalSalesSum > 0 ? ((totalProfitSum / totalSalesSum) * 100).toFixed(1) : '0'
+
+      // Día pico de ventas
+      let peakDay = { date: '', sales: 0, orders: 0 }
+      let activeDaysCount = 0
+      salesDataset.forEach((r: ReportRow) => {
+        const s = Number(r.sales) || 0
+        if (s > 0) activeDaysCount++
+        if (s > peakDay.sales) {
+          peakDay = { date: asText(r.date), sales: s, orders: asNumber(r.orders) }
+        }
+      })
+      const avgDailySales = salesDataset.length > 0 ? totalSalesSum / salesDataset.length : 0
+
+      // Top producto y top categoría
+      const topProduct = productsDataset[0] || null
+      const topCategory = categoriesDataset[0] || null
+
+      // ── PÁGINA 1: PORTADA EJECUTIVA Y DASHBOARD DE KPIS ────────────────────
+      // Banner de Cabecera Superior
+      doc.setFillColor(15, 23, 42) // Slate 900
+      doc.rect(margin, 24, contentWidth, 68, 'F')
+
+      // Acento de color superior (barra bicolor esmeralda/azul)
+      doc.setFillColor(37, 99, 235) // Blue 600
+      doc.rect(margin, 24, contentWidth / 2, 4, 'F')
+      doc.setFillColor(16, 185, 129) // Emerald 500
+      doc.rect(margin + contentWidth / 2, 24, contentWidth / 2, 4, 'F')
+
+      // Textos del Banner
+      doc.setFontSize(17)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(255, 255, 255)
+      doc.text(title.toUpperCase(), margin + 16, 52)
+
+      doc.setFontSize(9.5)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(148, 163, 184) // Slate 400
+      doc.text('INFORME EJECUTIVO DETALLADO DE GESTIÓN, VENTAS Y RENDIMIENTO OPERACIONAL', margin + 16, 72)
+
+      doc.setFontSize(8.5)
+      doc.setTextColor(203, 213, 225)
+      doc.text(`Fecha de Emisión: ${dateLabel}`, pageWidth - margin - 16, 52, { align: 'right' })
+      doc.text('Sistema 4G • Documento Oficial y Confidencial', pageWidth - margin - 16, 72, { align: 'right' })
+
+      // Cuadrícula de Tarjetas KPI Ejecutivas
+      let currentY = 104
       doc.setFontSize(12)
-      doc.setTextColor(100, 100, 100)
-      doc.text(`Reporte generado: ${new Date().toLocaleDateString('es-ES')}`, margin, 110)
-      doc.text(`Incluye ${chartRefs.length} gráficos y análisis detallado`, margin, 130)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(15, 23, 42)
+      doc.text('INDICADORES PRINCIPALES DE RENDIMIENTO (KPIS)', margin, currentY)
 
-      // Resumen ejecutivo si hay métricas
-      if (options.includeMetrics && Object.keys(metrics).length > 0) {
-        doc.setFontSize(16)
-        doc.setTextColor(31, 78, 121)
-        doc.text('RESUMEN EJECUTIVO', margin, 180)
+      currentY += 12
 
-        let yPos = 210
-        Object.entries(metrics).forEach(([key, value]) => {
-          doc.setFontSize(11)
-          doc.setTextColor(0, 0, 0)
-          doc.text(`${key}: ${value}`, margin, yPos)
-          yPos += 20
+      const metricEntries = Object.entries(metrics)
+      if (metricEntries.length > 0) {
+        const cardsPerRow = isLandscape ? 4 : 2
+        const cardGap = 8
+        const cardWidth = (contentWidth - ((cardsPerRow - 1) * cardGap)) / cardsPerRow
+        const cardHeight = 48
+
+        // La grilla crecio y no habia guarda de pagina: con suficientes KPI las
+        // ultimas tarjetas se dibujaban fuera de la hoja y desaparecian sin que
+        // nada avisara. Si no entran, se sigue en una pagina nueva.
+        const totalRowsPlanned = Math.ceil(metricEntries.length / cardsPerRow)
+        const gridHeight = totalRowsPlanned * (cardHeight + cardGap)
+        const pageBottom = doc.internal.pageSize.getHeight() - margin
+        if (currentY + gridHeight > pageBottom) {
+          doc.addPage()
+          currentY = margin + 20
+          doc.setFontSize(12)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(15, 23, 42)
+          doc.text('INDICADORES PRINCIPALES DE RENDIMIENTO (KPIS)', margin, currentY)
+          currentY += 12
+        }
+
+        metricEntries.forEach(([key, val], idx) => {
+          const row = Math.floor(idx / cardsPerRow)
+          const col = idx % cardsPerRow
+          const cardX = margin + col * (cardWidth + cardGap)
+          const cardY = currentY + row * (cardHeight + cardGap)
+
+          // Fondo de tarjeta
+          doc.setFillColor(248, 250, 252)
+          doc.setDrawColor(226, 232, 240)
+          doc.roundedRect(cardX, cardY, cardWidth, cardHeight, 5, 5, 'FD')
+
+          // Barra lateral de acento de tarjeta
+          const accentColors = [
+            [16, 185, 129], // Emerald
+            [37, 99, 235],  // Blue
+            [124, 58, 237], // Violet
+            [217, 119, 6],  // Amber
+            [99, 102, 241], // Indigo
+            [6, 182, 212]   // Cyan
+          ]
+          const color = accentColors[idx % accentColors.length]
+          doc.setFillColor(color[0], color[1], color[2])
+          doc.roundedRect(cardX, cardY, 3.5, cardHeight, 1.5, 1.5, 'F')
+
+          // Título de la métrica
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(100, 116, 139)
+          doc.text(key.toUpperCase(), cardX + 10, cardY + 16, { maxWidth: cardWidth - 16 })
+
+          // Valor de la métrica
+          doc.setFontSize(12)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(15, 23, 42)
+          doc.text(String(val), cardX + 10, cardY + 35, { maxWidth: cardWidth - 16 })
         })
-      }
-      addFooter()
 
-      // Índice de gráficos
-      if (options.includeCharts && chartTitles.length > 0) {
-        doc.addPage()
-        doc.setFontSize(18)
-        doc.setTextColor(31, 78, 121)
-        doc.text('ÍNDICE DE GRÁFICOS', margin, 70)
-        let y = 105
-        chartTitles.forEach((chartTitle, idx) => {
-          doc.setFontSize(11)
-          doc.setTextColor(40, 40, 40)
-          doc.text(`${idx + 1}. ${chartTitle}`, margin, y, { maxWidth: contentWidth })
-          y += 20
-          if (y > pageHeight - 50) {
-            addFooter()
-            doc.addPage()
-            y = 70
+        const totalRows = Math.ceil(metricEntries.length / cardsPerRow)
+        currentY += totalRows * (cardHeight + cardGap) + 12
+      }
+
+      // ── Cuadro de Diagnóstico y Conclusiones del Período ───────────────────
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(15, 23, 42)
+      doc.text('RESUMEN Y DIAGNÓSTICO EJECUTIVO DEL NEGOCIO', margin, currentY)
+      currentY += 10
+
+      const diagnosticRows = [
+        [
+          'Día Pico de Ventas',
+          peakDay.date ? `${formatDateStr(peakDay.date)} (${getDayOfWeekStr(peakDay.date)})` : 'N/D',
+          formatGs(peakDay.sales),
+          `${peakDay.orders} órdenes registradas`,
+        ],
+        [
+          'Promedio Diario de Ventas',
+          'Ventas divididas por días evaluados',
+          formatGs(avgDailySales),
+          `${salesDataset.length} días en el rango`,
+        ],
+        [
+          'Días con Ventas Activas',
+          'Frecuencia comercial del período',
+          `${activeDaysCount} de ${salesDataset.length} días`,
+          salesDataset.length > 0 ? `${((activeDaysCount / salesDataset.length) * 100).toFixed(0)}% de actividad` : '—',
+        ],
+        ...(topProduct ? [[
+          'Producto Estrella (#1)',
+          asText(topProduct.name),
+          formatGs(asNumber(topProduct.sales)),
+          `${asNumber(topProduct.quantity)} unid. (${topProduct.share ? asNumber(topProduct.share).toFixed(1) : '—'}% part.)`,
+        ]] : []),
+        ...(topCategory ? [[
+          'Categoría Predominante',
+          asText(topCategory.name),
+          formatGs(asNumber(topCategory.sales)),
+          `${asNumber(topCategory.quantity)} unidades vendidas`,
+        ]] : []),
+        ...(totalProfitSum > 0 ? [[
+          'Rentabilidad Bruta Estimada',
+          `Margen comercial sobre ventas: ${profitMarginPct}%`,
+          formatGs(totalProfitSum),
+          'Ganancia bruta histórica',
+        ]] : []),
+      ]
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Indicador de Negocio', 'Detalle / Concepto', 'Valor Registrado', 'Observación']],
+        body: diagnosticRows,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8.5, cellPadding: 5, font: 'helvetica' },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 160 },
+          1: { fontStyle: 'normal' },
+          2: { fontStyle: 'bold', halign: 'right', cellWidth: 120 },
+          3: { fontStyle: 'normal', cellWidth: 140 }
+        }
+      })
+
+      currentY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14
+
+      // Tabla de Contenido del Informe
+      if (currentY + 80 < pageHeight) {
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(15, 23, 42)
+        doc.text('CONTENIDO Y MÓDULOS DEL INFORME', margin, currentY)
+        currentY += 8
+
+        const indexItems = [
+          ['1', 'Evolución y Análisis Cronológico de Ventas', 'Facturación día por día, órdenes, ticket medio, clientes y margen.'],
+          ['2', 'Ranking Detallado de Productos Más Vendidos', 'Top productos con unidades, precio unitario promedio, recaudación y participación.'],
+          ['3', 'Participación y Desglose por Categorías', 'Distribución de ingresos por rubros comerciales con volúmenes de venta.'],
+          ...(repairsTrendDataset.length > 0 || repairsStatusDataset.length > 0 ? [['4', 'Taller Técnico y Reparaciones', 'Estado de equipos, tasa de finalización técnica y evolución de ingresos de taller.']] : []),
+        ]
+
+        autoTable(doc, {
+          startY: currentY,
+          head: [['#', 'Módulo del Informe', 'Alcance y Detalle de los Datos']],
+          body: indexItems,
+          margin: { left: margin, right: margin },
+          styles: { fontSize: 8, cellPadding: 4.5, font: 'helvetica' },
+          headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          columnStyles: {
+            0: { cellWidth: 26, halign: 'center', fontStyle: 'bold' },
+            1: { cellWidth: 180, fontStyle: 'bold' },
+            2: { fontStyle: 'normal' }
           }
         })
-        addFooter()
       }
 
-      // Capturar y agregar gráficos
-      let compactSlotCount = 0
+      setExportProgress(25)
+
+      // ── PÁGINAS DE GRÁFICOS CON TABLAS DE DATOS REALES FORMATEADAS ──────────
       for (let i = 0; i < chartRefs.length; i++) {
-        setExportProgress((i / chartRefs.length) * 80)
+        setExportProgress(25 + Math.round((i / chartRefs.length) * 65))
 
-        const chartImage = await captureChart(chartRefs[i], chartTitles[i])
-        if (chartImage) {
-          if (options.pdfChartsPerPage > 1) {
-            const perPage = options.pdfChartsPerPage
-            const columns = perPage === 4 ? 2 : 1
-            const rows = perPage === 4 ? 2 : 2
-            const slotIndex = compactSlotCount % perPage
-            if (slotIndex === 0) {
-              doc.addPage()
-            }
+        const chartTitle = chartTitles[i] || `Gráfico ${i + 1}`
 
-            const cellGapX = 12
-            const cellGapY = 14
-            const gridTop = 58
-            const gridBottom = pageHeight - 34
-            const usableHeight = gridBottom - gridTop
-            const cellWidth = (contentWidth - ((columns - 1) * cellGapX)) / columns
-            const cellHeight = (usableHeight - ((rows - 1) * cellGapY)) / rows
-            const rowIndex = Math.floor(slotIndex / columns)
-            const colIndex = slotIndex % columns
+        // Que seccion es esta pagina. Sale de lo que el dataset dice ser, no de
+        // su posicion: dos tableros distintos mandan seis datasets cada uno, en
+        // ordenes que no coinciden.
+        const section = sections[i]
+        const sectionId: ChartSectionId = section?.id ?? 'generic'
+        const sectionRows = toReportRows(section?.rows ?? (i === 0 ? data : []))
+        const sectionFormat = section?.formatValue ?? formatGs
 
-            const cellX = margin + (colIndex * (cellWidth + cellGapX))
-            const cellY = gridTop + (rowIndex * (cellHeight + cellGapY))
-            const titleY = cellY + 10
-            const imageTopY = cellY + 18
-            const maxWidth = cellWidth
-            const maxHeight = cellHeight - 24
+        const asDatePoint = (d: ReportRow, idx: number) => ({
+          label: d?.date ? formatDateStr(asText(d.date)) : pointLabel(d, String(idx + 1)),
+          value: pointValue(d),
+        })
 
-            let chartWidth = chartImage.width
-            let chartHeight = chartImage.height
+        let chartDataUrl: string | null = null
+        if (sectionId === 'sales' && salesDataset.length > 0) {
+          chartDataUrl = renderAreaChartCanvas(chartTitle, salesDataset.map(asDatePoint), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
+        } else if (sectionId === 'repairs-trend' && repairsTrendDataset.length > 0) {
+          chartDataUrl = renderAreaChartCanvas(chartTitle, repairsTrendDataset.map(asDatePoint), { lineColor: '#dc2626', fillColor: '#ef4444', formatValue: (v) => `${v} orden${v === 1 ? '' : 'es'}` })
+        } else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0) {
+          chartDataUrl = renderDonutChartCanvas(chartTitle, repairsStatusDataset.map((d: ReportRow) => ({ label: pointLabel(d, 'Sin dato'), value: pointValue(d), color: asColor(d?.color) })), { formatValue: (v) => `${v} equipos` })
+        } else if (sectionId === 'products' && productsDataset.length > 0) {
+          chartDataUrl = renderBarChartCanvas(chartTitle, productsDataset.slice(0, 10).map((d: ReportRow) => ({ label: pointLabel(d, 'Sin nombre'), value: pointValue(d) })), { barColor: '#059669', formatValue: formatGs })
+        } else if (sectionId === 'selected-product' && selectedProductDataset.length > 0) {
+          chartDataUrl = renderAreaChartCanvas(chartTitle, selectedProductDataset.map(asDatePoint), { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs })
+        } else if (sectionId === 'categories' && categoriesDataset.length > 0) {
+          chartDataUrl = renderDonutChartCanvas(chartTitle, categoriesDataset.slice(0, 8).map((d: ReportRow) => ({ label: pointLabel(d, 'Sin categoría'), value: pointValue(d) })), { formatValue: formatGs })
+        } else if (sectionId === 'generic' && sectionRows.length > 0) {
+          // Serie cualquiera de etiqueta y valor: la dibuja como pida quien la
+          // manda, y si no pide nada, en barras.
+          const points = sectionRows.map((d: ReportRow, idx: number) => ({
+            label: pointLabel(d, String(idx + 1)),
+            value: pointValue(d),
+            color: asColor(d?.color),
+          }))
+          const kind = section?.kind ?? 'bar'
+          chartDataUrl = kind === 'donut'
+            ? renderDonutChartCanvas(chartTitle, points.slice(0, 8), { formatValue: sectionFormat })
+            : kind === 'area'
+              ? renderAreaChartCanvas(chartTitle, points, { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: sectionFormat })
+              : renderBarChartCanvas(chartTitle, points.slice(0, 10), { barColor: '#059669', formatValue: sectionFormat })
+        }
 
-            if (chartWidth > maxWidth) {
-              const scale = maxWidth / chartWidth
-              chartWidth = maxWidth
-              chartHeight = chartHeight * scale
-            }
+        // Si no hay datos para la pagina, se omite para no generar una hoja vacia.
+        const hasDataForChart = sectionRows.length > 0 ||
+          (sectionId === 'sales' && salesDataset.length > 0)
 
-            if (chartHeight > maxHeight) {
-              const scale = maxHeight / chartHeight
-              chartHeight = maxHeight
-              chartWidth = chartWidth * scale
-            }
+        if (!hasDataForChart && !chartDataUrl) {
+          continue
+        }
 
-            const xPos = cellX + ((maxWidth - chartWidth) / 2)
-            doc.setFontSize(perPage === 4 ? 10 : 12)
-            doc.setTextColor(31, 78, 121)
-            doc.text(`${i + 1}. ${chartTitles[i]}`, cellX, titleY, { maxWidth: maxWidth })
-            doc.addImage(
-              chartImage.dataURL,
-              options.chartFormat.toUpperCase(),
-              xPos,
-              imageTopY,
-              chartWidth,
-              chartHeight
-            )
+        doc.addPage()
 
-            compactSlotCount += 1
-            if (slotIndex === perPage - 1) addFooter()
-          } else {
-            // Nueva página para cada gráfico
-            doc.addPage()
+        // Encabezado de Sección
+        doc.setFillColor(241, 245, 249)
+        doc.roundedRect(margin, 28, contentWidth, 30, 5, 5, 'F')
+        
+        doc.setFillColor(37, 99, 235)
+        doc.rect(margin, 28, 4, 30, 'F')
 
-            // Título del gráfico
-            doc.setFontSize(16)
-            doc.setTextColor(31, 78, 121)
-            doc.text(chartTitles[i], margin, 50, { maxWidth: contentWidth })
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(15, 23, 42)
+        doc.text(`${i + 1}. ${chartTitle.toUpperCase()}`, margin + 12, 47)
 
-            // Calcular dimensiones del gráfico
-            const maxWidth = pageWidth - (margin * 2)
-            const maxHeight = pageHeight - 150 // Espacio para título y datos
+        let yPos = 66
 
-            let chartWidth = chartImage.width
-            let chartHeight = chartImage.height
+        // Insertar imagen del gráfico renderizado
+        if (chartDataUrl) {
+          doc.addImage(chartDataUrl, 'PNG', margin, yPos, contentWidth, 160)
+          yPos += 172
+        }
 
-            // Escalar si es necesario
-            if (chartWidth > maxWidth) {
-              const scale = maxWidth / chartWidth
-              chartWidth = maxWidth
-              chartHeight = chartHeight * scale
-            }
+        // ── GENERAR TABLA DE DATOS DETALLADOS SEGÚN LA SECCIÓN ───────────────
+        if (options.includeData) {
+          if (sectionId === 'sales' && salesDataset.length > 0) {
+            // Sección 1: Ventas Diarias Detalladas
+            const headers = ['Fecha', 'Día', 'Facturación (Gs.)', 'Órdenes', 'Ticket Prom. (Gs.)', 'Ganancia (Gs.)', 'Margen %', 'Part. %']
 
-            if (chartHeight > maxHeight) {
-              const scale = maxHeight / chartHeight
-              chartHeight = maxHeight
-              chartWidth = chartWidth * scale
-            }
+            const rows = salesDataset.slice(0, 31).map((row: ReportRow) => {
+              const rowSales = Number(row.sales) || 0
+              const rowOrders = Number(row.orders) || 0
+              const rowTicket = rowOrders > 0 ? rowSales / rowOrders : rowSales
+              const rowProfit = Number(row.profit) || 0
+              const rowMargin = rowSales > 0 ? ((rowProfit / rowSales) * 100).toFixed(1) : '0'
+              const rowShare = totalSalesSum > 0 ? ((rowSales / totalSalesSum) * 100).toFixed(1) : '0'
 
-            // Centrar el gráfico
-            const xPos = (pageWidth - chartWidth) / 2
-            const yPos = 80
+              return [
+                formatDateStr(asText(row.date)),
+                getDayOfWeekStr(asText(row.date)),
+                formatGs(rowSales),
+                formatNumber(rowOrders),
+                formatGs(rowTicket),
+                rowProfit > 0 ? formatGs(rowProfit) : '—',
+                rowProfit > 0 ? `${rowMargin}%` : '—',
+                `${rowShare}%`
+              ]
+            })
 
-            // Agregar imagen del gráfico
-            doc.addImage(
-              chartImage.dataURL,
-              options.chartFormat.toUpperCase(),
-              xPos,
-              yPos,
-              chartWidth,
-              chartHeight
-            )
+            const footRows = [[
+              'TOTALES DEL PERÍODO',
+              `${salesDataset.length} días`,
+              formatGs(totalSalesSum),
+              formatNumber(totalOrdersSum),
+              formatGs(avgTicketGlobal),
+              totalProfitSum > 0 ? formatGs(totalProfitSum) : '—',
+              totalProfitSum > 0 ? `${profitMarginPct}%` : '—',
+              '100%'
+            ]]
 
-            // Agregar descripción o datos si está habilitado
-            if (options.includeData && (data.length > 0 || (chartData && chartData[i] && chartData[i].length > 0))) {
-              const currentChartData = (chartData && chartData[i]) || data;
-              const dataYPos = yPos + chartHeight + 30
-              
-              doc.setFontSize(12)
-              doc.setTextColor(31, 78, 121)
-              doc.text('Datos del gráfico:', margin, dataYPos)
-
-              // Agregar tabla con datos relevantes (primeros 8 registros y hasta 6 columnas)
-              const headers = Object.keys(currentChartData[0] || {}).slice(0, 6)
-              const tableData = currentChartData.slice(0, 8).map((item: any) =>
-                headers.map((key) => String(item?.[key] ?? ''))
-              )
-              
-              if (tableData.length > 0 && headers.length > 0) {
-                autoTable(doc, {
-                  startY: dataYPos + 20,
-                  head: [headers],
-                  body: tableData,
-                  styles: { fontSize: 8, cellPadding: 3 },
-                  headStyles: { fillColor: [54, 96, 146], textColor: [255, 255, 255] },
-                  margin: { left: margin, right: margin },
-                  tableWidth: 'auto'
-                })
+            autoTable(doc, {
+              startY: yPos,
+              head: [headers],
+              body: rows,
+              foot: footRows,
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+              headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+              footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                0: { fontStyle: 'bold', halign: 'center', cellWidth: 65 },
+                1: { halign: 'center', cellWidth: 35 },
+                2: { halign: 'right', fontStyle: 'bold' },
+                3: { halign: 'center', cellWidth: 45 },
+                4: { halign: 'right' },
+                5: { halign: 'right' },
+                6: { halign: 'right', cellWidth: 48 },
+                7: { halign: 'right', cellWidth: 42 }
               }
-            }
-            addFooter()
+            })
+          } else if (sectionId === 'repairs-trend' && repairsTrendDataset.length > 0) {
+            // Sección: Tendencia de Reparaciones
+            const headers = ['Fecha', 'Día', 'Reparaciones Ingresadas', 'Participación sobre Ingresos %']
+            const totalRepairsCount = repairsTrendDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.count) || 0), 0)
+
+            const rows = repairsTrendDataset.slice(0, 31).map((row: ReportRow) => {
+              const count = Number(row.count) || 0
+              const pct = totalRepairsCount > 0 ? ((count / totalRepairsCount) * 100).toFixed(1) : '0'
+              return [
+                formatDateStr(asText(row.date)),
+                getDayOfWeekStr(asText(row.date)),
+                formatNumber(count),
+                `${pct}%`
+              ]
+            })
+
+            const footRows = [[
+              'TOTALES TALLER',
+              `${repairsTrendDataset.length} días`,
+              formatNumber(totalRepairsCount),
+              '100%'
+            ]]
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [headers],
+              body: rows,
+              foot: footRows,
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+              headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold' },
+              footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                0: { fontStyle: 'bold', halign: 'center' },
+                1: { halign: 'center' },
+                2: { halign: 'right', fontStyle: 'bold' },
+                3: { halign: 'right' }
+              }
+            })
+          } else if (sectionId === 'repairs-status' && repairsStatusDataset.length > 0) {
+            // Sección: Estados de Reparación
+            const headers = ['Estado Operativo de la Orden', 'Equipos Registrados', 'Distribución %']
+            const totalRepairs = repairsStatusDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.value) || 0), 0)
+
+            const rows = repairsStatusDataset.map((row: ReportRow) => {
+              const val = Number(row.value) || 0
+              const pct = totalRepairs > 0 ? ((val / totalRepairs) * 100).toFixed(1) : '0'
+              return [row.name, formatNumber(val), `${pct}%`]
+            })
+
+            const footRows = [['TOTAL ÓRDENES EN TALLER', formatNumber(totalRepairs), '100%']]
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [headers],
+              body: rows,
+              foot: footRows,
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8.5, cellPadding: 4, font: 'helvetica' },
+              headStyles: { fillColor: [124, 58, 237], textColor: [255, 255, 255], fontStyle: 'bold' },
+              footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                0: { fontStyle: 'bold' },
+                1: { halign: 'right', fontStyle: 'bold' },
+                2: { halign: 'right' }
+              }
+            })
+          } else if (sectionId === 'products' && productsDataset.length > 0) {
+            // Sección: Ranking de Productos Detallado
+            const headers = ['#', 'Producto', 'Categoría', 'Unid.', 'Precio Unit. Prom.', 'Facturación Total (Gs.)', 'Part. %', 'Ganancia (Gs.)', 'Margen %']
+            const totalProductsSales = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+            const totalProductsQty = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.quantity) || 0), 0)
+            const totalProductsProfit = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.profit) || 0), 0)
+            const overallProdMargin = totalProductsSales > 0 ? ((totalProductsProfit / totalProductsSales) * 100).toFixed(1) : '0'
+
+            const rows = productsDataset.slice(0, 20).map((prod: ReportRow, idx: number) => {
+              const pSales = Number(prod.sales) || 0
+              const pQty = Number(prod.quantity) || 0
+              const pProfit = Number(prod.profit) || 0
+              const avgUnit = pQty > 0 ? pSales / pQty : pSales
+              const share = totalProductsSales > 0 ? ((pSales / totalProductsSales) * 100).toFixed(1) : (prod.share ? asNumber(prod.share).toFixed(1) : '0')
+              const pMargin = pSales > 0 ? ((pProfit / pSales) * 100).toFixed(1) : '0'
+
+              return [
+                `#${idx + 1}`,
+                prod.name,
+                prod.category || 'General',
+                formatNumber(pQty),
+                formatGs(avgUnit),
+                formatGs(pSales),
+                `${share}%`,
+                pProfit > 0 ? formatGs(pProfit) : '—',
+                pProfit > 0 ? `${pMargin}%` : '—'
+              ]
+            })
+
+            const footRows = [[
+              '',
+              'TOTALES TOP PRODUCTOS',
+              '',
+              formatNumber(totalProductsQty),
+              '—',
+              formatGs(totalProductsSales),
+              '100%',
+              totalProductsProfit > 0 ? formatGs(totalProductsProfit) : '—',
+              totalProductsProfit > 0 ? `${overallProdMargin}%` : '—'
+            ]]
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [headers],
+              body: rows,
+              foot: footRows,
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 7.5, cellPadding: 3.5, font: 'helvetica' },
+              headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold' },
+              footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                0: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+                1: { fontStyle: 'bold' },
+                2: { halign: 'center', cellWidth: 80 },
+                3: { halign: 'center', cellWidth: 35 },
+                4: { halign: 'right' },
+                5: { halign: 'right', fontStyle: 'bold' },
+                6: { halign: 'right', cellWidth: 38 },
+                7: { halign: 'right' },
+                8: { halign: 'right', cellWidth: 42 }
+              }
+            })
+          } else if (sectionId === 'selected-product' && selectedProductDataset.length > 0) {
+            // Sección: Tendencia Individual de Producto
+            const headers = ['Fecha', 'Día', 'Facturación (Gs.)', 'Unidades Vendidas', 'Ticket Promedio (Gs.)']
+            const totalSales = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+            const totalQty = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.qty) || 0), 0)
+            const avgTicket = totalQty > 0 ? totalSales / totalQty : totalSales
+
+            const rows = selectedProductDataset.slice(0, 25).map((p: ReportRow) => [
+              formatDateStr(asText(p.date)),
+              getDayOfWeekStr(asText(p.date)),
+              formatGs(asNumber(p.sales)),
+              formatNumber(asNumber(p.qty)),
+              formatGs(asNumber(p.qty) > 0 ? asNumber(p.sales) / asNumber(p.qty) : asNumber(p.sales))
+            ])
+            const footRows = [['TOTALES DEL ARTÍCULO', '', formatGs(totalSales), formatNumber(totalQty), formatGs(avgTicket)]]
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [headers],
+              body: rows,
+              foot: footRows,
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+              headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+              footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                0: { halign: 'center', fontStyle: 'bold' },
+                1: { halign: 'center' },
+                2: { halign: 'right', fontStyle: 'bold' },
+                3: { halign: 'center' },
+                4: { halign: 'right' }
+              }
+            })
+          } else if (sectionId === 'categories' && categoriesDataset.length > 0) {
+            // Sección: Categorías Detalladas
+            const headers = ['Categoría Comercial', 'Unidades Vendidas', 'Ventas Totales (Gs.)', 'Ticket Prom. / Unid.', 'Participación %']
+            const totalCatSales = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.sales) || 0), 0)
+            const totalCatQty = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.quantity) || 0), 0)
+
+            const rows = categoriesDataset.map((cat: ReportRow) => {
+              const cSales = Number(cat.sales) || 0
+              const cQty = Number(cat.quantity) || 0
+              const avgPerUnit = cQty > 0 ? cSales / cQty : cSales
+              const share = totalCatSales > 0 ? ((cSales / totalCatSales) * 100).toFixed(1) : '0'
+              return [cat.name, formatNumber(cQty), formatGs(cSales), formatGs(avgPerUnit), `${share}%`]
+            })
+
+            const footRows = [['TOTAL CATEGORÍAS', formatNumber(totalCatQty), formatGs(totalCatSales), '—', '100%']]
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [headers],
+              body: rows,
+              foot: footRows,
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8, cellPadding: 4, font: 'helvetica' },
+              headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold' },
+              footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                0: { fontStyle: 'bold' },
+                1: { halign: 'center' },
+                2: { halign: 'right', fontStyle: 'bold' },
+                3: { halign: 'right' },
+                4: { halign: 'right' }
+              }
+            })
+          } else if (sectionId === 'generic' && sectionRows.length > 0) {
+            // Serie de etiqueta y valor: dos columnas y el total. Antes estas
+            // paginas caian en la tabla de otra seccion, que leia `row.date` y
+            // `row.sales`, y salian vacias.
+            const totalGeneric = sectionRows.reduce((sum: number, row: ReportRow) => sum + pointValue(row), 0)
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [['Concepto', 'Valor', 'Part. %']],
+              body: sectionRows.slice(0, 40).map((row: ReportRow, idx: number) => [
+                pointLabel(row, String(idx + 1)),
+                sectionFormat(pointValue(row)),
+                totalGeneric > 0 ? `${((pointValue(row) / totalGeneric) * 100).toFixed(1)}%` : '0%',
+              ]),
+              foot: [['TOTAL', sectionFormat(totalGeneric), '100%']],
+              theme: 'grid',
+              margin: { left: margin, right: margin },
+              styles: { fontSize: 8, cellPadding: 4 },
+              headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+              footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [248, 250, 252] },
+              columnStyles: {
+                1: { halign: 'right', fontStyle: 'bold' },
+                2: { halign: 'right' },
+              },
+            })
           }
         }
       }
-      if (options.pdfChartsPerPage > 1 && compactSlotCount % options.pdfChartsPerPage !== 0) addFooter()
 
-      setExportProgress(90)
+      // ── PÁGINA ADICIONAL: CRÉDITOS Y COBRANZAS DE CARTERA ────────────────
+      if (creditReport) {
+        doc.addPage()
+        doc.setFillColor(241, 245, 249)
+        doc.roundedRect(margin, 28, contentWidth, 30, 5, 5, 'F')
+        doc.setFillColor(15, 118, 110)
+        doc.rect(margin, 28, 4, 30, 'F')
+
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(15, 23, 42)
+        doc.text('MÓDULO FINANCIERO: CRÉDITOS, CARTERA Y COBRANZAS', margin + 12, 47)
+
+        let credY = 68
+
+        const credKpis: Record<string, unknown> = {
+          'Créditos Otorgados': formatNumber(creditReport.period.grantedCount),
+          'Capital Financiado': formatGs(creditReport.period.principalGranted),
+          'Cobranzas Recibidas': formatGs(creditReport.period.paymentsReceived),
+          'Cartera Activa': formatGs(creditReport.portfolio.outstandingAmount),
+          'Monto en Mora': formatGs(creditReport.portfolio.overdueAmount),
+          'Tasa de Cobranza': `${creditReport.portfolio.collectionRate.toFixed(1)}%`,
+          'Clientes en Mora': formatNumber(creditReport.portfolio.overdueCustomers),
+          'Cuotas a Vencer': formatGs(creditReport.portfolio.dueSoonAmount),
+        }
+
+        const credKpiEntries = Object.entries(credKpis)
+        const cCardsPerRow = isLandscape ? 4 : 2
+        const cCardGap = 8
+        const cCardWidth = (contentWidth - ((cCardsPerRow - 1) * cCardGap)) / cCardsPerRow
+        const cCardHeight = 44
+
+        credKpiEntries.forEach(([k, v], idx) => {
+          const row = Math.floor(idx / cCardsPerRow)
+          const col = idx % cCardsPerRow
+          const cardX = margin + col * (cCardWidth + cCardGap)
+          const cardY = credY + row * (cCardHeight + cCardGap)
+
+          doc.setFillColor(248, 250, 252)
+          doc.setDrawColor(226, 232, 240)
+          doc.roundedRect(cardX, cardY, cCardWidth, cCardHeight, 4, 4, 'FD')
+
+          doc.setFillColor(15, 118, 110)
+          doc.roundedRect(cardX, cardY, 3, cCardHeight, 1.5, 1.5, 'F')
+
+          doc.setFontSize(7.5)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(100, 116, 139)
+          doc.text(k.toUpperCase(), cardX + 8, cardY + 14, { maxWidth: cCardWidth - 14 })
+
+          doc.setFontSize(11)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(15, 23, 42)
+          doc.text(String(v), cardX + 8, cardY + 32, { maxWidth: cCardWidth - 14 })
+        })
+
+        credY += Math.ceil(credKpiEntries.length / cCardsPerRow) * (cCardHeight + cCardGap) + 14
+
+        const statusLabels: Record<string, string> = { active: 'Al día', overdue: 'Con mora', completed: 'Cancelados' }
+        const totalCredStatus = creditReport.statusDistribution.reduce((acc, s) => acc + s.count, 0)
+        const credStatusRows = creditReport.statusDistribution.map((st) => {
+          const pct = totalCredStatus > 0 ? ((st.count / totalCredStatus) * 100).toFixed(1) : '0'
+          return [statusLabels[st.status] || st.status, formatNumber(st.count), `${pct}%`]
+        })
+
+        autoTable(doc, {
+          startY: credY,
+          head: [['Estado de Cuenta de Crédito', 'Cantidad de Créditos', 'Participación %']],
+          body: credStatusRows,
+          foot: [['TOTAL CUENTAS REGISTRADAS', formatNumber(totalCredStatus), '100%']],
+          margin: { left: margin, right: margin },
+          styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+          headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold' },
+          footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          columnStyles: {
+            0: { fontStyle: 'bold' },
+            1: { halign: 'right', fontStyle: 'bold' },
+            2: { halign: 'right' }
+          }
+        })
+
+        credY = (doc as typeof doc & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14
+
+        // Gráfico Canvas de Cobranzas
+        if (creditReport.paymentTrend.length > 0) {
+          const credChartImg = renderAreaChartCanvas(
+            'Evolución Diaria de Cobranzas y Pagos Recibidos',
+            creditReport.paymentTrend.map((p) => ({ label: formatDateStr(p.date), value: p.amount })),
+            { lineColor: '#0f766e', fillColor: '#14b8a6', formatValue: formatGs }
+          )
+          if (credChartImg) {
+            doc.addImage(credChartImg, 'PNG', margin, credY, contentWidth, 140)
+            credY += 150
+          }
+
+          const totalPayments = creditReport.paymentTrend.reduce((acc, p) => acc + p.amount, 0)
+          const payRows = creditReport.paymentTrend.slice(0, 20).map((p) => {
+            const pct = totalPayments > 0 ? ((p.amount / totalPayments) * 100).toFixed(1) : '0'
+            return [formatDateStr(p.date), getDayOfWeekStr(p.date), formatGs(p.amount), `${pct}%`]
+          })
+
+          autoTable(doc, {
+            startY: credY,
+            head: [['Fecha', 'Día', 'Monto Cobrado (Gs.)', 'Participación sobre Cobranzas %']],
+            body: payRows,
+            foot: [['TOTAL COBRANZAS DEL PERÍODO', `${creditReport.paymentTrend.length} días`, formatGs(totalPayments), '100%']],
+            margin: { left: margin, right: margin },
+            styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+            headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+            footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: {
+              0: { fontStyle: 'bold', halign: 'center' },
+              1: { halign: 'center' },
+              2: { halign: 'right', fontStyle: 'bold' },
+              3: { halign: 'right' }
+            }
+          })
+        }
+      }
+
+      // ── ENCABEZADOS Y PIE DE PÁGINA EN TODAS LAS HOJAS ─────────────────────
+      const totalPages = (doc.internal as typeof doc.internal & { getNumberOfPages: () => number }).getNumberOfPages()
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        doc.setPage(pageNum)
+
+        // Línea y encabezado superior (desde la página 2)
+        if (pageNum > 1) {
+          doc.setFontSize(7.5)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(148, 163, 184)
+          doc.text(title, margin, 20)
+          doc.text('Sistema 4G • Reporte Ejecutivo de Gestión', pageWidth - margin, 20, { align: 'right' })
+          
+          doc.setDrawColor(226, 232, 240)
+          doc.setLineWidth(0.5)
+          doc.line(margin, 24, pageWidth - margin, 24)
+        }
+
+        // Línea y pie de página inferior
+        doc.setDrawColor(226, 232, 240)
+        doc.setLineWidth(0.5)
+        doc.line(margin, pageHeight - 22, pageWidth - margin, pageHeight - 22)
+
+        doc.setFontSize(7.5)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(148, 163, 184)
+        doc.text(`Generado el ${dateLabel} • Documento Confidencial`, margin, pageHeight - 10)
+        doc.text(`Página ${pageNum} de ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' })
+      }
+
+      setExportProgress(95)
 
       // Guardar PDF
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
       const safeTitle = sanitizeFileName(title)
-      doc.save(`${safeTitle}_con_graficos_${timestamp}.pdf`)
+      doc.save(`${safeTitle}_informe_ejecutivo_${timestamp}.pdf`)
 
       setExportProgress(100)
       onExport?.('pdf-charts', true)
+      toast.success('Informe PDF generado exitosamente con análisis y tablas detalladas.')
 
     } catch (error) {
       console.error('Error exportando PDF con gráficos:', error)
+      toast.error('No se pudo generar el PDF.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
       onExport?.('pdf-charts', false)
     } finally {
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
     }
-  }, [options, title, chartRefs, chartTitles, metrics, data, chartData, captureChart, onExport, sanitizeFileName])
+  }, [options, title, chartRefs, chartTitles, metrics, data, chartData, creditReport, onExport, sanitizeFileName])
 
-  // Función para exportar Excel con gráficos
+  // ── EXPORTACIÓN DE EXCEL CON FORMATO CORPORATIVO Y DATOS REALES ─────────────
   const exportExcelOnly = useCallback(async () => {
     setIsExporting(true)
-    setExportProgress(0)
+    setExportProgress(10)
 
     try {
-      const wb = XLSX.utils.book_new()
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+      const XLSXStyle = await loadXlsxStyle()
+      const wb = XLSXStyle.utils.book_new()
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
       const safeTitle = sanitizeFileName(title)
+      const dateLabel = now.toLocaleString('es-PY', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
 
-      const summaryRows = [
-        ['Reporte', title],
-        ['Generado', new Date().toLocaleString('es-ES')],
-        ['', ''],
-        ['Incluye datos', options.includeData ? 'Sí' : 'No'],
-        ['Incluye métricas', options.includeMetrics ? 'Sí' : 'No']
-      ]
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
-      wsSummary['!cols'] = [{ wch: 28 }, { wch: 56 }]
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen')
-      setExportProgress(20)
+      // Datasets reales recibidos de la vista
+      const salesRows = toReportRows(chartData?.find((section) => section.id === 'sales')?.rows)
+      const salesDataset = salesRows.length > 0 ? salesRows : toReportRows(data)
+      const rowsById = (id: ChartSectionId) =>
+        toReportRows(chartData?.find((section) => section.id === id)?.rows)
+      const repairsTrendDataset = rowsById('repairs-trend')
+      const repairsStatusDataset = rowsById('repairs-status')
+      const productsDataset = rowsById('products')
+      const selectedProductDataset = rowsById('selected-product')
+      const categoriesDataset = rowsById('categories')
 
-      if (options.includeData && data.length > 0) {
-        const ws = XLSX.utils.json_to_sheet(data)
-        const headers = Object.keys(data[0] || {})
-        ws['!autofilter'] = { ref: `A1:${String.fromCharCode(64 + Math.max(headers.length, 1))}1` }
-        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
-        XLSX.utils.book_append_sheet(wb, ws, 'Datos')
+      // ── Hoja 1: Resumen Ejecutivo ──────────────────────────────────────────
+      {
+        const titleS: XCellStyle = { font: { bold: true, sz: 14, color: { rgb: XL_C.white }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.navy } }, alignment: { horizontal: 'left', vertical: 'center' } }
+        const subtitleS: XCellStyle = { font: { sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.navyL } }, alignment: { horizontal: 'left', vertical: 'center' } }
+        const labelS: XCellStyle = { font: { bold: true, sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' }, fill: { fgColor: { rgb: XL_C.white } }, border: XL_BORDER }
+        const kpiHdr: XCellStyle = xlHdr(XL_C.blue)
+        const diagHdr: XCellStyle = xlHdr(XL_C.green)
+        const indexHdr: XCellStyle = xlHdr(XL_C.navy)
+        const indexRow = (rowIdx: number): XCellStyle => ({ font: { sz: 10, color: { rgb: XL_C.gray }, name: 'Calibri' }, fill: { fgColor: { rgb: rowIdx % 2 === 0 ? XL_C.white : XL_C.blueL } }, border: XL_BORDER, alignment: { horizontal: 'left', vertical: 'center' } })
+
+        const metricEntries = Object.entries(metrics)
+
+        // Diagnóstico ejecutivo
+        const totalSalesSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.sales) || 0), 0)
+        const peakDay = salesDataset.length > 0 ? [...salesDataset].sort((a: ReportRow, b: ReportRow) => (Number(b.sales) || 0) - (Number(a.sales) || 0))[0] : null
+        const dailyAvg = salesDataset.length > 0 ? Math.round(totalSalesSum / salesDataset.length) : 0
+        const activeDays = salesDataset.filter((r: ReportRow) => (Number(r.sales) || 0) > 0).length
+
+        const rows: ReportCell[][] = [
+          [xlCell(`📊  ${title.toUpperCase()}`, titleS), xlCell('', titleS), xlCell('', titleS)],
+          [xlCell(`Sistema 4G • Informe Ejecutivo de Gestión y Ventas`, subtitleS), xlCell('', subtitleS), xlCell('', subtitleS)],
+          [xlCell(`Fecha de Emisión: ${dateLabel} | Moneda Base: Guaraníes (PYG)`, subtitleS), xlCell('', subtitleS), xlCell('', subtitleS)],
+          [xlCell('', {}), xlCell('', {}), xlCell('', {})],
+          
+          [xlCell('INDICADORES PRINCIPALES (KPIS)', kpiHdr), xlCell('', kpiHdr), xlCell('', kpiHdr)],
+          [xlCell('Métrica de Gestión', labelS), xlCell('Valor Registrado', { ...labelS, alignment: { horizontal: 'right' } }), xlCell('Detalle / Unidad', labelS)],
+          ...metricEntries.map(([k, v], i) => [
+            xlCell(k, xlData(i, 'left', true)),
+            xlCell(String(v), { ...xlNum(i, true), alignment: { horizontal: 'right' } }),
+            xlCell(k.includes('Tasa') || k.includes('%') ? 'Porcentaje' : k.includes('Ventas') || k.includes('Margen') || k.includes('Ticket') || k.includes('Cartera') || k.includes('Cobranzas') ? 'Moneda (Gs.)' : 'Unidades', xlData(i)),
+          ]),
+          [xlCell('', {}), xlCell('', {}), xlCell('', {})],
+
+          [xlCell('DIAGNÓSTICO Y RENDIMIENTO COMERCIAL', diagHdr), xlCell('', diagHdr), xlCell('', diagHdr)],
+          [xlCell('Concepto Clave', labelS), xlCell('Resultado', { ...labelS, alignment: { horizontal: 'right' } }), xlCell('Observación', labelS)],
+          [xlCell('Día Pico de Ventas', xlData(0, 'left', true)), xlCell(peakDay ? formatDateStr(asText(peakDay.date)) : '—', xlData(0, 'right', true)), xlCell(peakDay ? `${formatGs(asNumber(peakDay.sales))} facturados` : '—', xlData(0))],
+          [xlCell('Promedio Diario de Facturación', xlData(1, 'left', true)), xlCell(formatGs(dailyAvg), xlData(1, 'right', true)), xlCell('Por cada día del período', xlData(1))],
+          [xlCell('Días con Venta Activa', xlData(2, 'left', true)), xlCell(`${activeDays} de ${salesDataset.length}`, xlData(2, 'right', true)), xlCell(salesDataset.length > 0 ? `${((activeDays / salesDataset.length) * 100).toFixed(0)}% de operatividad` : '—', xlData(2))],
+          [xlCell('', {}), xlCell('', {}), xlCell('', {})],
+
+          [xlCell('CONTENIDO Y HOJAS DEL LIBRO', indexHdr), xlCell('', indexHdr), xlCell('', indexHdr)],
+          [xlCell('Hoja', labelS), xlCell('Descripción del Contenido', labelS), xlCell('Enfoque', labelS)],
+          ...[
+            ['Ventas Diarias',       'Evolución de facturación por día, órdenes, ticket promedio y ganancia.', 'Comercial'],
+            ['Ranking Productos',    'Top de artículos vendidos, unidades, recaudación y % de participación.', 'Inventario'],
+            ['Categorias',          'Desglose por rubros comerciales con participación de mercado.', 'Estratégico'],
+            ...(repairsTrendDataset.length > 0 || repairsStatusDataset.length > 0 ? [['Taller Reparaciones', 'Estados de órdenes del taller técnico y tendencia de ingresos.', 'Operativo']] : []),
+            ...(creditReport ? [['Creditos y Cobranzas', 'Salud de cartera, cobranzas del período, mora y financiamiento.', 'Financiero']] : []),
+            ...(selectedProductDataset.length > 0 ? [['Tendencia Producto', 'Evolución individual del producto seleccionado.', 'Profundidad']] : []),
+          ].map(([h, desc, enf], i) => [xlCell(h, indexRow(i)), xlCell(desc, indexRow(i)), xlCell(enf, indexRow(i))]),
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 34 }, { wch: 28 }, { wch: 42 }]
+        ws['!rows'] = [{ hpt: 26 }, { hpt: 16 }, { hpt: 16 }]
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Resumen Ejecutivo')
       }
-      setExportProgress(55)
+      setExportProgress(30)
 
-      if (options.includeMetrics && Object.keys(metrics).length > 0) {
-        const metricsData = Object.entries(metrics).map(([key, value]) => ({
-          Métrica: key,
-          Valor: value
-        }))
-        const wsMetrics = XLSX.utils.json_to_sheet(metricsData)
-        wsMetrics['!cols'] = [{ wch: 40 }, { wch: 22 }]
-        XLSX.utils.book_append_sheet(wb, wsMetrics, 'Métricas')
+      // ── Hoja 2: Ventas Diarias ─────────────────────────────────────────────
+      if (salesDataset && salesDataset.length > 0) {
+        const hdr = xlHdr(XL_C.blue)
+        const totalSalesSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.sales) || 0), 0)
+        const totalOrdersSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.orders) || 0), 0)
+        const totalProfitSum = salesDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.profit) || 0), 0)
+        const avgTicket = totalOrdersSum > 0 ? totalSalesSum / totalOrdersSum : 0
+        const totalMargin = totalSalesSum > 0 ? ((totalProfitSum / totalSalesSum) * 100).toFixed(1) : '0'
+
+        const rows: ReportCell[][] = [
+          [
+            xlCell('Fecha', hdr),
+            xlCell('Día', hdr),
+            xlCell('Facturación Total (Gs.)', hdr),
+            xlCell('Órdenes', hdr),
+            xlCell('Ticket Promedio (Gs.)', hdr),
+            xlCell('Ganancia Estimada (Gs.)', hdr),
+            xlCell('Margen %', hdr),
+            xlCell('Participación %', hdr),
+            xlCell('Barra Visual', hdr),
+          ],
+          ...salesDataset.map((row: ReportRow, i: number) => {
+            const s = Number(row.sales) || 0
+            const o = Number(row.orders) || 0
+            const p = Number(row.profit) || 0
+            const t = o > 0 ? Math.round(s / o) : s
+            const m = s > 0 ? +((p / s) * 100).toFixed(1) : 0
+            const share = totalSalesSum > 0 ? +((s / totalSalesSum) * 100).toFixed(1) : 0
+            const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(share / 4))))
+
+            return [
+              xlCell(formatDateStr(asText(row.date)), xlData(i, 'center')),
+              xlCell(getDayOfWeekStr(asText(row.date)), xlData(i, 'center')),
+              xlCell(s, xlNum(i, true)),
+              xlCell(o, xlNum(i)),
+              xlCell(t, xlNum(i)),
+              xlCell(p > 0 ? p : '—', xlNum(i)),
+              xlCell(p > 0 ? `${m}%` : '—', xlData(i, 'right')),
+              xlCell(`${share}%`, xlData(i, 'right')),
+              xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.blue }, name: 'Calibri' } }),
+            ]
+          }),
+          [
+            xlCell('TOTALES DEL PERÍODO', xlTotal(XL_C.navy)),
+            xlCell(`${salesDataset.length} días`, xlTotal(XL_C.navy)),
+            xlCell(totalSalesSum, xlTotal(XL_C.navy)),
+            xlCell(totalOrdersSum, xlTotal(XL_C.navy)),
+            xlCell(Math.round(avgTicket), xlTotal(XL_C.navy)),
+            xlCell(totalProfitSum > 0 ? totalProfitSum : '—', xlTotal(XL_C.navy)),
+            xlCell(totalProfitSum > 0 ? `${totalMargin}%` : '—', xlTotal(XL_C.navy)),
+            xlCell('100%', xlTotal(XL_C.navy)),
+            xlCell('', xlTotal(XL_C.navy)),
+          ]
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 22 }]
+        ws['!autofilter'] = { ref: `A1:I${salesDataset.length + 1}` }
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Ventas Diarias')
+      }
+      setExportProgress(50)
+
+      // ── Hoja 3: Ranking de Productos ───────────────────────────────────────
+      if (productsDataset && productsDataset.length > 0) {
+        const hdr = xlHdr(XL_C.green)
+        const totalSalesSum = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+        const totalQtySum = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.quantity) || 0), 0)
+        const totalProfitSum = productsDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.profit) || 0), 0)
+
+        const rows: ReportCell[][] = [
+          [
+            xlCell('Posición', hdr),
+            xlCell('Producto', hdr),
+            xlCell('Categoría Comercial', hdr),
+            xlCell('Unidades Vendidas', hdr),
+            xlCell('Precio Prom. Unitario (Gs.)', hdr),
+            xlCell('Facturación Total (Gs.)', hdr),
+            xlCell('Participación %', hdr),
+            xlCell('Ganancia Est. (Gs.)', hdr),
+            xlCell('Margen %', hdr),
+            xlCell('Barra Visual', hdr),
+          ],
+          ...productsDataset.map((prod: ReportRow, i: number) => {
+            const s = Number(prod.sales) || 0
+            const q = Number(prod.quantity) || 0
+            const p = Number(prod.profit) || 0
+            const avgPrice = q > 0 ? Math.round(s / q) : s
+            const share = totalSalesSum > 0 ? +((s / totalSalesSum) * 100).toFixed(1) : 0
+            const m = s > 0 ? +((p / s) * 100).toFixed(1) : 0
+            const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(share / 4))))
+            const medal = i === 0 ? '🥇 #1' : i === 1 ? '🥈 #2' : i === 2 ? '🥉 #3' : `#${i + 1}`
+
+            return [
+              xlCell(medal, xlData(i, 'center', true)),
+              xlCell(asText(prod.name) || 'Sin nombre', xlData(i, 'left', true)),
+              xlCell(asText(prod.category) || 'General', xlData(i, 'left')),
+              xlCell(q, xlNum(i)),
+              xlCell(avgPrice, xlNum(i)),
+              xlCell(s, xlNum(i, true)),
+              xlCell(`${share}%`, xlData(i, 'right')),
+              xlCell(p > 0 ? p : '—', xlNum(i)),
+              xlCell(p > 0 ? `${m}%` : '—', xlData(i, 'right')),
+              xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.green }, name: 'Calibri' } }),
+            ]
+          }),
+          [
+            xlCell('TOTALES', xlTotal(XL_C.green)),
+            xlCell('CATÁLOGO DE PRODUCTOS', xlTotal(XL_C.green)),
+            xlCell('', xlTotal(XL_C.green)),
+            xlCell(totalQtySum, xlTotal(XL_C.green)),
+            xlCell('—', xlTotal(XL_C.green)),
+            xlCell(totalSalesSum, xlTotal(XL_C.green)),
+            xlCell('100%', xlTotal(XL_C.green)),
+            xlCell(totalProfitSum > 0 ? totalProfitSum : '—', xlTotal(XL_C.green)),
+            xlCell(totalProfitSum > 0 && totalSalesSum > 0 ? `${((totalProfitSum / totalSalesSum) * 100).toFixed(1)}%` : '—', xlTotal(XL_C.green)),
+            xlCell('', xlTotal(XL_C.green)),
+          ]
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 12 }, { wch: 38 }, { wch: 22 }, { wch: 18 }, { wch: 26 }, { wch: 24 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 20 }]
+        ws['!autofilter'] = { ref: `A1:J${productsDataset.length + 1}` }
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Ranking Productos')
+      }
+      setExportProgress(70)
+
+      // ── Hoja 4: Categorías y Rubros ────────────────────────────────────────
+      if (categoriesDataset && categoriesDataset.length > 0) {
+        const hdr = xlHdr(XL_C.violet)
+        const totalSalesSum = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.sales) || 0), 0)
+        const totalQtySum = categoriesDataset.reduce((sum: number, c: ReportRow) => sum + (Number(c.quantity) || 0), 0)
+
+        const rows: ReportCell[][] = [
+          [
+            xlCell('Categoría Comercial', hdr),
+            xlCell('Unidades Vendidas', hdr),
+            xlCell('Facturación Total (Gs.)', hdr),
+            xlCell('Ticket Prom. / Unid. (Gs.)', hdr),
+            xlCell('Participación %', hdr),
+            xlCell('Barra Visual', hdr),
+          ],
+          ...categoriesDataset.map((cat: ReportRow, i: number) => {
+            const s = Number(cat.sales) || 0
+            const q = Number(cat.quantity) || 0
+            const avgU = q > 0 ? Math.round(s / q) : s
+            const share = totalSalesSum > 0 ? +((s / totalSalesSum) * 100).toFixed(1) : 0
+            const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(share / 4))))
+
+            return [
+              xlCell(asText(cat.name) || 'Sin Categoría', xlData(i, 'left', true)),
+              xlCell(q, xlNum(i)),
+              xlCell(s, xlNum(i, true)),
+              xlCell(avgU, xlNum(i)),
+              xlCell(`${share}%`, xlData(i, 'right')),
+              xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.violet }, name: 'Calibri' } }),
+            ]
+          }),
+          [
+            xlCell('TOTAL GENERAL', xlTotal(XL_C.violet)),
+            xlCell(totalQtySum, xlTotal(XL_C.violet)),
+            xlCell(totalSalesSum, xlTotal(XL_C.violet)),
+            xlCell('—', xlTotal(XL_C.violet)),
+            xlCell('100%', xlTotal(XL_C.violet)),
+            xlCell('', xlTotal(XL_C.violet)),
+          ]
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 32 }, { wch: 18 }, { wch: 24 }, { wch: 24 }, { wch: 16 }, { wch: 24 }]
+        ws['!autofilter'] = { ref: `A1:F${categoriesDataset.length + 1}` }
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Categorias')
       }
       setExportProgress(85)
 
-      XLSX.writeFile(wb, `${safeTitle}_excel_${timestamp}.xlsx`)
+      // ── Hoja 5: Taller y Reparaciones (si existen datos) ────────────────────
+      if (repairsStatusDataset.length > 0 || repairsTrendDataset.length > 0) {
+        const hdr = xlHdr(XL_C.amber)
+        const totalRepairs = repairsStatusDataset.reduce((sum: number, r: ReportRow) => sum + (Number(r.value) || 0), 0)
+        const totalTrendCount = repairsTrendDataset.reduce((sum: number, t: ReportRow) => sum + (Number(t.count) || 0), 0)
+
+        const rows: ReportCell[][] = [
+          [xlCell('DESGLOSE DE REPARACIONES POR ESTADO', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
+          [xlCell('Estado Operativo', hdr), xlCell('Equipos Registrados', hdr), xlCell('Participación %', hdr), xlCell('Barra Visual', hdr)],
+          ...repairsStatusDataset.map((st: ReportRow, i: number) => {
+            const v = Number(st.value) || 0
+            const pct = totalRepairs > 0 ? +((v / totalRepairs) * 100).toFixed(1) : 0
+            const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(pct / 4))))
+            return [
+              xlCell(asText(st.name), xlData(i, 'left', true)),
+              xlCell(v, xlNum(i)),
+              xlCell(`${pct}%`, xlData(i, 'right')),
+              xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.amber }, name: 'Calibri' } }),
+            ]
+          }),
+          [
+            xlCell('TOTAL ÓRDENES', xlTotal(XL_C.amber)),
+            xlCell(totalRepairs, xlTotal(XL_C.amber)),
+            xlCell('100%', xlTotal(XL_C.amber)),
+            xlCell('', xlTotal(XL_C.amber)),
+          ],
+          [xlCell('', {}), xlCell('', {}), xlCell('', {}), xlCell('', {})],
+          [xlCell('INGRESOS DIARIOS AL TALLER', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
+          [xlCell('Fecha', hdr), xlCell('Día', hdr), xlCell('Órdenes Ingresadas', hdr), xlCell('Participación %', hdr)],
+          ...repairsTrendDataset.map((t: ReportRow, i: number) => {
+            const cnt = Number(t.count) || 0
+            const pct = totalTrendCount > 0 ? +((cnt / totalTrendCount) * 100).toFixed(1) : 0
+            return [
+              xlCell(formatDateStr(asText(t.date)), xlData(i, 'center')),
+              xlCell(getDayOfWeekStr(asText(t.date)), xlData(i, 'center')),
+              xlCell(cnt, xlNum(i, true)),
+              xlCell(`${pct}%`, xlData(i, 'right')),
+            ]
+          }),
+          [
+            xlCell('TOTAL INGRESOS', xlTotal(XL_C.amber)),
+            xlCell(`${repairsTrendDataset.length} días`, xlTotal(XL_C.amber)),
+            xlCell(totalTrendCount, xlTotal(XL_C.amber)),
+            xlCell('100%', xlTotal(XL_C.amber)),
+          ]
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 22 }]
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Taller Reparaciones')
+      }
+
+      // ── Hoja 6: Tendencia de Producto (si existe selección) ─────────────────
+      if (selectedProductDataset.length > 0) {
+        const hdr = xlHdr(XL_C.blue)
+        const totalSales = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.sales) || 0), 0)
+        const totalQty = selectedProductDataset.reduce((sum: number, p: ReportRow) => sum + (Number(p.qty) || 0), 0)
+
+        const rows: ReportCell[][] = [
+          [
+            xlCell('Fecha', hdr),
+            xlCell('Día', hdr),
+            xlCell('Facturación (Gs.)', hdr),
+            xlCell('Unidades Vendidas', hdr),
+          ],
+          ...selectedProductDataset.map((p: ReportRow, i: number) => [
+            xlCell(formatDateStr(asText(p.date)), xlData(i, 'center')),
+            xlCell(getDayOfWeekStr(asText(p.date)), xlData(i, 'center')),
+            xlCell(Number(p.sales) || 0, xlNum(i, true)),
+            xlCell(Number(p.qty) || 0, xlNum(i)),
+          ]),
+          [
+            xlCell('TOTAL', xlTotal(XL_C.blue)),
+            xlCell(`${selectedProductDataset.length} días`, xlTotal(XL_C.blue)),
+            xlCell(totalSales, xlTotal(XL_C.blue)),
+            xlCell(totalQty, xlTotal(XL_C.blue)),
+          ]
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 24 }, { wch: 20 }]
+        ws['!autofilter'] = { ref: `A1:D${selectedProductDataset.length + 1}` }
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Tendencia Producto')
+      }
+
+      // ── Hoja 7: Créditos y Cobranzas (si existe reporte de créditos) ───────
+      if (creditReport) {
+        const hdr = xlHdr(XL_C.green)
+        const totalStatus = creditReport.statusDistribution.reduce((acc, s) => acc + s.count, 0)
+        const totalPayments = creditReport.paymentTrend.reduce((acc, p) => acc + p.amount, 0)
+
+        const rows: ReportCell[][] = [
+          [xlCell('RESUMEN FINANCIERO DE CARTERA Y CRÉDITOS', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
+          [xlCell('Indicador de Créditos', hdr), xlCell('Monto / Valor', hdr), xlCell('Unidad', hdr), xlCell('Observación', hdr)],
+          [xlCell('Créditos Otorgados en Período', xlData(0, 'left', true)), xlCell(creditReport.period.grantedCount, xlNum(0)), xlCell('Operaciones', xlData(0)), xlCell('Nuevas financiaciones', xlData(0))],
+          [xlCell('Capital Total Financiado', xlData(1, 'left', true)), xlCell(creditReport.period.principalGranted, xlNum(1, true)), xlCell('Gs.', xlData(1)), xlCell('Monto original', xlData(1))],
+          [xlCell('Cobranzas Recibidas en Período', xlData(2, 'left', true)), xlCell(creditReport.period.paymentsReceived, xlNum(2, true)), xlCell('Gs.', xlData(2)), xlCell('Ingresos por cuotas', xlData(2))],
+          [xlCell('Cartera Activa por Cobrar', xlData(3, 'left', true)), xlCell(creditReport.portfolio.outstandingAmount, xlNum(3, true)), xlCell('Gs.', xlData(3)), xlCell('Saldo total vigente', xlData(3))],
+          [xlCell('Monto en Mora', xlData(4, 'left', true)), xlCell(creditReport.portfolio.overdueAmount, xlNum(4, true)), xlCell('Gs.', xlData(4)), xlCell('Cuotas vencidas impagas', xlData(4))],
+          [xlCell('Tasa de Cobranza', xlData(5, 'left', true)), xlCell(`${creditReport.portfolio.collectionRate.toFixed(1)}%`, xlData(5, 'right')), xlCell('Porcentaje', xlData(5)), xlCell('Tasa de recuperación', xlData(5))],
+          [xlCell('Clientes con Mora', xlData(6, 'left', true)), xlCell(creditReport.portfolio.overdueCustomers, xlNum(6)), xlCell('Clientes', xlData(6)), xlCell('Deudores atrasados', xlData(6))],
+          [xlCell('Cuotas por Vencer Pronto', xlData(7, 'left', true)), xlCell(creditReport.portfolio.dueSoonAmount, xlNum(7, true)), xlCell('Gs.', xlData(7)), xlCell('Vencimiento próximo', xlData(7))],
+          [xlCell('', {}), xlCell('', {}), xlCell('', {}), xlCell('', {})],
+          
+          [xlCell('DISTRIBUCIÓN DE CUENTAS POR ESTADO', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
+          [xlCell('Estado', hdr), xlCell('Cantidad de Cuentas', hdr), xlCell('Part. %', hdr), xlCell('Barra Visual', hdr)],
+          ...creditReport.statusDistribution.map((st, i) => {
+            const pct = totalStatus > 0 ? +((st.count / totalStatus) * 100).toFixed(1) : 0
+            const label = st.status === 'active' ? 'Al día' : st.status === 'overdue' ? 'Con mora' : 'Cancelados'
+            const bars = '█'.repeat(Math.min(25, Math.max(1, Math.round(pct / 4))))
+            return [
+              xlCell(label, xlData(i, 'left', true)),
+              xlCell(st.count, xlNum(i)),
+              xlCell(`${pct}%`, xlData(i, 'right')),
+              xlCell(bars, { ...xlData(i), font: { sz: 9, color: { rgb: XL_C.green }, name: 'Calibri' } }),
+            ]
+          }),
+          [
+            xlCell('TOTAL CUENTAS', xlTotal(XL_C.green)),
+            xlCell(totalStatus, xlTotal(XL_C.green)),
+            xlCell('100%', xlTotal(XL_C.green)),
+            xlCell('', xlTotal(XL_C.green)),
+          ],
+          [xlCell('', {}), xlCell('', {}), xlCell('', {}), xlCell('', {})],
+          
+          [xlCell('COBRANZAS DIARIAS RECIBIDAS', hdr), xlCell('', hdr), xlCell('', hdr), xlCell('', hdr)],
+          [xlCell('Fecha', hdr), xlCell('Día', hdr), xlCell('Cobranzas (Gs.)', hdr), xlCell('Participación %', hdr)],
+          ...creditReport.paymentTrend.map((p, i) => {
+            const pct = totalPayments > 0 ? +((p.amount / totalPayments) * 100).toFixed(1) : 0
+            return [
+              xlCell(formatDateStr(p.date), xlData(i, 'center')),
+              xlCell(getDayOfWeekStr(p.date), xlData(i, 'center')),
+              xlCell(p.amount, xlNum(i, true)),
+              xlCell(`${pct}%`, xlData(i, 'right')),
+            ]
+          }),
+          [
+            xlCell('TOTAL COBRADO', xlTotal(XL_C.green)),
+            xlCell(`${creditReport.paymentTrend.length} días`, xlTotal(XL_C.green)),
+            xlCell(totalPayments, xlTotal(XL_C.green)),
+            xlCell('100%', xlTotal(XL_C.green)),
+          ],
+        ]
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{ wch: 34 }, { wch: 22 }, { wch: 22 }, { wch: 28 }]
+        XLSXStyle.utils.book_append_sheet(wb, ws, 'Creditos y Cobranzas')
+      }
+
+      setExportProgress(95)
+
+      // Descargar archivo Excel
+      XLSXStyle.writeFile(wb, `${safeTitle}_analytics_${timestamp}.xlsx`)
       setExportProgress(100)
       onExport?.('excel', true)
+
+      const sheetCount = wb.SheetNames.length
+      toast.success(`Libro Excel descargado exitosamente (${sheetCount} hojas con datos reales y estilos).`)
     } catch (error) {
       console.error('Error exportando Excel:', error)
       onExport?.('excel', false)
-    } finally {
-      setIsExporting(false)
-      setTimeout(() => setExportProgress(0), 2000)
-    }
-  }, [options.includeData, options.includeMetrics, title, data, metrics, onExport, sanitizeFileName])
-
-  // Función para exportar Excel con gráficos (ZIP)
-  const exportExcelWithCharts = useCallback(async () => {
-    setIsExporting(true)
-    setExportProgress(0)
-
-    try {
-      const wb = XLSX.utils.book_new()
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
-      const safeTitle = sanitizeFileName(title)
-      const zipEntries: Array<{ fileName: string; dataURL: string }> = []
-
-      // Hoja de resumen
-      const summaryRows = [
-        ['Reporte', title],
-        ['Generado', new Date().toLocaleString('es-ES')],
-        ['Total de gráficos', String(chartRefs.length)],
-        ['Formato de imágenes', options.chartFormat.toUpperCase()],
-        ['', ''],
-        ['Secciones incluidas', [
-          options.includeData ? 'Datos' : null,
-          options.includeMetrics ? 'Métricas' : null,
-          options.includeCharts ? 'Gráficos' : null
-        ].filter(Boolean).join(', ') || 'Ninguna']
-      ]
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
-      wsSummary['!cols'] = [{ wch: 28 }, { wch: 68 }]
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen')
-
-      // Hoja de datos
-      if (options.includeData && data.length > 0) {
-        const ws = XLSX.utils.json_to_sheet(data)
-        const headers = Object.keys(data[0] || {})
-        ws['!autofilter'] = { ref: `A1:${String.fromCharCode(64 + Math.max(headers.length, 1))}1` }
-        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
-        XLSX.utils.book_append_sheet(wb, ws, 'Datos')
-      }
-
-      // Hoja de métricas
-      if (options.includeMetrics && Object.keys(metrics).length > 0) {
-        const metricsData = Object.entries(metrics).map(([key, value]) => ({
-          Métrica: key,
-          Valor: value
-        }))
-        const wsMetrics = XLSX.utils.json_to_sheet(metricsData)
-        wsMetrics['!cols'] = [{ wch: 40 }, { wch: 22 }]
-        XLSX.utils.book_append_sheet(wb, wsMetrics, 'Métricas')
-      }
-
-      // Índice de gráficos dentro del Excel
-      const chartsIndexRows: any[][] = [['#', 'Título', 'Archivo', 'Resolución']]
-
-      // Capturar gráficos y agregar metadatos
-      for (let i = 0; i < chartRefs.length; i++) {
-        setExportProgress((i / Math.max(chartRefs.length, 1)) * 75)
-
-        if (!options.includeCharts) continue
-
-        const chartImage = await captureChart(chartRefs[i], chartTitles[i])
-        if (!chartImage) continue
-
-        const imageFileName = `graficos/${String(i + 1).padStart(2, '0')}_${sanitizeFileName(chartTitles[i])}.${options.chartFormat}`
-        zipEntries.push({ fileName: imageFileName, dataURL: chartImage.dataURL })
-
-        chartsIndexRows.push([
-          i + 1,
-          chartTitles[i],
-          imageFileName,
-          `${chartImage.width}x${chartImage.height}`
-        ])
-
-        const currentChartData = (chartData && chartData[i]) || []
-        if (currentChartData.length > 0) {
-          const wsChartData = XLSX.utils.json_to_sheet(currentChartData)
-          const sheetName = `Datos_${i + 1}`.slice(0, 31)
-          XLSX.utils.book_append_sheet(wb, wsChartData, sheetName)
-        }
-      }
-      const wsChartsIndex = XLSX.utils.aoa_to_sheet(chartsIndexRows)
-      wsChartsIndex['!cols'] = [{ wch: 6 }, { wch: 42 }, { wch: 48 }, { wch: 16 }]
-      XLSX.utils.book_append_sheet(wb, wsChartsIndex, 'Graficos')
-
-      setExportProgress(82)
-
-      // Empaquetar ZIP: Excel + carpeta de gráficos + manifiesto
-      const { default: JSZip } = await import('jszip')
-      const zip = new JSZip()
-      const workbookArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      zip.file(`${safeTitle}_reporte_${timestamp}.xlsx`, workbookArray)
-
-      zipEntries.forEach(({ fileName, dataURL }) => {
-        const base64 = dataURL.split(',')[1] || ''
-        zip.file(fileName, base64, { base64: true })
+      toast.error('No se pudo generar el Excel.', {
+        description: error instanceof Error ? error.message : undefined,
       })
-
-      const manifest = [
-        `Reporte: ${title}`,
-        `Generado: ${new Date().toLocaleString('es-ES')}`,
-        `Graficos incluidos: ${zipEntries.length}`,
-        `Formato: ${options.chartFormat.toUpperCase()}`,
-        '',
-        'Contenido:',
-        `- ${safeTitle}_reporte_${timestamp}.xlsx`,
-        '- graficos/*'
-      ].join('\n')
-      zip.file('LEEME.txt', manifest)
-
-      setExportProgress(92)
-      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
-      const url = URL.createObjectURL(zipBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${safeTitle}_excel_graficos_${timestamp}.zip`
-      link.click()
-      URL.revokeObjectURL(url)
-
-      setExportProgress(100)
-      onExport?.('excel-charts', true)
-
-    } catch (error) {
-      console.error('Error exportando Excel con gráficos:', error)
-      onExport?.('excel-charts', false)
     } finally {
       setIsExporting(false)
       setTimeout(() => setExportProgress(0), 2000)
     }
-  }, [options, title, chartRefs, chartTitles, metrics, data, chartData, captureChart, onExport, sanitizeFileName])
+  }, [title, data, metrics, chartData, creditReport, onExport, sanitizeFileName])
 
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      {/* Botones de exportación con gráficos */}
-      <div className="flex gap-2">
+    <div className={`flex items-center gap-2 ${className}`}>
+      {/* ── Botón Descargar PDF con Menú de Opciones ── */}
+      <div className="flex items-center rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 overflow-hidden shadow-2xs">
         <Button
-          variant="outline"
-          size="sm"
-          onClick={() => exportAsImage('png')}
-          disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 hover:from-purple-100 hover:to-pink-100 dark:hover:from-purple-800/30 dark:hover:to-pink-800/30 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300"
-          title="Exportar gráficos como imágenes PNG"
-        >
-          {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileImage className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          )}
-          Imágenes
-        </Button>
-
-        <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={exportPDFWithCharts}
           disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-800/30 dark:hover:to-indigo-800/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-          title="Exportar PDF completo con gráficos incluidos"
+          className="gap-2 h-9 px-3 rounded-none text-xs font-bold text-rose-700 dark:text-rose-400 hover:bg-rose-100/80 dark:hover:bg-rose-900/40 cursor-pointer"
         >
           {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
+            <RefreshCw className="h-4 w-4 animate-spin text-rose-600" />
           ) : (
-            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <FileText className="h-4 w-4 text-rose-600 dark:text-rose-400" />
           )}
-          PDF + Gráficos
+          <span>Descargar PDF</span>
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={exportExcelOnly}
-          disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-800/30 dark:hover:to-emerald-800/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
-          title="Exportar Excel con datos (sin gráficos)"
-        >
-          {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          )}
-          Excel
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={exportExcelWithCharts}
-          disabled={isExporting}
-          className="gap-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-800/30 dark:hover:to-emerald-800/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
-          title="Exportar Excel + gráficos en un ZIP"
-        >
-          {isExporting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <BarChart3 className="h-4 w-4 text-green-600 dark:text-green-400" />
-          )}
-          Excel + Gráficos (ZIP)
-        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isExporting}
+              className="h-9 w-7 px-0 rounded-none border-l border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-100/80 dark:hover:bg-rose-900/40"
+              title="Orientación del PDF"
+            >
+              <Layout className="h-3.5 w-3.5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-3 shadow-lg rounded-xl" align="end">
+            <p className="text-xs font-bold text-foreground mb-2">Orientación del PDF</p>
+            <div className="flex gap-2">
+              {(['landscape', 'portrait'] as const).map((layout) => (
+                <button
+                  key={layout}
+                  type="button"
+                  onClick={() => setOptions(prev => ({ ...prev, pageLayout: layout }))}
+                  className={`flex-1 py-1.5 px-2 text-xs rounded-lg border font-semibold transition-all cursor-pointer ${
+                    options.pageLayout === layout
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                      : 'bg-muted text-muted-foreground border-border hover:border-rose-400'
+                  }`}
+                >
+                  {layout === 'landscape' ? 'Horizontal' : 'Vertical'}
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {/* Configuración avanzada */}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2 border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80">
-            <Palette className="h-4 w-4" />
-            Opciones
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-80 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700" align="end">
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-medium text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                <Camera className="h-4 w-4" />
-                Configuración de Gráficos
-              </h4>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="include-charts" className="text-sm text-slate-700 dark:text-slate-300">Incluir gráficos</Label>
-                  <Switch
-                    id="include-charts"
-                    checked={options.includeCharts}
-                    onCheckedChange={(checked) => 
-                      setOptions(prev => ({ ...prev, includeCharts: checked }))
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="include-data" className="text-sm text-slate-700 dark:text-slate-300">Incluir datos</Label>
-                  <Switch
-                    id="include-data"
-                    checked={options.includeData}
-                    onCheckedChange={(checked) => 
-                      setOptions(prev => ({ ...prev, includeData: checked }))
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="include-metrics" className="text-sm text-slate-700 dark:text-slate-300">Incluir métricas</Label>
-                  <Switch
-                    id="include-metrics"
-                    checked={options.includeMetrics}
-                    onCheckedChange={(checked) => 
-                      setOptions(prev => ({ ...prev, includeMetrics: checked }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
+      {/* ── Botón Exportar Excel con Estilo ── */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={exportExcelOnly}
+        disabled={isExporting}
+        className="gap-2 h-9 px-3.5 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/40 shadow-2xs cursor-pointer"
+      >
+        {isExporting ? (
+          <RefreshCw className="h-4 w-4 animate-spin text-emerald-600" />
+        ) : (
+          <Table className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        )}
+        <span>Exportar Excel</span>
+      </Button>
 
-            <Separator className="bg-slate-200 dark:bg-slate-700" />
-
-            <div className="space-y-3">
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Calidad de imagen</Label>
-                <Select 
-                  value={options.chartQuality} 
-                  onValueChange={(value: 'low' | 'medium' | 'high') => 
-                    setOptions(prev => ({ ...prev, chartQuality: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="low" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Baja (rápida)</SelectItem>
-                    <SelectItem value="medium" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Media (balanceada)</SelectItem>
-                    <SelectItem value="high" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Alta (mejor calidad)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Formato de imagen</Label>
-                <Select 
-                  value={options.chartFormat} 
-                  onValueChange={(value: 'png' | 'jpeg') => 
-                    setOptions(prev => ({ ...prev, chartFormat: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="png" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">PNG (sin pérdida)</SelectItem>
-                    <SelectItem value="jpeg" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">JPEG (comprimido)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Orientación de página</Label>
-                <Select 
-                  value={options.pageLayout} 
-                  onValueChange={(value: 'portrait' | 'landscape') => 
-                    setOptions(prev => ({ ...prev, pageLayout: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="portrait" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Vertical</SelectItem>
-                    <SelectItem value="landscape" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">Horizontal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm text-slate-700 dark:text-slate-300">Gráficos por página (PDF)</Label>
-                <Select
-                  value={String(options.pdfChartsPerPage)}
-                  onValueChange={(value: '1' | '2' | '4') =>
-                    setOptions(prev => ({ ...prev, pdfChartsPerPage: Number(value) as 1 | 2 | 4 }))
-                  }
-                >
-                  <SelectTrigger className="w-full mt-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                    <SelectItem value="1" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">1 (detallado)</SelectItem>
-                    <SelectItem value="2" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">2 (compacto)</SelectItem>
-                    <SelectItem value="4" className="text-slate-900 dark:text-slate-100 focus:bg-slate-100 dark:focus:bg-slate-700">4 (resumen)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-
-      {/* Indicador de progreso */}
+      {/* Barra de progreso interactiva */}
       {isExporting && (
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3"
-        >
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <Zap className="h-4 w-4 text-yellow-500 dark:text-yellow-400 animate-pulse" />
-            Procesando gráficos...
-          </div>
-          
-          <div className="w-32 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 dark:from-purple-400 dark:to-pink-400"
-              initial={{ width: 0 }}
-              animate={{ width: `${exportProgress}%` }}
-              transition={{ duration: 0.3 }}
+        <div className="flex items-center gap-2 pl-1">
+          <div className="w-20 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 transition-all duration-300 rounded-full"
+              style={{ width: `${exportProgress}%` }}
             />
           </div>
-          
-          <Badge variant="secondary" className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+          <span className="text-[11px] font-mono font-bold text-muted-foreground tabular-nums">
             {Math.round(exportProgress)}%
-          </Badge>
-        </motion.div>
+          </span>
+        </div>
       )}
     </div>
   )
 }
-
-
-

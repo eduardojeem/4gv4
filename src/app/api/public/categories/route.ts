@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     // vitrina se actualiza sin esperar a que expire una caché local de minutos.
     response.headers.set(
       'Cache-Control',
-      'public, max-age=0, must-revalidate, s-maxage=300, stale-while-revalidate=600'
+      'no-store'
     )
     return response
   } catch (error) {

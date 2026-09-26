@@ -1,9 +1,18 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { unstable_cache } from 'next/cache'
 
 export type PlatformBranding = {
   platformName: string
   platformTagline: string
   logoUrl: string
+  logoDarkUrl?: string
+  faviconUrl?: string
+  hideNavBrandText?: boolean
+  hideNavTagline?: boolean
+  logoHeight?: 'sm' | 'md' | 'lg' | 'xl'
+  /** Alto exacto en px. Si esta definido, manda sobre `logoHeight`. */
+  logoHeightPx?: number
+  logoGlowDark?: boolean
   marketplaceName: string
   marketplaceTagline: string
   primaryCtaLabel: string
@@ -18,9 +27,16 @@ export type PlatformBranding = {
 }
 
 export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
-  platformName: 'SERVIX 360',
+  platformName: 'Plataforma',
   platformTagline: 'POS, inventario, marketplace y servicios',
-  logoUrl: '/branding/servix-360-logo.png',
+  logoUrl: '',
+  logoDarkUrl: '',
+  faviconUrl: '',
+  hideNavBrandText: false,
+  hideNavTagline: false,
+  logoHeight: 'md',
+  logoHeightPx: 0,
+  logoGlowDark: true,
   marketplaceName: 'Marketplace',
   marketplaceTagline: 'Empresas y productos',
   primaryCtaLabel: 'Crear empresa',
@@ -29,7 +45,7 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   secondaryCtaHref: '/marketplace',
   loginEyebrow: 'Panel interno',
   loginSubtitle: 'Panel de administracion y staff',
-  seoTitle: 'SERVIX 360 para POS, inventario, marketplace y servicios',
+  seoTitle: 'POS, inventario, marketplace y servicios',
   seoDescription: 'Plataforma SaaS multiempresa para POS, inventario, ecommerce, reparaciones, servicios y marketplace.',
   footerText: 'Una plataforma para operar POS, catalogos, servicios y marketplace.',
 }
@@ -51,13 +67,39 @@ function readPath(value: unknown, fallback: string) {
   return path
 }
 
+/** 0 significa "sin tamaño personalizado": manda el preset. */
+function readLogoHeightPx(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  // Mismos limites que el control del formulario, para que un valor manipulado
+  // no pueda romper la barra de navegacion con un logo gigante.
+  return Math.min(96, Math.max(24, Math.round(parsed)))
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value
+  if (value === 'true' || value === 1) return true
+  if (value === 'false' || value === 0) return false
+  return fallback
+}
+
 export function normalizePlatformBranding(value: unknown): PlatformBranding {
   const source = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
+
+  const rawLogoHeight = readString(source.logoHeight, DEFAULT_PLATFORM_BRANDING.logoHeight || 'md', 10)
+  const validHeight = (['sm', 'md', 'lg', 'xl'].includes(rawLogoHeight) ? rawLogoHeight : 'md') as 'sm' | 'md' | 'lg' | 'xl'
 
   return {
     platformName: readString(source.platformName, DEFAULT_PLATFORM_BRANDING.platformName, 80),
     platformTagline: readString(source.platformTagline, DEFAULT_PLATFORM_BRANDING.platformTagline, 140),
     logoUrl: readString(source.logoUrl, DEFAULT_PLATFORM_BRANDING.logoUrl, 500),
+    logoDarkUrl: readString(source.logoDarkUrl, '', 500),
+    faviconUrl: readString(source.faviconUrl, '', 500),
+    hideNavBrandText: readBoolean(source.hideNavBrandText, DEFAULT_PLATFORM_BRANDING.hideNavBrandText || false),
+    hideNavTagline: readBoolean(source.hideNavTagline, DEFAULT_PLATFORM_BRANDING.hideNavTagline || false),
+    logoHeight: validHeight,
+    logoHeightPx: readLogoHeightPx(source.logoHeightPx),
+    logoGlowDark: readBoolean(source.logoGlowDark, DEFAULT_PLATFORM_BRANDING.logoGlowDark ?? true),
     marketplaceName: readString(source.marketplaceName, DEFAULT_PLATFORM_BRANDING.marketplaceName, 80),
     marketplaceTagline: readString(source.marketplaceTagline, DEFAULT_PLATFORM_BRANDING.marketplaceTagline, 140),
     primaryCtaLabel: readString(source.primaryCtaLabel, DEFAULT_PLATFORM_BRANDING.primaryCtaLabel, 50),
@@ -85,7 +127,7 @@ export function withBrandingInFeatures(features: unknown, branding: PlatformBran
   }
 }
 
-export async function getPlatformBranding() {
+async function getPlatformBrandingUncached() {
   const admin = createAdminSupabase()
   const { data } = await admin
     .from('system_settings')
@@ -95,3 +137,9 @@ export async function getPlatformBranding() {
 
   return getBrandingFromFeatures((data as { features?: unknown } | null)?.features)
 }
+
+export const getPlatformBranding = unstable_cache(
+  getPlatformBrandingUncached,
+  ['platform-branding'],
+  { revalidate: 300, tags: ['platform:branding'] }
+)

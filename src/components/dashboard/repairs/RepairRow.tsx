@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck, DollarSign, Shield } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,7 @@ import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
+import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
 
 interface RepairPrintCompanyInfo {
   name: string
@@ -48,10 +49,13 @@ type RepairCustomerDetails = Repair['customer'] & {
 interface RepairRowProps {
   repair: Repair
   onStatusChange?: (id: string, status: RepairStatus) => void
-  onEdit: (repair: Repair) => void
+  onEdit?: (repair: Repair) => void
   onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
   onDeliver?: (repair: Repair) => void
+  onQualityCheck?: (repair: Repair) => void
+  onQuickPay?: (repair: Repair) => void
+  onClaimWarranty?: (repair: Repair) => void
   companyInfo?: RepairPrintCompanyInfo
 }
 
@@ -63,9 +67,9 @@ const DEFAULT_COMPANY_INFO: RepairPrintCompanyInfo = {
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, companyInfo }) {
-    const StatusIcon = statusConfig[repair.status].icon
-    const priority = priorityConfig[repair.priority]
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, onQualityCheck, onQuickPay, onClaimWarranty, companyInfo }) {
+    const StatusIcon = statusConfig[repair.status]?.icon || Clock
+    const priority = priorityConfig[repair.priority] || priorityConfig.medium
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
     const resolvedCompanyInfo = companyInfo || DEFAULT_COMPANY_INFO
     const customerDetails = repair.customer as RepairCustomerDetails
@@ -95,7 +99,16 @@ export const RepairRow = memo<RepairRowProps>(
       toast.success(`${actionName} enviado por WhatsApp`)
     }
 
-    const pendingAmount = (repair.finalCost || 0) - (repair.paidAmount || 0)
+    const financial = getRepairFinancialPresentation({
+      status: repair.status,
+      finalCost: repair.finalCost,
+      estimatedCost: repair.estimatedCost,
+      paidAmount: repair.paidAmount,
+      deliveryOutcome: repair.deliveryOutcome,
+      qualityCheck: repair.qualityCheck,
+      closeout: repair.closeout,
+    })
+    const pendingAmount = financial.balance ?? 0
 
     const getPrintPayload = (): RepairPrintPayload => {
       return {
@@ -185,18 +198,20 @@ export const RepairRow = memo<RepairRowProps>(
         </TableCell>
 
         <TableCell>
-          <Badge
-            variant="outline"
-            className={cn(
-              'flex w-fit items-center gap-1.5 font-medium',
-              statusConfig[repair.status].color
-            )}
-          >
-            <StatusIcon className="h-3 w-3" />
-            <span className="hidden sm:inline">
-              {statusConfig[repair.status].label}
-            </span>
-          </Badge>
+          <div className="flex min-w-[150px] flex-col items-start gap-1">
+            <Badge
+              variant="outline"
+              className={cn(
+                'flex w-fit items-center gap-1.5 font-medium',
+                statusConfig[repair.status].color
+              )}
+            >
+              <StatusIcon className="h-3 w-3" />
+              <span className="hidden sm:inline">
+                {statusConfig[repair.status].label}
+              </span>
+            </Badge>
+          </div>
         </TableCell>
 
         <TableCell className="hidden lg:table-cell">
@@ -210,7 +225,7 @@ export const RepairRow = memo<RepairRowProps>(
         </TableCell>
 
         <TableCell className="hidden xl:table-cell">
-          {repair.warrantyMonths && repair.warrantyMonths > 0 ? (
+          {repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0) ? (
             <WarrantyBadge repair={repair} showDaysRemaining />
           ) : (
             <span className="text-xs text-muted-foreground dark:text-muted-foreground/70">Sin garantía</span>
@@ -267,14 +282,16 @@ export const RepairRow = memo<RepairRowProps>(
             <DropdownMenuContent align="end" className="w-48 dark:bg-popover/95 dark:border-muted/50 backdrop-blur-sm">
               <DropdownMenuLabel className="text-foreground dark:text-foreground">Acciones</DropdownMenuLabel>
               <DropdownMenuSeparator className="dark:bg-muted/50" />
-              <DropdownMenuItem onClick={() => onView ? onView(repair) : onEdit(repair)} className="dark:hover:bg-muted/50">
+              <DropdownMenuItem onClick={() => { if (onView) onView(repair); else onEdit?.(repair) }} className="dark:hover:bg-muted/50">
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit(repair)} className="dark:hover:bg-muted/50">
-                <Edit className="mr-2 h-4 w-4" />
-                Editar reparación
-              </DropdownMenuItem>
+              {onEdit && (
+                <DropdownMenuItem onClick={() => onEdit(repair)} className="dark:hover:bg-muted/50">
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar reparación
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="dark:bg-muted/50" />
               <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
                 Comprobantes
@@ -349,8 +366,17 @@ export const RepairRow = memo<RepairRowProps>(
                   Recordatorio de Pago
                 </DropdownMenuItem>
               )}
+              {pendingAmount > 0 && onQuickPay && repair.status !== 'cancelado' && (
+                <DropdownMenuItem
+                  onClick={() => onQuickPay(repair)}
+                  className="text-emerald-600 dark:text-emerald-400"
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  {repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
+                </DropdownMenuItem>
+              )}
               {/* Quick delivery action */}
-              {repair.status !== 'entregado' && repair.status !== 'cancelado' && onDeliver && (
+              {repair.status === 'listo' && onDeliver && (
                 <>
                   <DropdownMenuSeparator className="dark:bg-muted/50" />
                   <DropdownMenuItem
@@ -362,13 +388,31 @@ export const RepairRow = memo<RepairRowProps>(
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuSeparator className="dark:bg-muted/50" />
-              <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
+              {onQualityCheck && (repair.status === 'reparacion' || repair.status === 'listo') && (
+                <DropdownMenuItem onClick={() => onQualityCheck(repair)} className="text-blue-700 dark:text-blue-300">
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  {repair.qualityCheck ? 'Repetir prueba técnica' : 'Verificar funcionamiento'}
+                </DropdownMenuItem>
+              )}
+              {(repair.status === 'entregado' || repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
+                <>
+                  <DropdownMenuSeparator className="dark:bg-muted/50" />
+                  <DropdownMenuItem
+                    onClick={() => onClaimWarranty ? onClaimWarranty(repair) : onView?.(repair)}
+                    className="text-amber-700 dark:text-amber-400 font-semibold focus:text-amber-800 dark:focus:text-amber-300 focus:bg-amber-50 dark:focus:bg-amber-950/40 cursor-pointer"
+                  >
+                    <Shield className="mr-2 h-4 w-4 text-amber-600" />
+                    Procesar Garantía
+                  </DropdownMenuItem>
+                </>
+              )}
+              {onStatusChange && <DropdownMenuSeparator className="dark:bg-muted/50" />}
+              {onStatusChange && <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
                 Cambiar estado
-              </DropdownMenuLabel>
-              {Object.entries(statusConfig).map(([key, config]) => {
+              </DropdownMenuLabel>}
+              {onStatusChange && Object.entries(statusConfig).map(([key, config]) => {
                 const Icon = config.icon
-                if (key === repair.status) return null
+                if (key === repair.status || key === 'entregado') return null
                 return (
                   <DropdownMenuItem
                     key={key}
@@ -382,14 +426,14 @@ export const RepairRow = memo<RepairRowProps>(
                   </DropdownMenuItem>
                 )
               })}
-              <DropdownMenuSeparator className="dark:bg-muted/50" />
-              <DropdownMenuItem
+              {onDelete && <DropdownMenuSeparator className="dark:bg-muted/50" />}
+              {onDelete && <DropdownMenuItem
                 className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-300 focus:bg-red-50 dark:focus:bg-red-950/40"
                 onClick={() => onDelete?.(repair.id)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Eliminar
-              </DropdownMenuItem>
+              </DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
@@ -406,6 +450,9 @@ export const RepairRow = memo<RepairRowProps>(
     
     // Check most frequently changing properties first
     if (prev.status !== next.status) return false
+    if (prev.paidAmount !== next.paidAmount) return false
+    if (prev.finalCost !== next.finalCost) return false
+    if (prev.estimatedCost !== next.estimatedCost) return false
     if (prev.priority !== next.priority) return false
     if (prev.lastUpdate !== next.lastUpdate) return false
     

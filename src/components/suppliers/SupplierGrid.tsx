@@ -1,29 +1,30 @@
 'use client'
 
-import React from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from '../ui/motion'
 import {
-    Building2, Mail, Phone, MapPin, Globe, Star,
-    Package, DollarSign, MoreVertical, Edit, Trash2,
-    TrendingUp, Calendar, Eye
+  Building2, Mail, Phone, MapPin, Globe, Star,
+  Package, DollarSign, MoreVertical, Edit, Trash2, Calendar, Eye, ExternalLink, ShoppingCart
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { UISupplier } from '@/lib/types/supplier-ui'
+import { formatCurrency } from '@/lib/currency'
 
 interface SupplierCardProps {
     supplier: UISupplier
     onEdit: (supplier: UISupplier) => void
     onDelete: (id: string) => void
+    onViewDetail?: (supplier: UISupplier) => void
+    onCreateOrder?: (supplier: UISupplier) => void
     selected?: boolean
     onSelect?: (id: string) => void
 }
@@ -43,11 +44,15 @@ const businessTypeColors = {
     service_provider: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300'
 }
 
-export function SupplierCard({ supplier, onEdit, onDelete, selected, onSelect }: SupplierCardProps) {
+export function SupplierCard({ supplier, onEdit, onDelete, onViewDetail, onCreateOrder, selected, onSelect }: SupplierCardProps) {
     const router = useRouter()
 
     const handleViewDetails = () => {
-        router.push(`/dashboard/suppliers/${supplier.id}`)
+        if (onViewDetail) {
+            onViewDetail(supplier)
+        } else {
+            router.push(`/dashboard/suppliers/${supplier.id}`)
+        }
     }
 
     return (
@@ -87,14 +92,24 @@ export function SupplierCard({ supplier, onEdit, onDelete, selected, onSelect }:
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleViewDetails()}>
-                            <Eye className="h-4 w-4 mr-2" />
+                            <Eye className="h-4 w-4 mr-2 text-indigo-600" />
                             Ver Detalle
                         </DropdownMenuItem>
+                        {onCreateOrder && (
+                            <DropdownMenuItem onClick={() => onCreateOrder(supplier)}>
+                                <ShoppingCart className="h-4 w-4 mr-2 text-emerald-600" />
+                                Nueva Orden
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/suppliers/${supplier.id}`)}>
+                            <ExternalLink className="h-4 w-4 mr-2 text-slate-500" />
+                            Ficha Completa
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => onEdit(supplier)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Editar
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={() => onDelete(supplier.id)}
                             className="text-red-600 dark:text-red-400"
@@ -197,7 +212,7 @@ export function SupplierCard({ supplier, onEdit, onDelete, selected, onSelect }:
                         <div className="flex items-center justify-center gap-1 mb-1">
                             <DollarSign className="h-4 w-4 text-green-500" />
                             <span className="text-lg font-bold text-foreground">
-                                ${(supplier.total_amount || 0).toLocaleString()}
+                                {formatCurrency(supplier.total_amount || 0)}
                             </span>
                         </div>
                         <p className="text-xs text-muted-foreground">Total</p>
@@ -223,6 +238,8 @@ interface SupplierGridProps {
     suppliers: UISupplier[]
     onEdit: (supplier: UISupplier) => void
     onDelete: (id: string) => void
+    onViewDetail?: (supplier: UISupplier) => void
+    onCreateOrder?: (supplier: UISupplier) => void
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
     className?: string
@@ -232,6 +249,8 @@ export function SupplierGrid({
     suppliers,
     onEdit,
     onDelete,
+    onViewDetail,
+    onCreateOrder,
     selectedIds = [],
     onSelectionChange,
     className
@@ -257,6 +276,8 @@ export function SupplierGrid({
                     supplier={supplier}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onViewDetail={onViewDetail}
+                    onCreateOrder={onCreateOrder}
                     selected={selectedIds.includes(supplier.id)}
                     onSelect={onSelectionChange ? handleSelect : undefined}
                 />

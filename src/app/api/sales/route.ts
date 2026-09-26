@@ -1,9 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
+import { tryAutoRaffleEntryForSale } from '@/lib/raffles/auto-entry'
 import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
 import { SALE_STATUS } from '@/lib/sales-status'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** Lo que puede salir mal al anular, dicho en castellano. */
+const VOID_ERRORS: Array<[string, string, number]> = [
+  ['SALE_NOT_IN_ORGANIZATION', 'No encontramos esa venta en tu negocio.', 404],
+  ['SALE_CREDIT_ALREADY_PAID', 'El crédito de esta venta ya tiene cuotas cobradas. Resolvé primero la devolución del dinero con el cliente.', 409],
+  ['VOID_REQUIRES_OPEN_REGISTER', 'Abrí la caja antes de anular: hay efectivo que devolver y tiene que quedar registrado.', 409],
+]
 
 // GET /api/sales - Get sales with filters
 export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'pos' }, async (request, { organization }) => {
@@ -97,7 +109,7 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         details: errors
       }, { status: 400 })
     }
@@ -195,6 +207,68 @@ export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'po
       }
     }
     
+    // 4. Acreditar puntos de fidelidad.
+    //
+    // Va despues del stock y fuera del camino critico a proposito: si algo
+    // falla acá, la venta ya está hecha y no se revierte por los puntos. La
+    // función es idempotente por venta, así que un reintento posterior no
+    // acredita dos veces. Sin cliente asignado no hay a quién acreditarle.
+    if (finalCustomerId) {
+      const { error: loyaltyError } = await supabase.rpc('award_loyalty_points_for_sale', {
+        p_organization_id: organization.id,
+        p_customer_id: finalCustomerId,
+        p_amount: validated.total_amount,
+        p_sale_id: sale.id,
+        p_idempotency_key: `sale:${sale.id}`,
+      })
+
+      if (loyaltyError && !isLoyaltyModuleMissing(loyaltyError)) {
+        // Se registra pero no se le devuelve error al cajero: la venta salió.
+        logger.warn('No se pudieron acreditar los puntos de la venta', {
+          saleId: sale.id,
+          error: loyaltyError.message,
+        })
+      }
+
+      // 5. Entrada automática a sorteos abiertos vigentes si el cliente califica
+      let autoRaffleTickets = null
+      try {
+        autoRaffleTickets = await tryAutoRaffleEntryForSale(
+          supabase,
+          organization.id,
+          finalCustomerId,
+          validated.total_amount
+        )
+      } catch (raffleErr) {
+        logger.warn('No se pudieron asignar tickets automáticos de sorteo', { error: raffleErr })
+      }
+
+      logger.info('Sale created successfully', {
+        saleId: sale.id,
+        itemCount: saleItems.length,
+        total: validated.total_amount,
+        userId: user.id
+      })
+      
+      // Fetch complete sale with relations for response
+      const { data: completeSale } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          customer:customers!customer_id(id, first_name, last_name),
+          sale_items(*, product:products(id, name, sku))
+        `)
+        .eq('id', sale.id)
+        .eq('organization_id', organization.id)
+        .single()
+      
+      return NextResponse.json({
+        success: true,
+        data: completeSale || sale,
+        raffleTickets: autoRaffleTickets
+      }, { status: 201 })
+    }
+
     logger.info('Sale created successfully', {
       saleId: sale.id,
       itemCount: saleItems.length,
@@ -251,7 +325,7 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         details: errors
       }, { status: 400 })
     }
@@ -259,7 +333,7 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
     const validated = validationResult.data
     
     // Only allow updating status for now (to prevent complex scenarios)
-    const updates: any = {}
+    const updates: { status?: 'completed' | 'cancelled' | 'pending' | 'draft' } = {}
     if (validated.status) updates.status = validated.status
     
     const { data: sale, error } = await supabase
@@ -290,51 +364,59 @@ export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos'
   }
 })
 
-// DELETE /api/sales - Delete sale (admin only)
+/**
+ * DELETE /api/sales — anula la venta; no la borra.
+ *
+ * Antes borraba la fila y sus items, y nada mas: el stock descontado no volvia,
+ * el credito y sus cuotas seguian vivos —el cliente seguia debiendo una venta
+ * inexistente— y la plata seguia contada en el cierre de caja.
+ *
+ * Ahora todo el trabajo lo hace `void_pos_sale` en una sola transaccion:
+ * devuelve el stock, cancela las cuotas impagas, saca el efectivo con un
+ * movimiento inverso y deja la venta marcada como anulada, con el motivo.
+ */
 export const DELETE = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos' }, async (request, { user, organization }) => {
-  try {
-    const { searchParams } = new URL(request.url)
-    const saleId = searchParams.get('id')
-    
-    if (!saleId) {
-      return NextResponse.json(
-        { success: false, error: 'Sale ID is required' },
-        { status: 400 }
-      )
-    }
-    
-    const supabase = await createClient()
-    
-    // Delete sale items first (cascade might handle this, but being explicit)
-    await supabase
-      .from('sale_items')
-      .delete()
-      .eq('sale_id', saleId)
-      .eq('organization_id', organization.id)
-    
-    // Delete sale
-    const { error } = await supabase
-      .from('sales')
-      .delete()
-      .eq('id', saleId)
-      .eq('organization_id', organization.id)
-    
-    if (error) {
-      logger.error('Failed to delete sale', { error: error.message, saleId })
-      throw error
-    }
-    
-    logger.info('Sale deleted', { saleId, userId: user.id })
-    
-    return NextResponse.json({
-      success: true,
-      message: 'Sale deleted successfully'
-    })
-  } catch (error) {
-    logger.error('Sale deletion error', { error })
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete sale' },
-      { status: 500 }
-    )
+  const { searchParams } = new URL(request.url)
+  const saleId = searchParams.get('id')
+  const reason = searchParams.get('reason')
+
+  if (!saleId || !UUID_PATTERN.test(saleId)) {
+    return NextResponse.json({ success: false, error: 'Indicá qué venta anular.' }, { status: 400 })
   }
+
+  const admin = createAdminSupabase()
+  const { data, error } = await admin.rpc('void_pos_sale', {
+    p_sale_id: saleId,
+    p_organization_id: organization.id,
+    p_actor_id: user.id,
+    p_reason: reason?.slice(0, 300) ?? null,
+  })
+
+  if (error) {
+    const texto = `${error.message ?? ''} ${error.details ?? ''}`
+    for (const [codigo, mensaje, estado] of VOID_ERRORS) {
+      if (texto.includes(codigo)) {
+        return NextResponse.json({ success: false, error: mensaje }, { status: estado })
+      }
+    }
+    if (texto.includes('void_pos_sale') || error.code === '42883') {
+      return NextResponse.json({
+        success: false,
+        error: 'Falta aplicar la migración de anulación de ventas. La venta no fue modificada.',
+      }, { status: 503 })
+    }
+    logger.error('Sale void failed', { error: error.message, saleId })
+    return NextResponse.json({ success: false, error: 'No se pudo anular la venta.' }, { status: 500 })
+  }
+
+  const resultado = (data ?? {}) as Record<string, unknown>
+  logger.info('Sale voided', { saleId, userId: user.id, resultado })
+
+  return NextResponse.json({
+    success: true,
+    data: resultado,
+    message: resultado.already_voided === true
+      ? 'Esta venta ya estaba anulada.'
+      : 'Venta anulada: se devolvió el stock y se cancelaron las cuotas pendientes.',
+  })
 })

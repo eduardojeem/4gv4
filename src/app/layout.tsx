@@ -11,6 +11,7 @@ import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from "@/lib/platform/branding";
 import "./globals.css";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
+import { ServiceWorkerRegistration } from "@/components/util/ServiceWorkerRegistration";
 import { ThemeInitScript } from "@/components/util/ThemeInitScript";
 import { RegionalSettingsBoundary } from "@/components/providers/regional-settings-boundary";
 
@@ -38,7 +39,11 @@ export async function generateMetadata(): Promise<Metadata> {
     title: branding.platformName,
     description: branding.seoDescription,
     icons: {
-      icon: branding.logoUrl || '/globe.svg',
+      icon: branding.faviconUrl || branding.logoUrl || '/globe.svg',
+      // iOS no lee el manifest: sin esto, "Agregar a inicio" usa una captura de
+      // la pagina como icono. Va sobre fondo blanco porque Safari pinta de negro
+      // cualquier transparencia.
+      apple: '/icons/apple-touch-icon.png',
     },
   };
 }
@@ -62,7 +67,8 @@ export default function RootLayout({
         <ThemeInitScript />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased theme-transition`}
+        suppressHydrationWarning
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider defaultColorScheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
           <AccessibilityProvider>
@@ -72,6 +78,7 @@ export default function RootLayout({
                   <BranchProvider>
                     <SWRProvider>
                       <PredictivePrefetchInit />
+                      <ServiceWorkerRegistration />
                       <main id="main-content" tabIndex={-1}>
                         {children}
                       </main>

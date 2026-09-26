@@ -1,15 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo, memo } from 'react'
-import { 
-  Filter, 
-  X, 
-  ChevronDown, 
+import {
+  Filter,
+  X,
+  ChevronDown,
   Search,
-  Package,
-  AlertTriangle,
-  Calendar,
-  Tag,
+  Package, Tag,
   Users,
   BarChart3,
   Sliders,
@@ -42,10 +39,11 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { Checkbox } from '@/components/ui/checkbox'
+import type { Product } from '@/types/products'
 
 export interface ProductFiltersProps {
-  products: any[] | undefined | null
-  onFiltersChange: (filteredProducts: any[]) => void
+  products: Product[] | undefined | null
+  onFiltersChange: (filteredProducts: Product[]) => void
 }
 
 interface FilterState {
@@ -89,7 +87,6 @@ const defaultFilters: FilterState = {
 const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps) => {
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
   const [isOpen, setIsOpen] = useState(false)
-  const [activeFiltersCount, setActiveFiltersCount] = useState(0)
 
   // Extraer datos únicos de los productos para los filtros
   const filterOptions = useMemo(() => {
@@ -103,8 +100,13 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
       }
     }
 
-    const categories = [...new Set(products.map(p => p.category).filter(Boolean))]
-    const suppliers = [...new Set(products.map(p => p.supplier).filter(Boolean))]
+    const getCategoryName = (p: Product): string =>
+      typeof p.category === 'object' && p.category ? (p.category.name || '') : (typeof p.category === 'string' ? p.category : '')
+    const getSupplierName = (p: Product): string =>
+      typeof p.supplier === 'object' && p.supplier ? (p.supplier.name || '') : (typeof p.supplier === 'string' ? p.supplier : '')
+
+    const categories = [...new Set(products.map(getCategoryName).filter(Boolean))]
+    const suppliers = [...new Set(products.map(getSupplierName).filter(Boolean))]
     const prices = products.map(p => p.sale_price || 0).filter(p => p > 0)
     const margins = products.map(p => {
       if (p.purchase_price > 0 && p.sale_price > 0) {
@@ -129,31 +131,40 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
       return []
     }
 
+    const getCategoryName = (p: Product): string =>
+      typeof p.category === 'object' && p.category ? (p.category.name || '') : (typeof p.category === 'string' ? p.category : '')
+    const getSupplierName = (p: Product): string =>
+      typeof p.supplier === 'object' && p.supplier ? (p.supplier.name || '') : (typeof p.supplier === 'string' ? p.supplier : '')
+
     let filtered = [...products]
 
     // Filtro de búsqueda
     if (filters.search) {
       const searchLower = filters.search.toLowerCase()
-      filtered = filtered.filter(product =>
-        product.name?.toLowerCase().includes(searchLower) ||
-        product.sku?.toLowerCase().includes(searchLower) ||
-        product.description?.toLowerCase().includes(searchLower) ||
-        product.category?.toLowerCase().includes(searchLower) ||
-        product.supplier?.toLowerCase().includes(searchLower)
-      )
+      filtered = filtered.filter(product => {
+        const catName = getCategoryName(product).toLowerCase()
+        const supName = getSupplierName(product).toLowerCase()
+        return (
+          product.name?.toLowerCase().includes(searchLower) ||
+          product.sku?.toLowerCase().includes(searchLower) ||
+          product.description?.toLowerCase().includes(searchLower) ||
+          catName.includes(searchLower) ||
+          supName.includes(searchLower)
+        )
+      })
     }
 
     // Filtro de categorías
     if (filters.categories.length > 0) {
       filtered = filtered.filter(product =>
-        filters.categories.includes(product.category)
+        filters.categories.includes(getCategoryName(product))
       )
     }
 
     // Filtro de proveedores
     if (filters.suppliers.length > 0) {
       filtered = filtered.filter(product =>
-        filters.suppliers.includes(product.supplier)
+        filters.suppliers.includes(getSupplierName(product))
       )
     }
 
@@ -198,7 +209,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
     }
 
     if (!filters.showDiscontinued) {
-      filtered = filtered.filter(product => product.status !== 'discontinued')
+      filtered = filtered.filter(product => product.is_active !== false)
     }
 
     // Filtro de fecha
@@ -270,7 +281,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
   }
 
   // Contar filtros activos
-  useEffect(() => {
+  const activeFiltersCount = useMemo(() => {
     let count = 0
     if (filters.search) count++
     if (filters.categories.length > 0) count++
@@ -282,7 +293,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
     if (filters.dateRange.from || filters.dateRange.to) count++
     if (!filters.showOutOfStock || !filters.showLowStock || filters.showDiscontinued) count++
 
-    setActiveFiltersCount(count)
+    return count
   }, [filters, filterOptions])
 
   // Aplicar filtros cuando cambien
@@ -290,7 +301,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
     onFiltersChange(filteredProducts)
   }, [filteredProducts, onFiltersChange])
 
-  const handleFilterChange = (key: keyof FilterState, value: any) => {
+  const handleFilterChange = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
     setFilters(prev => ({
       ...prev,
       [key]: value
@@ -519,7 +530,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
                     </div>
                     <Slider
                       value={filters.priceRange}
-                      onValueChange={(value) => handleFilterChange('priceRange', value)}
+                      onValueChange={(val) => handleFilterChange('priceRange', [val[0] ?? 0, val[1] ?? filterOptions.maxPrice])}
                       max={filterOptions.maxPrice}
                       step={10}
                       className="w-full"
@@ -543,7 +554,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
                     </div>
                     <Slider
                       value={filters.stockRange}
-                      onValueChange={(value) => handleFilterChange('stockRange', value)}
+                      onValueChange={(val) => handleFilterChange('stockRange', [val[0] ?? 0, val[1] ?? filterOptions.maxStock])}
                       max={filterOptions.maxStock}
                       step={1}
                       className="w-full"
@@ -638,7 +649,7 @@ const ProductFilters = memo(({ products, onFiltersChange }: ProductFiltersProps)
         <div className="flex flex-wrap gap-2">
           {filters.search && (
             <Badge variant="secondary" className="flex items-center gap-1">
-              Búsqueda: "{filters.search}"
+              Búsqueda: &quot;{filters.search}&quot;
               <Button
                 variant="ghost"
                 size="sm"

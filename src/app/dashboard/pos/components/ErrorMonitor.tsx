@@ -11,11 +11,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { 
-  AlertTriangle, 
-  CheckCircle2, 
-  XCircle, 
-  Info, 
+import {
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Info,
   RefreshCw,
   TrendingDown,
   TrendingUp,
@@ -116,10 +116,10 @@ export const ErrorMonitor: React.FC<ErrorMonitorProps> = ({
     if (!hasErrors) {
       return <CheckCircle2 className="h-5 w-5 text-green-500" />
     }
-    
+
     const criticalErrors = stats.bySeverity[ErrorSeverity.CRITICAL] || 0
     const highErrors = stats.bySeverity[ErrorSeverity.HIGH] || 0
-    
+
     if (criticalErrors > 0) {
       return <Bug className="h-5 w-5 text-red-500" />
     } else if (highErrors > 0) {
@@ -131,10 +131,10 @@ export const ErrorMonitor: React.FC<ErrorMonitorProps> = ({
 
   const getStatusText = () => {
     if (!hasErrors) return 'Sistema funcionando correctamente'
-    
+
     const criticalErrors = stats.bySeverity[ErrorSeverity.CRITICAL] || 0
     const highErrors = stats.bySeverity[ErrorSeverity.HIGH] || 0
-    
+
     if (criticalErrors > 0) {
       return `${criticalErrors} error${criticalErrors > 1 ? 'es' : ''} crítico${criticalErrors > 1 ? 's' : ''} detectado${criticalErrors > 1 ? 's' : ''}`
     } else if (highErrors > 0) {
@@ -179,7 +179,7 @@ export const ErrorMonitor: React.FC<ErrorMonitorProps> = ({
                     const date = new Date(lastError.timestamp)
                     if (isNaN(date.getTime())) return 'Fecha inválida'
                     return formatDistanceToNow(date, { addSuffix: true, locale: es })
-                  } catch (error) {
+                  } catch (_error) {
                     return 'Fecha no disponible'
                   }
                 })()}

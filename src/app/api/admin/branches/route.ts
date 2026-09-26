@@ -521,6 +521,34 @@ async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
       )
     }
 
+    // Las restricciones de unicidad de la base solo cubren (org, code) y
+    // (org, slug). Como el code/slug se derivan del nombre pero recortados y
+    // normalizados, dos nombres distintos con el mismo prefijo — o el mismo
+    // nombre escrito de nuevo — generan code/slug distintos y colaban un
+    // duplicado por NOMBRE que la base no frena. El selector entonces mostraba
+    // varias sucursales con el mismo nombre, indistinguibles. Se bloquea acá.
+    const { data: existingByName, error: existingByNameError } = await supabase
+      .from('branches')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .ilike('name', name)
+      .maybeSingle()
+
+    if (existingByNameError && existingByNameError.code !== 'PGRST116') {
+      return NextResponse.json(
+        { error: 'No se pudo verificar si el nombre de la sucursal ya existe.' },
+        { status: 500 }
+      )
+    }
+
+    if (existingByName) {
+      return NextResponse.json(
+        { error: `Ya existe una sucursal llamada "${name}". Usá un nombre distinto.` },
+        { status: 409 }
+      )
+    }
+
     const insertPayload: Record<string, unknown> = {
       organization_id: organizationId,
       name,

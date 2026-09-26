@@ -3,10 +3,15 @@ import { createClient } from '@/lib/supabase/client'
 import { User } from './use-admin-dashboard'
 import { useAuth } from '@/contexts/auth-context'
 import { toast } from 'sonner'
+import { normalizeManagedUserRole } from '@/lib/auth/organization-owner-policy'
 
 export interface SupabaseUser extends User {
   avatar_url?: string
   updated_at?: string
+  /** El correo y el teléfono vienen tapados: son de un cliente de la tienda. */
+  contactMasked?: boolean
+  /** Última compra en esta organización. `null` si nunca compró. */
+  lastPurchase?: string | null
   /** Acceso a precios mayoristas (permiso products.read_wholesale_prices). */
   isWholesale?: boolean
   branches?: Array<{
@@ -38,7 +43,7 @@ interface UseUsersOptions {
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
-type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+type CanonicalRole = 'super_admin' | 'owner' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
 type SerializableError = {
   message?: string
   name?: string
@@ -66,28 +71,16 @@ type ApiUserProfile = {
   /** Real last sign-in time from auth.users (may be present in some API responses) */
   last_sign_in_at?: string | null
   is_wholesale?: boolean | null
+  /** El contacto viene tapado porque es un cliente de la tienda. */
+  contactMasked?: boolean | null
+  /** Última compra del cliente en esta organización: mostrador o pedido web. */
+  last_purchase_at?: string | null
 }
 
-const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
 
 function normalizeRole(role: unknown): CanonicalRole {
-  if (typeof role !== 'string') return DEFAULT_ROLE
-  const value = role.trim().toLowerCase()
-
-  if (value === 'super_admin' || value === 'admin' || value === 'vendedor' || value === 'tecnico' || value === 'cliente') {
-    return value
-  }
-
-  if (value === 'supervisor' || value === 'manager' || value === 'employee') {
-    return 'vendedor'
-  }
-
-  if (value === 'technician') {
-    return 'tecnico'
-  }
-
-  return DEFAULT_ROLE
+  return normalizeManagedUserRole(role)
 }
 
 function normalizeStatus(status: unknown): ProfileStatus {
@@ -163,6 +156,8 @@ export function useUsersSupabase({
     loginAttempts: 0,
     lastActivity: profile.updated_at || new Date().toISOString(),
     notes: '',
+    contactMasked: Boolean(profile.contactMasked),
+    lastPurchase: profile.last_purchase_at ?? null,
   })
 
   const fetchUsers = useCallback(async () => {
@@ -213,6 +208,31 @@ export function useUsersSupabase({
       setIsLoading(false)
     }
   }, [page, pageSize, search, roleFilter, statusFilter, scope, wholesaleOnly])
+
+  /**
+   * Pide el contacto completo de un cliente. El servidor lo devuelve solo para
+   * ese cliente y deja registrado quien lo miro.
+   */
+  const revealCustomerContact = useCallback(async (userId: string) => {
+    try {
+      const params = new URLSearchParams({ page: '1', pageSize: '1', scope: 'all', id: userId, reveal: userId })
+      const response = await fetch(`/api/admin/users?${params.toString()}`)
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo mostrar el contacto')
+      }
+
+      const row = (payload.data || [])[0] as ApiUserProfile | undefined
+      if (!row) return null
+
+      const contact = { email: row.email || '', phone: row.phone || '' }
+      setUsers((current) => current.map((user) => (user.id === userId ? { ...user, ...contact, contactMasked: false } : user)))
+      return contact
+    } catch (err: unknown) {
+      toast.error(errorMessage(err))
+      return null
+    }
+  }, [])
 
   useEffect(() => {
     void fetchUsers()
@@ -454,6 +474,7 @@ export function useUsersSupabase({
     isLoading,
     error,
     refreshUsers: fetchUsers,
+    revealCustomerContact,
     createUser,
     updateUser,
     deleteUser,

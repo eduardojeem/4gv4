@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Search, CheckCircle, Receipt, Printer } from 'lucide-react'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import type { CreditRow, InstallmentRow, PaymentRow } from '@/hooks/use-credits'
 import { getCreditDisplayInfo } from '@/lib/credits/display'
 import { createCreditPaymentReceiptPdf, getCreditCurrentBalance } from '@/lib/credits/payment-receipt'
+import { printPdfDocument } from '@/lib/credits/print-receipt'
+import { useCreditPrinting } from '@/hooks/use-credit-printing'
+import { toast } from 'sonner'
 
 const methodConfig: Record<string, { label: string; color: string; dot: string }> = {
   cash:     { label: 'Efectivo',     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',   dot: 'bg-green-500' },
@@ -34,7 +37,7 @@ function getDateLabel(iso?: string) {
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
   if (d.getTime() === today.getTime()) return 'Hoy'
   if (d.getTime() === yesterday.getTime()) return 'Ayer'
-  return new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  return new Date(iso).toLocaleDateString(getDisplayLocale(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 interface PaymentsTimelineProps {
@@ -60,6 +63,7 @@ export function PaymentsTimeline({
   isPending,
   onExportCSV,
 }: PaymentsTimelineProps) {
+  const { format, issuer } = useCreditPrinting()
   const [search, setSearch] = useState('')
 
   const filtered = search.trim()
@@ -79,9 +83,15 @@ export function PaymentsTimeline({
   }, {})
 
   const printPaymentReceipt = async (payment: PaymentRow) => {
+    try {
     const credit = creditById[payment.credit_id]
     const installment = installments.find((row) => row.id === payment.installment_id)
+    const creditInstallments = installments.filter((row) => row.credit_id === payment.credit_id)
+    const paidCount = creditInstallments.filter((row) => row.status === 'paid').length
+    const pendingCount = creditInstallments.filter((row) => row.status !== 'paid').length
+    const nextPending = creditInstallments.find((row) => row.status !== 'paid')
     const display = getCreditDisplayInfo(credit, installments, sales, saleItems)
+
     const result = await createCreditPaymentReceiptPdf({
       paymentId: payment.id,
       paymentDate: payment.created_at,
@@ -98,14 +108,27 @@ export function PaymentsTimeline({
       creditLabel: display.creditLabel,
       saleCode: display.saleCode,
       productSummary: display.productSummary,
+      totalCreditAmount: credit?.principal,
+      totalInstallments: credit?.term_months || creditInstallments.length,
+      paidInstallmentsCount: paidCount,
+      pendingInstallmentsCount: pendingCount,
       installmentNumber: installment?.installment_number,
       installmentDueDate: installment?.due_date,
       installmentAmount: installment?.amount,
       currentCreditBalance: getCreditCurrentBalance(installments, payment.credit_id),
-    })
+      nextDueDate: nextPending?.due_date,
+      nextDueAmount: nextPending?.amount,
+      ...issuer,
+    }, { format })
 
-    result.doc.autoPrint()
-    result.doc.output('dataurlnewwindow')
+      await printPdfDocument(result.doc)
+    } catch (error) {
+      // El pago YA quedo registrado en la base: el mensaje tiene que dejarlo
+      // claro para que nadie vuelva a cobrarlo creyendo que fallo el cobro.
+      toast.error('No se pudo imprimir el comprobante', {
+        description: `El pago quedó registrado. ${error instanceof Error ? error.message : 'Volvé a intentar desde el historial.'}`,
+      })
+    }
   }
 
   return (
@@ -218,7 +241,7 @@ export function PaymentsTimeline({
                           </div>
                           <div className="hidden sm:block text-right shrink-0">
                             <p className="text-xs text-muted-foreground tabular-nums">
-                              {p.created_at ? new Date(p.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              {p.created_at ? new Date(p.created_at).toLocaleTimeString(getDisplayLocale(), { hour: '2-digit', minute: '2-digit' }) : ''}
                             </p>
                           </div>
                           <div className="text-right shrink-0 min-w-[80px]">

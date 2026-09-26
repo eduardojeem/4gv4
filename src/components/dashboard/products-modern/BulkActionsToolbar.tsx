@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react'
-import { Edit, Trash2, Download, CheckCircle, XCircle, X } from 'lucide-react'
+import { Edit, Trash2, Download, CheckCircle, XCircle, X, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -25,6 +25,8 @@ export interface BulkActionsToolbarProps {
   onBulkEdit?: () => void
   onBulkDelete?: () => void
   onBulkExport?: () => void
+  /** Imprime las etiquetas con el codigo de barras de los productos elegidos. */
+  onBulkPrintLabels?: () => void
   onBulkActivate?: () => void
   onBulkDeactivate?: () => void
   className?: string
@@ -36,6 +38,7 @@ export function BulkActionsToolbar({
   onBulkEdit,
   onBulkDelete,
   onBulkExport,
+  onBulkPrintLabels,
   onBulkActivate,
   onBulkDeactivate,
   className
@@ -124,6 +127,18 @@ export function BulkActionsToolbar({
                 >
                   <XCircle className="h-4 w-4 mr-2" />
                   Desactivar
+                </Button>
+              )}
+
+              {onBulkPrintLabels && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onBulkPrintLabels}
+                  className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                >
+                  <Tag className="h-4 w-4 mr-2" />
+                  Etiquetas
                 </Button>
               )}
 

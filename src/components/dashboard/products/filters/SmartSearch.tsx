@@ -291,7 +291,7 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
               </div>
             ) : value.length > 0 ? (
               <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                No se encontraron sugerencias para "{value}"
+                No se encontraron sugerencias para &quot;{value}&quot;
               </div>
             ) : (
               <div className="px-3 py-4 text-center text-sm text-muted-foreground">

@@ -5,12 +5,12 @@ import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  Eye, 
-  Edit, 
-  History, 
-  Phone, 
-  Mail, 
+import {
+  Eye,
+  Edit,
+  History,
+  Phone,
+  Mail,
   MapPin,
   Star,
   TrendingUp,
@@ -33,10 +33,10 @@ interface OptimizedCustomerListProps {
 }
 
 // Memoized customer card component
-const CustomerCard = memo(({ 
-  customer, 
-  onViewDetail, 
-  onViewHistory, 
+const CustomerCard = memo(({
+  customer,
+  onViewDetail,
+  onViewHistory,
   onEdit,
   compact = false,
   style
@@ -96,7 +96,7 @@ const CustomerCard = memo(({
                   {customer.name}
                 </h3>
                 {getTypeIcon(customer.customer_type)}
-                <Badge 
+                <Badge
                   className={cn(
                     "text-xs",
                     getStatusColor(customer.status)
@@ -186,7 +186,7 @@ export const OptimizedCustomerList = memo(({
   onViewDetail,
   onViewHistory,
   onEdit,
-  viewMode = 'table',
+  viewMode: _viewMode = 'table',
   compact = false,
   virtualized = true,
   containerHeight = 600
@@ -197,7 +197,7 @@ export const OptimizedCustomerList = memo(({
 
   const {
     virtualItems,
-    totalHeight,
+    totalHeight: _totalHeight,
     scrollToIndex,
     containerProps,
     innerProps
@@ -210,7 +210,7 @@ export const OptimizedCustomerList = memo(({
   })
 
   const memoizedCustomers = useMemo(() => {
-    return virtualItems.map(({ item: customer, index, offsetTop }) => (
+    return virtualItems.map(({ item: customer, index: _index, offsetTop }) => (
       <CustomerCard
         key={customer.id}
         customer={customer}

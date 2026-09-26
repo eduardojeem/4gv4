@@ -1,19 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence  } from '../../../ui/motion'
+import { useState, type ElementType, type ReactNode } from 'react'
 import {
   Filter,
-  Search,
-  X,
-  ChevronDown,
+  Search, ChevronDown,
   Calendar,
   Package,
   Tag,
   TrendingUp,
   AlertTriangle,
-  RefreshCw,
-  Settings
+  RefreshCw
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,11 +26,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -48,7 +39,7 @@ import { ProductFilters } from '@/hooks/products/types'
 
 interface AdvancedProductFiltersProps {
   className?: string
-  onFiltersChange?: (filters: any) => void
+  onFiltersChange?: (filters: ProductFilters) => void
   showPresets?: boolean
   collapsible?: boolean
 }
@@ -71,7 +62,7 @@ const marginStatusOptions = [
 type FilterPreset = {
   id: string
   name: string
-  icon: any
+  icon: ElementType
   getFilters: () => Partial<ProductFilters>
 }
 
@@ -107,6 +98,20 @@ const filterPresets: FilterPreset[] = [
   }
 ]
 
+const FilterSection = ({ title, icon: Icon, children }: {
+  title: string
+  icon: ElementType
+  children: ReactNode
+}) => (
+  <div className="space-y-3">
+    <div className="flex items-center space-x-2">
+      <Icon className="h-4 w-4 text-muted-foreground" />
+      <Label className="text-sm font-medium">{title}</Label>
+    </div>
+    {children}
+  </div>
+)
+
 export const AdvancedProductFilters = ({
   className,
   onFiltersChange,
@@ -125,9 +130,9 @@ export const AdvancedProductFilters = ({
     activeFiltersCount,
     priceRange,
     stockRange,
-    marginRange,
-    categories,
-    suppliers
+    marginRange: _marginRange,
+    categories = [],
+    suppliers = []
   } = useProductFiltering({
     onFiltersChange
   })
@@ -142,24 +147,11 @@ export const AdvancedProductFilters = ({
     }
   }
 
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = <K extends keyof ProductFilters>(key: K, value: ProductFilters[K]) => {
     updateFilters({ [key]: value })
     setActivePreset(null) // Desactivar preset al cambiar filtros manualmente
   }
 
-  const FilterSection = ({ title, icon: Icon, children }: {
-    title: string
-    icon: any
-    children: React.ReactNode
-  }) => (
-    <div className="space-y-3">
-      <div className="flex items-center space-x-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <Label className="text-sm font-medium">{title}</Label>
-      </div>
-      {children}
-    </div>
-  )
 
   const content = (
     <div className="space-y-6">

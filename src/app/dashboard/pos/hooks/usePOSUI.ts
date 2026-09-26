@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 
 export interface POSUIState {
   // Modales
@@ -126,9 +127,10 @@ export function usePOSUI(): POSUIResult {
   const [renameRegisterId, setRenameRegisterId] = useState<string | null>(DEFAULT_STATE.renameRegisterId)
   const [renameRegisterName, setRenameRegisterName] = useState(DEFAULT_STATE.renameRegisterName)
 
-  // Cargar preferencias de UI
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  const hydrated = useHydrated()
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  if (hydrated && !preferencesLoaded) {
+    setPreferencesLoaded(true)
     try {
       const savedUI = localStorage.getItem('pos.ui')
       if (savedUI) {
@@ -138,18 +140,18 @@ export function usePOSUI(): POSUIResult {
     } catch (e) {
       console.warn('Error loading UI preferences:', e)
     }
-  }, [])
+  }
 
   // Guardar preferencias de UI
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!preferencesLoaded) return
     try {
       const ui = { sidebarCollapsed }
       localStorage.setItem('pos.ui', JSON.stringify(ui))
     } catch (e) {
       console.error('Error saving UI preferences:', e)
     }
-  }, [sidebarCollapsed])
+  }, [sidebarCollapsed, preferencesLoaded])
 
   // Gestión de fullscreen
   useEffect(() => {

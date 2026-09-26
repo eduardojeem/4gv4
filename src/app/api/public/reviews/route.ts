@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { logger } from '@/lib/logger'
+import { verifyTurnstileToken } from '@/lib/security/turnstile'
 
 // Rate limit: 3 reseñas por IP cada 24 horas
 const REVIEW_RATE_LIMIT = 3
@@ -29,7 +31,17 @@ const reviewSchema = z.object({
     .max(500, 'El comentario no puede superar los 500 caracteres')
     .optional()
     .nullable(),
+  captcha_token: z.string().trim().max(4096).optional().nullable(),
+  invite_token: z.string().trim().min(32).max(256).optional().nullable(),
 })
+
+const verificationFilterSchema = z.enum(['all', 'verified', 'purchase', 'repair']).catch('all')
+
+function safePositiveInteger(value: string | null, fallback: number, maximum: number) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(Math.max(Math.trunc(parsed), 1), maximum)
+}
 
 /**
  * GET /api/public/reviews?limit=10&offset=0
@@ -48,15 +60,27 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(Number(searchParams.get('limit') || 10), 50)
-    const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
+    const limit = safePositiveInteger(searchParams.get('limit'), 10, 50)
+    const offsetValue = Number(searchParams.get('offset') || 0)
+    const offset = Number.isFinite(offsetValue) ? Math.max(Math.trunc(offsetValue), 0) : 0
+    const verification = verificationFilterSchema.parse(searchParams.get('verification') || 'all')
 
-    const { data: reviews, error, count } = await supabase
+    let reviewsQuery = supabase
       .from('organization_reviews')
-      .select('id, reviewer_name, rating, comment, created_at', { count: 'exact' })
+      .select(
+        'id, reviewer_name, rating, comment, created_at, verification_type, business_response, responded_at',
+        { count: 'exact' },
+      )
       .eq('organization_id', organization.id)
-      .eq('is_approved', true)
-      .eq('is_visible', true)
+      .eq('moderation_status', 'published')
+
+    if (verification === 'verified') {
+      reviewsQuery = reviewsQuery.in('verification_type', ['purchase', 'repair'])
+    } else if (verification === 'purchase' || verification === 'repair') {
+      reviewsQuery = reviewsQuery.eq('verification_type', verification)
+    }
+
+    const { data: reviews, error, count } = await reviewsQuery
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -68,20 +92,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Obtener stats de la organización
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('review_rating_avg, review_count')
-      .eq('id', organization.id)
-      .single()
+    const { data: statsRows, error: statsError } = await supabase
+      .rpc('get_organization_review_public_stats', { p_organization_id: organization.id })
+
+    if (statsError) {
+      logger.error('[reviews] Error fetching public stats', { error: statsError })
+    }
+
+    const stats = statsRows?.[0]
 
     return NextResponse.json({
       success: true,
       data: {
         reviews: reviews ?? [],
         stats: {
-          average: Number(org?.review_rating_avg ?? 0),
-          count: org?.review_count ?? 0,
+          average: Number(stats?.average ?? 0),
+          count: Number(stats?.count ?? 0),
+          verifiedAverage: Number(stats?.verified_average ?? 0),
+          verifiedCount: Number(stats?.verified_count ?? 0),
+          respondedCount: Number(stats?.responded_count ?? 0),
+          satisfactionRate: Number(stats?.satisfaction_rate ?? 0),
+          breakdown: stats?.breakdown ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
         },
         pagination: {
           total: count ?? 0,
@@ -104,15 +135,6 @@ export async function GET(request: NextRequest) {
  * Enviar una nueva reseña (requiere moderación)
  */
 export async function POST(request: NextRequest) {
-  const clientIp = getClientIp(request)
-  const allowed = await rateLimiter.check(clientIp, REVIEW_RATE_LIMIT, REVIEW_RATE_WINDOW_MS)
-  if (!allowed) {
-    return NextResponse.json(
-      { success: false, error: 'Has enviado demasiadas reseñas. Intenta nuevamente mañana.' },
-      { status: 429 }
-    )
-  }
-
   try {
     const supabase = createAdminSupabase()
     const organization = await resolvePublicOrganization(request, supabase)
@@ -121,6 +143,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Organization not found' },
         { status: 404 }
+      )
+    }
+
+    const clientIp = getClientIp(request)
+    const allowed = await rateLimiter.check(
+      `${organization.id}:${clientIp}`,
+      REVIEW_RATE_LIMIT,
+      REVIEW_RATE_WINDOW_MS,
+    )
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Has enviado demasiadas reseñas. Intenta nuevamente mañana.' },
+        { status: 429 },
       )
     }
 
@@ -134,7 +169,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { reviewer_name, reviewer_email, rating, comment } = validation.data
+    const { reviewer_name, reviewer_email, rating, comment, captcha_token, invite_token } = validation.data
+    const captcha = await verifyTurnstileToken(captcha_token, clientIp)
+    if (!captcha.success) {
+      const notConfigured = 'reason' in captcha && captcha.reason === 'not_configured'
+      return NextResponse.json(
+        {
+          success: false,
+          error: notConfigured
+            ? 'La verificación anti-bots no está configurada.'
+            : 'No pudimos validar la verificación de seguridad. Intenta nuevamente.',
+        },
+        { status: notConfigured ? 503 : 400 },
+      )
+    }
 
     // Verificar si ya existe una reseña reciente con el mismo email
     if (reviewer_email) {
@@ -154,25 +202,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: review, error } = await supabase
-      .from('organization_reviews')
-      .insert({
-        organization_id: organization.id,
-        reviewer_name,
-        reviewer_email: reviewer_email?.toLowerCase() || null,
-        rating,
-        comment: comment || null,
-        is_approved: false,
-        is_visible: true,
-      })
-      .select('id, created_at')
-      .single()
+    const normalizedEmail = reviewer_email?.toLowerCase() || null
+    const reviewResult = invite_token
+      ? await supabase.rpc('submit_verified_organization_review', {
+          p_organization_id: organization.id,
+          p_token_hash: createHash('sha256').update(invite_token).digest('hex'),
+          p_reviewer_name: reviewer_name,
+          p_reviewer_email: normalizedEmail,
+          p_rating: rating,
+          p_comment: comment || null,
+        }).single()
+      : await supabase
+          .from('organization_reviews')
+          .insert({
+            organization_id: organization.id,
+            reviewer_name,
+            reviewer_email: normalizedEmail,
+            rating,
+            comment: comment || null,
+            moderation_status: 'pending',
+            verification_type: 'open',
+          })
+          .select('id, created_at')
+          .single()
+
+    const { data: review, error } = reviewResult
 
     if (error) {
       logger.error('[reviews] Error creating review', { error })
       return NextResponse.json(
-        { success: false, error: 'No se pudo enviar la reseña' },
-        { status: 500 }
+        {
+          success: false,
+          error: invite_token
+            ? 'El enlace verificado no es válido, ya fue utilizado o venció.'
+            : 'No se pudo enviar la reseña',
+        },
+        { status: invite_token ? 409 : 500 },
       )
     }
 
@@ -180,7 +245,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         data: review,
-        message: '¡Gracias por tu reseña! Ya está publicada.',
+        message: '¡Gracias por tu reseña! Quedó pendiente de revisión antes de publicarse.',
       },
       { status: 201 }
     )

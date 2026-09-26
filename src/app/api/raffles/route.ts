@@ -1,0 +1,119 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { createOrgScopedClient } from '@/lib/supabase/org-scoped-server'
+import { isLoyaltyModuleMissing, LOYALTY_MIGRATION_HINT } from '@/lib/loyalty/module-status'
+import { loyaltyErrorResponse } from '@/lib/loyalty/api-errors'
+import { logger } from '@/lib/logger'
+
+const prizeSchema = z.object({
+  position: z.number().int().positive(),
+  title: z.string().min(2, 'Cada premio necesita un nombre'),
+  details: z.string().max(300).optional(),
+})
+
+const raffleSchema = z.object({
+  name: z.string().min(3, 'Poné un nombre para el sorteo'),
+  description: z.string().max(1000).nullable().optional(),
+  prizes: z.array(prizeSchema).min(1, 'Cargá al menos un premio'),
+  requirements: z.string().max(1000).nullable().optional(),
+  terms: z.string().max(4000).nullable().optional(),
+  min_purchase_amount: z.number().nonnegative().nullable().optional(),
+  auto_entry_on_sale: z.boolean().default(false),
+  // Vender puntos en efectivo es vender números por plata: se pide a
+  // proposito, no se asume. La pantalla tambien lo ofrece apagado.
+  allow_point_purchase: z.boolean().default(false),
+  point_purchase_price: z.number().positive().nullable().optional(),
+  starts_at: z.string().min(1, 'Falta la fecha de inicio'),
+  ends_at: z.string().min(1, 'Falta la fecha de cierre'),
+  points_per_ticket: z.number().int().positive('Cada número tiene que costar al menos 1 punto'),
+  max_tickets_per_customer: z.number().int().positive().nullable().optional(),
+  max_tickets_total: z.number().int().positive().max(1_000_000).default(10_000),
+  min_age: z.number().int().min(0).max(99).default(18),
+  status: z.enum(['draft', 'published']).default('draft'),
+}).refine((data) => new Date(data.ends_at) > new Date(data.starts_at), {
+  message: 'La fecha de cierre tiene que ser posterior a la de inicio',
+})
+
+export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.create'], module: 'promotions' }, async (_request, { organization }) => {
+  const supabase = await createOrgScopedClient(organization.id)
+
+  const [rafflesRes, ticketsRes] = await Promise.all([
+    supabase
+      .from('raffles')
+      .select('*, tickets:raffle_tickets(count), winners:raffle_winners(count)')
+      .eq('organization_id', organization.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('raffle_tickets')
+      .select('raffle_id, customer_id')
+      .eq('organization_id', organization.id)
+  ])
+
+  if (rafflesRes.error) {
+    if (isLoyaltyModuleMissing(rafflesRes.error)) {
+      logger.warn('raffles: modulo reportado como no instalado', { code: rafflesRes.error.code, message: rafflesRes.error.message })
+      return NextResponse.json({ moduleInstalled: false, raffles: [], message: LOYALTY_MIGRATION_HINT, reason: rafflesRes.error.message, code: rafflesRes.error.code })
+    }
+    logger.error('raffles read failed', { error: rafflesRes.error })
+    return NextResponse.json({ error: 'No se pudieron cargar los sorteos' }, { status: 500 })
+  }
+
+  // Agrupamos clientes únicos por sorteo
+  const participantMap: Record<string, Set<string>> = {}
+  if (ticketsRes.data) {
+    for (const t of ticketsRes.data) {
+      if (!participantMap[t.raffle_id]) participantMap[t.raffle_id] = new Set()
+      participantMap[t.raffle_id].add(t.customer_id)
+    }
+  }
+
+  const enhancedRaffles = (rafflesRes.data ?? []).map((raffle) => ({
+    ...raffle,
+    participants_count: participantMap[raffle.id]?.size ?? 0,
+  }))
+
+  return NextResponse.json({ moduleInstalled: true, raffles: enhancedRaffles })
+})
+
+export const POST = withTenantAuth({ permission: 'promotions.manage', module: 'promotions' }, async (request: NextRequest, { organization, user }) => {
+  const body = await request.json().catch(() => null)
+  const parsed = raffleSchema.safeParse(body)
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: 'Error de validación',
+        code: 'VALIDATION_FAILED',
+        details: parsed.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })),
+      },
+      { status: 400 }
+    )
+  }
+
+  const supabase = await createOrgScopedClient(organization.id)
+
+  const { data, error } = await supabase
+    .from('raffles')
+    .insert({
+      organization_id: organization.id,
+      ...parsed.data,
+      description: parsed.data.description ?? null,
+      requirements: parsed.data.requirements ?? null,
+      terms: parsed.data.terms ?? null,
+      min_purchase_amount: parsed.data.min_purchase_amount ?? null,
+      auto_entry_on_sale: parsed.data.auto_entry_on_sale,
+      allow_point_purchase: parsed.data.allow_point_purchase,
+      point_purchase_price: parsed.data.point_purchase_price ?? null,
+      max_tickets_per_customer: parsed.data.max_tickets_per_customer ?? null,
+      created_by: user.id,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    return loyaltyErrorResponse(error, 'crear el sorteo', { organizationId: organization.id })
+  }
+
+  return NextResponse.json({ raffle: data }, { status: 201 })
+})

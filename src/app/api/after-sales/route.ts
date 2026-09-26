@@ -66,6 +66,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const customerId = searchParams.get('customer_id')
     const repairId = searchParams.get('repair_id')
     const saleId = searchParams.get('sale_id')
+    const search = searchParams.get('search')?.trim()
     const from = (page - 1) * limit
     const to = from + limit - 1
 
@@ -96,6 +97,12 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     if (customerId) query = query.eq('customer_id', customerId)
     if (repairId) query = query.eq('repair_id', repairId)
     if (saleId) query = query.eq('sale_id', saleId)
+    if (search) {
+      const sanitized = search.replace(/[%_,()]/g, '')
+      if (sanitized) {
+        query = query.or(`case_number.ilike.%${sanitized}%,reason.ilike.%${sanitized}%,notes.ilike.%${sanitized}%`)
+      }
+    }
 
     const { data, error, count } = await query
       .order('created_at', { ascending: false })
@@ -129,15 +136,17 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       replacementById = new Map((replacements ?? []).map((row) => [row.id, { name: row.name, image_url: row.image_url }]))
     }
 
-    let generatedById = new Map<string, { ticket_number: string | null }>()
+    let generatedById = new Map<string, { ticket_number: string | null; status: string | null }>()
     if (generatedIds.length > 0) {
       const { data: generated } = await supabase
         .from('repairs')
-        .select('id, ticket_number')
+        // El estado del retrabajo permite avisar si el caso se cierra con el
+        // equipo todavia en el taller.
+        .select('id, ticket_number, status')
         .eq('organization_id', organization.id)
         .in('id', generatedIds)
 
-      generatedById = new Map((generated ?? []).map((row) => [row.id, { ticket_number: row.ticket_number }]))
+      generatedById = new Map((generated ?? []).map((row) => [row.id, { ticket_number: row.ticket_number, status: row.status ?? null }]))
     }
 
     const enriched = rows.map((row) => normalizeAfterSalesCase({
@@ -168,7 +177,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
 
     if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: validation.error.issues[0]?.message || 'Validation failed', details: validation.error.issues },
+        { success: false, error: validation.error.issues[0]?.message || 'Error de validación', details: validation.error.issues },
         { status: 400 }
       )
     }

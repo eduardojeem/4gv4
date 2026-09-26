@@ -2,8 +2,6 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { backupManager } from './backup-manager'
-import { backupMonitor } from './backup-monitor'
-import { backupVersioning } from './backup-versioning'
 
 // Interfaces para recuperación automática
 export interface RecoveryStrategy {
@@ -46,7 +44,7 @@ export interface RecoveryAction {
   type: 'restore_backup' | 'restart_service' | 'switch_environment' | 'rollback_deployment' | 'scale_resources' | 'run_script' | 'notify_team' | 'custom'
   name: string
   description: string
-  parameters: { [key: string]: any }
+  parameters: Record<string, unknown>
   order: number
   parallel: boolean
   timeoutMinutes: number
@@ -93,7 +91,7 @@ export interface HealthCheck {
     script?: string
     metric?: string
     threshold?: number
-    expectedValue?: any
+    expectedValue?: unknown
   }
   timeoutSeconds: number
   retryCount: number
@@ -109,7 +107,7 @@ export interface NotificationSettings {
 
 export interface NotificationChannel {
   type: 'email' | 'slack' | 'teams' | 'webhook' | 'sms' | 'push'
-  config: { [key: string]: any }
+  config: Record<string, unknown>
   enabled: boolean
 }
 
@@ -143,7 +141,7 @@ export interface RecoveryExecution {
   metrics: RecoveryMetrics
   rollbackExecution?: RollbackExecution
   notifications: NotificationLog[]
-  metadata: { [key: string]: any }
+  metadata: Record<string, unknown>
 }
 
 export interface RecoveryProgress {
@@ -165,7 +163,7 @@ export interface ActionExecution {
   retryCount: number
   output?: string
   error?: string
-  metrics?: { [key: string]: any }
+  metrics?: Record<string, unknown>
 }
 
 export interface HealthCheckResult {
@@ -174,7 +172,7 @@ export interface HealthCheckResult {
   status: 'passed' | 'failed' | 'timeout' | 'error'
   executedAt: Date
   duration: number
-  result?: any
+  result?: unknown
   error?: string
   retryCount: number
 }
@@ -187,7 +185,7 @@ export interface RecoveryLog {
   message: string
   component: string
   actionId?: string
-  metadata?: { [key: string]: any }
+  metadata?: Record<string, unknown>
 }
 
 export interface RecoveryMetrics {
@@ -300,7 +298,7 @@ class AutoRecovery {
     await this.loadConfiguration()
     await this.loadRecoveryStrategies()
     await this.loadActiveExecutions()
-    
+
     if (this.config.enabled && !this.config.maintenanceMode) {
       this.startMonitoring()
       this.startHealthChecks()
@@ -394,7 +392,7 @@ class AutoRecovery {
 
       try {
         const shouldTrigger = await this.evaluateConditions(strategy.conditions)
-        
+
         if (shouldTrigger && !this.isStrategyRunning(strategyId)) {
           await this.triggerRecovery(strategyId, 'automatic', 'Conditions met')
         }
@@ -446,7 +444,7 @@ class AutoRecovery {
   // Verificar si una estrategia está ejecutándose
   private isStrategyRunning(strategyId: string): boolean {
     for (const execution of this.activeExecutions.values()) {
-      if (execution.strategyId === strategyId && 
+      if (execution.strategyId === strategyId &&
           (execution.status === 'pending' || execution.status === 'running')) {
         return true
       }
@@ -456,10 +454,10 @@ class AutoRecovery {
 
   // Activar recuperación
   async triggerRecovery(
-    strategyId: string, 
-    triggeredBy: string, 
+    strategyId: string,
+    triggeredBy: string,
     reason: string,
-    metadata?: { [key: string]: any }
+    metadata?: Record<string, unknown>
   ): Promise<string> {
     try {
       const strategy = this.strategies.get(strategyId)
@@ -537,13 +535,13 @@ class AutoRecovery {
     return this.compareValues(currentValue, operator, value)
   }
 
-  private async checkDataCorruption(condition: RecoveryCondition): Promise<boolean> {
+  private async checkDataCorruption(_condition: RecoveryCondition): Promise<boolean> {
     try {
       const verifyDataIntegrity = (backupManager as unknown as { verifyDataIntegrity?: () => Promise<{ isValid: boolean }> }).verifyDataIntegrity
       if (!verifyDataIntegrity) return false
       const integrityCheck = await verifyDataIntegrity()
       return !integrityCheck.isValid
-    } catch (error) {
+    } catch (_error) {
       return true
     }
   }
@@ -553,7 +551,7 @@ class AutoRecovery {
     try {
       const response = await fetch(metric, { method: 'GET' })
       return !response.ok
-    } catch (error) {
+    } catch (_error) {
       return true
     }
   }
@@ -565,7 +563,7 @@ class AutoRecovery {
     return this.compareValues(currentValue, operator, value)
   }
 
-  private async checkSecurityBreach(condition: RecoveryCondition): Promise<boolean> {
+  private async checkSecurityBreach(_condition: RecoveryCondition): Promise<boolean> {
     const securityEvents = await this.getSecurityEvents()
     return securityEvents.some(event => event.severity === 'critical')
   }
@@ -581,20 +579,22 @@ class AutoRecovery {
     }
   }
 
-  private compareValues(current: any, operator: string, expected: any): boolean {
+  private compareValues(current: unknown, operator: string, expected: unknown): boolean {
+    const cur = typeof current === 'number' || typeof current === 'string' ? current : String(current)
+    const exp = typeof expected === 'number' || typeof expected === 'string' ? expected : String(expected)
     switch (operator) {
-      case '>': return current > expected
-      case '<': return current < expected
+      case '>': return cur > exp
+      case '<': return cur < exp
       case '=': return current === expected
-      case '>=': return current >= expected
-      case '<=': return current <= expected
+      case '>=': return cur >= exp
+      case '<=': return cur <= exp
       case '!=': return current !== expected
       default: return false
     }
   }
 
   // Métodos auxiliares
-  private async getSystemMetrics(): Promise<{ [key: string]: any }> {
+  private async getSystemMetrics(): Promise<Record<string, number>> {
     return {
       cpu_usage: Math.random() * 100,
       memory_usage: Math.random() * 100,
@@ -604,7 +604,7 @@ class AutoRecovery {
     }
   }
 
-  private async getPerformanceMetrics(): Promise<{ [key: string]: any }> {
+  private async getPerformanceMetrics(): Promise<Record<string, number>> {
     return {
       response_time: Math.random() * 5000,
       throughput: Math.random() * 1000,
@@ -617,7 +617,7 @@ class AutoRecovery {
     return []
   }
 
-  private async executeCustomLogic(logic: string): Promise<any> {
+  private async executeCustomLogic(_logic: string): Promise<unknown> {
     // Implementar ejecución segura de lógica personalizada
     return false
   }
@@ -690,7 +690,7 @@ class AutoRecovery {
     // Realizar verificaciones de salud del sistema
   }
 
-  private async failExecution(execution: RecoveryExecution, reason: string): Promise<void> {
+  private async failExecution(execution: RecoveryExecution, _reason: string): Promise<void> {
     execution.status = 'failed'
     execution.completedAt = new Date()
     execution.duration = execution.completedAt.getTime() - execution.startedAt.getTime()
@@ -706,24 +706,24 @@ class AutoRecovery {
     this.activeExecutions.delete(execution.id)
   }
 
-  private async verifySuccess(execution: RecoveryExecution, criteria: SuccessCriteria): Promise<{ success: boolean; reason?: string }> {
+  private async verifySuccess(_execution: RecoveryExecution, _criteria: SuccessCriteria): Promise<{ success: boolean; reason?: string }> {
     return { success: true }
   }
 
-  private async executeRollback(execution: RecoveryExecution, strategy: RollbackStrategy): Promise<void> {
+  private async executeRollback(_execution: RecoveryExecution, _strategy: RollbackStrategy): Promise<void> {
     // Implementar rollback
   }
 
-  private async sendNotification(execution: RecoveryExecution, event: string, data: any): Promise<void> {
+  private async sendNotification(_execution: RecoveryExecution, _event: string, _data: unknown): Promise<void> {
     // Implementar notificaciones
   }
 
-  private async logRecovery(execution: RecoveryExecution, level: string, message: string, actionId?: string): Promise<void> {
+  private async logRecovery(execution: RecoveryExecution, level: RecoveryLog['level'], message: string, actionId?: string): Promise<void> {
     const log: RecoveryLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       executionId: execution.id,
       timestamp: new Date(),
-      level: level as any,
+      level,
       message,
       component: 'AutoRecovery',
       actionId,

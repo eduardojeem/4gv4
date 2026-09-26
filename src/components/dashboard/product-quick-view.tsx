@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { AppImage } from '@/components/ui/app-image'
+
 import { X, Edit, ShoppingCart, Package, Star, TrendingUp, Calendar, Barcode, Building2, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/currency'
@@ -62,7 +62,7 @@ export function ProductQuickView({
             <div className="flex items-start space-x-4">
               <div className="relative">
                 {product.image ? (
-                  <img
+                  <AppImage
                     src={product.image}
                     alt={product.name}
                     className="w-20 h-20 object-cover rounded-xl shadow-lg ring-2 ring-gray-100"

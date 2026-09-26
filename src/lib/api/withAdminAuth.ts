@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { resolveUserOrganizationId } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
 
 export interface AdminAuthContext {
@@ -98,16 +98,24 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
             requiredRoles: allowedRoles,
           })
 
+          // La tienda a la que apuntaba el intento. Queda en null solo cuando
+          // quien llama no es miembro de ninguna: ahi el evento es de la
+          // plataforma y no de un comercio, que es la atribucion correcta.
+          const attemptOrganizationId = await resolveUserOrganizationId(auth.user.id)
+
           try {
             await supabase.from('audit_log').insert({
               user_id: auth.user.id,
               action: 'unauthorized_admin_access_attempt',
               resource: 'admin_api',
               resource_id: request.nextUrl.pathname,
+              organization_id: attemptOrganizationId,
+              severity: 'high',
               new_values: {
                 path: request.nextUrl.pathname,
                 method: request.method,
                 userRole: auth.user.role,
+                organization_id: attemptOrganizationId,
               },
             })
         } catch (err) {
@@ -126,29 +134,7 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
 
       let organizationId: string | null = null
       if (auth.user.role !== 'super_admin') {
-        try {
-          const activeOrganization = await getCurrentOrganizationContext(auth.user.id)
-          organizationId = activeOrganization?.id ?? null
-        } catch (err) {
-          logger.error('Failed to resolve active admin organization', { error: err, userId: auth.user.id })
-        }
-
-        if (!organizationId) {
-          try {
-            const admin = createAdminSupabase()
-            const { data: membership } = await admin
-              .from('organization_members')
-              .select('organization_id')
-              .eq('user_id', auth.user.id)
-              .eq('status', 'active')
-              .order('created_at', { ascending: true })
-              .limit(1)
-              .maybeSingle()
-            organizationId = membership?.organization_id ?? null
-          } catch (err) {
-            logger.error('Failed to resolve admin organization', { error: err, userId: auth.user.id })
-          }
-        }
+        organizationId = await resolveUserOrganizationId(auth.user.id)
 
         if (!organizationId) {
           return NextResponse.json(
@@ -212,6 +198,9 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
             resource: 'admin_api',
             resource_id: request.nextUrl.pathname,
             organization_id: organizationId,
+            // La columna la escribia un solo lugar del proyecto; sin ella el
+            // filtro de gravedad de /admin/security no encontraba nada.
+            severity: 'low',
             new_values: {
               path: request.nextUrl.pathname,
               method: request.method,

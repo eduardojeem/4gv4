@@ -63,20 +63,36 @@ export async function GET(request: NextRequest) {
             accountHolder: option.accountHolder,
           })),
         },
+        // El alias y el QR son lo que el cliente necesita para pagar: el
+        // carrito los muestra, pero se quitaban acá y nunca llegaban.
         digital_wallet: {
           enabled: normalized.checkout.payment.digital_wallet.enabled,
           label: normalized.checkout.payment.digital_wallet.label,
           instructions: normalized.checkout.payment.digital_wallet.instructions,
+          walletAlias: normalized.checkout.payment.digital_wallet.walletAlias,
+          qrImageUrl: normalized.checkout.payment.digital_wallet.qrImageUrl,
         },
       },
     }
+
+    // La configuración de crédito es interna: dice sobre qué base y con qué
+    // recargo sobre el costo calcula cada tienda sus cuotas. La tienda pública
+    // no la usa; las cuotas ya vienen calculadas en cada producto.
+    delete (normalized as Partial<WebsiteSettings>).product_credit_defaults
 
     const response = NextResponse.json({
       success: true,
       data: normalized,
       organization: toPublicOrganizationPayload(organization),
     })
-    response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
+    // 30 s fresh, luego sirve el cache mientras revalida en background.
+    // El `s-maxage` aplica al CDN/edge (ej: Vercel). `private` queda
+    // excluido a propósito: los settings públicos son los mismos para
+    // todos los visitantes del mismo org.
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=30, s-maxage=60, stale-while-revalidate=300'
+    )
     return response
   } catch {
     return NextResponse.json(

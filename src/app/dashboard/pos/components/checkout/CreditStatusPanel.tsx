@@ -2,15 +2,13 @@
 import React from 'react'
 import { Clock, AlertCircle, Calendar } from 'lucide-react'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
-import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { buildPosCreditSummary, type PosCreditTerms } from '@/lib/credits/pos-credit-summary'
+import { FirstInstallmentSelector } from './FirstInstallmentSelector'
+import type { CreditPlanSuggestion } from '../../contexts/CheckoutContext'
 
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
-export interface CreditTerms {
-  count: number
-  frequency: CreditFrequency
-  interestRate: number
-}
+export type CreditTerms = PosCreditTerms
 
 interface CreditStatusPanelProps {
   cartTotal: number
@@ -21,6 +19,7 @@ interface CreditStatusPanelProps {
   terms: CreditTerms
   onTermsChange: (terms: CreditTerms) => void
   formatCurrency?: (amount: number) => string
+  suggestion?: CreditPlanSuggestion | null
 }
 
 export function CreditStatusPanel({
@@ -28,15 +27,11 @@ export function CreditStatusPanel({
   creditSummary,
   terms,
   onTermsChange,
-  formatCurrency = defaultFormatCurrency
+  formatCurrency = defaultFormatCurrency,
+  suggestion = null,
 }: CreditStatusPanelProps) {
   const installmentCount = Math.max(1, terms.count || 1)
-  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
-    principalAmount: cartTotal,
-    interestRate: terms.interestRate,
-    installmentCount,
-    frequency: terms.frequency,
-  }), [cartTotal, installmentCount, terms.frequency, terms.interestRate])
+  const creditPlan = React.useMemo(() => buildPosCreditSummary(cartTotal, terms), [cartTotal, terms])
   const estimatedInstallment = creditPlan.installments[0]?.amount ?? 0
   const frequencyLabel: Record<CreditFrequency, string> = { weekly: 'semanal', biweekly: 'quincenal', monthly: 'mensual' }
   const totalCredit = creditSummary.availableCredit + creditSummary.usedCredit
@@ -44,6 +39,11 @@ export function CreditStatusPanel({
   const remainingCredit = Math.max(0, creditSummary.availableCredit - creditPlan.financedTotal)
   const utilizationPercentage = totalCredit > 0 ? (newBalance / totalCredit) * 100 : 0
   const isNearLimit = utilizationPercentage > 80
+  const suggestionWasAdjusted = Boolean(suggestion && (
+    suggestion.count !== terms.count
+    || suggestion.interestRate !== terms.interestRate
+    || suggestion.frequency !== terms.frequency
+  ))
 
   return (
     <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg shadow-sm">
@@ -53,6 +53,19 @@ export function CreditStatusPanel({
         </div>
         <span className="font-semibold text-base">Venta a Crédito</span>
       </div>
+      {suggestion && (
+        <div className="mb-3 rounded-md border border-blue-300/60 bg-white/60 p-2 text-xs text-blue-900 dark:border-blue-700 dark:bg-slate-950/30 dark:text-blue-100">
+          <p className="font-semibold">Plan sugerido por {suggestion.productName}</p>
+          <p className="mt-0.5 text-[11px] text-blue-700 dark:text-blue-300">
+            Estas condiciones se aplican al total financiado del ticket.
+          </p>
+          {suggestionWasAdjusted && (
+            <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">
+              Condiciones ajustadas manualmente
+            </p>
+          )}
+        </div>
+      )}
       
       <div className="space-y-2.5">
         {/* Total de la venta */}
@@ -178,6 +191,7 @@ export function CreditStatusPanel({
               />
             </label>
           </div>
+          <FirstInstallmentSelector value={terms.firstInstallmentTiming ?? 'at_start'} onChange={value => onTermsChange({ ...terms, firstInstallmentTiming: value, firstPayment: value === 'next_cycle' ? undefined : terms.firstPayment })} frequency={terms.frequency} />
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
@@ -195,9 +209,9 @@ export function CreditStatusPanel({
             </div>
             <div className="mt-3 max-h-28 overflow-y-auto rounded-md border border-blue-200/80 bg-white/70 text-[11px] dark:border-blue-800/80 dark:bg-slate-950/30">
               {creditPlan.installments.slice(0, 6).map((installment) => (
-                <div key={installment.installmentNumber} className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-blue-100 px-2 py-1.5 last:border-b-0 dark:border-blue-900">
-                  <span>Cuota {installment.installmentNumber}</span>
-                  <span>{installment.dueDate.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                <div key={installment.number} className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-blue-100 px-2 py-1.5 last:border-b-0 dark:border-blue-900">
+                  <span>Cuota {installment.number}</span>
+                  <span>{installment.dueDate.split('-').reverse().join('/')}</span>
                   <span className="font-semibold">{formatCurrency(installment.amount)}</span>
                 </div>
               ))}

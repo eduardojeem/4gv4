@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Tag, Palette, Hash, Eye, EyeOff, Save, X, AlertCircle, CheckCircle } from 'lucide-react'
+import { Tag, Hash, Save, X, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,20 +12,10 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Category, CategoryFormData, ValidationErrors, ModalMode } from '@/lib/types/catalog'
@@ -44,10 +34,6 @@ const PREDEFINED_COLORS = [
   '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1'
 ]
 
-const CATEGORY_ICONS = [
-  'Tag', 'Package', 'Smartphone', 'Tablet', 'Laptop', 'Headphones',
-  'Camera', 'Battery', 'Wrench', 'Shield', 'Star', 'Heart'
-]
 
 export function CategoryModal({
   isOpen,
@@ -64,7 +50,7 @@ export function CategoryModal({
     color: '#3B82F6',
     icon: 'Tag'
   })
-  
+
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [previewSubcategories, setPreviewSubcategories] = useState<string[]>([])
@@ -110,8 +96,8 @@ export function CategoryModal({
       newErrors.name = 'El nombre debe tener al menos 2 caracteres'
     } else {
       // Verificar duplicados
-      const isDuplicate = existingCategories.some(cat => 
-        cat.name.toLowerCase() === formData.name.toLowerCase() && 
+      const isDuplicate = existingCategories.some(cat =>
+        cat.name.toLowerCase() === formData.name.toLowerCase() &&
         cat.id !== category?.id
       )
       if (isDuplicate) {
@@ -140,7 +126,7 @@ export function CategoryModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) {
       toast.error('Por favor corrige los errores en el formulario')
       return
@@ -163,15 +149,15 @@ export function CategoryModal({
       }
 
       onSave(categoryData)
-      
+
       toast.success(
-        mode === 'add' 
-          ? 'Categoría creada exitosamente' 
+        mode === 'add'
+          ? 'Categoría creada exitosamente'
           : 'Categoría actualizada exitosamente'
       )
-      
+
       onClose()
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al guardar la categoría')
     } finally {
       setIsSubmitting(false)
@@ -193,7 +179,7 @@ export function CategoryModal({
             {mode === 'add' ? 'Agregar Nueva Categoría' : 'Editar Categoría'}
           </DialogTitle>
           <DialogDescription>
-            {mode === 'add' 
+            {mode === 'add'
               ? 'Crea una nueva categoría para organizar tus productos'
               : 'Modifica la información de la categoría'
             }
@@ -296,7 +282,7 @@ export function CategoryModal({
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Color</Label>
                   <div className="flex items-center gap-2">
-                    <div 
+                    <div
                       className="w-7 h-7 rounded-lg border"
                       style={{ backgroundColor: formData.color }}
                     />

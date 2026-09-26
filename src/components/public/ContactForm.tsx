@@ -6,13 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { 
-  Send, 
-  User, 
-  Mail, 
-  MessageSquare, 
-  CheckCircle2, 
+import {
+  Send,
+  User,
+  Mail,
+  MessageSquare,
+  CheckCircle2,
   AlertCircle,
   Loader2,
   Phone
@@ -20,7 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { z } from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, type UseFormRegister } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 // Validation schema
@@ -51,16 +50,14 @@ function FormField({
   error,
   required = false,
   ...props
-}: {
+}: React.ComponentProps<typeof Input> & {
   name: keyof ContactFormData
   label: string
-  type?: string
   placeholder: string
   icon: React.ReactNode
-  register: any
+  register: UseFormRegister<ContactFormData>
   error?: string
   required?: boolean
-  [key: string]: any
 }) {
   return (
     <motion.div
@@ -124,7 +121,7 @@ export function ContactForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty, isValid }
+    formState: { errors, isDirty: _isDirty, isValid }
   } = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     mode: 'onChange'

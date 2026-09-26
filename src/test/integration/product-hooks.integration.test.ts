@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
 // Imports commented out to prevent OOM in test environment
 // import { useProductManagement } from '../../hooks/products/useProductManagement'
 // import { useProductFiltering } from '../../hooks/products/useProductFiltering'

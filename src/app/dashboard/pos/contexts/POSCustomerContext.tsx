@@ -2,18 +2,37 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react'
 import { toast } from 'sonner'
-import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
+
+const METRICS_CACHE_TTL = 5 * 60 * 1000
+
+export interface POSCustomer {
+  id: string
+  name: string
+  email: string
+  phone: string
+  type: string
+  updated_at: string
+  address: string
+  city?: string
+  last_visit: string | null
+  loyalty_points: number
+  total_purchases: number
+  total_repairs: number
+  current_balance: number
+  credit_limit?: number
+  discount_percentage?: number
+}
 
 interface POSCustomerContextType {
   // Customer Selection State
   selectedCustomer: string
   setSelectedCustomer: (id: string) => void
-  activeCustomer: any | null
+  activeCustomer: POSCustomer | null
   
   // Customer Data State
-  customers: any[]
-  setCustomers: (customers: any[]) => void
+  customers: POSCustomer[]
+  setCustomers: React.Dispatch<React.SetStateAction<POSCustomer[]>>
   customersSourceSupabase: boolean
   setCustomersSourceSupabase: (isSupabase: boolean) => void
   lastCustomerRefreshCount: number | null
@@ -29,7 +48,7 @@ interface POSCustomerContextType {
   
   // Derived Data
   customerTypes: string[]
-  filteredCustomers: any[]
+  filteredCustomers: POSCustomer[]
   
   // New Customer Form State
   newCustomerOpen: boolean
@@ -70,6 +89,7 @@ interface ApiCustomerRow {
   total_repairs?: unknown
   current_balance?: unknown
   credit_limit?: unknown
+  discount_percentage?: unknown
 }
 
 function textValue(value: unknown) {
@@ -93,13 +113,14 @@ function mapApiCustomer(row: ApiCustomerRow) {
     total_repairs: Number(row.total_repairs) || 0,
     current_balance: Number(row.current_balance) || 0,
     credit_limit: Number(row.credit_limit) || 0,
+    discount_percentage: Math.min(100, Math.max(0, Number(row.discount_percentage) || 0)),
   }
 }
 
 export function POSCustomerProvider({ children }: { children: ReactNode }) {
   // Estados principales
   const [selectedCustomer, setSelectedCustomer] = useState<string>('')
-  const [customers, setCustomers] = useState<any[]>([])
+  const [customers, setCustomers] = useState<POSCustomer[]>([])
   const [customersSourceSupabase, setCustomersSourceSupabase] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all')
@@ -193,9 +214,7 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
   }, [refreshCustomers])
 
   // Load real aggregates from Supabase when selecting a customer (parallelized + cached)
-  const customerMetricsCache = React.useRef<Map<string, { data: any; timestamp: number }>>(new Map())
-  const METRICS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
+  const customerMetricsCache = React.useRef<Map<string, { data: Partial<POSCustomer>; timestamp: number }>>(new Map())
   React.useEffect(() => {
     const run = async () => {
       if (!config.supabase.isConfigured || !selectedCustomer) return
@@ -210,39 +229,14 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const supabase = createSupabaseClient()
-
-        // Execute all independent queries in parallel
-        const [salesResult, repairsResult, creditsResult] = await Promise.all([
-          supabase.from('sales').select('total_amount').eq('customer_id', selectedCustomer),
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('customer_id', selectedCustomer),
-          supabase.from('customer_credits').select('id,status').eq('customer_id', selectedCustomer),
-        ])
-
-        const totalPurchases = salesResult.data?.length || 0
-        const totalSpent = (salesResult.data || []).reduce((sum: number, s: any) => sum + (Number(s.total_amount) || 0), 0)
-        const totalRepairs = repairsResult.count || 0
-
-        // Only fetch installments if there are credits (avoids unnecessary query)
-        let outstanding = 0
-        const creditIds = (creditsResult.data || []).map((c: any) => c.id)
-        if (creditIds.length > 0) {
-          const { data: installments } = await supabase
-            .from('credit_installments')
-            .select('amount,status')
-            .in('credit_id', creditIds)
-            .eq('status', 'pending')
-
-          outstanding = (installments || []).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0)
-        }
-
-        const loyaltyPoints = Math.floor((totalSpent || 0) / 10)
-
+        const response = await fetch(`/api/customers/${selectedCustomer}/metrics`, { cache: 'no-store' })
+        const payload = await response.json().catch(() => null) as { metrics?: { purchases?: number; repairs?: number; creditBalance?: number; loyaltyPoints?: number | null }; error?: string } | null
+        if (!response.ok || !payload?.metrics) throw new Error(payload?.error || 'No se pudieron cargar las métricas')
         const metrics = {
-          total_purchases: totalPurchases,
-          total_repairs: totalRepairs,
-          current_balance: outstanding,
-          loyalty_points: loyaltyPoints,
+          total_purchases: Number(payload.metrics.purchases) || 0,
+          total_repairs: Number(payload.metrics.repairs) || 0,
+          current_balance: Number(payload.metrics.creditBalance) || 0,
+          ...(payload.metrics.loyaltyPoints == null ? {} : { loyalty_points: Number(payload.metrics.loyaltyPoints) || 0 }),
           last_visit: new Date().toISOString(),
         }
 
@@ -253,8 +247,8 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
         setCustomers(prev => prev.map(c => (
           c.id === selectedCustomer ? { ...c, ...metrics } : c
         )))
-      } catch (e: any) {
-        console.warn('No se pudieron cargar métricas del cliente:', String(e?.message || e || ''))
+      } catch (e: unknown) {
+        console.warn('No se pudieron cargar métricas del cliente:', e instanceof Error ? e.message : String(e || ''))
       }
     }
     run()
@@ -318,9 +312,9 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
       setNewPhone('')
       setNewEmail('')
       setNewType('regular')
-    } catch (e: any) {
+    } catch (e: unknown) {
       setNewCustomerSaving(false)
-      toast.error('No se pudo crear cliente: ' + String(e?.message || e || ''))
+      toast.error('No se pudo crear cliente: ' + (e instanceof Error ? e.message : String(e || '')))
     }
   }, [customers.length, newFirstName, newLastName, newPhone, newEmail, newType])
 

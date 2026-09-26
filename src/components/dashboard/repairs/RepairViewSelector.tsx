@@ -10,6 +10,7 @@ interface RepairViewSelectorProps {
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
   onPreload?: (view: 'kanban' | 'calendar') => void
+  allowedModes?: ViewMode[]
 }
 
 const viewOptions: Array<{
@@ -24,10 +25,14 @@ const viewOptions: Array<{
   { mode: 'calendar', label: 'Calendario', mobileLabel: 'Agenda', icon: CalendarIcon },
 ]
 
-export function RepairViewSelector({ viewMode, onViewModeChange, onPreload }: RepairViewSelectorProps) {
+export function RepairViewSelector({ viewMode, onViewModeChange, onPreload, allowedModes }: RepairViewSelectorProps) {
+  const visibleOptions = allowedModes
+    ? viewOptions.filter((option) => allowedModes.includes(option.mode))
+    : viewOptions
+
   return (
     <div className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/70">
-      {viewOptions.map((option) => {
+      {visibleOptions.map((option) => {
         const Icon = option.icon
         const isActive = viewMode === option.mode
         const shouldPreload = option.mode === 'kanban' || option.mode === 'calendar'

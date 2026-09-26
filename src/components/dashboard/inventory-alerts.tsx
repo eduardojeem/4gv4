@@ -1,17 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { 
-  AlertTriangle, 
-  Package, 
-  Calendar, 
-  TrendingDown, 
-  Bell, 
-  X, 
-  Eye,
-  RefreshCw,
-  Settings,
-  Filter
+import { useState } from 'react'
+import {
+  AlertTriangle,
+  Package,
+  Calendar,
+  TrendingDown,
+  Bell,
+  X, RefreshCw,
+  Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,12 +28,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -72,7 +63,87 @@ interface InventoryAlertsProps {
   onProductUpdate?: (productId: string, updates: Partial<Product>) => void
 }
 
-export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAlertsProps) {
+const getStockPercentage = (product: Product) => {
+  if (product.maxStock === 0) return 0
+  return (product.stock / product.maxStock) * 100
+}
+
+
+const AlertCard = ({
+  title,
+  products,
+  icon: Icon,
+  variant,
+  alertType,
+  onDismiss
+}: {
+  title: string
+  products: Product[]
+  icon: React.ComponentType<{ className?: string }>
+  variant: 'destructive' | 'default' | 'secondary'
+  alertType: string
+  onDismiss: (alertId: string) => void
+}) => {
+  if (products.length === 0) return null
+
+  return (
+    <Alert className={`${variant === 'destructive' ? 'border-red-200 bg-red-50' :
+                       variant === 'secondary' ? 'border-yellow-200 bg-yellow-50' :
+                       'border-blue-200 bg-blue-50'}`}>
+      <Icon className="h-4 w-4" />
+      <AlertTitle className="flex items-center justify-between">
+        {title}
+        <Badge variant={variant === 'destructive' ? 'destructive' : 'secondary'}>
+          {products.length}
+        </Badge>
+      </AlertTitle>
+      <AlertDescription>
+        <div className="mt-3 space-y-2">
+          {products.slice(0, 3).map((product) => (
+            <div key={product.id} className="flex items-center justify-between p-2 bg-white rounded border">
+              <div className="flex-1">
+                <div className="font-medium text-sm">{product.name}</div>
+                <div className="text-xs text-muted-foreground">SKU: {product.sku}</div>
+                {alertType === 'stock' && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Progress
+                      value={getStockPercentage(product)}
+                      className="h-2 flex-1"
+                    />
+                    <span className="text-xs font-medium">
+                      {product.stock}/{product.maxStock}
+                    </span>
+                  </div>
+                )}
+                {alertType === 'expiry' && product.expiryDate && (
+                  <div className="text-xs text-orange-600 mt-1">
+                    Vence: {product.expiryDate.toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDismiss(`${alertType}-${product.id}`)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          {products.length > 3 && (
+            <div className="text-sm text-muted-foreground text-center py-2">
+              ... y {products.length - 3} productos más
+            </div>
+          )}
+        </div>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+export function InventoryAlerts({ products = [], onProductUpdate: _onProductUpdate }: InventoryAlertsProps) {
   const [alertSettings, setAlertSettings] = useState<AlertSettings>({
     lowStockEnabled: true,
     lowStockThreshold: 10,
@@ -88,13 +159,13 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([])
 
   // Calcular alertas
-  const lowStockProducts = products.filter(product => 
-    alertSettings.lowStockEnabled && 
+  const lowStockProducts = products.filter(product =>
+    alertSettings.lowStockEnabled &&
     product.stock <= Math.max(product.minStock, alertSettings.lowStockThreshold) &&
     !dismissedAlerts.includes(`low-stock-${product.id}`)
   )
 
-  const outOfStockProducts = products.filter(product => 
+  const outOfStockProducts = products.filter(product =>
     product.stock === 0 &&
     !dismissedAlerts.includes(`out-of-stock-${product.id}`)
   )
@@ -102,7 +173,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
   const expiringProducts = products.filter(product => {
     if (!alertSettings.expiryEnabled || !product.expiryDate) return false
     const daysUntilExpiry = Math.ceil((product.expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    return daysUntilExpiry <= alertSettings.expiryDaysWarning && 
+    return daysUntilExpiry <= alertSettings.expiryDaysWarning &&
            daysUntilExpiry > 0 &&
            !dismissedAlerts.includes(`expiry-${product.id}`)
   })
@@ -127,98 +198,14 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
            !dismissedAlerts.includes(`no-movement-${product.id}`)
   })
 
-  const totalAlerts = lowStockProducts.length + outOfStockProducts.length + 
-                     expiringProducts.length + expiredProducts.length + 
+  const totalAlerts = lowStockProducts.length + outOfStockProducts.length +
+                     expiringProducts.length + expiredProducts.length +
                      overstockedProducts.length + noMovementProducts.length
 
   const dismissAlert = (alertId: string) => {
     setDismissedAlerts(prev => [...prev, alertId])
   }
 
-  const getStockPercentage = (product: Product) => {
-    if (product.maxStock === 0) return 0
-    return (product.stock / product.maxStock) * 100
-  }
-
-  const getStockColor = (product: Product) => {
-    const percentage = getStockPercentage(product)
-    if (percentage === 0) return 'bg-red-500'
-    if (percentage <= 20) return 'bg-red-400'
-    if (percentage <= 50) return 'bg-yellow-400'
-    return 'bg-green-500'
-  }
-
-  const AlertCard = ({ 
-    title, 
-    products, 
-    icon: Icon, 
-    variant, 
-    alertType 
-  }: { 
-    title: string
-    products: Product[]
-    icon: any
-    variant: 'destructive' | 'default' | 'secondary'
-    alertType: string
-  }) => {
-    if (products.length === 0) return null
-
-    return (
-      <Alert className={`${variant === 'destructive' ? 'border-red-200 bg-red-50' : 
-                         variant === 'secondary' ? 'border-yellow-200 bg-yellow-50' : 
-                         'border-blue-200 bg-blue-50'}`}>
-        <Icon className="h-4 w-4" />
-        <AlertTitle className="flex items-center justify-between">
-          {title}
-          <Badge variant={variant === 'destructive' ? 'destructive' : 'secondary'}>
-            {products.length}
-          </Badge>
-        </AlertTitle>
-        <AlertDescription>
-          <div className="mt-3 space-y-2">
-            {products.slice(0, 3).map((product) => (
-              <div key={product.id} className="flex items-center justify-between p-2 bg-white rounded border">
-                <div className="flex-1">
-                  <div className="font-medium text-sm">{product.name}</div>
-                  <div className="text-xs text-muted-foreground">SKU: {product.sku}</div>
-                  {alertType === 'stock' && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <Progress 
-                        value={getStockPercentage(product)} 
-                        className="h-2 flex-1"
-                      />
-                      <span className="text-xs font-medium">
-                        {product.stock}/{product.maxStock}
-                      </span>
-                    </div>
-                  )}
-                  {alertType === 'expiry' && product.expiryDate && (
-                    <div className="text-xs text-orange-600 mt-1">
-                      Vence: {product.expiryDate.toLocaleDateString()}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => dismissAlert(`${alertType}-${product.id}`)}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-            {products.length > 3 && (
-              <div className="text-sm text-muted-foreground text-center py-2">
-                ... y {products.length - 3} productos más
-              </div>
-            )}
-          </div>
-        </AlertDescription>
-      </Alert>
-    )
-  }
 
   return (
     <div className="space-y-6">
@@ -268,7 +255,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="low-stock"
                           checked={alertSettings.lowStockEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, lowStockEnabled: checked }))
                           }
                         />
@@ -280,10 +267,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="low-stock-threshold"
                             type="number"
                             value={alertSettings.lowStockThreshold}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                lowStockThreshold: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                lowStockThreshold: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -303,7 +290,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="expiry"
                           checked={alertSettings.expiryEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, expiryEnabled: checked }))
                           }
                         />
@@ -315,10 +302,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="expiry-days"
                             type="number"
                             value={alertSettings.expiryDaysWarning}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                expiryDaysWarning: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                expiryDaysWarning: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -338,7 +325,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="overstock"
                           checked={alertSettings.overstockEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, overstockEnabled: checked }))
                           }
                         />
@@ -350,10 +337,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="overstock-threshold"
                             type="number"
                             value={alertSettings.overstockThreshold}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                overstockThreshold: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                overstockThreshold: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -375,7 +362,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                         <Switch
                           id="no-movement"
                           checked={alertSettings.noMovementEnabled}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             setAlertSettings(prev => ({ ...prev, noMovementEnabled: checked }))
                           }
                         />
@@ -387,10 +374,10 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
                             id="no-movement-days"
                             type="number"
                             value={alertSettings.noMovementDays}
-                            onChange={(e) => 
-                              setAlertSettings(prev => ({ 
-                                ...prev, 
-                                noMovementDays: parseInt(e.target.value) || 0 
+                            onChange={(e) =>
+                              setAlertSettings(prev => ({
+                                ...prev,
+                                noMovementDays: parseInt(e.target.value) || 0
                               }))
                             }
                             className="w-24"
@@ -429,6 +416,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
             icon={AlertTriangle}
             variant="destructive"
             alertType="out-of-stock"
+            onDismiss={dismissAlert}
           />
 
           <AlertCard
@@ -437,6 +425,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
             icon={TrendingDown}
             variant="secondary"
             alertType="low-stock"
+            onDismiss={dismissAlert}
           />
 
           <AlertCard
@@ -445,6 +434,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
             icon={Calendar}
             variant="destructive"
             alertType="expired"
+            onDismiss={dismissAlert}
           />
 
           <AlertCard
@@ -453,6 +443,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
             icon={Calendar}
             variant="secondary"
             alertType="expiry"
+            onDismiss={dismissAlert}
           />
 
           <AlertCard
@@ -461,6 +452,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
             icon={Package}
             variant="default"
             alertType="overstock"
+            onDismiss={dismissAlert}
           />
 
           <AlertCard
@@ -469,6 +461,7 @@ export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAle
             icon={TrendingDown}
             variant="default"
             alertType="no-movement"
+            onDismiss={dismissAlert}
           />
         </div>
       )}

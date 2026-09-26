@@ -999,6 +999,8 @@ export interface Database {
           organization_id: string
           order_id: string
           product_id: string | null
+          variant_id: string | null
+          variant_name: string | null
           product_name: string
           product_sku: string | null
           quantity: number
@@ -1011,6 +1013,8 @@ export interface Database {
           organization_id: string
           order_id: string
           product_id?: string | null
+          variant_id?: string | null
+          variant_name?: string | null
           product_name: string
           product_sku?: string | null
           quantity: number
@@ -1023,6 +1027,8 @@ export interface Database {
           organization_id?: string
           order_id?: string
           product_id?: string | null
+          variant_id?: string | null
+          variant_name?: string | null
           product_name?: string
           product_sku?: string | null
           quantity?: number
@@ -1073,6 +1079,8 @@ export interface Database {
           from_status: string | null
           to_status: string
           payment_method: string | null
+          payment_reference: string | null
+          idempotency_key: string | null
           amount: number | null
           note: string | null
           changed_by: string | null
@@ -1085,6 +1093,8 @@ export interface Database {
           from_status?: string | null
           to_status: string
           payment_method?: string | null
+          payment_reference?: string | null
+          idempotency_key?: string | null
           amount?: number | null
           note?: string | null
           changed_by?: string | null
@@ -1097,6 +1107,8 @@ export interface Database {
           from_status?: string | null
           to_status?: string
           payment_method?: string | null
+          payment_reference?: string | null
+          idempotency_key?: string | null
           amount?: number | null
           note?: string | null
           changed_by?: string | null
@@ -1123,6 +1135,7 @@ export interface Database {
           shipping_cost: number
           discount_amount: number
           total: number
+          collected_amount: number
           notes: string | null
           created_by: string | null
           created_at: string
@@ -1150,6 +1163,7 @@ export interface Database {
           shipping_cost: number
           discount_amount: number
           total: number
+          collected_amount?: number
           notes?: string | null
           created_by?: string | null
           created_at?: string
@@ -1177,6 +1191,7 @@ export interface Database {
           shipping_cost?: number
           discount_amount?: number
           total?: number
+          collected_amount?: number
           notes?: string | null
           created_by?: string | null
           created_at?: string
@@ -1589,6 +1604,7 @@ export interface Database {
           timezone: string
           branding: Json
           modules: Json
+          repair_receipt_settings: Json | null
           created_at: string
           updated_at: string
         }
@@ -1599,6 +1615,7 @@ export interface Database {
           timezone: string
           branding: Json
           modules: Json
+          repair_receipt_settings?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -1609,6 +1626,7 @@ export interface Database {
           timezone?: string
           branding?: Json
           modules?: Json
+          repair_receipt_settings?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -1616,6 +1634,9 @@ export interface Database {
       }
       organizations: {
         Row: {
+          business_vertical: string
+          operating_model: string
+          enabled_modules: string[] | null
           id: string
           name: string
           slug: string
@@ -1625,8 +1646,12 @@ export interface Database {
           created_at: string
           updated_at: string
           marketplace_public: boolean
+          storefront_public: boolean
         }
         Insert: {
+          business_vertical?: string
+          operating_model?: string
+          enabled_modules?: string[] | null
           id?: string
           name: string
           slug: string
@@ -1635,9 +1660,13 @@ export interface Database {
           owner_id?: string | null
           created_at?: string
           updated_at?: string
-          marketplace_public: boolean
+          marketplace_public?: boolean
+          storefront_public?: boolean
         }
         Update: {
+          business_vertical?: string
+          operating_model?: string
+          enabled_modules?: string[] | null
           id?: string
           name?: string
           slug?: string
@@ -1647,6 +1676,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           marketplace_public?: boolean
+          storefront_public?: boolean
         }
         Relationships: []
       }
@@ -1867,6 +1897,7 @@ export interface Database {
           user_id: string | null
           created_at: string | null
           branch_id: string
+          organization_id: string
         }
         Insert: {
           id?: string
@@ -1883,6 +1914,7 @@ export interface Database {
           user_id?: string | null
           created_at?: string | null
           branch_id: string
+          organization_id: string
         }
         Update: {
           id?: string
@@ -1899,6 +1931,7 @@ export interface Database {
           user_id?: string | null
           created_at?: string | null
           branch_id?: string
+          organization_id?: string
         }
         Relationships: []
       }
@@ -1965,14 +1998,153 @@ export interface Database {
         }
         Relationships: []
       }
+      product_variant_attributes: {
+        Row: {
+          id: string
+          organization_id: string
+          product_id: string
+          attribute_key: string
+          label: string
+          control: string
+          options: Json
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          product_id: string
+          attribute_key: string
+          label: string
+          control: string
+          options?: Json
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          product_id?: string
+          attribute_key?: string
+          label?: string
+          control?: string
+          options?: Json
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      branch_variant_inventory: {
+        Row: {
+          organization_id: string
+          branch_id: string
+          product_id: string
+          variant_id: string
+          stock_quantity: number
+          reserved_quantity: number
+          min_stock: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          branch_id: string
+          product_id: string
+          variant_id: string
+          stock_quantity?: number
+          reserved_quantity?: number
+          min_stock?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          organization_id?: string
+          branch_id?: string
+          product_id?: string
+          variant_id?: string
+          stock_quantity?: number
+          reserved_quantity?: number
+          min_stock?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      variant_inventory_movements: {
+        Row: {
+          id: string
+          organization_id: string
+          branch_id: string
+          product_id: string
+          variant_id: string
+          movement_type: string
+          quantity_delta: number
+          stock_before: number
+          stock_after: number
+          idempotency_key: string
+          reference_type: string | null
+          reference_id: string | null
+          reason: string | null
+          actor_id: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          branch_id: string
+          product_id: string
+          variant_id: string
+          movement_type: string
+          quantity_delta: number
+          stock_before: number
+          stock_after: number
+          idempotency_key: string
+          reference_type?: string | null
+          reference_id?: string | null
+          reason?: string | null
+          actor_id: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          branch_id?: string
+          product_id?: string
+          variant_id?: string
+          movement_type?: string
+          quantity_delta?: number
+          stock_before?: number
+          stock_after?: number
+          idempotency_key?: string
+          reference_type?: string | null
+          reference_id?: string | null
+          reason?: string | null
+          actor_id?: string
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
       product_variants: {
         Row: {
           id: string
           product_id: string
+          organization_id: string
           variant_name: string
+          attributes: Json
           sku: string | null
+          barcode: string | null
           price_adjustment: number | null
-          stock_quantity: number | null
+          purchase_price: number
+          sale_price: number
+          wholesale_price: number | null
+          min_stock: number
+          stock_quantity: number
           is_active: boolean | null
           created_at: string | null
           updated_at: string | null
@@ -1980,10 +2152,17 @@ export interface Database {
         Insert: {
           id?: string
           product_id: string
+          organization_id: string
           variant_name: string
+          attributes?: Json
           sku?: string | null
+          barcode?: string | null
           price_adjustment?: number | null
-          stock_quantity?: number | null
+          purchase_price?: number
+          sale_price?: number
+          wholesale_price?: number | null
+          min_stock?: number
+          stock_quantity?: number
           is_active?: boolean | null
           created_at?: string | null
           updated_at?: string | null
@@ -1991,10 +2170,17 @@ export interface Database {
         Update: {
           id?: string
           product_id?: string
+          organization_id?: string
           variant_name?: string
+          attributes?: Json
           sku?: string | null
+          barcode?: string | null
           price_adjustment?: number | null
-          stock_quantity?: number | null
+          purchase_price?: number
+          sale_price?: number
+          wholesale_price?: number | null
+          min_stock?: number
+          stock_quantity?: number
           is_active?: boolean | null
           created_at?: string | null
           updated_at?: string | null
@@ -2040,6 +2226,8 @@ export interface Database {
           exchange_policy: string | null
           stock_status_computed: string | null
           organization_id: string | null
+          has_variants: boolean
+          variant_attribute_config: Json
         }
         Insert: {
           id?: string
@@ -2079,6 +2267,8 @@ export interface Database {
           exchange_policy?: string | null
           stock_status_computed?: string | null
           organization_id?: string | null
+          has_variants?: boolean
+          variant_attribute_config?: Json
         }
         Update: {
           id?: string
@@ -2118,6 +2308,8 @@ export interface Database {
           exchange_policy?: string | null
           stock_status_computed?: string | null
           organization_id?: string | null
+          has_variants?: boolean
+          variant_attribute_config?: Json
         }
         Relationships: []
       }
@@ -2775,6 +2967,7 @@ export interface Database {
           part_number: string | null
           quantity: number
           unit_cost: number
+          unit_price: number
           total_cost: number | null
           supplier: string | null
           status: string | null
@@ -2788,6 +2981,7 @@ export interface Database {
           part_number?: string | null
           quantity: number
           unit_cost: number
+          unit_price: number
           total_cost?: number | null
           supplier?: string | null
           status?: string | null
@@ -2801,6 +2995,7 @@ export interface Database {
           part_number?: string | null
           quantity?: number
           unit_cost?: number
+          unit_price?: number
           total_cost?: number | null
           supplier?: string | null
           status?: string | null
@@ -2903,6 +3098,11 @@ export interface Database {
           final_cost: number | null
           labor_cost: number | null
           parts_cost: number | null
+          pricing_mode: string
+          discount_amount: number
+          price_override_reason: string | null
+          pricing_updated_by: string | null
+          pricing_updated_at: string | null
           location: string | null
           warranty_months: number | null
           warranty_expires_at: string | null
@@ -2953,6 +3153,11 @@ export interface Database {
           final_cost?: number | null
           labor_cost?: number | null
           parts_cost?: number | null
+          pricing_mode?: string
+          discount_amount?: number
+          price_override_reason?: string | null
+          pricing_updated_by?: string | null
+          pricing_updated_at?: string | null
           location?: string | null
           warranty_months?: number | null
           warranty_expires_at?: string | null
@@ -3003,6 +3208,11 @@ export interface Database {
           final_cost?: number | null
           labor_cost?: number | null
           parts_cost?: number | null
+          pricing_mode?: string
+          discount_amount?: number
+          price_override_reason?: string | null
+          pricing_updated_by?: string | null
+          pricing_updated_at?: string | null
           location?: string | null
           warranty_months?: number | null
           warranty_expires_at?: string | null
@@ -3194,6 +3404,10 @@ export interface Database {
           subtotal: number
           created_at: string | null
           organization_id: string | null
+          variant_id: string | null
+          variant_name: string | null
+          variant_sku: string | null
+          variant_attributes: Json | null
         }
         Insert: {
           id?: string
@@ -3205,6 +3419,10 @@ export interface Database {
           subtotal: number
           created_at?: string | null
           organization_id?: string | null
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_sku?: string | null
+          variant_attributes?: Json | null
         }
         Update: {
           id?: string
@@ -3216,6 +3434,10 @@ export interface Database {
           subtotal?: number
           created_at?: string | null
           organization_id?: string | null
+          variant_id?: string | null
+          variant_name?: string | null
+          variant_sku?: string | null
+          variant_attributes?: Json | null
         }
         Relationships: []
       }
@@ -4133,7 +4355,60 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      record_customer_order_collection_atomic: {
+        Args: {
+          p_organization_id: string
+          p_order_id: string
+          p_actor_id: string
+          p_amount: number
+          p_payment_method: string
+          p_payment_reference?: string | null
+          p_note?: string | null
+          p_idempotency_key?: string | null
+        }
+        Returns: Json
+      }
+      save_product_with_variants: {
+        Args: {
+          p_product: Json
+          p_variants: Json
+          p_branch_id: string
+          p_actor_id: string
+        }
+        Returns: Json
+      }
+      adjust_variant_stock_atomic: {
+        Args: {
+          p_organization_id: string
+          p_branch_id: string
+          p_variant_id: string
+          p_quantity_delta: number
+          p_movement_type: string
+          p_idempotency_key: string
+          p_actor_id: string
+          p_reference_type?: string | null
+          p_reference_id?: string | null
+          p_reason?: string | null
+          p_metadata?: Json
+        }
+        Returns: Json
+      }
+      restore_variant_stock_atomic: {
+        Args: {
+          p_organization_id: string
+          p_branch_id: string
+          p_variant_id: string
+          p_quantity: number
+          p_movement_type: string
+          p_idempotency_key: string
+          p_actor_id: string
+          p_reference_type?: string | null
+          p_reference_id?: string | null
+          p_reason?: string | null
+          p_metadata?: Json
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

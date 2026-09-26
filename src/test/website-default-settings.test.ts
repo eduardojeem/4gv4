@@ -10,10 +10,10 @@ describe('applyWebsiteSettingsDefaults', () => {
     expect(result.checkout.commerceMode).toBe('cart')
   })
 
-  it('keeps the process section hidden until an organization configures it', () => {
+  it('shows the guided process by default for the public storefront', () => {
     const result = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
 
-    expect(result.company_info.processSectionEnabled).toBe(false)
+    expect(result.company_info.processSectionEnabled).toBe(true)
   })
 
   it('accepts the expanded offers accent palette', () => {
@@ -74,5 +74,34 @@ describe('applyWebsiteSettingsDefaults', () => {
     expect(customized.offers_section.title).toBe('Liquidacion de temporada')
     expect(customized.offers_section.accentColor).toBe('brand')
     expect(customized.offers_section.subtitle).toBe(defaults.offers_section.subtitle)
+  })
+
+  it('provides brands_section defaults and supports custom items and visibility', () => {
+    const defaults = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
+    expect(defaults.brands_section.enabled).toBe(false)
+    expect(defaults.brands_section.title).toBe('Marcas destacadas')
+    expect(defaults.brands_section.showOnHome).toBe(false)
+    expect(defaults.brands_section.showOnProducts).toBe(false)
+    expect(defaults.brands_section.showOnOffers).toBe(false)
+    expect(defaults.brands_section.items).toEqual([])
+
+    const customized = applyWebsiteSettingsDefaults({
+      brands_section: {
+        enabled: true,
+        title: 'Marcas Exclusivas',
+        showOnHome: true,
+        showOnProducts: true,
+        showOnOffers: false,
+        items: [{ id: 'custom-1', name: 'Mi Marca Propia', active: true }],
+      },
+    } as Partial<WebsiteSettings>)
+
+    expect(customized.brands_section.enabled).toBe(true)
+    expect(customized.brands_section.title).toBe('Marcas Exclusivas')
+    expect(customized.brands_section.showOnHome).toBe(true)
+    expect(customized.brands_section.showOnProducts).toBe(true)
+    expect(customized.brands_section.showOnOffers).toBe(false)
+    expect(customized.brands_section.items).toHaveLength(1)
+    expect(customized.brands_section.items[0].name).toBe('Mi Marca Propia')
   })
 })

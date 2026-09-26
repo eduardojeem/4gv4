@@ -57,12 +57,6 @@ const statusConfig = {
   }
 }
 
-const progressColors = {
-  default: 'bg-primary',
-  success: 'bg-green-500',
-  warning: 'bg-yellow-500',
-  destructive: 'bg-red-500'
-}
 
 export function MetricCard({
   title,

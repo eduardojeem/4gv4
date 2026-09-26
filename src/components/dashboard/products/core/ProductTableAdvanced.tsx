@@ -54,6 +54,18 @@ interface ProductTableAdvancedProps {
 type SortField = 'name' | 'price' | 'category' | 'stock' | 'createdAt' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
+const SortButton: React.FC<{ field: SortField; children: React.ReactNode; onSort: (field: SortField) => void }> = ({ field, children, onSort }) => (
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => onSort(field)}
+    className="h-auto p-0 font-semibold"
+  >
+    {children}
+    <ArrowUpDown className="ml-1 h-3 w-3" />
+  </Button>
+);
+
 const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
   products,
   selectedProducts = [],
@@ -87,17 +99,19 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
     });
 
     return filtered.sort((a, b) => {
-      let aValue: any = a[sortField];
-      let bValue: any = b[sortField];
+      let aValue: string | number = 0;
+      let bValue: string | number = 0;
 
       if (sortField === 'createdAt' || sortField === 'updatedAt') {
-        aValue = aValue ? new Date(aValue).getTime() : 0;
-        bValue = bValue ? new Date(bValue).getTime() : 0;
-      }
-
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
+        const aDate = a[sortField];
+        const bDate = b[sortField];
+        aValue = aDate ? new Date(aDate).getTime() : 0;
+        bValue = bDate ? new Date(bDate).getTime() : 0;
+      } else {
+        const aRaw = a[sortField];
+        const bRaw = b[sortField];
+        aValue = typeof aRaw === 'number' ? aRaw : String(aRaw ?? '').toLowerCase();
+        bValue = typeof bRaw === 'number' ? bRaw : String(bRaw ?? '').toLowerCase();
       }
 
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -115,17 +129,6 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
     }
   };
 
-  const SortButton: React.FC<{ field: SortField; children: React.ReactNode }> = ({ field, children }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={() => handleSort(field)}
-      className="h-auto p-0 font-semibold"
-    >
-      {children}
-      <ArrowUpDown className="ml-1 h-3 w-3" />
-    </Button>
-  );
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -188,23 +191,23 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
                 <TableHead className="w-12">
                   <Checkbox
                     checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={(checked) => onSelectAll?.()}
+                    onCheckedChange={(_checked) => onSelectAll?.()}
                     aria-label="Seleccionar todos los productos"
                   />
                 </TableHead>
               )}
               <TableHead>
-                <SortButton field="name">Producto</SortButton>
+                <SortButton onSort={handleSort} field="name">Producto</SortButton>
               </TableHead>
               <TableHead>SKU</TableHead>
               <TableHead>
-                <SortButton field="category">Categoría</SortButton>
+                <SortButton onSort={handleSort} field="category">Categoría</SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="price">Precio</SortButton>
+                <SortButton onSort={handleSort} field="price">Precio</SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="stock">Stock</SortButton>
+                <SortButton onSort={handleSort} field="stock">Stock</SortButton>
               </TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>

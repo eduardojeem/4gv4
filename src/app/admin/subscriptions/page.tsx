@@ -1,271 +1,253 @@
-import type { ElementType } from 'react'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
   AlertTriangle,
-  BarChart3,
+  ArrowUpRight,
   Building2,
-  CalendarDays,
+  CalendarClock,
   CreditCard,
-  ExternalLink,
-  Package,
-  Receipt,
-  ShoppingBag,
-  Users,
+  Gauge,
   Info,
 } from 'lucide-react'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import {
   getCurrentOrganizationSubscription,
-  getPlanLimit,
+  getProductGraceStatus,
   type BillingProfile,
-  type OrganizationUsage,
-  type PlanRecord,
+  type ProductGraceStatus,
 } from '@/lib/saas/subscription-service'
+import {
+  averageUsagePercent,
+  daysUntil,
+  formatDate,
+  money,
+  quotaTone,
+  subscriptionStatusLabel,
+  subscriptionStatusTone,
+  TONE_BADGE,
+  TONE_DOT,
+  TONE_TEXT,
+  type SubscriptionTone,
+} from '@/lib/saas/subscription-ui'
 import { cn } from '@/lib/utils'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { BillingProfileForm } from '@/components/admin/subscriptions/BillingProfileForm'
 import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
-import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/PlansComparison'
-import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
 import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
-
-const statusLabels: Record<string, string> = {
-  active: 'Activo',
-  trialing: 'Prueba',
-  past_due: 'Pago vencido',
-  suspended: 'Suspendido',
-  cancelled: 'Cancelado',
-  canceled: 'Cancelado',
-  expired: 'Expirado',
-  unpaid: 'Impago',
-  manual: 'Manual',
-  paid: 'Pagado',
-  pending: 'Pendiente',
-  failed: 'Fallido',
-  refunded: 'Reembolsado',
-  sin_estado: 'Sin estado',
-}
-
-const resources: Array<{ key: keyof OrganizationUsage; label: string; icon: ElementType }> = [
-  { key: 'users', label: 'Usuarios', icon: Users },
-  { key: 'branches', label: 'Sucursales', icon: Building2 },
-  { key: 'cashRegisters', label: 'Cajas', icon: CreditCard },
-  { key: 'products', label: 'Productos', icon: Package },
-  { key: 'categories', label: 'Categorias', icon: ShoppingBag },
-]
-
-function money(value: number, currency: string) {
-  return new Intl.NumberFormat('es-PY', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value)
-}
-
-function date(value?: string | null) {
-  if (!value) return 'Sin fecha'
-  return new Intl.DateTimeFormat('es-PY', { dateStyle: 'medium' }).format(new Date(value))
-}
+import { SubscriptionsClientView } from '@/components/admin/subscriptions/SubscriptionsClientView'
 
 function getBillingMissingFields(profile: BillingProfile | null) {
   const missing: string[] = []
   const ruc = profile?.ruc?.replace(/[^\d]/g, '') || ''
 
-  if (!profile?.business_name?.trim()) missing.push('Razon social')
+  if (!profile?.business_name?.trim()) missing.push('Razón social')
   if (!ruc) missing.push('RUC o CI')
-  if (!profile?.billing_email?.trim()) missing.push('Correo de facturacion')
-  if (!profile?.phone?.trim()) missing.push('Telefono')
-  if (!profile?.fiscal_address?.trim()) missing.push('Direccion fiscal')
+  if (!profile?.billing_email?.trim()) missing.push('Correo de facturación')
+  if (!profile?.phone?.trim()) missing.push('Teléfono')
+  if (!profile?.fiscal_address?.trim()) missing.push('Dirección fiscal')
 
   return missing
 }
 
-function limitText(limit: number | null) {
-  return limit === null ? 'Ilimitado' : String(limit)
-}
+type Notice = { id: string; tone: 'warn' | 'danger'; title: string; body: string }
 
-function getRedemptionDetailText(benefit: Record<string, unknown> | null | undefined) {
-  if (!benefit) return ''
-  const type = String(benefit.benefit_type || '')
-  const unit = benefit.duration_unit === 'months' ? 'meses' : 'días'
-  const durationDays = Number(benefit.duration_days || 0)
-  const durationText = durationDays > 0 ? `${durationDays} ${unit}` : ''
+/**
+ * Todo lo que pide atencion, en una sola pila y ordenado por gravedad.
+ *
+ * Antes los avisos salian en tres lugares distintos —dentro del encabezado, en
+ * tarjetas sueltas debajo y en la columna de botones— y el de renovacion se
+ * mostraba aunque la baja ya estuviera programada, pidiendo revisar un metodo
+ * de pago que ya no se iba a cobrar.
+ */
+function buildNotices({
+  status,
+  periodEnd,
+  cancelScheduled,
+  limitsAreFallback,
+  planCode,
+  productGrace,
+}: {
+  status?: string | null
+  periodEnd?: string | null
+  cancelScheduled: boolean
+  limitsAreFallback: boolean
+  planCode: string
+  productGrace: ProductGraceStatus | null
+}): Notice[] {
+  const notices: Notice[] = []
 
-  if (type === 'activate_plan') {
-    return `Activación de plan ${String(benefit.target_plan || '')} por ${durationText}`
-  }
-  if (type === 'extend_trial') {
-    return `Extensión de prueba por ${durationText}`
-  }
-  if (type === 'extend_period') {
-    return `Extensión de período por ${durationText}`
-  }
-  if (type === 'discount_percent') {
-    return `Descuento de ${Number(benefit.discount_percent || 0)}%`
-  }
-  if (type === 'discount_fixed') {
-    return `Descuento de ${money(Number(benefit.discount_amount || 0), 'PYG')}`
-  }
-  return 'Beneficio promocional aplicado'
-}
-
-function usagePercent(current: number, limit: number | null) {
-  if (limit === null || limit <= 0) return 0
-  return Math.min(100, Math.round((current / limit) * 100))
-}
-
-function feature(plan: PlanRecord, key: string) {
-  // 1. Check if features is a key-value object map
-  if (plan.features && !Array.isArray(plan.features)) {
-    const value = plan.features[key]
-    if (typeof value === 'boolean') return value ? 'Incluido' : 'No incluido'
-    if (typeof value === 'string') return value
-  }
-
-  // 2. Check if features is a JSON array of objects
-  if (Array.isArray(plan.features)) {
-    const found = plan.features.find((item) => {
-      const f = item && typeof item === 'object' ? item as Record<string, unknown> : {}
-      const label = String(f?.label || '').toLowerCase()
-      if (key === 'marketplace') {
-        return label.includes('marketplace') || label.includes('ecommerce')
-      }
-      if (key === 'analytics') {
-        return label.includes('analytics') || label.includes('analítica') || label.includes('analysis')
-      }
-      if (key === 'credits') {
-        return label.includes('crédito') || label.includes('cuota')
-      }
-      return label.includes(key.toLowerCase())
+  if (productGrace) {
+    notices.push({
+      id: 'grace',
+      tone: productGrace.stage === 'archived' ? 'danger' : 'warn',
+      title:
+        productGrace.stage === 'grace'
+          ? `Tenés ${productGrace.daysLeft} ${productGrace.daysLeft === 1 ? 'día' : 'días'} para ampliar el plan y mantener todos tus productos`
+          : productGrace.stage === 'deactivated'
+            ? `${productGrace.excessProducts} productos quedaron desactivados por el límite de tu plan`
+            : 'Los productos que excedían el límite de tu plan fueron archivados',
+      body:
+        productGrace.stage === 'grace'
+          ? `Al abrirse este ciclo tenías ${productGrace.activeProducts} productos activos y tu plan permite ${productGrace.productLimit}. Si no lo regularizás, solo se mantendrán activos tus ${productGrace.productLimit} productos más vendidos.`
+          : productGrace.stage === 'deactivated'
+            ? `Te ${productGrace.daysLeft === 1 ? 'queda' : 'quedan'} ${productGrace.daysLeft} ${productGrace.daysLeft === 1 ? 'día' : 'días'} para recuperarlos: al ampliar el plan se reactivan automáticamente.`
+            : 'Se conservan los productos que entran dentro del límite de tu plan actual. Tu historial de ventas y reportes no se vieron afectados.',
     })
+  }
 
-    if (found) {
-      if (typeof found.value === 'boolean') return found.value ? 'Incluido' : 'No incluido'
-      if (typeof found.value === 'string') return found.value
+  if (status && ['past_due', 'suspended', 'cancelled', 'canceled', 'expired', 'unpaid'].includes(status)) {
+    notices.push({
+      id: 'status',
+      tone: 'danger',
+      title: `La suscripción está en estado «${subscriptionStatusLabel(status)}»`,
+      body: 'Regularizá el pago para conservar los límites y los módulos de tu plan.',
+    })
+  }
+
+  const daysLeft = daysUntil(periodEnd)
+  if (daysLeft !== null && !cancelScheduled) {
+    if (daysLeft < 0) {
+      notices.push({
+        id: 'period',
+        tone: 'danger',
+        title: `Tu plan venció hace ${Math.abs(daysLeft)} ${Math.abs(daysLeft) === 1 ? 'día' : 'días'}`,
+        body: 'Regularizá el pago para conservar los límites de tu plan.',
+      })
+    } else if (daysLeft <= 7) {
+      notices.push({
+        id: 'period',
+        tone: 'warn',
+        title:
+          daysLeft === 0
+            ? 'Tu plan se renueva hoy'
+            : `Tu plan se renueva en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`,
+        body: `Verificá que el método de pago esté al día para no perder el servicio el ${formatDate(periodEnd)}.`,
+      })
     }
   }
 
-  // 3. Fallback to modules
-  return plan.modules.includes(key) ? 'Incluido' : 'No incluido'
+  if (limitsAreFallback) {
+    notices.push({
+      id: 'fallback',
+      tone: 'warn',
+      title: 'No pudimos leer la configuración de tu plan',
+      body: `Se están aplicando los cupos por defecto de ${planCode}. Si notás límites distintos a los contratados, avisanos para revisarlo.`,
+    })
+  }
+
+  return notices.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'danger' ? -1 : 1))
 }
 
-function statusTone(status?: string | null) {
-  if (status === 'active' || status === 'paid') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
-  }
-  if (status === 'trialing') {
-    return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-300'
-  }
-  if (status === 'past_due' || status === 'pending') {
-    return 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-300'
-  }
-  if (status === 'suspended' || status === 'unpaid' || status === 'failed') {
-    return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
-  }
-  if (status === 'cancelled' || status === 'canceled' || status === 'expired' || status === 'refunded') {
-    return 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-  }
-  return 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-}
-
-function progressColor(percent: number) {
-  if (percent >= 90) return '#dc2626'
-  if (percent >= 80) return '#f59e0b'
-  return '#059669'
-}
-
-function currentTimestamp() {
-  return Date.now()
-}
-
-function buildAlerts(state: Awaited<ReturnType<typeof getCurrentOrganizationSubscription>>) {
-  const alerts: string[] = []
-  const status = state.subscription?.status
-  const periodEnd = state.subscription?.current_period_ends_at || state.subscription?.trial_ends_at
-
-  if (status && ['past_due', 'suspended', 'cancelled', 'canceled', 'expired', 'unpaid'].includes(status)) {
-    alerts.push(`El estado de la suscripcion requiere atencion: ${statusLabels[status] || status}.`)
-  }
-
-  if (periodEnd) {
-    const daysLeft = Math.ceil((new Date(periodEnd).getTime() - Date.now()) / 86400000)
-    if (daysLeft >= 0 && daysLeft <= 7) alerts.push(`Faltan ${daysLeft} dias para el proximo vencimiento.`)
-  }
-
-  // Usage alerts are already communicated via progress bars — omit here to avoid duplication
-
-  return alerts
+function MetricCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'neutral',
+  children,
+}: {
+  label: string
+  value: string
+  hint?: string
+  icon: typeof Gauge
+  tone?: SubscriptionTone
+  children?: ReactNode
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="h-4 w-4 shrink-0" />
+        <p className="text-[11px] font-bold uppercase tracking-wider">{label}</p>
+      </div>
+      <p className={cn('mt-2 truncate text-xl font-extrabold tracking-tight', TONE_TEXT[tone])}>{value}</p>
+      {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
+      {children}
+    </div>
+  )
 }
 
 export default async function AdminSubscriptionsPage() {
   const auth = await resolveRequestAuthUser()
-  if ('reason' in auth) redirect('/login')
+  if (!auth.authenticated || !auth.user) return redirect('/login')
 
   const organization = await getCurrentOrganizationContext(auth.user.id)
   if (!organization || !['owner', 'admin'].includes(organization.role)) redirect('/forbidden')
 
   const state = await getCurrentOrganizationSubscription(organization.id)
-  const alerts = buildAlerts(state)
-  const billingMissingFields = getBillingMissingFields(state.billingProfile)
+  const productGrace = await getProductGraceStatus(organization.id)
+
   const subscription = state.subscription
-  const nextDate = subscription?.current_period_ends_at || subscription?.trial_ends_at
+  const billingMissingFields = getBillingMissingFields(state.billingProfile)
   const subscriptionStatus = subscription?.status || 'sin_estado'
   const paymentStatus = subscription?.payment_status || 'manual'
+  const cancelScheduled = subscription?.cancel_at_period_end === true
+  const periodEnd = subscription?.current_period_ends_at || subscription?.trial_ends_at || null
+  const daysLeft = daysUntil(periodEnd)
+  const canChangePlan = organization.role === 'owner'
+  const averageUsage = averageUsagePercent(state.currentPlan, state.usage)
+
   const paymentProvider = subscription?.provider === 'pagopar'
     ? 'Pagopar'
     : subscription?.provider === 'mercado_pago'
       ? 'Mercado Pago'
       : 'Pago manual'
-  const canChangePlan = organization.role === 'owner'
-  const periodEnd = nextDate ? new Date(nextDate) : null
-  const daysLeft = periodEnd ? Math.ceil((periodEnd.getTime() - currentTimestamp()) / 86400000) : null
-  const usedLimits = resources
-    .map((resource) => {
-      const limit = getPlanLimit(state.currentPlan, resource.key)
-      return limit === null ? null : usagePercent(state.usage[resource.key], limit)
-    })
-    .filter((percent): percent is number => percent !== null)
-  const averageUsage = usedLimits.length ? Math.round(usedLimits.reduce((sum, percent) => sum + percent, 0) / usedLimits.length) : 0
+
+  const notices = buildNotices({
+    status: subscriptionStatus,
+    periodEnd,
+    cancelScheduled,
+    limitsAreFallback: state.currentPlan.limits_are_fallback === true,
+    planCode: state.currentPlan.code,
+    productGrace,
+  })
+
+  const statusTone = subscriptionStatusTone(subscriptionStatus)
+  // La renovacion solo es «buena noticia» si todavia falta. Si ya vencio, o si
+  // la baja esta programada, el numero tiene que avisar por si solo.
+  const renewalTone: SubscriptionTone = cancelScheduled
+    ? 'warn'
+    : daysLeft === null
+      ? 'neutral'
+      : daysLeft < 0
+        ? 'danger'
+        : daysLeft <= 3
+          ? 'danger'
+          : daysLeft <= 7
+            ? 'warn'
+            : 'ok'
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-lg border bg-card">
-        <div className="flex flex-col gap-6 p-5 lg:flex-row lg:items-start lg:justify-between lg:p-6">
-          <div className="min-w-0 space-y-4">
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-normal">Suscripcion</h1>
-                <Badge variant="outline" className={cn('rounded-full border px-2.5 py-0.5', statusTone(subscriptionStatus))}>
-                  {statusLabels[subscriptionStatus] || subscriptionStatus}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">{organization.name}</p>
+    <div className="space-y-6 pb-12">
+      {/* ── Encabezado ───────────────────────────────────────────────────── */}
+      <header className="rounded-3xl border border-border bg-card p-5 shadow-2xs sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+                <CreditCard className="h-3.5 w-3.5" />
+                Suscripción
+              </span>
+              <Badge variant="outline" className={cn('rounded-full border px-2.5 py-0.5 text-[11px] font-bold', TONE_BADGE[statusTone])}>
+                <span className={cn('mr-1.5 inline-block h-1.5 w-1.5 rounded-full', TONE_DOT[statusTone])} />
+                {subscriptionStatusLabel(subscriptionStatus)}
+              </Badge>
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Plan actual</p>
-                <p className="mt-1 text-3xl font-bold">{state.currentPlan.name}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Precio mensual</p>
-                <p className="mt-1 text-2xl font-semibold">{money(state.currentPlan.price_monthly, state.currentPlan.currency)}</p>
-                {state.currentPlan.price_note && (
-                  <p className="text-xs text-muted-foreground">{state.currentPlan.price_note}</p>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Proximo evento</p>
-                <p className={cn('mt-1 text-lg font-semibold', daysLeft !== null && daysLeft <= 7 && daysLeft >= 0 && 'text-orange-600 dark:text-orange-400')}>{date(nextDate)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {daysLeft === null ? 'Sin periodo configurado' : daysLeft < 0 ? `${Math.abs(daysLeft)} dias vencido` : `${daysLeft} dias restantes`}
-                </p>
-              </div>
-            </div>
+
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+              Suscripción y facturación
+            </h1>
+
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Building2 className="h-4 w-4 shrink-0 text-primary" />
+              <span className="truncate">
+                {organization.name} · plan <strong className="font-semibold text-foreground">{state.currentPlan.name}</strong>
+              </span>
+            </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+
+          <div className="flex w-full shrink-0 flex-col gap-3 sm:w-auto sm:min-w-[18rem]">
             <PagoparPaymentButton
               missingFields={billingMissingFields}
               isPaidPlan={state.currentPlan.price_monthly > 0}
@@ -273,280 +255,157 @@ export default async function AdminSubscriptionsPage() {
               planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
             />
             {canChangePlan && (
-              <Button asChild variant="outline" className="gap-2">
+              <Button asChild variant="outline" className="h-11 w-full gap-2 rounded-xl font-semibold">
                 <Link href="/admin/subscriptions/change-plan">
-                  <CreditCard className="h-4 w-4" />
-                  Cambiar plan
+                  <ArrowUpRight className="h-4 w-4 text-primary" />
+                  Cambiar de plan
                 </Link>
               </Button>
             )}
-            <SubscriptionCancellation
-              isFreePlan={state.currentPlan.price_monthly <= 0}
-              cancelAtPeriodEnd={subscription?.cancel_at_period_end === true}
-              periodEndDate={subscription?.current_period_ends_at ?? subscription?.trial_ends_at ?? null}
-              currentPlanName={state.currentPlan.name}
-            />
           </div>
         </div>
-        <div className="grid border-t bg-muted/30 sm:grid-cols-3">
-          <div className="border-b p-4 sm:border-b-0 sm:border-r">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Uso promedio</p>
-            <div className="mt-2 flex items-center gap-3">
-              <Progress value={averageUsage} indicatorColor={progressColor(averageUsage)} className="h-2" />
-              <span className="w-10 text-right text-sm font-medium">{averageUsage}%</span>
-            </div>
-          </div>
-          <div className="border-b p-4 sm:border-b-0 sm:border-r">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Metodo de pago</p>
-            <p className="mt-1 text-sm font-medium">{paymentProvider}</p>
-            <p className="text-xs text-muted-foreground">{statusLabels[paymentStatus] || paymentStatus}</p>
-          </div>
-          <div className="p-4">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Periodo iniciado</p>
-            <p className="mt-1 text-sm font-medium">{date(subscription?.started_at || subscription?.created_at)}</p>
-          </div>
-        </div>
-      </section>
 
-      {alerts.length > 0 && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {alerts.map((alert) => (
-            <Alert key={alert} className="border-orange-200 bg-orange-50/80 dark:border-orange-900/60 dark:bg-orange-950/20">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Atencion</AlertTitle>
-              <AlertDescription>{alert}</AlertDescription>
-            </Alert>
-          ))}
+        {/* ── Los cuatro numeros que importan ─────────────────────────────── */}
+        <div className="mt-6 grid gap-3 border-t border-border pt-5 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="Plan actual"
+            value={state.currentPlan.name}
+            hint={
+              state.currentPlan.price_monthly > 0
+                ? `${money(state.currentPlan.price_monthly, state.currentPlan.currency)} por mes`
+                : state.currentPlan.price_note || 'Sin costo mensual'
+            }
+            icon={CreditCard}
+          />
+
+          <MetricCard
+            label={cancelScheduled ? 'Cancelación programada' : daysLeft !== null && daysLeft < 0 ? 'Vencimiento' : 'Próxima renovación'}
+            value={
+              daysLeft === null
+                ? 'Sin fecha'
+                : daysLeft < 0
+                  ? `Venció hace ${Math.abs(daysLeft)} ${Math.abs(daysLeft) === 1 ? 'día' : 'días'}`
+                  : daysLeft === 0
+                    ? 'Hoy'
+                    : `En ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`
+            }
+            hint={
+              daysLeft === null
+                ? 'Sin fecha configurada'
+                : cancelScheduled
+                  ? `Pasa a Gratuito el ${formatDate(periodEnd)}`
+                  : formatDate(periodEnd)
+            }
+            icon={CalendarClock}
+            tone={renewalTone}
+          />
+
+          <MetricCard
+            label="Uso de cupos"
+            value={`${averageUsage}%`}
+            hint="Promedio de los cupos con tope"
+            icon={Gauge}
+            tone={quotaTone(averageUsage)}
+          >
+            <div
+              className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuenow={averageUsage}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Uso promedio de cupos"
+            >
+              <div
+                className={cn('h-full rounded-full transition-all', TONE_DOT[quotaTone(averageUsage)])}
+                style={{ width: `${averageUsage}%` }}
+              />
+            </div>
+          </MetricCard>
+
+          <MetricCard
+            label="Cobro"
+            value={paymentProvider}
+            hint={subscriptionStatusLabel(paymentStatus)}
+            icon={CreditCard}
+            tone={subscriptionStatusTone(paymentStatus)}
+          />
         </div>
+      </header>
+
+      {/* ── Lo que pide atencion ─────────────────────────────────────────── */}
+      {notices.length > 0 && (
+        <section aria-label="Avisos de la suscripción" className="grid gap-3 lg:grid-cols-2">
+          {notices.map((notice) => (
+            <div
+              key={notice.id}
+              role="alert"
+              className={cn(
+                'flex items-start gap-3 rounded-2xl border p-4 shadow-2xs',
+                notice.tone === 'danger'
+                  ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900/60 dark:bg-rose-950/30'
+                  : 'border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/30'
+              )}
+            >
+              <AlertTriangle
+                className={cn(
+                  'mt-0.5 h-5 w-5 shrink-0',
+                  notice.tone === 'danger' ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'
+                )}
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground">{notice.title}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{notice.body}</p>
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-lg font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-5 w-5" /> ¿Cómo funciona tu suscripción?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Límites de Uso
-                </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Cada plan limita cuántos usuarios, sucursales, cajas registradoras y productos puedes crear. Al llegar al límite, deberás pasar a un plan superior para seguir agregando registros.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Pagos y Facturación
-                </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Cada pago confirmado habilita un período mensual. Pagopar procesa el cobro, pero no realiza débitos automáticos: deberás iniciar el siguiente pago desde esta sección.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Cambios de Plan
-                </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Puedes cambiar de plan cuando quieras. Para bajar a un plan menor (downgrade), primero debes asegurarte de que tu uso actual no supere los límites del nuevo plan.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
-
-      <PromoCodeRedeemer canRedeem={['owner', 'admin'].includes(organization.role)} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Uso y limites</CardTitle>
-              <span className="text-sm text-muted-foreground">Datos reales de la organizacion</span>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {resources.map((resource) => {
-              const Icon = resource.icon
-              const current = state.usage[resource.key]
-              const limit = getPlanLimit(state.currentPlan, resource.key)
-              const percent = usagePercent(current, limit)
-
-              return (
-                <div key={resource.key} className="rounded-lg border bg-background p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{resource.label}</p>
-                        <p className="text-sm text-muted-foreground">{current} usados de {limitText(limit)}</p>
-                      </div>
-                    </div>
-                    <span className="text-sm font-medium">{limit === null ? 'Sin limite' : `${percent}%`}</span>
-                  </div>
-                  <Progress value={limit === null ? 100 : percent} indicatorColor={progressColor(percent)} className="mt-3 h-2" />
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Features del plan</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-lg border p-4">
-              <div className="mb-2 flex items-center gap-2 font-medium"><ShoppingBag className="h-4 w-4" />Marketplace</div>
-              <p className="text-sm text-muted-foreground">{feature(state.currentPlan, 'marketplace')}</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <div className="mb-2 flex items-center gap-2 font-medium"><BarChart3 className="h-4 w-4" />Analytics</div>
-              <p className="text-sm text-muted-foreground">{feature(state.currentPlan, 'analytics')}</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <div className="mb-2 flex items-center gap-2 font-medium"><CreditCard className="h-4 w-4" />Créditos y cuotas</div>
-              <p className="text-sm text-muted-foreground">{feature(state.currentPlan, 'credits')}</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <div className="mb-2 flex items-center gap-2 font-medium"><CalendarDays className="h-4 w-4" />Modulos activos</div>
-              {state.currentPlan.modules.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {state.currentPlan.modules.map((mod) => (
-                    <Badge key={mod} variant="secondary" className="rounded-full text-xs">{mod}</Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Sin modulos adicionales</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <PlansComparison
+      {/* ── Cupos, planes, pagos y datos fiscales ────────────────────────── */}
+      <SubscriptionsClientView
+        currentPlan={state.currentPlan}
+        usage={state.usage}
+        plans={state.plans}
+        payments={state.payments}
+        promoRedemptions={state.promoRedemptions}
+        billingProfile={state.billingProfile}
+        subscriptionStatus={subscriptionStatus}
         canChangePlan={canChangePlan}
-        currentPlanCode={state.currentPlan.code}
-        plans={state.plans.map((plan): PlanRow => ({
-          code: plan.code,
-          name: plan.name,
-          priceLabel: money(plan.price_monthly, plan.currency),
-          priceMonthly: plan.price_monthly,
-          users: limitText(getPlanLimit(plan, 'users')),
-          branches: limitText(getPlanLimit(plan, 'branches')),
-          cashRegisters: limitText(getPlanLimit(plan, 'cashRegisters')),
-          products: limitText(getPlanLimit(plan, 'products')),
-          marketplace: feature(plan, 'marketplace'),
-          analytics: feature(plan, 'analytics'),
-          credits: feature(plan, 'credits'),
-          isPopular: plan.is_popular,
-        }))}
+        canRedeemCodes={['owner', 'admin'].includes(organization.role)}
+        averageUsage={averageUsage}
       />
 
-      <Card id="payment-history">
-        <CardHeader>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Historial de pagos</CardTitle>
-            <span className="text-sm text-muted-foreground">{state.payments.length} registros</span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {state.payments.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center">
-              <Receipt className="mx-auto h-8 w-8 text-muted-foreground" />
-              <p className="mt-3 text-sm font-medium">Sin pagos registrados</p>
-              <p className="mt-1 text-sm text-muted-foreground">Los pagos manuales, de Pagopar o por código de activación aparecerán aquí.</p>
+      {/* ── Dar de baja ──────────────────────────────────────────────────── */}
+      {/* Va al final y a lo ancho: el aviso de baja programada traia su propio
+          cartel y antes se dibujaba dentro de la columna angosta de botones. */}
+      {cancelScheduled ? (
+        <SubscriptionCancellation
+          isFreePlan={state.currentPlan.price_monthly <= 0}
+          cancelAtPeriodEnd
+          periodEndDate={subscription?.current_period_ends_at ?? subscription?.trial_ends_at ?? null}
+          currentPlanName={state.currentPlan.name}
+        />
+      ) : state.currentPlan.price_monthly > 0 ? (
+        <section className="rounded-2xl border border-border bg-muted/30 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="max-w-xl leading-relaxed">
+                Al cancelar, tu organización pasa al plan Gratuito cuando termina el período ya pagado. No se pierde el
+                historial de ventas ni los reportes.
+              </p>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Metodo</TableHead>
-                  <TableHead>Referencia</TableHead>
-                  <TableHead>Enlace Pagopar</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {state.payments.map((payment) => {
-                  const isActivationCode = payment.payment_method === 'activation_code' || payment.provider === 'activation'
-                  const matchingRedemption = isActivationCode
-                    ? state.promoRedemptions?.find((r) => r.benefit_snapshot?.code === payment.external_reference)
-                    : null
-                  return (
-                    <TableRow key={payment.id}>
-                      <TableCell>{date(payment.paid_at || payment.created_at)}</TableCell>
-                      <TableCell>{state.plans.find((p) => p.code === payment.plan_id)?.name || payment.plan_id || state.currentPlan.name}</TableCell>
-                      <TableCell>{money(payment.amount, payment.currency)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn('rounded-full border', statusTone(payment.status))}>
-                          {statusLabels[payment.status] || payment.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {isActivationCode ? (
-                          <Badge variant="secondary" className="bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800 font-medium">
-                            Código de Activación
-                          </Badge>
-                        ) : (
-                          payment.payment_method || payment.provider || 'manual'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isActivationCode ? (
-                          <div className="space-y-1">
-                            <span className="font-mono font-semibold text-violet-700 dark:text-violet-400">
-                              {payment.external_reference}
-                            </span>
-                            {matchingRedemption && (
-                              <p className="text-[10px] text-muted-foreground leading-tight">
-                                {getRedemptionDetailText(matchingRedemption.benefit_snapshot)}
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          payment.external_reference || payment.provider_payment_id || '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {payment.receipt_url ? (
-                          <Button asChild size="sm" variant="outline">
-                            <a href={payment.receipt_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ver</a>
-                          </Button>
-                        ) : '-'}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card id="billing-form">
-        <CardHeader>
-          <CardTitle>Facturacion</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BillingProfileForm profile={state.billingProfile} />
-        </CardContent>
-      </Card>
+            <div className="shrink-0">
+              <SubscriptionCancellation
+                isFreePlan={false}
+                cancelAtPeriodEnd={false}
+                periodEndDate={subscription?.current_period_ends_at ?? subscription?.trial_ends_at ?? null}
+                currentPlanName={state.currentPlan.name}
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }

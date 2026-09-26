@@ -5,9 +5,12 @@ import { SaaSPlansSection } from '@/components/saas/landing/saas-plans-section'
 import { createClient } from '@/lib/supabase/server'
 import { getPlatformBranding } from '@/lib/platform/branding'
 
-export const metadata: Metadata = {
-  title: 'Planes | SERVIX 360',
-  description: 'Planes FREE, BASIC, PRO y ENTERPRISE para operar POS, inventario, reparaciones y marketplace.',
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getPlatformBranding()
+  return {
+    title: `Planes y Precios | ${branding.platformName}`,
+    description: 'Compará los planes activos para operar POS, inventario físico y de servicios, reparaciones y marketplace.',
+  }
 }
 
 export default async function SaaSPlansPage() {
@@ -19,7 +22,7 @@ export default async function SaaSPlansPage() {
   // Obtenemos los planes desde la DB, solo los activos, ordenados por precio
   const { data: plans } = await supabase
     .from('subscription_plans')
-    .select('*')
+    .select('id, tier, public_slug, name, price, price_note, description, is_popular, is_active, limits, highlights, features, color_config, trial_days')
     .eq('is_active', true)
     .order('price', { ascending: true })
 

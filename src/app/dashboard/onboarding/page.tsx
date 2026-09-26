@@ -46,7 +46,7 @@ export default async function DashboardOnboardingPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: subscription }, { data: settings }] = await Promise.all([
+  const [{ data: subscription }, { data: settings }, { data: businessProfile }] = await Promise.all([
     admin
       .from('subscriptions')
       .select('plan, status, trial_ends_at')
@@ -56,6 +56,11 @@ export default async function DashboardOnboardingPage() {
       .from('organization_settings')
       .select('display_name, currency, timezone, modules')
       .eq('organization_id', organization.id)
+      .maybeSingle(),
+    admin
+      .from('organizations')
+      .select('business_vertical, operating_model, storefront_public')
+      .eq('id', organization.id)
       .maybeSingle(),
   ])
 
@@ -104,10 +109,17 @@ export default async function DashboardOnboardingPage() {
     ruc?: string
     whatsapp?: string
     businessType?: string
+    brandColor?: string
     instagram?: string
     facebook?: string
     tiktok?: string
   }
+
+  // La tienda de una organizacion nueva arranca con `storefront_public = false`
+  // y el onboarding nunca la publica. El paso se marcaba listo con la sola
+  // existencia de la fila `company_info` —que crea el propio onboarding—, asi
+  // que decia «Listo» y su enlace llevaba a una tienda sin publicar.
+  const storefrontPublic = businessProfile?.storefront_public === true
 
   const hasCompanyInfo = Boolean(
     (settings?.display_name || organization.name) &&
@@ -132,7 +144,7 @@ export default async function DashboardOnboardingPage() {
       stepProgress={{
         hasCompanyInfo,
         hasProducts: (productsCount ?? 0) > 0,
-        hasPublicStore: Boolean(companyInfoSetting?.value),
+        hasPublicStore: storefrontPublic,
         hasTeam: (membersCount ?? 0) > 1,
       }}
       initialCompanyInfo={{
@@ -144,12 +156,21 @@ export default async function DashboardOnboardingPage() {
         email: adminSettings.companyEmail ?? branch?.email ?? companyInfo.email ?? '',
         address: adminSettings.companyAddress ?? branch?.address ?? companyInfo.address ?? '',
         city: adminSettings.city ?? branch?.city ?? '',
-        weekdays: companyInfo.hours?.weekdays || 'Lunes a viernes, 08:00 a 18:00',
-        saturday: companyInfo.hours?.saturday || 'Sabado, 08:00 a 12:00',
+        // Vacío si la tienda no lo cargó: un horario de ejemplo precargado se
+        // guardaba tal cual y la tienda mostraba horarios que no eran los suyos.
+        // El campo ya tiene el ejemplo como texto de ayuda.
+        weekdays: companyInfo.hours?.weekdays || '',
+        saturday: companyInfo.hours?.saturday || '',
         logoUrl: organization.logoUrl || companyInfo.logoUrl || '',
         ruc: adminSettings.companyRuc ?? companyInfo.ruc ?? '',
         whatsapp: companyInfo.whatsapp || '',
         businessType: companyInfo.businessType || '',
+        brandColor: typeof companyInfo.brandColor === 'string' && companyInfo.brandColor
+          ? companyInfo.brandColor
+          : 'blue',
+        storefrontPublic,
+        businessVertical: businessProfile?.business_vertical || 'general',
+        operatingModel: businessProfile?.operating_model || companyInfo.businessType || 'retail',
         instagram: companyInfo.instagram || '',
         facebook: companyInfo.facebook || '',
         tiktok: companyInfo.tiktok || '',

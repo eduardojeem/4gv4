@@ -1,4 +1,5 @@
 import type { ProductFormData } from '@/types/products'
+import { INTERNAL_EAN_PREFIX } from '@/lib/labels/internal-barcode'
 
 export interface ValidationError {
   field: string
@@ -215,9 +216,15 @@ async function checkSKUUnique(sku: string): Promise<boolean> {
 }
 
 /**
- * Genera un código EAN-13 válido
+ * Genera un código EAN-13 válido para uso interno.
+ *
+ * El prefijo venía en '750', que GS1 asignó a México: un código así dice ser
+ * de un fabricante mexicano que nunca lo emitió, y si el producto sale de la
+ * tienda choca con el código real de otro. El rango 200–299 es justamente el
+ * que GS1 reserva para circulación interna, y es el mismo que usa la
+ * generación de códigos para etiquetas (INTERNAL_EAN_PREFIX).
  */
-export function generateEAN13(prefix: string = '750'): string {
+export function generateEAN13(prefix: string = INTERNAL_EAN_PREFIX): string {
   // Generar 9 dígitos aleatorios
   const random = Math.floor(Math.random() * 1000000000).toString().padStart(9, '0')
   const code = prefix + random

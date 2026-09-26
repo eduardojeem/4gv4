@@ -133,17 +133,19 @@ export function PromotionManager() {
     return colors[type] || 'bg-gray-100 text-gray-800'
   }
 
-  // Obtener estadísticas resumidas
+  // Habia una tercera tarjeta, «Descuento Total Est.», que era literalmente
+  // `usos * 10` con un `$` escrito a mano. Se pintaba junto a dos cifras reales
+  // y con la moneda equivocada. Se saca: cuando exista de donde sumar los
+  // descuentos aplicados de verdad, vuelve como cifra y no como estimacion.
   const getOverallStats = () => {
     const activePromotions = promotions.filter(p => p.is_active).length
     const totalUsage = promotions.reduce((sum, p) => sum + (p.usage_count || 0), 0)
-    // Estimación simple del descuento total dado
-    const totalDiscountGiven = totalUsage * 10 
+    const unusedActive = promotions.filter(p => p.is_active && (p.usage_count || 0) === 0).length
 
     return {
       activePromotions,
       totalUsage,
-      totalDiscountGiven
+      unusedActive
     }
   }
 
@@ -193,8 +195,8 @@ export function PromotionManager() {
             <div className="flex items-center">
               <TrendingUp className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Descuento Total Est.</p>
-                <p className="text-2xl font-bold text-gray-900">${stats.totalDiscountGiven}</p>
+                <p className="text-sm font-medium text-gray-600">Activas sin usar</p>
+                <p className="text-2xl font-bold text-gray-900 tabular-nums">{stats.unusedActive}</p>
               </div>
             </div>
           </CardContent>
@@ -206,7 +208,7 @@ export function PromotionManager() {
         <div className="flex justify-between items-center">
           <TabsList>
             <TabsTrigger value="list">Lista de Promociones</TabsTrigger>
-            <TabsTrigger value="analytics">Analíticas</TabsTrigger>
+
           </TabsList>
           
           <Button 
@@ -304,22 +306,6 @@ export function PromotionManager() {
               </Card>
             ))}
           </div>
-        </TabsContent>
-
-        <TabsContent value="analytics">
-          <Card>
-            <CardHeader>
-              <CardTitle>Analíticas de Promociones</CardTitle>
-              <CardDescription>
-                Estadísticas detalladas del rendimiento de las promociones
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600">
-                Las analíticas detalladas estarán disponibles próximamente.
-              </p>
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
 

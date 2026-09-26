@@ -1,29 +1,23 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { 
-  notificationCache, 
-  useCachedOperation, 
-  createCacheKey, 
-  CACHE_TTL 
+import {
+  notificationCache, createCacheKey,
+  CACHE_TTL
 } from '@/lib/notification-cache'
-import { 
-  useDebounce, 
-  useThrottle, 
-  measurePerformance, 
-  notificationQueue, 
-  notificationBatcher, 
-  PERFORMANCE_CONFIG 
+import {
+  useDebounce,
+  useThrottle,
+  measurePerformance,
+  notificationQueue,
+  notificationBatcher,
+  PERFORMANCE_CONFIG
 } from '@/lib/notification-performance'
 import {
   useErrorHandler,
   ErrorClassifier,
-  ErrorMessageGenerator,
-  globalRetryHandler,
-  NotificationError,
-  ErrorType,
-  createError
+  ErrorMessageGenerator, NotificationError
 } from '@/lib/error-handling'
 
 export type NotificationVariant = 'success' | 'error' | 'warning' | 'info' | 'loading'
@@ -50,10 +44,10 @@ export interface NotificationOptions {
     label: string
     onClick: () => void
   }
-  promise?: Promise<any>
+  promise?: Promise<unknown>
   loading?: string
-  success?: string | ((data: any) => string)
-  error?: string | ((error: any) => string)
+  success?: string | ((data: unknown) => string)
+  error?: string | ((error: unknown) => string)
 }
 
 export interface ButtonNotificationState {
@@ -75,9 +69,9 @@ export function useOptimizedNotifications() {
     pendingActions: new Set()
   })
 
-  
+
   const timeoutRef = useRef<NodeJS.Timeout>(undefined)
-  
+
   // Función principal para mostrar notificaciones optimizadas
   const showNotification = useCallback((
     variant: NotificationVariant,
@@ -168,15 +162,15 @@ export function useOptimizedNotifications() {
       success?: string | ((data: T) => string)
       error?: string | ((error: Error) => string)
     },
-    options: NotificationOptions & { 
+    options: NotificationOptions & {
       useCache?: boolean
       cacheTTL?: number
       cacheKey?: string
     } = {}
   ): Promise<T> => {
-    const toastId = `${buttonId}-${Date.now()}`
+    void (`${buttonId}-${Date.now()}`);
     const cacheKey = options.cacheKey || createCacheKey('button-action', buttonId)
-    
+
     try {
       // Verificar caché si está habilitado
       if (options.useCache) {
@@ -184,14 +178,14 @@ export function useOptimizedNotifications() {
         if (cached !== null) {
           // Mostrar notificación de éxito inmediata desde caché
           if (messages.success) {
-            const successMessage = typeof messages.success === 'function' 
-              ? messages.success(cached) 
+            const successMessage = typeof messages.success === 'function'
+              ? messages.success(cached)
               : messages.success
-            
+
             notificationQueue.enqueue(() => {
-              showNotification('success', `${successMessage} (caché)`, { 
+              showNotification('success', `${successMessage} (caché)`, {
                 duration: options.duration || 2000,
-                ...options 
+                ...options
               })
             })
           }
@@ -202,9 +196,9 @@ export function useOptimizedNotifications() {
       // Mostrar notificación de carga con debounce para evitar spam
       if (messages.loading) {
         notificationBatcher.batch(`loading-${buttonId}`, () => {
-          showNotification('loading', messages.loading!, { 
+          showNotification('loading', messages.loading!, {
             duration: Infinity,
-            ...options 
+            ...options
           })
         })
       }
@@ -219,14 +213,14 @@ export function useOptimizedNotifications() {
 
       // Mostrar notificación de éxito
       if (messages.success) {
-        const successMessage = typeof messages.success === 'function' 
-          ? messages.success(result) 
+        const successMessage = typeof messages.success === 'function'
+          ? messages.success(result)
           : messages.success
-        
+
         notificationQueue.enqueue(() => {
-          showNotification('success', successMessage, { 
+          showNotification('success', successMessage, {
             duration: options.duration || 3000,
-            ...options 
+            ...options
           })
         })
       }
@@ -235,14 +229,14 @@ export function useOptimizedNotifications() {
     } catch (error) {
       // Mostrar notificación de error
       if (messages.error) {
-        const errorMessage = typeof messages.error === 'function' 
-          ? messages.error(error as Error) 
+        const errorMessage = typeof messages.error === 'function'
+          ? messages.error(error as Error)
           : messages.error
-        
+
         notificationQueue.enqueue(() => {
-          showNotification('error', errorMessage, { 
+          showNotification('error', errorMessage, {
             duration: options.duration || 5000,
-            ...options 
+            ...options
           })
         })
       }
@@ -258,9 +252,9 @@ export function useOptimizedNotifications() {
   const notifyQuickAction = useCallback((
     variant: NotificationVariant,
     message: string,
-    options: NotificationOptions & { 
+    options: NotificationOptions & {
       useDebounce?: boolean
-      batchKey?: string 
+      batchKey?: string
     } = {}
   ) => {
     const notificationFn = () => {
@@ -294,7 +288,7 @@ export function useOptimizedNotifications() {
         onClick: async () => {
           try {
             await onConfirm()
-          } catch (error) {
+          } catch (_error) {
             showNotification('error', 'Error al ejecutar la acción', { important: true })
           }
         }
@@ -329,7 +323,7 @@ export function useOptimizedNotifications() {
     isLoading: state.isLoading,
     hasPendingActions: state.pendingActions.size > 0,
     pendingActionsCount: state.pendingActions.size,
-    
+
     // Métodos principales
     showNotification,
     notifyButtonAction,
@@ -337,17 +331,17 @@ export function useOptimizedNotifications() {
     notifyWithConfirmation,
     clearNotifications,
     cleanup,
-    
+
     // Métodos de conveniencia
-    success: (message: string, options?: NotificationOptions) => 
+    success: (message: string, options?: NotificationOptions) =>
       showNotification('success', message, options),
-    error: (message: string, options?: NotificationOptions) => 
+    error: (message: string, options?: NotificationOptions) =>
       showNotification('error', message, options),
-    warning: (message: string, options?: NotificationOptions) => 
+    warning: (message: string, options?: NotificationOptions) =>
       showNotification('warning', message, options),
-    info: (message: string, options?: NotificationOptions) => 
+    info: (message: string, options?: NotificationOptions) =>
       showNotification('info', message, options),
-    loading: (message: string, options?: NotificationOptions) => 
+    loading: (message: string, options?: NotificationOptions) =>
       showNotification('loading', message, options),
   }
 }
@@ -362,7 +356,7 @@ export function useButtonNotifications(buttonId: string) {
   })
 
   // Integrar manejo de errores
-  const { handleError, handleAsyncError } = useErrorHandler()
+  const { handleError: _handleError, handleAsyncError } = useErrorHandler()
 
   // Throttle state updates para evitar renders excesivos
   const throttledSetState = useThrottle(setButtonState, PERFORMANCE_CONFIG.THROTTLE_DELAYS.RESIZE)
@@ -399,11 +393,11 @@ export function useButtonNotifications(buttonId: string) {
         }),
         `ejecutar acción del botón ${buttonId}`
       )
-      
+
       updateState({
         status: 'success',
-        message: typeof messages.success === 'function' 
-          ? messages.success(result) 
+        message: typeof messages.success === 'function'
+          ? messages.success(result)
           : messages.success || 'Completado',
         isLoading: false
       })
@@ -421,10 +415,10 @@ export function useButtonNotifications(buttonId: string) {
     } catch (error) {
       // Clasificar y manejar el error
       const notificationError = error instanceof NotificationError ? error : ErrorClassifier.classify(error)
-      
+
       // Generar mensaje de error contextual
-      const errorMessage = typeof messages.error === 'function' 
-        ? messages.error(notificationError) 
+      const errorMessage = typeof messages.error === 'function'
+        ? messages.error(notificationError)
         : messages.error || ErrorMessageGenerator.generateWithContext(notificationError, `ejecutar acción del botón ${buttonId}`)
 
       updateState({
@@ -458,7 +452,7 @@ export function useButtonNotifications(buttonId: string) {
       batchKey: options.batchKey || `quick-${buttonId}`,
       ...options
     })
-    
+
     setButtonState({
       status: variant === 'success' ? 'success' : variant === 'error' ? 'error' : 'idle',
       message,

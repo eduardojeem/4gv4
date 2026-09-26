@@ -2,7 +2,8 @@
  * Custom hook for managing products dashboard state and operations
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { Product, ProductAlert, Category, Supplier } from '@/types/product-unified'
 import { DashboardFilters, DashboardMetrics, SortConfig, ViewMode } from '@/types/products-dashboard'
 import {
@@ -20,6 +21,8 @@ interface UseProductsDashboardProps {
   alerts: ProductAlert[]
   serverPaginated?: boolean
   serverTotalItems?: number
+  /** Con qué filtro abre la pantalla. Sin esto, abría con todo mezclado. */
+  initialFilters?: DashboardFilters
 }
 
 interface UseProductsDashboardReturn {
@@ -27,7 +30,7 @@ interface UseProductsDashboardReturn {
   displayedProducts: Product[] // All filtered products (for export, metrics)
   paginatedProducts: Product[] // Current page products
   metrics: DashboardMetrics
-  
+
   // UI State
   viewMode: ViewMode
   setViewMode: (mode: ViewMode) => void
@@ -47,11 +50,11 @@ interface UseProductsDashboardReturn {
   setSelectedProductIds: (ids: string[]) => void
   isFilterPanelOpen: boolean
   setIsFilterPanelOpen: (open: boolean) => void
-  
+
   // Actions
   handleSearch: (query: string) => void
   handleFilterChange: (newFilters: Partial<DashboardFilters>) => void
-  handleQuickFilter: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active') => void
+  handleQuickFilter: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants') => void
   handleSort: (field: SortConfig['field']) => void
   handleSelectProduct: (id: string) => void
   handleSelectAll: (selected: boolean) => void
@@ -61,32 +64,29 @@ interface UseProductsDashboardReturn {
 
 export function useProductsDashboard({
   products,
-  categories,
-  suppliers,
-  alerts,
+  categories: _categories,
+  suppliers: _suppliers,
+  alerts: _alerts,
   serverPaginated = false,
   serverTotalItems = 0,
+  initialFilters,
 }: UseProductsDashboardProps): UseProductsDashboardReturn {
   // UI State
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const hydrated = useHydrated()
+  const [preferredViewMode, setViewMode] = useState<ViewMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'table')
+  const viewMode = hydrated ? preferredViewMode : 'table'
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-  const [filters, setFilters] = useState<DashboardFilters>({})
+  const [filters, setFilters] = useState<DashboardFilters>(initialFilters ?? {})
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: 'name',
     direction: 'asc'
   })
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false)
-
-  // Auto-detect mobile screen and switch to grid mode
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setViewMode('grid')
-    }
-  }, [])
 
   // Debounced search handler
   const debouncedSearch = useMemo(
@@ -122,10 +122,14 @@ export function useProductsDashboard({
     return sortProducts(filteredProducts, sortConfig)
   }, [filteredProducts, sortConfig, serverPaginated])
 
-  // Reset page when filters change
-  useEffect(() => {
+  // Reset before children render, rather than briefly showing the old page.
+  const [pageCriteria, setPageCriteria] = useState({ filters, searchQuery, sortConfig, debouncedSearchQuery, itemsPerPage })
+  if (pageCriteria.filters !== filters || pageCriteria.searchQuery !== searchQuery ||
+      pageCriteria.sortConfig !== sortConfig || pageCriteria.debouncedSearchQuery !== debouncedSearchQuery ||
+      pageCriteria.itemsPerPage !== itemsPerPage) {
+    setPageCriteria({ filters, searchQuery, sortConfig, debouncedSearchQuery, itemsPerPage })
     setCurrentPage(1)
-  }, [filters, searchQuery, sortConfig])
+  }
 
   // Apply pagination
   const paginatedProducts = useMemo(() => {
@@ -148,13 +152,44 @@ export function useProductsDashboard({
     setFilters(prev => ({ ...prev, ...newFilters }))
   }, [])
 
-  // Handle quick filters
-  const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active') => {
-    // Clear custom filters when applying quick filter
-    setFilters({
-      quick_filter: filter
+  /**
+   * Los filtros rapidos no borran el alcance de la seccion.
+   *
+   * Antes cada filtro reemplazaba todo el estado: la pantalla abria en «solo
+   * productos» y al tocar «bajo stock» volvian a aparecer los servicios y los
+   * productos desactivados, sin que nada lo dijera. Ahora el tipo y el estado
+   * son dos ejes propios, y el filtro rapido solo cambia el suyo.
+   *
+   * «Todos» es la unica salida al catalogo completo: ahi si se limpia todo.
+   */
+  const handleQuickFilter = useCallback((filter: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants') => {
+    const base = initialFilters ?? {}
+
+    setFilters(prev => {
+      // «Todos» es la unica salida al catalogo completo.
+      if (filter === 'all') return {}
+
+      // Un eje apagado a mano queda apagado: `prev` manda aunque valga
+      // undefined, y el alcance de la seccion solo se usa si nadie lo toco.
+      const actual = <K extends keyof DashboardFilters>(clave: K) =>
+        (clave in prev ? prev[clave] : base[clave])
+
+      if (filter === 'products' || filter === 'services') {
+        const tipo = filter === 'products' ? ('part' as const) : ('service' as const)
+        // Volver a tocar el tipo puesto lo saca, y quedan los dos.
+        return { ...base, ...prev, quick_filter: null, catalog_kind: actual('catalog_kind') === tipo ? undefined : tipo }
+      }
+
+      if (filter === 'active' || filter === 'inactive') {
+        const quiere = filter === 'active'
+        return { ...base, ...prev, quick_filter: null, is_active: actual('is_active') === quiere ? undefined : quiere }
+      }
+
+      // Bajo stock, agotados y variantes: se apagan al volver a tocarlos y no
+      // tocan el tipo ni el estado.
+      return { ...base, ...prev, quick_filter: prev.quick_filter === filter ? null : filter }
     })
-  }, [])
+  }, [initialFilters])
 
   // Handle sorting
   const handleSort = useCallback((field: SortConfig['field']) => {
@@ -184,10 +219,12 @@ export function useProductsDashboard({
 
   // Clear filters
   const clearFilters = useCallback(() => {
-    setFilters({})
+    // Vuelve al filtro con el que abre la pantalla: si el listado arranca en
+    // «solo productos», limpiar no tiene por qué mezclar los servicios.
+    setFilters(initialFilters ?? {})
     setSearchQuery('')
     setDebouncedSearchQuery('')
-  }, [])
+  }, [initialFilters])
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -199,7 +236,7 @@ export function useProductsDashboard({
     displayedProducts,
     paginatedProducts,
     metrics,
-    
+
     // UI State
     viewMode,
     setViewMode,
@@ -219,7 +256,7 @@ export function useProductsDashboard({
     setSelectedProductIds,
     isFilterPanelOpen,
     setIsFilterPanelOpen,
-    
+
     // Actions
     handleSearch,
     handleFilterChange,

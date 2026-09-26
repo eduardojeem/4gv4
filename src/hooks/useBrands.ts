@@ -8,6 +8,8 @@ type BrandInsert = Database['public']['Tables']['brands']['Insert']
 type BrandUpdate = Database['public']['Tables']['brands']['Update']
 
 export type Brand = BrandRow & {
+  /** Marca del catálogo global. Los tipos generados todavía no traen la columna. */
+  global_brand_id?: string | null
   stats?: {
     product_count: number
   }

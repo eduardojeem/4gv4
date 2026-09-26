@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useState } from 'react'
+import { ReactNode } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react'
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 export interface ColumnDef<T> {
     key: string
     header: string
-    accessor?: keyof T | ((row: T) => any)
+    accessor?: keyof T | ((row: T) => ReactNode)
     cell?: (row: T) => ReactNode
     sortable?: boolean
     width?: string
@@ -52,7 +52,7 @@ export interface DataTableProps<T> {
 // Main Component
 // ============================================================================
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends object>({
     data,
     columns,
     loading = false,
@@ -65,7 +65,7 @@ export function DataTable<T extends Record<string, any>>({
 }: DataTableProps<T>) {
 
     // Get cell value
-    const getCellValue = (row: T, column: ColumnDef<T>) => {
+    const getCellValue = (row: T, column: ColumnDef<T>): ReactNode => {
         if (column.cell) {
             return column.cell(row)
         }
@@ -73,9 +73,9 @@ export function DataTable<T extends Record<string, any>>({
             if (typeof column.accessor === 'function') {
                 return column.accessor(row)
             }
-            return row[column.accessor]
+            return row[column.accessor] as ReactNode
         }
-        return row[column.key as keyof T]
+        return row[column.key as keyof T] as ReactNode
     }
 
     // Handle sort

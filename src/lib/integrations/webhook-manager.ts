@@ -341,7 +341,7 @@ class WebhookManager {
     }
   ): Promise<string> {
     const deliveryId = `wh_out_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const delivery: WebhookDelivery = {
       id: deliveryId,
       webhookId: `webhook_${Date.now()}`,
@@ -418,9 +418,9 @@ class WebhookManager {
     } catch (error) {
       attempt.duration = Date.now() - startTime
       attempt.error = error instanceof Error ? error.message : 'Unknown error'
-      
+
       delivery.error = attempt.error
-      
+
       // Determinar si se debe reintentar
       const maxAttempts = 3
       if (delivery.attempts.length < maxAttempts) {
@@ -502,9 +502,9 @@ class WebhookManager {
       const processingTimes = webhooks
         .filter(w => w.processed_at && w.timestamp)
         .map(w => new Date(w.processed_at).getTime() - new Date(w.timestamp).getTime())
-      
-      const avgProcessingTime = processingTimes.length > 0 
-        ? processingTimes.reduce((sum, time) => sum + time, 0) / processingTimes.length 
+
+      const avgProcessingTime = processingTimes.length > 0
+        ? processingTimes.reduce((sum, time) => sum + time, 0) / processingTimes.length
         : 0
 
       const successRate = totalReceived > 0 ? (totalProcessed - totalFailed) / totalReceived : 0
@@ -566,23 +566,23 @@ class WebhookManager {
     if (!rateLimit.enabled) return true
 
     const now = Date.now()
-    
+
     if (!this.rateLimiters.has(endpointId)) {
       this.rateLimiters.set(endpointId, new Map())
     }
 
     const endpointLimiters = this.rateLimiters.get(endpointId)!
-    
+
     if (!endpointLimiters.has(sourceIP)) {
       endpointLimiters.set(sourceIP, [])
     }
 
     const requests = endpointLimiters.get(sourceIP)!
-    
+
     // Limpiar requests antiguos
     const oneMinuteAgo = now - 60000
     const oneHourAgo = now - 3600000
-    
+
     const recentRequests = requests.filter(timestamp => timestamp > oneMinuteAgo)
     const hourlyRequests = requests.filter(timestamp => timestamp > oneHourAgo)
 
@@ -607,7 +607,7 @@ class WebhookManager {
 
     // Soportar diferentes formatos de firma
     const cleanSignature = signature.replace(/^(sha256=|sha1=)/, '')
-    
+
     return crypto.timingSafeEqual(
       Buffer.from(expectedSignature, 'hex'),
       Buffer.from(cleanSignature, 'hex')
@@ -624,7 +624,7 @@ class WebhookManager {
   private passesFilters(payload: Record<string, unknown>, filters: WebhookFilter[]): boolean {
     return filters.every(filter => {
       const value = this.getNestedValue(payload, filter.field)
-      
+
       switch (filter.operator) {
         case 'exists':
           return value !== undefined && value !== null
@@ -720,7 +720,7 @@ class WebhookManager {
   private compareValues(a: unknown, b: unknown, caseSensitive: boolean): number {
     const strA = String(a)
     const strB = String(b)
-    
+
     if (caseSensitive) {
       return strA.localeCompare(strB)
     } else {
@@ -747,10 +747,10 @@ class WebhookManager {
     }
   }
 
-  private async handleWebhookEvent(event: string, payload: Record<string, unknown>, webhook: IncomingWebhook): Promise<void> {
+  private async handleWebhookEvent(event: string, payload: Record<string, unknown>, _webhook: IncomingWebhook): Promise<void> {
     // Implementar lógica específica según el tipo de evento
     console.log(`Handling webhook event: ${event}`, payload)
-    
+
     // Ejemplo: notificar a suscriptores
     await this.notifySubscribers(event, payload)
   }
@@ -787,7 +787,7 @@ class WebhookManager {
       if (this.isProcessing || this.processingQueue.length === 0) return
 
       this.isProcessing = true
-      
+
       try {
         const webhook = this.processingQueue.shift()
         if (webhook) {
@@ -804,7 +804,7 @@ class WebhookManager {
   private startDeliveryLoop(): void {
     setInterval(async () => {
       const now = new Date()
-      const readyDeliveries = this.deliveryQueue.filter(d => 
+      const readyDeliveries = this.deliveryQueue.filter(d =>
         d.status === 'pending' && (!d.nextAttemptAt || d.nextAttemptAt <= now)
       )
 

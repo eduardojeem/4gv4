@@ -4,6 +4,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { logger } from '@/lib/logger'
 import { createClient } from '@/lib/supabase/server'
 import { normalizeOrder } from '@/lib/orders/helpers'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 const updateOrderSchema = z.object({
   payment_method: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).optional(),
@@ -25,7 +26,7 @@ async function getRouteId(routeContext: unknown) {
   return resolved?.id
 }
 
-export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (_request, { organization }, routeContext) => {
+export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (_request, { organization }, routeContext) => {
   try {
     const id = await getRouteId(routeContext)
     if (!id) return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 })
@@ -48,20 +49,31 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
   }
 })
 
-export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request, { organization }, routeContext) => {
+export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage', module: 'orders' }, async (request, { organization }, routeContext) => {
   try {
     const id = await getRouteId(routeContext)
     if (!id) return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 })
 
     const validation = updateOrderSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
+    }
+
+    if (validation.data.fulfillment_type === 'DELIVERY') {
+      const { effectiveModules } = await getOrganizationPlanInfo(organization.id)
+      if (!effectiveModules.includes('delivery')) {
+        return NextResponse.json({
+          success: false,
+          error: 'Las entregas están desactivadas para esta organización.',
+          code: 'DELIVERY_MODULE_DISABLED',
+        }, { status: 403 })
+      }
     }
 
     const supabase = await createClient()
     const { data: current, error: currentError } = await supabase
       .from('customer_orders')
-      .select('subtotal, shipping_cost, discount_amount')
+      .select('subtotal, shipping_cost, discount_amount, status, payment_status')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -70,6 +82,14 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
     if (!current) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 })
 
     const updates = validation.data
+    const changesMoney = 'shipping_cost' in updates || 'discount_amount' in updates
+    if (changesMoney && (current.payment_status !== 'PENDING' || ['DELIVERED', 'CANCELLED'].includes(String(current.status)))) {
+      return NextResponse.json({
+        success: false,
+        code: 'ORDER_FINANCIAL_EDIT_LOCKED',
+        error: 'No se pueden modificar importes después del pago, entrega o cancelación. Usá una corrección auditable.',
+      }, { status: 409 })
+    }
     const subtotal = Number(current.subtotal || 0)
 
     // Only recompute total when shipping or discount are explicitly changed
@@ -94,9 +114,8 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
 
     if (error) throw error
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('Orders API update error', { error })
-    const msg = error?.message || 'No se pudo actualizar el pedido.'
-    return NextResponse.json({ success: false, error: msg, details: error }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'No se pudo actualizar el pedido.' }, { status: 500 })
   }
 })

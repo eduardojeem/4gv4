@@ -1,9 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Plus, Package, Building2, Users, ChevronDown, Search, X } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Package, Building2, Users, ChevronDown, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -29,11 +28,14 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useCatalogSync } from '@/hooks/use-catalog-sync'
 import { CategoryModal } from './category-modal'
-import { BrandModal } from './brands/BrandModal'
+import { BrandModal, type BrandModalBrand } from './brands/BrandModal'
 import { SupplierModal } from './supplier-modal'
 import { Category, Brand, ModalMode } from '@/lib/types/catalog'
 import { Supplier } from '@/lib/types/supplier'
 import { UISupplier } from '@/lib/types/supplier-ui'
+import type { Database } from '@/lib/supabase/types'
+
+type BrandInsert = Database['public']['Tables']['brands']['Insert'] & { global_brand_id?: string | null }
 
 interface IntegratedCatalogSelectorProps {
   // Valores seleccionados
@@ -41,12 +43,12 @@ interface IntegratedCatalogSelectorProps {
   selectedSubcategory?: string
   selectedBrand?: string
   selectedSupplier?: string
-  
+
   // Callbacks para cambios
   onCategoryChange?: (categoryId: string, subcategory?: string) => void
   onBrandChange?: (brandId: string) => void
   onSupplierChange?: (supplierId: string) => void
-  
+
   // Configuración
   showQuickAdd?: boolean
   compact?: boolean
@@ -119,7 +121,7 @@ export function IntegratedCatalogSelector({
     onCategoryChange?.(category.id)
   }
 
-  const handleBrandSave = async (brandData: any) => {
+  const handleBrandSave = async (brandData: BrandInsert) => {
     try {
       // Map back to our local type if needed, or just add it
       const newBrand: Brand = {
@@ -138,17 +140,18 @@ export function IntegratedCatalogSelector({
       setBrandModal({ isOpen: false, mode: 'add' })
       onBrandChange?.(newBrand.id)
       return { success: true }
-    } catch (e) {
+    } catch (_e) {
       return { success: false, error: 'Error al guardar localmente' }
     }
   }
 
   const handleSupplierSave = (supplierData: Partial<UISupplier>) => {
     // Create a complete Supplier object with defaults for missing required fields
+    const contactPerson = 'contact_person' in supplierData ? String((supplierData as { contact_person?: unknown }).contact_person || '') : ''
     const newSupplier: Supplier = {
       id: crypto.randomUUID(),
       name: supplierData.name || '',
-      contact_name: supplierData.contact_name || (supplierData as any).contact_person || '',
+      contact_name: supplierData.contact_name || contactPerson || '',
       email: supplierData.email || '',
       phone: supplierData.phone || '',
       address: supplierData.address || '',
@@ -159,47 +162,47 @@ export function IntegratedCatalogSelector({
       status: supplierData.status || 'active',
       rating: supplierData.rating || 0,
       notes: supplierData.notes || '',
-      
+
       // Default values for required fields not in UISupplier or not provided
       industry: 'Unspecified',
       company_size: 'small',
       postal_code: supplierData.postal_code,
-      
+
       reliability_score: 100,
       quality_score: 100,
       delivery_score: 100,
-      
+
       payment_terms: 'Net 30',
       currency: 'USD',
-      
+
       lead_time_days: 7,
       minimum_order_amount: 0,
-      
+
       products_count: 0,
       categories: [],
       specialties: [],
-      
+
       total_orders: 0,
       total_amount: 0,
       avg_order_value: 0,
-      
+
       on_time_delivery_rate: 100,
       defect_rate: 0,
       response_time_hours: 24,
-      
+
       preferred_contact_method: 'email',
       communication_language: 'Spanish',
       time_zone: 'UTC',
-      
+
       certifications: [],
       compliance_status: 'compliant',
       tags: [],
-      
+
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       created_by: 'system',
       last_modified_by: 'system',
-      
+
       sync_status: 'synced',
       risk_level: 'low',
       risk_factors: [],
@@ -322,7 +325,7 @@ export function IntegratedCatalogSelector({
               </Command>
             </PopoverContent>
           </Popover>
-          
+
           {showQuickAdd && (
             <Button
               variant="outline"
@@ -405,7 +408,7 @@ export function IntegratedCatalogSelector({
               </Command>
             </PopoverContent>
           </Popover>
-          
+
           {showQuickAdd && (
             <Button
               variant="outline"
@@ -468,7 +471,7 @@ export function IntegratedCatalogSelector({
               </Command>
             </PopoverContent>
           </Popover>
-          
+
           {showQuickAdd && (
             <Button
               variant="outline"
@@ -492,8 +495,8 @@ export function IntegratedCatalogSelector({
                 <Package className="w-3 h-3" />
                 {selectedCategoryName}
                 {selectedSubcategory && ` > ${selectedSubcategory}`}
-                <X 
-                  className="w-3 h-3 cursor-pointer hover:text-red-500" 
+                <X
+                  className="w-3 h-3 cursor-pointer hover:text-red-500"
                   onClick={() => onCategoryChange?.('')}
                 />
               </Badge>
@@ -502,8 +505,8 @@ export function IntegratedCatalogSelector({
               <Badge variant="secondary" className="flex items-center gap-1">
                 <Building2 className="w-3 h-3" />
                 {selectedBrandName}
-                <X 
-                  className="w-3 h-3 cursor-pointer hover:text-red-500" 
+                <X
+                  className="w-3 h-3 cursor-pointer hover:text-red-500"
                   onClick={() => onBrandChange?.('')}
                 />
               </Badge>
@@ -512,8 +515,8 @@ export function IntegratedCatalogSelector({
               <Badge variant="secondary" className="flex items-center gap-1">
                 <Users className="w-3 h-3" />
                 {selectedSupplierName}
-                <X 
-                  className="w-3 h-3 cursor-pointer hover:text-red-500" 
+                <X
+                  className="w-3 h-3 cursor-pointer hover:text-red-500"
                   onClick={() => onSupplierChange?.('')}
                 />
               </Badge>
@@ -534,7 +537,7 @@ export function IntegratedCatalogSelector({
       <BrandModal
         isOpen={brandModal.isOpen}
         onClose={() => setBrandModal({ isOpen: false, mode: 'add' })}
-        brand={brands.find(b => b.id === selectedBrand) as any}
+        brand={brands.find(b => b.id === selectedBrand) as BrandModalBrand | undefined}
         onSave={handleBrandSave}
       />
 

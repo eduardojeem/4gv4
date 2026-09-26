@@ -29,6 +29,22 @@ const categoryShowcase = readFileSync(
   resolve(workspace, 'src/components/public/inicio/CategoryShowcase.tsx'),
   'utf8'
 )
+const heroSection = readFileSync(
+  resolve(workspace, 'src/components/public/inicio/HeroSection.tsx'),
+  'utf8'
+)
+const featuredProducts = readFileSync(
+  resolve(workspace, 'src/components/public/inicio/FeaturedProducts.tsx'),
+  'utf8'
+)
+const organizationReviews = readFileSync(
+  resolve(workspace, 'src/components/public/inicio/OrganizationReviews.tsx'),
+  'utf8'
+)
+const productCard = readFileSync(
+  resolve(workspace, 'src/components/public/ProductCard.tsx'),
+  'utf8'
+)
 const servicesPage = readFileSync(
   resolve(workspace, 'src/app/(public)/servicios/ServicesPageClient.tsx'),
   'utf8'
@@ -77,7 +93,7 @@ describe('public storefront hardening', () => {
 
   it('only accepts a tenant slug as the legacy public organization target', () => {
     expect(normalizeDefaultPublicOrgSlug('4g-celulares')).toBe('4g-celulares')
-    expect(normalizeDefaultPublicOrgSlug('www.servix360.org')).toBeNull()
+    expect(normalizeDefaultPublicOrgSlug('www.example.com')).toBeNull()
     expect(normalizeDefaultPublicOrgSlug('')).toBeNull()
   })
 
@@ -94,12 +110,40 @@ describe('public storefront hardening', () => {
 
   it('keeps one main landmark and hides the closed mobile menu from assistive technology', () => {
     expect(publicLayout).not.toContain('<main id="main-content"')
-    expect(publicHeader).toContain('inert={!mobileMenuOpen}')
-    expect(publicHeader).toContain('aria-hidden={!mobileMenuOpen}')
+    // El panel dejo de estar siempre montado con `inert`: ahora se renderiza
+    // solo cuando el menu esta abierto, asi que cerrado no existe en el DOM
+    // para nadie. Es una garantia mas fuerte que la anterior.
+    expect(publicHeader).toContain('{mobileMenuOpen && (')
+    expect(publicHeader).toContain('id="public-mobile-menu"')
+    // Sin el panel siempre montado, estos atributos quedarian fijos en false.
+    expect(publicHeader).not.toContain('inert={!mobileMenuOpen}')
+    expect(publicHeader).not.toContain('aria-hidden={!mobileMenuOpen}')
   })
 
   it('keeps the category skeleton stable through the first client render', () => {
     expect(categoryShowcase).toContain('if (!mounted || isLoading)')
+  })
+
+  it('keeps home product cards readable on narrow screens', () => {
+    // Dos columnas en movil es deliberado (estandar en comercio movil y muestra
+    // el doble de productos por pantalla). Lo que hace falta cuidar es que la
+    // tarjeta aguante ~138px de ancho a 320px sin desbordarse.
+    expect(featuredProducts).toContain('grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4')
+    expect(productCard).toContain('line-clamp-2')
+    expect(productCard).toContain('truncate')
+  })
+
+  it('keeps the duplicated hero panel content out of the mobile viewport', () => {
+    // La tarjeta comercial se muestra en movil, pero sin la identidad de la
+    // tienda (ya esta en el header) ni los accesos rapidos (repiten los CTA del
+    // hero): en movil solo quedan las estadisticas y el horario.
+    expect(heroSection).toContain('hidden lg:flex items-center gap-3.5')
+    expect(heroSection).toContain('hidden lg:block space-y-2')
+  })
+
+  it('keeps cached reviews stable during hydration', () => {
+    expect(organizationReviews).toContain('const mounted = useSyncExternalStore(')
+    expect(organizationReviews).toContain('const hydratedData = mounted ? data : undefined')
   })
 
   it('prefixes internal service links with the active tenant', () => {

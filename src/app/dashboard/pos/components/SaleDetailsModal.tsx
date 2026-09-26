@@ -14,6 +14,62 @@ import { createReceiptData, printReceipt, CompanyInfo } from '@/lib/receipt-util
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { config } from '@/lib/config'
 import { CreateAfterSalesCaseDialog } from '@/components/dashboard/after-sales/CreateAfterSalesCaseDialog'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
+
+export interface SaleDetailItem {
+  id: string
+  product_id?: string
+  product_name?: string
+  products?: { name?: string; sku?: string } | null
+  sku?: string
+  quantity: number
+  price?: number
+  unit_price?: number
+  discount?: number
+  subtotal?: number
+  total?: number
+  is_service?: boolean
+}
+
+export interface SaleDetailPayment {
+  id: string
+  method: string
+  amount: number
+  reference?: string
+  card_last4?: string
+  created_at?: string
+}
+
+export interface SaleDetailRecord {
+  id: string
+  sale_number?: string
+  created_at: string
+  customer_id?: string | null
+  customer_name?: string | null
+  cashier_id?: string | null
+  total_amount?: number
+  total?: number
+  subtotal?: number
+  tax_amount?: number
+  tax?: number
+  discount_amount?: number
+  discount?: number
+  change_amount?: number
+  payment_method?: string
+  payment_status?: string
+  notes?: string
+  sale_items?: SaleDetailItem[]
+  items?: SaleDetailItem[]
+  payments?: SaleDetailPayment[]
+}
+
+function toReceiptPaymentMethod(method?: string): 'cash' | 'card' | 'transfer' | 'credit' | 'store_credit' {
+  if (method === 'card' || method === 'tarjeta') return 'card'
+  if (method === 'transfer' || method === 'transferencia' || method === 'sipap' || method === 'qr') return 'transfer'
+  if (method === 'credit' || method === 'credito') return 'credit'
+  if (method === 'store_credit') return 'store_credit'
+  return 'cash'
+}
 
 interface SaleDetailsModalProps {
   isOpen: boolean
@@ -25,7 +81,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
   const { getSale } = useSales()
   const { settings } = useSharedSettings()
   const [loading, setLoading] = useState(false)
-  const [sale, setSale] = useState<any>(null)
+  const [sale, setSale] = useState<SaleDetailRecord | null>(null)
   const [afterSalesOpen, setAfterSalesOpen] = useState(false)
 
   const handlePrintReceipt = () => {
@@ -39,19 +95,19 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
         ruc: settings.companyRuc
     }
 
-    const items = (sale.sale_items || sale.items || []).map((item: any) => ({
+    const items = (sale.sale_items || sale.items || []).map((item: SaleDetailItem) => ({
         id: item.id,
         name: item.products?.name || item.product_name || 'Producto',
         sku: item.products?.sku || item.sku || 'N/A',
-        price: Number(item.price || item.unit_price || 0),
+        price: Number(item.price ?? item.unit_price ?? 0),
         quantity: Number(item.quantity || 1),
         discount: Number(item.discount || 0),
         isService: item.is_service
     }))
 
-    const payments = (sale.payments || []).map((p: any) => ({
+    const payments: Array<import('@/lib/receipt-utils').PaymentSplit> = (sale.payments || []).map((p: SaleDetailPayment) => ({
         id: p.id,
-        method: p.method,
+        method: toReceiptPaymentMethod(p.method),
         amount: Number(p.amount),
         reference: p.reference
     }))
@@ -60,8 +116,8 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
     if (payments.length === 0 && sale.payment_method) {
         payments.push({
             id: 'default',
-            method: sale.payment_method,
-            amount: Number(sale.total_amount || sale.total),
+            method: toReceiptPaymentMethod(sale.payment_method),
+            amount: Number(sale.total_amount ?? sale.total ?? 0),
         })
     }
 
@@ -178,7 +234,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                       <CreditCard className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Pago</span>
                     </div>
-                    <p className="text-lg font-bold capitalize">{sale.payment_method}</p>
+                    <p className="text-lg font-bold">{paymentMethodLabel(sale.payment_method)}</p>
                     <Badge variant={sale.payment_status === 'paid' ? 'default' : 'secondary'} className="mt-1">
                       {sale.payment_status === 'paid' ? 'Pagada' : sale.payment_status}
                     </Badge>
@@ -230,7 +286,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                 <CardContent>
                   <ScrollArea className="h-[260px] w-full pr-4">
                     <div className="space-y-3 text-sm">
-                      {(sale.sale_items || sale.items || []).map((item: any) => (
+                      {(sale.sale_items || sale.items || []).map((item: SaleDetailItem) => (
                         <div key={item.id} className="flex justify-between border-b pb-2 last:border-0 last:pb-0">
                           <div>
                             <p className="font-medium">{item.products?.name || item.product_name}</p>
@@ -265,7 +321,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2 text-sm">
-                      {sale.payments.map((p: any) => (
+                      {sale.payments.map((p: SaleDetailPayment) => (
                         <div key={p.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                           <div className="capitalize">
                             {p.method}
@@ -276,7 +332,7 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                           <div className="text-right">
                             <div className="font-medium">{formatCurrency(p.amount)}</div>
                             <div className="text-xs text-muted-foreground">
-                              {new Date(p.created_at).toLocaleString('es-PY')}
+                              {p.created_at ? new Date(p.created_at).toLocaleString('es-PY') : '-'}
                             </div>
                           </div>
                         </div>

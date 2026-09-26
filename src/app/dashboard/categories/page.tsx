@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from '@/components/ui/motion'
 import {
   Plus, Download, LayoutGrid, List, Trash2,
   CheckCircle, XCircle, RefreshCw, FolderTree,
   MoreHorizontal, AlertTriangle, FolderOpen, Layers,
-  Tag, Search, SlidersHorizontal, Info, X
+  Tag, Search, SlidersHorizontal, X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,8 @@ import { computeCategoryStats } from '@/hooks/use-category-stats'
 import { exportCategories } from '@/lib/utils/export-categories'
 
 // Components
+import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
+import { CATEGORIES_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { CategoryGrid } from '@/components/categories/CategoryCard'
 import { CategoryListView } from '@/components/categories/CategoryListView'
 import { CategoryTreeViewImproved } from '@/components/categories/CategoryTreeViewImproved'
@@ -76,7 +78,7 @@ export default function CategoriesPage() {
   const [initialParentId, setInitialParentId] = useState<string | null>(null)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [searchValue, setSearchValue] = useState('')
-  const [showGuide, setShowGuide] = useState(true)
+  const [_showGuide, _setShowGuide] = useState(true)
 
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean; id: string | null; isBulk: boolean
@@ -96,7 +98,7 @@ export default function CategoriesPage() {
   const subCount = useMemo(() => categories.filter(c => !!c.parent_id).length, [categories])
   const withProducts = useMemo(
     () =>
-      categories.filter((c) => (((c as any).products_count ?? c.stats?.product_count ?? 0) > 0)).length,
+      categories.filter((c) => ((c.products_count ?? c.stats?.product_count ?? 0) > 0)).length,
     [categories]
   )
 
@@ -145,7 +147,11 @@ export default function CategoriesPage() {
       let successCount = 0, failCount = 0
       for (const id of selectedIds) {
         const res = await deleteCategory(id)
-        res.success ? successCount++ : failCount++
+        if (res.success) {
+          successCount += 1
+        } else {
+          failCount += 1
+        }
       }
       if (successCount > 0) { toast.success(`${successCount} categorías eliminadas`); setSelectedIds([]) }
       if (failCount > 0) toast.error(`No se pudieron eliminar ${failCount} categorías`)
@@ -175,13 +181,17 @@ export default function CategoriesPage() {
     let successCount = 0, failCount = 0
     for (const id of selectedIds) {
       const res = await updateCategory(id, { is_active: active })
-      res.success ? successCount++ : failCount++
+      if (res.success) {
+        successCount += 1
+      } else {
+        failCount += 1
+      }
     }
     if (successCount > 0) { toast.success(`${successCount} categorías actualizadas`); setSelectedIds([]) }
     if (failCount > 0) toast.error(`No se pudieron actualizar ${failCount} categorías`)
   }
 
-  const handleModalSubmit = async (data: any) => {
+  const handleModalSubmit = async (data: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => {
     if ((editingCategory && !canUpdate) || (!editingCategory && !canCreate)) return Promise.reject()
     if (editingCategory) {
       const res = await updateCategory(editingCategory.id, data)
@@ -218,140 +228,128 @@ export default function CategoriesPage() {
     <RouteGuard route="/dashboard/categories">
       <div className="space-y-6 pb-8">
 
-        {/* ─── HEADER ─── */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700">
-          <div className="absolute inset-0 bg-black/10" />
-          {/* Decorative orbs */}
-          <div className="absolute -top-12 -right-12 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-purple-300/20 blur-2xl" />
+        {/* ─── HEADER EJECUTIVO ─── */}
+        <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card to-muted/30 p-6 sm:p-8 shadow-xs">
+          {/* Ambient lighting glow */}
+          <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl dark:bg-indigo-500/15" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-purple-500/10 blur-3xl dark:bg-purple-500/15" />
 
-          <div className="relative z-10 p-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-start sm:items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/20">
+                <FolderOpen className="h-6 w-6" />
+              </div>
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="rounded-xl bg-white/15 p-2.5">
-                    <FolderOpen className="h-7 w-7 text-white" />
-                  </div>
-                  <h1 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
                     Categorías
                   </h1>
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold">
+                    Catálogo de Productos
+                  </Badge>
                 </div>
-                <p className="text-white/80 text-sm ml-[52px]">
-                  Organizá y administrá el catálogo de productos
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  Estructurá el árbol de categorías, subniveles y visibilidad para la tienda y el punto de venta.
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" className="bg-white/15 border-white/20 text-white hover:bg-white/25 gap-2 border">
-                      <Download className="h-4 w-4" />
-                      Exportar
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleExport('csv')}>CSV</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport('json')}>JSON</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {canCreate && (
-                  <Button
-                    onClick={openCreateModal}
-                    className="bg-white text-purple-700 hover:bg-white/90 gap-2 font-semibold shadow-lg"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Nueva Categoría
-                  </Button>
-                )}
               </div>
             </div>
 
-            {/* Stats cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { icon: Tag, label: 'Total', value: stats.total_categories, color: 'text-white' },
-                { icon: CheckCircle, label: 'Activas', value: stats.active_categories, color: 'text-green-300' },
-                { icon: Layers, label: 'Subcategorías', value: subCount, color: 'text-blue-300' },
-                { icon: FolderOpen, label: 'Con productos', value: withProducts, color: 'text-amber-300' },
-              ].map((stat, i) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 * i }}
-                  className="group rounded-xl bg-white/10 backdrop-blur-sm border border-white/15 p-4 hover:bg-white/15 transition-all duration-200"
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <SectionGuideButton guide={CATEGORIES_GUIDE} />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl text-xs font-semibold border-border/80 hover:bg-muted">
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Exportar</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExport('csv')}>Exportar a CSV</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('json')}>Exportar a JSON</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {canCreate && (
+                <Button
+                  onClick={openCreateModal}
+                  size="sm"
+                  className="h-9 gap-1.5 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm shadow-primary/20"
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-white/60 mb-1">{stat.label}</p>
-                      <p className="text-2xl font-bold text-white">
-                        {loading && categories.length === 0 ? '—' : stat.value}
-                      </p>
-                    </div>
-                    <stat.icon className={cn("h-5 w-5 opacity-80", stat.color)} />
-                  </div>
-                </motion.div>
-              ))}
+                  <Plus className="h-4 w-4" />
+                  Nueva Categoría
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Guía de funcionamiento de categorías */}
-        {showGuide && (
-          <Card className="relative bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="absolute right-3 top-3 z-10 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-white/10 transition-colors"
-              title="Ocultar guía permanentemente durante esta sesión"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <details className="group">
-              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3 pr-10">
-                <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                  <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Categorías?
+        {/* ─── QUICK STATS KPI PANEL (4-Card System) ─── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Card 1: Total */}
+          <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Categorías</p>
+                <div className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1 tabular-nums">
+                  {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : stats.total_categories}
                 </div>
-                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                  <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                  <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-                </div>
-              </summary>
-              <CardContent className="pt-0 pb-5 text-xs">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                      Jerarquía y Árbol
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Estructura tu catálogo creando categorías principales (ej: "Pantallas") y subcategorías (ej: "Pantallas iPhone"). Puedes ver este árbol jerárquico desde la pestaña "Árbol".
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                      Asociación de Productos
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Cada categoría te muestra cuántos artículos del catálogo tiene asociados. Al organizar tus productos con categorías, facilitarás el filtrado rápido en el Punto de Venta.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2">
-                      <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                      Estados de Categoría
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Una categoría inactiva y sus subcategorías quedarán ocultas del menú del POS, previniendo que los cajeros vendan repuestos o productos que no deban estar en oferta.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </details>
+                <p className="text-[11px] text-muted-foreground mt-0.5">En catálogo de tienda</p>
+              </div>
+              <div className="h-11 w-11 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/20">
+                <Tag className="h-5 w-5" />
+              </div>
+            </CardContent>
           </Card>
-        )}
+
+          {/* Card 2: Activas */}
+          <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Activas</p>
+                <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
+                  {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : stats.active_categories}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Visibles en catálogo</p>
+              </div>
+              <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Subcategorías */}
+          <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Subcategorías</p>
+                <div className="text-2xl sm:text-3xl font-extrabold text-purple-600 dark:text-purple-400 mt-1 tabular-nums">
+                  {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : subCount}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Estructura multinivel</p>
+              </div>
+              <div className="h-11 w-11 rounded-2xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+                <Layers className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 4: Con Productos */}
+          <Card className="border-border/70 bg-card shadow-2xs hover:shadow-xs transition-shadow">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Con Productos</p>
+                <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 tabular-nums">
+                  {loading ? <Skeleton className="h-8 w-14 rounded-lg" /> : withProducts}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Con stock / catálogo</p>
+              </div>
+              <div className="h-11 w-11 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
+                <FolderOpen className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {error && (
           <Alert variant="destructive">
@@ -366,13 +364,22 @@ export default function CategoriesPage() {
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
             {/* Search */}
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchValue}
                 onChange={e => setSearchValue(e.target.value)}
-                placeholder="Buscar categorías..."
-                className="pl-9 h-9"
+                placeholder="Buscar categorías por nombre o descripción..."
+                className="pl-9 pr-8 h-10 rounded-xl bg-card border-border/80 text-sm"
               />
+              {searchValue && (
+                <button
+                  type="button"
+                  onClick={() => setSearchValue('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
             {/* Right controls */}
@@ -380,7 +387,7 @@ export default function CategoriesPage() {
               {selectedIds.length > 0 && canBulkSelect && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1.5">
+                    <Button variant="outline" size="sm" className="h-10 gap-1.5 rounded-xl border-border/80 text-xs font-semibold">
                       <MoreHorizontal className="h-4 w-4" />
                       {selectedIds.length} seleccionados
                     </Button>
@@ -410,53 +417,54 @@ export default function CategoriesPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => fetchCategories()}
-                className="gap-1.5"
+                className="h-10 px-3 rounded-xl border-border/80 text-xs font-semibold gap-1.5"
                 title="Actualizar"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                <span className="hidden sm:inline">Actualizar</span>
               </Button>
             </div>
           </div>
 
           {/* Quick Filters */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             {quickFilterConfig.map(f => (
               <button
                 key={f.id}
                 onClick={() => setQuickFilter(f.id)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all duration-150",
+                  "flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-150 border shrink-0",
                   quickFilter === f.id
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                    : "bg-card hover:bg-muted text-muted-foreground border-border/80"
                 )}
               >
                 {f.label}
                 <span className={cn(
-                  "rounded-full px-1.5 py-0 text-[10px] font-semibold",
-                  quickFilter === f.id ? "bg-white/25" : "bg-background/60"
+                  "rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums",
+                  quickFilter === f.id ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
                 )}>
                   {f.count}
                 </span>
               </button>
             ))}
-            <span className="ml-auto text-xs text-muted-foreground">
+            <span className="ml-auto text-xs text-muted-foreground font-medium shrink-0">
               {filteredCategories.length} resultado{filteredCategories.length !== 1 ? 's' : ''}
             </span>
           </div>
         </div>
 
         {/* ─── VIEWS ─── */}
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="space-y-4">
-          <TabsList className="h-9">
-            <TabsTrigger value="grid" className="gap-1.5 text-xs">
+        <Tabs value={viewMode} onValueChange={(v) => { if (v === 'grid' || v === 'list' || v === 'tree') setViewMode(v) }} className="space-y-4">
+          <TabsList className="h-10 bg-muted/60 p-1 rounded-xl border border-border/60">
+            <TabsTrigger value="grid" className="gap-1.5 text-xs rounded-lg font-semibold data-[state=active]:bg-card data-[state=active]:shadow-xs">
               <LayoutGrid className="h-3.5 w-3.5" /> Grid
             </TabsTrigger>
-            <TabsTrigger value="list" className="gap-1.5 text-xs">
+            <TabsTrigger value="list" className="gap-1.5 text-xs rounded-lg font-semibold data-[state=active]:bg-card data-[state=active]:shadow-xs">
               <List className="h-3.5 w-3.5" /> Lista
             </TabsTrigger>
-            <TabsTrigger value="tree" className="gap-1.5 text-xs">
+            <TabsTrigger value="tree" className="gap-1.5 text-xs rounded-lg font-semibold data-[state=active]:bg-card data-[state=active]:shadow-xs">
               <FolderTree className="h-3.5 w-3.5" /> Árbol
             </TabsTrigger>
           </TabsList>

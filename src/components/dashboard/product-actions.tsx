@@ -1,44 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Package, 
-  Upload, 
-  Download, 
-  Copy, 
-  Star,
-  Eye,
-  MoreHorizontal,
-  AlertTriangle,
-  Check,
-  X,
-  Settings,
-  Filter,
-  RefreshCw,
-  FileText,
-  BarChart3
+import {
+  Plus,
+  Edit,
+  Trash2, Upload,
+  Download,
+  Copy,
+  Star, MoreHorizontal,
+  AlertTriangle, X, RefreshCw, BarChart3
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +35,8 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { OptimizedButton, ConfirmationButton } from '@/components/ui/optimized-button'
 import { useOptimizedNotifications } from '@/hooks/use-optimized-notifications'
-import { useContextualNotifications, NotificationContext, ActionType } from '@/lib/contextual-notifications'
+import { useContextualNotifications, ActionType } from '@/lib/contextual-notifications'
+import { ErrorClassifier } from '@/lib/error-handling'
 import type { Product } from '@/lib/types/product'
 
 interface ProductActionsProps {
@@ -85,7 +66,7 @@ export function ProductActions({
   onDeleteProducts,
   onDuplicateProduct,
   onToggleFeatured,
-  onAdjustStock,
+  onAdjustStock: _onAdjustStock,
   onExportProducts,
   onImportProducts,
   onRefresh,
@@ -93,7 +74,7 @@ export function ProductActions({
 }: ProductActionsProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
-  const notifications = useOptimizedNotifications()
+  void (useOptimizedNotifications());
   const { notifyProductAction, notifyImportExport } = useContextualNotifications()
 
   const hasSelectedProducts = selectedProducts.length > 0
@@ -116,7 +97,7 @@ export function ProductActions({
       return { success: true, data: newProduct }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.CREATE, 'error', { error: error as any })
+      notifyProductAction(ActionType.CREATE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al abrir el formulario')
     }
   }
@@ -127,11 +108,11 @@ export function ProductActions({
       await simulateAsyncOperation(500)
       onEditProduct?.(product)
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.UPDATE, 'success', { data: product })
+      notifyProductAction(ActionType.UPDATE, 'success', { data: { ...product } })
       return { product: product.name }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.UPDATE, 'error', { error: error as any })
+      notifyProductAction(ActionType.UPDATE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al abrir el editor')
     }
   }
@@ -148,13 +129,13 @@ export function ProductActions({
         await simulateAsyncOperation(1200)
         onDeleteProduct?.(productToDelete.id)
         toast.dismiss(loadingToast)
-        notifyProductAction(ActionType.DELETE, 'success', { data: productToDelete })
+        notifyProductAction(ActionType.DELETE, 'success', { data: { ...productToDelete } })
         setProductToDelete(null)
         setIsDeleteDialogOpen(false)
         return { productName: productToDelete.name }
       } catch (error) {
         toast.dismiss(loadingToast)
-        notifyProductAction(ActionType.DELETE, 'error', { error: error as any })
+        notifyProductAction(ActionType.DELETE, 'error', { error: ErrorClassifier.classify(error) })
         throw new Error('Error al eliminar el producto')
       }
     }
@@ -171,7 +152,7 @@ export function ProductActions({
         return { count: selectedProducts.length }
       } catch (error) {
         toast.dismiss(loadingToast)
-        notifyProductAction(ActionType.DELETE, 'error', { error: error as any })
+        notifyProductAction(ActionType.DELETE, 'error', { error: ErrorClassifier.classify(error) })
         throw new Error('Error al eliminar los productos seleccionados')
       }
     }
@@ -183,11 +164,11 @@ export function ProductActions({
       await simulateAsyncOperation(1000)
       onDuplicateProduct?.(product)
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.DUPLICATE, 'success', { data: product })
+      notifyProductAction(ActionType.DUPLICATE, 'success', { data: { ...product } })
       return { productName: product.name }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.DUPLICATE, 'error', { error: error as any })
+      notifyProductAction(ActionType.DUPLICATE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al duplicar el producto')
     }
   }
@@ -198,14 +179,14 @@ export function ProductActions({
       await simulateAsyncOperation(600)
       onToggleFeatured?.(product.id)
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.TOGGLE, 'success', { data: product })
-      return { 
-        productName: product.name, 
-        action: product.featured ? 'removido de' : 'marcado como' 
+      notifyProductAction(ActionType.TOGGLE, 'success', { data: { ...product } })
+      return {
+        productName: product.name,
+        action: product.featured ? 'removido de' : 'marcado como'
       }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.TOGGLE, 'error', { error: error as any })
+      notifyProductAction(ActionType.TOGGLE, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al cambiar el estado destacado')
     }
   }
@@ -220,7 +201,7 @@ export function ProductActions({
       return { count: products.length }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyImportExport(ActionType.EXPORT, 'error', { error: error as any })
+      notifyImportExport(ActionType.EXPORT, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al exportar los productos')
     }
   }
@@ -235,7 +216,7 @@ export function ProductActions({
       return { success: true }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyImportExport(ActionType.IMPORT, 'error', { error: error as any })
+      notifyImportExport(ActionType.IMPORT, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al abrir el importador')
     }
   }
@@ -250,7 +231,7 @@ export function ProductActions({
       return { count: products.length }
     } catch (error) {
       toast.dismiss(loadingToast)
-      notifyProductAction(ActionType.REFRESH, 'error', { error: error as any })
+      notifyProductAction(ActionType.REFRESH, 'error', { error: ErrorClassifier.classify(error) })
       throw new Error('Error al actualizar los datos')
     }
   }
@@ -282,7 +263,7 @@ export function ProductActions({
             <Plus className="h-4 w-4 mr-2" />
             Agregar Producto
           </OptimizedButton>
-          
+
           <OptimizedButton
             buttonId="import-products"
             onAsyncClick={handleImport}
@@ -297,7 +278,7 @@ export function ProductActions({
             <Upload className="h-4 w-4 mr-2" />
             Importar
           </OptimizedButton>
-          
+
           <OptimizedButton
             buttonId="export-products"
             onAsyncClick={handleExport}
@@ -312,7 +293,7 @@ export function ProductActions({
             <Download className="h-4 w-4 mr-2" />
             Exportar
           </OptimizedButton>
-          
+
           <OptimizedButton
             buttonId="refresh-products"
             onAsyncClick={handleRefresh}
@@ -335,7 +316,7 @@ export function ProductActions({
             <Badge variant="secondary" className="px-3 py-1">
               {selectedCount} seleccionado{selectedCount > 1 ? 's' : ''}
             </Badge>
-            
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm" className="gap-2">
@@ -466,7 +447,7 @@ export function ProductActions({
             >
               <Edit className="h-4 w-4" />
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -475,7 +456,7 @@ export function ProductActions({
             >
               <Copy className="h-4 w-4" />
             </Button>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -485,7 +466,7 @@ export function ProductActions({
             >
               <Star className={cn("h-4 w-4", product.featured && "fill-current")} />
             </Button>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -507,7 +488,7 @@ export function ProductActions({
                   {product.featured ? 'Quitar destacado' : 'Marcar destacado'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => handleDeleteProduct(product)}
                   className="text-red-600"
                 >
@@ -526,13 +507,13 @@ export function ProductActions({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que quieres eliminar "{productToDelete?.name}"?
+              ¿Estás seguro de que quieres eliminar &quot;{productToDelete?.name}&quot;?
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDeleteProduct}
               className="bg-red-600 hover:bg-red-700"
             >
@@ -548,12 +529,12 @@ export function ProductActions({
 export default ProductActions
 
 // Export individual action components for use in other parts of the app
-export function ProductRowActions({ 
-  product, 
-  onEdit, 
-  onDelete, 
-  onDuplicate, 
-  onToggleFeatured 
+export function ProductRowActions({
+  product,
+  onEdit,
+  onDelete,
+  onDuplicate,
+  onToggleFeatured
 }: {
   product: Product
   onEdit?: (product: Product) => void
@@ -581,7 +562,7 @@ export function ProductRowActions({
       >
         <Edit className="h-4 w-4" />
       </OptimizedButton>
-      
+
       <OptimizedButton
         buttonId={`duplicate-${product.id}`}
         onAsyncClick={async () => {
@@ -600,13 +581,13 @@ export function ProductRowActions({
       >
         <Copy className="h-4 w-4" />
       </OptimizedButton>
-      
+
       <OptimizedButton
         buttonId={`toggle-featured-${product.id}`}
         onAsyncClick={async () => {
           await new Promise(resolve => setTimeout(resolve, 400))
           onToggleFeatured?.(product)
-          return { 
+          return {
             productName: product.name,
             featured: !product.featured
           }
@@ -615,8 +596,8 @@ export function ProductRowActions({
         size="icon"
         notificationMessages={{
           loading: product.featured ? "Quitando de destacados..." : "Marcando como destacado...",
-          success: (data: { productName: string; featured: boolean }) => data.featured 
-            ? `${data.productName} marcado como destacado` 
+          success: (data: { productName: string; featured: boolean }) => data.featured
+            ? `${data.productName} marcado como destacado`
             : `${data.productName} quitado de destacados`,
           error: "Error al actualizar el estado destacado"
         }}
@@ -625,7 +606,7 @@ export function ProductRowActions({
       >
         <Star className={cn("h-4 w-4", product.featured && "fill-current")} />
       </OptimizedButton>
-      
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon">

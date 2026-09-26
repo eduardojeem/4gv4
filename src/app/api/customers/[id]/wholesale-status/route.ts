@@ -45,7 +45,7 @@ export const GET = withTenantAuth(
       const admin = createAdminSupabase()
       const { data: customer, error } = await admin
         .from('customers')
-        .select('profile_id')
+        .select('profile_id, customer_type, segment')
         .eq('id', id)
         .eq('organization_id', organization.id)
         .maybeSingle()
@@ -53,6 +53,15 @@ export const GET = withTenantAuth(
       if (error) throw error
       if (!customer) {
         return NextResponse.json({ success: false, error: 'Cliente no encontrado.' }, { status: 404 })
+      }
+
+      const isWholesaleByType = (customer.customer_type || '').toLowerCase() === 'wholesale' ||
+        (customer.customer_type || '').toLowerCase() === 'mayorista' ||
+        (customer.segment || '').toLowerCase() === 'wholesale' ||
+        (customer.segment || '').toLowerCase() === 'mayorista'
+
+      if (isWholesaleByType) {
+        return NextResponse.json({ success: true, data: { isWholesale: true, hasAccount: Boolean(customer.profile_id) } })
       }
 
       if (!customer.profile_id) {

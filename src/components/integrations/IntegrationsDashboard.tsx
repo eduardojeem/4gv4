@@ -12,22 +12,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
-import { 
-  CreditCard, 
-  Calculator, 
-  Package, 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  Settings, 
+import {
+  CreditCard,
+  Calculator,
+  Package,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Settings,
   Plus,
   Activity,
   TrendingUp,
-  AlertTriangle,
-  ShoppingCart,
-  Users
+  AlertTriangle
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { usePaymentSystem } from '@/lib/integrations/payment-processors'
@@ -60,12 +57,12 @@ export default function IntegrationsDashboard() {
   const [showConfigDialog, setShowConfigDialog] = React.useState(false)
   const [configType, setConfigType] = React.useState<'payment' | 'accounting' | 'supplier'>('payment')
   
-  const paymentSystem = usePaymentSystem()
-  const accountingSystem = useAccountingSystem()
-  const supplierSystem = useSupplierSystem()
+  void (usePaymentSystem());
+  void (useAccountingSystem());
+  void (useSupplierSystem());
 
   // Mock data para demostración
-  const [integrations, setIntegrations] = React.useState<IntegrationStatus[]>([
+  const [integrations, setIntegrations] = React.useState<IntegrationStatus[]>(() => [
     {
       id: 'stripe',
       name: 'Stripe',
@@ -233,7 +230,7 @@ export default function IntegrationsDashboard() {
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="integration-type">Tipo de Integración</Label>
-                  <Select value={configType} onValueChange={(value: any) => setConfigType(value)}>
+                  <Select value={configType} onValueChange={(value: 'payment' | 'accounting' | 'supplier') => setConfigType(value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

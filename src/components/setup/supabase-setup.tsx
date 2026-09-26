@@ -1,18 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  Database, 
-  Shield, 
-  Users, 
-  CheckCircle, 
-  AlertTriangle, 
-  Copy, 
+import {
+  Database,
+  Shield,
+  Users,
+  CheckCircle,
+  AlertTriangle,
+  Copy,
   ExternalLink,
   Settings,
   Key,
@@ -69,7 +68,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key`
 
 export default function SupabaseSetup() {
-  const [currentStep, setCurrentStep] = useState(0)
+  const [_currentStep, _setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -117,16 +116,16 @@ export default function SupabaseSetup() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {SETUP_STEPS.map((step, index) => {
+            {SETUP_STEPS.map((step, _index) => {
               const Icon = step.icon
               const completed = isStepCompleted(step.id)
-              
+
               return (
                 <div
                   key={step.id}
                   className={`p-4 border rounded-lg transition-colors ${
-                    completed 
-                      ? 'bg-green-50 border-green-200' 
+                    completed
+                      ? 'bg-green-50 border-green-200'
                       : 'bg-gray-50 border-gray-200'
                   }`}
                 >
@@ -259,7 +258,7 @@ export default function SupabaseSetup() {
               </p>
               <Badge variant="outline">Recomendado</Badge>
             </div>
-            
+
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium mb-2">Proveedores OAuth</h4>
               <p className="text-sm text-gray-600 mb-3">
@@ -349,8 +348,8 @@ export default function SupabaseSetup() {
             <div>
               <p className="font-medium">Pasos completados</p>
               <p className="text-sm text-gray-500">
-                {completedSteps.length === SETUP_STEPS.length 
-                  ? '¡Configuración completa!' 
+                {completedSteps.length === SETUP_STEPS.length
+                  ? '¡Configuración completa!'
                   : `${SETUP_STEPS.length - completedSteps.length} pasos restantes`
                 }
               </p>

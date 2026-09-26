@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Cache metadata for 5 minutes
-    response.headers.set('Cache-Control', 'public, max-age=300, s-maxage=600')
+    response.headers.set('Cache-Control', 'no-store')
     return response
   } catch (error) {
     logger.error('Public products meta API error', { error })

@@ -1,22 +1,42 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { useDebounce } from "./use-debounce"
+import { searchCustomers } from '@/lib/customers/search'
+import { paginateCustomers } from '@/lib/customers/pagination'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import {
+  applyCustomerSpend,
+  COMPUTED_SPEND_FIELDS,
+  fetchCustomerSpend,
+} from '@/lib/customers/customer-spend-client'
+import {
+  buildCustomerIdentity,
+  normalizeCustomerStatus,
+  normalizeCustomerType,
+  type CustomerStatus,
+} from '@/lib/customers/customer-contract'
 
 export interface Customer {
   id: string  // UUID from Supabase
   profile_id?: string // Linked user profile ID
   customerCode: string
   name: string
+  first_name?: string | null
+  last_name?: string | null
+  company_name?: string | null
   email: string
   phone: string
+  alternate_phone?: string | null
+  alternate_phone_label?: string | null
   ruc?: string
-  customer_type: "premium" | "empresa" | "regular"
-  status: "active" | "inactive" | "suspended"
+  customer_type: "premium" | "empresa" | "regular" | "wholesale"
+  status: CustomerStatus
   total_purchases: number
   total_repairs: number
   registration_date: string
   created_at?: string  // Agregado para compatibilidad con metrics-service
+  updated_at?: string
   last_visit: string
   last_activity: string
   address: string
@@ -45,6 +65,10 @@ export interface Customer {
   assigned_salesperson: string
   last_purchase_amount: number
   total_spent_this_year: number
+  purchase_spend?: number
+  repair_spend?: number
+  /** true cuando los totales ya salen de las operaciones reales y no de las columnas viejas. */
+  spend_synced?: boolean
   avatar?: string
   repairs_history?: Record<string, unknown>[]
   sales_history?: Record<string, unknown>[]
@@ -68,6 +92,8 @@ export interface CustomerFilters {
   purchases_min: number
   spent_min: number
   loyalty_points_min: number
+  has_debt?: boolean
+  has_credit_limit?: boolean
 }
 
 export interface CustomerState {
@@ -110,18 +136,22 @@ const initialFilters: CustomerFilters = {
  * Maps a raw Supabase row to the Customer interface.
  * Centralized here to avoid duplication in realtime handlers.
  */
-export function mapRawToCustomer(raw: Record<string, any>): Customer {
+export function mapRawToCustomer(rawInput: unknown): Customer {
+  const raw = (rawInput && typeof rawInput === 'object' ? rawInput : {}) as Record<string, unknown>
+  const identity = buildCustomerIdentity(raw)
+  const id = String(raw.id ?? '')
   return {
     ...raw,
-    id: raw.id,
-    profile_id: raw.profile_id,
-    customerCode: raw.customer_code || `CLI-${raw.id?.slice(0, 6)}`,
-    name: raw.name || '',
-    email: raw.email || '',
-    phone: raw.phone || '',
-    ruc: raw.ruc,
-    customer_type: raw.customer_type || 'regular',
-    status: raw.status || 'active',
+    ...identity,
+    id,
+    profile_id: typeof raw.profile_id === 'string' ? raw.profile_id : undefined,
+    customerCode: typeof raw.customer_code === 'string' ? raw.customer_code : `CLI-${id.slice(0, 6)}`,
+    name: identity.name,
+    email: typeof raw.email === 'string' ? raw.email : '',
+    phone: typeof raw.phone === 'string' ? raw.phone : '',
+    ruc: typeof raw.ruc === 'string' ? raw.ruc : undefined,
+    customer_type: normalizeCustomerType(raw.customer_type),
+    status: normalizeCustomerStatus(raw.status),
     total_purchases: raw.total_purchases || 0,
     total_repairs: raw.total_repairs || 0,
     registration_date: raw.created_at,
@@ -146,7 +176,8 @@ export function mapRawToCustomer(raw: Record<string, any>): Customer {
     tags: raw.tags || [],
     whatsapp: raw.whatsapp,
     social_media: raw.social_media,
-    company: raw.company,
+    company: identity.company,
+    company_name: identity.company_name,
     position: raw.position,
     referral_source: raw.referral_source || '',
     discount_percentage: raw.discount_percentage || 0,
@@ -156,6 +187,47 @@ export function mapRawToCustomer(raw: Record<string, any>): Customer {
     total_spent_this_year: raw.total_spent_this_year || 0,
     avatar: raw.avatar,
   } as Customer
+}
+
+/**
+ * Conserva en `next` los totales ya calculados de `prev`.
+ *
+ * Un evento en tiempo real o una edición traen la fila cruda de la tabla, con
+ * `lifetime_value` y compañía desactualizados: reemplazar el cliente entero
+ * volvía a mostrar esos números viejos después de cada cambio.
+ */
+export function keepComputedSpend(next: Customer, prev?: Customer | null): Customer {
+  if (!prev?.spend_synced) return next
+  const kept: Record<string, unknown> = {}
+  for (const field of COMPUTED_SPEND_FIELDS) kept[field] = (prev as unknown as Record<string, unknown>)[field]
+  return { ...next, ...kept } as Customer
+}
+
+/**
+ * Calcula en el servidor lo gastado por esos clientes y lo pone en la lista.
+ * Solo toca los campos calculados, así no pisa una edición que haya llegado
+ * mientras tanto.
+ */
+export async function syncCustomerSpend<S extends { customers: Customer[] }>(
+  setState: React.Dispatch<React.SetStateAction<S>>,
+  customers: Customer[],
+) {
+  if (customers.length === 0) return
+  const spend = await fetchCustomerSpend(customers.map((customer) => customer.id))
+  const enriched = new Map(applyCustomerSpend(customers, spend).map((customer) => [customer.id, customer]))
+
+  setState((prev) => ({
+    ...prev,
+    customers: prev.customers.map((customer) => {
+      const computed = enriched.get(customer.id)
+      return computed ? keepComputedSpend(customer, computed as Customer) : customer
+    }),
+  }))
+}
+
+/** Un cliente recién creado todavía no gastó nada. */
+export function withEmptySpend(customer: Customer): Customer {
+  return applyCustomerSpend([customer], {})[0] as Customer
 }
 
 export function useCustomerState() {
@@ -179,37 +251,94 @@ export function useCustomerState() {
     }
   })
 
-  // Load customers on mount
+  // Load customers on mount with progressive loading
   useEffect(() => {
+    let isMounted = true
+    let spendWarningShown = false
+
+    const enrich = async (list: Customer[]) => {
+      try {
+        if (isMounted) await syncCustomerSpend(setState, list)
+      } catch {
+        if (isMounted && !spendWarningShown) {
+          spendWarningShown = true
+          toast.warning('No se pudieron calcular los totales gastados. Los montos pueden no estar al día.')
+        }
+      }
+    }
+
     const loadCustomers = async () => {
       try {
-        setState(prev => ({ ...prev, loading: true, error: null }))
+        setState(prev => ({ ...prev, loading: prev.customers.length === 0, error: null }))
 
-        // Load all pages to keep local filtering aligned.
         const pageSize = 200
-        let currentPage = 1
-        let totalPages = 1
-        const allCustomers: Customer[] = []
+        const page1Response = await fetch(`/api/customers?page=1&limit=${pageSize}`)
+        const page1Result = await page1Response.json()
 
-        while (currentPage <= totalPages) {
-          const response = await fetch(`/api/customers?page=${currentPage}&limit=${pageSize}`)
-          const result = await response.json()
-
-          if (!response.ok || !result.success) {
-            throw new Error(result.error || 'Error al cargar clientes')
-          }
-
-          allCustomers.push(...(result.data || []).map(mapRawToCustomer))
-          totalPages = result.pagination?.totalPages || 1
-          currentPage += 1
+        if (!page1Response.ok || !page1Result.success) {
+          throw new Error(page1Result.error || 'Error al cargar clientes')
         }
 
+        const page1Customers: Customer[] = (page1Result.data || []).map(mapRawToCustomer)
+        const totalPages = page1Result.pagination?.totalPages || 1
+
+        if (!isMounted) return
+
+        // Render immediately with first batch so user sees list with zero delay
         setState(prev => ({
           ...prev,
-          customers: allCustomers,
+          customers: page1Customers,
           loading: false,
         }))
+        void enrich(page1Customers)
+
+        // If there are more pages, fetch in parallel in the background
+        if (totalPages > 1) {
+          // La primera pantalla no debe competir con cientos de requests y
+          // renders. Dejamos respirar al navegador antes de hidratar el resto
+          // del padrón; la lista inicial ya está disponible para trabajar.
+          await new Promise<void>((resolve) => setTimeout(resolve, 800))
+          if (!isMounted) return
+          const remainingPages = Array.from({ length: totalPages - 1 }, (_, index) => index + 2)
+          const remainingBatches = await Promise.allSettled(
+            remainingPages.map(async (page) => {
+              const res = await fetch(`/api/customers?page=${page}&limit=${pageSize}`)
+              const json = await res.json()
+              return (json.data || []).map(mapRawToCustomer) as Customer[]
+            })
+          )
+
+          if (!isMounted) return
+
+          const additionalCustomers: Customer[] = []
+          let failedPages = 0
+          for (const batch of remainingBatches) {
+            if (batch.status === 'fulfilled') {
+              additionalCustomers.push(...batch.value)
+            } else {
+              failedPages += 1
+            }
+          }
+
+          // Una página que fallaba se descartaba callada: faltaban clientes y
+          // nada lo decía.
+          if (failedPages > 0) {
+            toast.warning(`No se pudieron cargar ${failedPages} ${failedPages === 1 ? 'página' : 'páginas'} de clientes. Recargá para ver la lista completa.`)
+          }
+
+          if (additionalCustomers.length > 0) {
+            setState(prev => {
+              // Dos altas pueden caer en páginas distintas si se crearon mientras
+              // se cargaba: se evita mostrar el mismo cliente dos veces.
+              const seen = new Set(prev.customers.map((customer) => customer.id))
+              const extra = additionalCustomers.filter((customer) => !seen.has(customer.id))
+              return { ...prev, customers: [...prev.customers, ...extra] }
+            })
+            void enrich(additionalCustomers)
+          }
+        }
       } catch (error: unknown) {
+        if (!isMounted) return
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
         setState(prev => ({
           ...prev,
@@ -221,45 +350,64 @@ export function useCustomerState() {
     }
 
     loadCustomers()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  // Realtime subscription for automatic updates
+  // Tiempo real, solo de la empresa activa.
+  //
+  // Se escuchaba toda la tabla `customers`. RLS acota lo que llega, pero quien
+  // pertenece a varias empresas veía aparecer en la lista clientes de otra.
+  // Sin empresa conocida todavía no se escucha nada: mejor esperar que filtrar
+  // de más.
+  const organizationId = useOptionalActiveOrganization()?.organization?.id ?? null
+
   useEffect(() => {
+    if (!organizationId) return
     const supabase = createClient()
+    const filter = `organization_id=eq.${organizationId}`
 
     const channel = supabase
-      .channel('customers_realtime')
+      .channel(`customers_realtime:${organizationId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'customers' },
+        { event: 'INSERT', schema: 'public', table: 'customers', filter },
         (payload) => {
-          const mappedCustomer = mapRawToCustomer(payload.new as any)
-          setState(prev => ({
-            ...prev,
-            customers: [mappedCustomer, ...prev.customers]
-          }))
+          const mappedCustomer = withEmptySpend(mapRawToCustomer(payload.new as Record<string, unknown>))
+          setState(prev => {
+            // Quien lo creó ya lo agregó a la lista: sin esto aparecía dos veces.
+            if (prev.customers.some((customer) => customer.id === mappedCustomer.id)) return prev
+            return { ...prev, customers: [mappedCustomer, ...prev.customers] }
+          })
         }
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'customers' },
+        { event: 'UPDATE', schema: 'public', table: 'customers', filter },
         (payload) => {
-          const mappedCustomer = mapRawToCustomer(payload.new as any)
+          const mappedCustomer = mapRawToCustomer(payload.new as Record<string, unknown>)
           setState(prev => ({
             ...prev,
             customers: prev.customers.map(c =>
-              c.id === mappedCustomer.id ? mappedCustomer : c
+              c.id === mappedCustomer.id ? keepComputedSpend(mappedCustomer, c) : c
             )
           }))
         }
       )
       .on(
         'postgres_changes',
+        // Supabase no aplica filtros a los DELETE (la fila vieja solo trae la
+        // clave). No hace falta: se quita por id, y un id de otra empresa no está
+        // en esta lista.
         { event: 'DELETE', schema: 'public', table: 'customers' },
         (payload) => {
+          const deletedId = (payload.old as { id?: string } | null)?.id
+          if (!deletedId) return
           setState(prev => ({
             ...prev,
-            customers: prev.customers.filter(c => c.id !== (payload.old as any).id)
+            customers: prev.customers.filter(c => c.id !== deletedId)
           }))
         }
       )
@@ -270,7 +418,7 @@ export function useCustomerState() {
         channel.unsubscribe()
       }
     }
-  }, [])
+  }, [organizationId])
 
   // Debounce search term for better performance
   const debouncedSearchTerm = useDebounce(state.filters.search, 300)
@@ -278,145 +426,12 @@ export function useCustomerState() {
   // Derive searching state without storing it
   const searching = state.filters.search !== debouncedSearchTerm
 
-  // Enhanced search function with fuzzy matching and pattern detection
-  const performIntelligentSearch = useCallback((customers: Customer[], searchTerm: string): Customer[] => {
-    if (!searchTerm || searchTerm.trim().length === 0) return customers
-    
-    const term = searchTerm.toLowerCase().trim()
-    
-    // Detect search patterns
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(term)
-    const isPhone = /^[\d\s\-\+\(\)]+$/.test(term) && term.replace(/\D/g, '').length >= 8
-    const isRUC = /^\d{12}$/.test(term.replace(/\D/g, ''))
-    const isCode = /^CLI-/.test(term.toUpperCase())
-    const isQuickFilter = term.includes(':')
-    
-    // Handle quick filters (e.g., "customer_type:premium", "city:Montevideo")
-    if (isQuickFilter) {
-      const [filterType, filterValue] = term.split(':')
-      return customers.filter(customer => {
-        switch (filterType) {
-          case 'customer_type':
-            return customer.customer_type === filterValue
-          case 'city':
-            return customer.city?.toLowerCase() === filterValue.toLowerCase()
-          case 'status':
-            return customer.status === filterValue
-          case 'segment':
-            return customer.segment?.toLowerCase() === filterValue.toLowerCase()
-          default:
-            return true
-        }
-      })
-    }
-    
-    // Fuzzy matching function
-    const fuzzyMatch = (text: string, query: string): number => {
-      if (!text) return 0
-      text = text.toLowerCase()
-      
-      if (text.includes(query)) return 100
-      
-      let score = 0
-      let queryIndex = 0
-      
-      for (let i = 0; i < text.length && queryIndex < query.length; i++) {
-        if (text[i] === query[queryIndex]) {
-          score += 1
-          queryIndex++
-        }
-      }
-      
-      return queryIndex === query.length ? (score / query.length) * 80 : 0
-    }
-    
-    // Score and filter customers
-    const scoredCustomers = customers.map(customer => {
-      let totalScore = 0
-      let matchCount = 0
-      
-      const nameScore = fuzzyMatch(customer.name || '', term)
-      if (nameScore > 30) {
-        totalScore += nameScore * 2
-        matchCount++
-      }
-      
-      if (customer.email) {
-        if (isEmail && customer.email.toLowerCase() === term) {
-          totalScore += 100
-          matchCount++
-        } else if (customer.email.toLowerCase().includes(term)) {
-          totalScore += 90
-          matchCount++
-        }
-      }
-      
-      if (customer.phone) {
-        const cleanPhone = customer.phone.replace(/\D/g, '')
-        const cleanTerm = term.replace(/\D/g, '')
-        if (isPhone && cleanPhone.includes(cleanTerm)) {
-          totalScore += 95
-          matchCount++
-        } else if (customer.phone.includes(term)) {
-          totalScore += 85
-          matchCount++
-        }
-      }
-      
-      if (customer.customerCode) {
-        if (isCode && customer.customerCode.toLowerCase().includes(term)) {
-          totalScore += 95
-          matchCount++
-        } else if (customer.customerCode.toLowerCase().includes(term)) {
-          totalScore += 90
-          matchCount++
-        }
-      }
-      
-      if (customer.ruc) {
-        const cleanRUC = customer.ruc.replace(/\D/g, '')
-        const cleanTerm = term.replace(/\D/g, '')
-        if (isRUC && cleanRUC === cleanTerm) {
-          totalScore += 100
-          matchCount++
-        } else if (customer.ruc.includes(term)) {
-          totalScore += 85
-          matchCount++
-        }
-      }
-      
-      if (customer.city && customer.city.toLowerCase().includes(term)) {
-        totalScore += 70
-        matchCount++
-      }
-      
-      if (customer.company && customer.company.toLowerCase().includes(term)) {
-        totalScore += 75
-        matchCount++
-      }
-      
-      if (customer.address && customer.address.toLowerCase().includes(term)) {
-        totalScore += 50
-        matchCount++
-      }
-      
-      if (customer.notes && customer.notes.toLowerCase().includes(term)) {
-        totalScore += 30
-        matchCount++
-      }
-      
-      return {
-        customer,
-        score: matchCount > 0 ? totalScore / matchCount : 0,
-        matchCount
-      }
-    })
-    
-    return scoredCustomers
-      .filter(item => item.score > 25)
-      .sort((a, b) => b.score - a.score)
-      .map(item => item.customer)
-  }, [])
+  // La busqueda vive en `lib/customers/search`: es logica pura, se puede probar
+  // sin montar el hook, y la comparten el panel y el selector de reparaciones.
+  const performIntelligentSearch = useCallback(
+    (customers: Customer[], searchTerm: string): Customer[] => searchCustomers(customers, searchTerm),
+    []
+  )
 
   // Derive filtered customers (not stored in state)
   const filteredCustomers = useMemo(() => {
@@ -461,7 +476,8 @@ export function useCustomerState() {
     }
 
     if (state.filters.spent_min > 0) {
-      filtered = filtered.filter(customer => (((customer.total_spent_this_year as number) ?? customer.lifetime_value) || 0) >= state.filters.spent_min)
+      // «Gastado» es el total histórico, el mismo que muestran la lista y el detalle.
+      filtered = filtered.filter(customer => (customer.lifetime_value || 0) >= state.filters.spent_min)
     }
 
     if (state.filters.loyalty_points_min > 0) {
@@ -505,29 +521,32 @@ export function useCustomerState() {
     return filtered
   }, [state.customers, debouncedSearchTerm, state.filters, state.sortBy, state.sortOrder, performIntelligentSearch])
 
-  // Derive pagination metadata from filtered results
-  const totalItems = filteredCustomers.length
-  const totalPages = Math.ceil(totalItems / state.pagination.itemsPerPage)
-  
-  // Auto-correct currentPage if it exceeds totalPages
-  const currentPage = state.pagination.currentPage > totalPages && totalPages > 0
-    ? 1
-    : state.pagination.currentPage
+  // Buscar y paginar son dos cosas distintas: ver `lib/customers/pagination`.
+  const isSearching = debouncedSearchTerm.trim().length > 0
 
-  // Derive paginated customers (not stored in state)
-  const paginatedCustomers = useMemo(() => {
-    const startIndex = (currentPage - 1) * state.pagination.itemsPerPage
-    const endIndex = startIndex + state.pagination.itemsPerPage
-    return filteredCustomers.slice(startIndex, endIndex)
-  }, [filteredCustomers, currentPage, state.pagination.itemsPerPage])
+  const visiblePage = useMemo(
+    () =>
+      paginateCustomers(filteredCustomers, {
+        isSearching,
+        currentPage: state.pagination.currentPage,
+        itemsPerPage: state.pagination.itemsPerPage,
+      }),
+    [filteredCustomers, isSearching, state.pagination.currentPage, state.pagination.itemsPerPage]
+  )
 
-  // Compose the full pagination object for consumers
-  const pagination = useMemo(() => ({
-    currentPage,
-    itemsPerPage: state.pagination.itemsPerPage,
-    totalItems,
-    totalPages
-  }), [currentPage, state.pagination.itemsPerPage, totalItems, totalPages])
+  const paginatedCustomers = visiblePage.visible
+  const totalPages = visiblePage.totalPages
+  const currentPage = visiblePage.currentPage
+
+  const pagination = useMemo(
+    () => ({
+      currentPage: visiblePage.currentPage,
+      itemsPerPage: visiblePage.itemsPerPage,
+      totalItems: visiblePage.totalItems,
+      totalPages: visiblePage.totalPages,
+    }),
+    [visiblePage]
+  )
 
   // Pagination functions
   const setPage = useCallback((page: number) => {

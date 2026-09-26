@@ -1,15 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { DateRange } from 'react-day-picker'
-import { AlertTriangle, Loader2, RefreshCw, Info } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Shield, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { usePosStats } from './hooks/usePosStats'
 import { Button } from '@/components/ui/button'
-import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 
 import { PosDashboardHeader, type PosDashboardViewTab } from './components/PosDashboardHeader'
 import { PosStatsGrid } from './components/PosStatsGrid'
@@ -20,8 +20,17 @@ import { RecentTransactionsList } from './components/RecentTransactionsList'
 import { CreditStatsCards } from './components/CreditStatsCards'
 import { RepairPosStatsCards } from './components/RepairPosStatsCards'
 import { ProfitStatsCards } from './components/ProfitStatsCards'
+import { CreditPortfolioCards } from './components/CreditPortfolioCards'
+import { useCreditPortfolio } from './hooks/useCreditPortfolio'
+import { availablePosDashboardTabs, resolveActiveTab, showsSection } from './lib/dashboard-tabs'
+import { buildSalesCsv, salesCsvFileName } from './lib/sales-csv'
+
+import { DetailedSalesTable } from './components/DetailedSalesTable'
 
 export default function POSDashboard() {
+  const { user, isAdmin, loading: authLoading } = useAuth()
+  const canAccess = Boolean(isAdmin || user?.role === 'admin' || user?.role === 'super_admin')
+
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date(),
@@ -29,40 +38,40 @@ export default function POSDashboard() {
   const [activeViewTab, setActiveViewTab] = useState<PosDashboardViewTab>('all')
 
   const { stats, loading, error, refetch } = usePosStats(dateRange)
+
+  // Pestañas segun los modulos de la organizacion. Se leen del contexto que el
+  // layout arma en el servidor: no hay estado de carga ni parpadeo.
+  const { effectiveModules } = useSubscriptionStatus()
+  const availableTabs = availablePosDashboardTabs(effectiveModules)
+  const hasRepairs = availableTabs.some((tab) => tab.value === 'repairs')
+  const hasCredits = availableTabs.some((tab) => tab.value === 'credits')
+  const viewTab = resolveActiveTab(activeViewTab, availableTabs)
+  // La cartera completa solo se pide al abrir la pestaña de creditos.
+  const creditPortfolio = useCreditPortfolio(dateRange, hasCredits && viewTab === 'credits')
   const [refreshing, setRefreshing] = useState(false)
 
   const handleExport = () => {
     try {
-      if (!stats.recentSales.length) {
-        toast.error('No hay datos para exportar')
+      // Exportaba `recentSales`: las 10 ventas mas recientes, no el periodo, y
+      // con Cliente e Items en «undefined». Ahora son todas las del periodo,
+      // con las columnas de la tabla detallada.
+      if (!stats.allSales.length) {
+        toast.error('No hay ventas en el período para exportar')
         return
       }
 
-      const headers = ['ID', 'Fecha', 'Cliente', 'Método pago', 'Total', 'Items']
-      const rows = stats.recentSales.map((sale) => [
-        sale.id,
-        sale.created_at,
-        sale.customer_name,
-        sale.payment_method,
-        formatCurrency(sale.total || 0),
-        sale.items_count,
-      ])
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
-      ].join('\n')
+      const csvContent = buildSalesCsv(stats.allSales)
 
       const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.setAttribute('href', url)
-      link.setAttribute('download', `ventas_pos_${new Date().toISOString().split('T')[0]}.csv`)
+      link.setAttribute('download', salesCsvFileName(dateRange))
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
 
-      toast.success('Exportación completada')
+      toast.success(`Exportadas ${stats.allSales.length} ventas del período`)
     } catch (e) {
       toast.error('Error al exportar datos')
       console.error(e)
@@ -71,9 +80,42 @@ export default function POSDashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await refetch()
+    await Promise.all([refetch(), hasCredits && viewTab === 'credits' ? creditPortfolio.refetch() : null])
     setRefreshing(false)
     toast.success('Datos actualizados')
+  }
+
+  if (authLoading) {
+    return (
+      <div className="mx-auto flex max-w-[1480px] flex-col items-center justify-center gap-3 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        <p className="text-sm text-slate-500">Verificando permisos de acceso...</p>
+      </div>
+    )
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] p-6">
+        <div className="max-w-md w-full text-center space-y-4 bg-card p-8 rounded-2xl border border-border shadow-lg">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-foreground">Acceso Restringido</h1>
+            <p className="text-xs text-muted-foreground">
+              Esta sección contiene métricas financieras confidenciales y está reservada exclusivamente para administradores y gerencia.
+            </p>
+          </div>
+          <Button asChild className="gap-2 text-xs font-semibold rounded-xl mt-2" size="sm">
+            <Link href="/dashboard/pos">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Punto de Venta
+            </Link>
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (loading && !stats.totalTransactions && !stats.repairStats.deliveredCount) {
@@ -111,66 +153,13 @@ export default function POSDashboard() {
           dateRange={dateRange}
           setDateRange={setDateRange}
           onExport={handleExport}
-          activeViewTab={activeViewTab}
+          activeViewTab={viewTab}
           setActiveViewTab={setActiveViewTab}
+          availableTabs={availableTabs}
         />
       </div>
 
-      {/* Guía de funcionamiento del Dashboard POS */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Dashboard del POS y Taller?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-4">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Filtro por Rango Fechas
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Usa los atajos (Hoy, 7 días, Este mes) o el calendario para filtrar ventas, créditos y reparaciones.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
 
-                  Filtro por Módulo
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Usa los botones superiores para conmutar entre Vista General, Solo Ventas, Solo Reparaciones del Taller o Análisis de Ganancias.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Métricas de Taller
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Monitorea el total presupuestado de reparaciones ingresadas, recaudación por reparaciones entregadas y equipos en taller.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">4</Badge>
-                  Ganancias y Márgenes
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Calcula la ganancia bruta considerando costo de mercadería vendida (CMV) y recaudación total del taller.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       {/* Refresh footer */}
       <div className="flex justify-end -mt-2">
@@ -187,27 +176,35 @@ export default function POSDashboard() {
       </div>
 
       {/* 1. KPIs Generales de Ventas (visible en 'all' o 'sales') */}
-      {(activeViewTab === 'all' || activeViewTab === 'sales') && (
+      {showsSection('sales', viewTab) && (
         <PosStatsGrid stats={stats} />
       )}
 
-      {/* 2. Tarjetas de Reparaciones / Taller (visible en 'all' o 'repairs') */}
-      {(activeViewTab === 'all' || activeViewTab === 'repairs') && (
+      {/* 2. Taller: solo si la organizacion tiene el modulo de reparaciones. */}
+      {hasRepairs && showsSection('repairs', viewTab) && (
         <RepairPosStatsCards stats={stats} />
       )}
 
       {/* 3. Tarjetas de Ganancias & Rentabilidad (visible en 'all' o 'profit') */}
-      {(activeViewTab === 'all' || activeViewTab === 'profit') && (
-        <ProfitStatsCards stats={stats} />
+      {showsSection('profit', viewTab) && (
+        <ProfitStatsCards stats={stats} showRepairs={hasRepairs} />
       )}
 
-      {/* 4. Créditos (visible en 'all' o 'sales') */}
-      {(activeViewTab === 'all' || activeViewTab === 'sales') && (
+      {/* 4. Créditos: pestaña propia, solo con el modulo de creditos. Antes
+          vivian dentro de «Ventas POS» y aparecian aunque la organizacion no
+          vendiera a credito. */}
+      {hasCredits && viewTab === 'credits' && (
+        <CreditPortfolioCards
+          portfolio={creditPortfolio}
+          repairCredits={hasRepairs ? stats.repairCreditStats : null}
+        />
+      )}
+      {hasCredits && showsSection('credits', viewTab) && (
         <CreditStatsCards stats={stats} />
       )}
 
       {/* 5. Gráficos y Tablas */}
-      {(activeViewTab === 'all' || activeViewTab === 'sales' || activeViewTab === 'profit') && (
+      {(showsSection('sales', viewTab) || viewTab === 'profit') && (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <SalesTrendChart data={stats.dailySales} />
@@ -218,6 +215,8 @@ export default function POSDashboard() {
             <RecentTransactionsList sales={stats.recentSales} />
             <TopProductsCard products={stats.topProducts} />
           </div>
+
+          <DetailedSalesTable stats={stats} />
         </>
       )}
     </div>

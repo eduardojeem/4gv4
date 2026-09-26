@@ -6,11 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   validateSale,
   validateCartItem,
-  validateCustomer,
-  validateCashMovement,
-  validateRegisterOpening,
-  validateRegisterClosing,
-  validateSaleBusinessRules,
+  validateCustomer, validateSaleBusinessRules,
   cartItemSchema,
   saleSchema,
   customerSchema
@@ -371,7 +367,8 @@ describe('Business Rules Validation', () => {
           isService: false
         }],
         paymentMethod: 'card' as const,
-        discount: 0
+        discount: 0,
+        cardNumber: '1234'
       }
       
       const result = validateSaleBusinessRules(sale)

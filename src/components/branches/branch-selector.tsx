@@ -67,16 +67,27 @@ export function BranchSelector({ compact = false, className }: BranchSelectorPro
         </div>
       </SelectTrigger>
       <SelectContent align="end">
-        {branches.map((branch) => (
-          <SelectItem key={branch.id} value={branch.id}>
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate">{branch.name}</span>
-              {branch.is_primary || branch.is_default ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              ) : null}
-            </div>
-          </SelectItem>
-        ))}
+        {branches.map((branch) => {
+          // Subtítulo para distinguir sucursales con nombre igual o parecido:
+          // sin esto, dos sucursales del mismo nombre se ven idénticas en la
+          // lista y no hay forma de saber cuál es cuál.
+          const subtitle = [branch.city, branch.code].filter(Boolean).join(' · ')
+          return (
+            <SelectItem key={branch.id} value={branch.id}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate">{branch.name}</span>
+                  {subtitle ? (
+                    <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
+                  ) : null}
+                </div>
+                {branch.is_primary || branch.is_default ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                ) : null}
+              </div>
+            </SelectItem>
+          )
+        })}
       </SelectContent>
     </Select>
   )

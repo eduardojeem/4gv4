@@ -1,10 +1,13 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   DEFAULT_SYSTEM_COLOR_SCHEME,
   type ThemeColorScheme,
 } from '@/lib/theme/color-schemes'
+
+/** Lo que dura la transicion de color al cambiar de modo, igual que en el CSS. */
+export const THEME_TRANSITION_MS = 260
 
 export type Theme = 'light' | 'dark' | 'system'
 export type ColorScheme = ThemeColorScheme
@@ -61,7 +64,10 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'system',
+  // Claro por defecto: quien nunca eligio tema abre en claro, aunque su sistema
+  // este en oscuro. Quien ya eligio conserva su eleccion —incluido 'system',
+  // que sigue al sistema operativo—. Tiene que coincidir con `ThemeInitScript`.
+  defaultTheme = 'light',
   defaultColorScheme = DEFAULT_SYSTEM_COLOR_SCHEME
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -179,6 +185,27 @@ export function ThemeProvider({
       } catch {}
     }
   }, [])
+
+  /**
+   * La transición de color acompaña el cambio de modo y se retira enseguida.
+   * Antes vivía fija en el <body>: cambiar de tema tenía que animar todos los
+   * elementos a la vez —medido, 140-240 ms de bloqueo contra 40 sin ella— y
+   * además le ponía 300 ms de retardo a cada cambio de color del día a día.
+   */
+  const modoAnterior = useRef<boolean | null>(null)
+  useEffect(() => {
+    const body = window.document.body
+    const cambio = modoAnterior.current !== null && modoAnterior.current !== isDark
+    modoAnterior.current = isDark
+    if (!cambio) return
+
+    body.classList.add('theme-transition')
+    const timer = setTimeout(() => body.classList.remove('theme-transition'), THEME_TRANSITION_MS)
+    return () => {
+      clearTimeout(timer)
+      body.classList.remove('theme-transition')
+    }
+  }, [isDark])
 
   useEffect(() => {
     // Listen for system theme changes

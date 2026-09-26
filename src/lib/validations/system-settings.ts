@@ -65,6 +65,13 @@ export const SystemSettingsSchema = z.object({
     .min(0, 'La tasa de impuesto no puede ser negativa')
     .max(100, 'La tasa de impuesto no puede exceder 100%')
     .finite('La tasa debe ser un número válido'),
+
+  repairMaxDiscountPercent: z.number()
+    .min(0, 'El descuento máximo no puede ser negativo')
+    .max(100, 'El descuento máximo no puede superar 100%')
+    .finite('El descuento máximo debe ser válido'),
+
+  repairLaborTaxRate: z.union([z.literal(0), z.literal(5), z.literal(10)]),
   
   lowStockThreshold: z.number()
     .int('Debe ser un número entero')
@@ -88,7 +95,8 @@ export const SystemSettingsSchema = z.object({
 
   // Características y Redes
   socialLinks: z.record(z.string(), z.string()).default({}),
-  features: z.record(z.string(), z.boolean()).default({}),
+  features: z.record(z.string(), z.unknown()).default({}),
+  defaultInstallmentRates: z.record(z.string(), z.number()).default({}),
   retentionDays: z.number().int().min(30).max(3650).default(90),
   
   // Opciones del sistema
@@ -119,9 +127,20 @@ export type SystemSettings = z.infer<typeof SystemSettingsSchema>
 /**
  * Esquema para actualizaciones parciales
  */
-export const SystemSettingsPartialSchema = SystemSettingsSchema.partial()
+const partialSystemSettingsShape = Object.fromEntries(
+  Object.entries(SystemSettingsSchema.shape).map(([key, schema]) => [
+    key,
+    schema instanceof z.ZodDefault
+      ? schema.removeDefault().optional()
+      : schema.optional(),
+  ])
+) as z.ZodRawShape
 
-export type SystemSettingsPartial = z.infer<typeof SystemSettingsPartialSchema>
+// `SystemSettingsSchema.partial()` conserva los `.default(...)` internos de
+// Zod. En una petición parcial eso convertía campos ausentes en valores vacíos
+// y el servidor los persistía como si el administrador los hubiera borrado.
+export type SystemSettingsPartial = Partial<SystemSettings>
+export const SystemSettingsPartialSchema: z.ZodType<SystemSettingsPartial> = z.object(partialSystemSettingsShape)
 
 /**
  * Esquema para mapear de DB a frontend
@@ -144,8 +163,8 @@ export const SystemSettingsDBSchema = z.object({
   time_zone: z.string().optional(),
   language: z.string().optional(),
   items_per_page: z.number().optional(),
-  social_links: z.record(z.string(), z.any()).nullable().optional(),
-  features: z.record(z.string(), z.any()).nullable().optional(),
+  social_links: z.record(z.string(), z.unknown()).nullable().optional(),
+  features: z.record(z.string(), z.unknown()).nullable().optional(),
   retention_days: z.number().optional(),
   auto_backup: z.boolean(),
   email_notifications: z.boolean(),
@@ -173,6 +192,8 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     city: dbData.city || '',
     currency: isSupportedCurrency(dbData.currency) ? dbData.currency : 'PYG',
     taxRate: typeof dbData.tax_rate === 'string' ? parseFloat(dbData.tax_rate) : dbData.tax_rate,
+    repairMaxDiscountPercent: Number((dbData as { repair_max_discount_percent?: number }).repair_max_discount_percent ?? 20),
+    repairLaborTaxRate: ((dbData as { repair_labor_tax_rate?: 0 | 5 | 10 }).repair_labor_tax_rate ?? 10),
     theme: (dbData.theme as 'light' | 'dark' | 'system') || 'system',
     primaryColor: (dbData.primary_color || 'blue') as import('@/lib/theme/color-schemes').SystemColorScheme,
     dateFormat: dbData.date_format === 'MM/DD/YYYY' || dbData.date_format === 'YYYY-MM-DD'
@@ -194,7 +215,8 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     requireEmailVerification: dbData.require_email_verification,
     maxLoginAttempts: dbData.max_login_attempts,
     passwordMinLength: dbData.password_min_length,
-    requireTwoFactor: dbData.require_two_factor
+    requireTwoFactor: dbData.require_two_factor,
+    defaultInstallmentRates: (dbData as { default_installment_rates?: Record<string, number> }).default_installment_rates || {}
   }
 }
 
@@ -212,6 +234,8 @@ export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string,
   if (settings.city !== undefined) dbData.city = settings.city
   if (settings.currency !== undefined) dbData.currency = settings.currency
   if (settings.taxRate !== undefined) dbData.tax_rate = settings.taxRate
+  if (settings.repairMaxDiscountPercent !== undefined) dbData.repair_max_discount_percent = settings.repairMaxDiscountPercent
+  if (settings.repairLaborTaxRate !== undefined) dbData.repair_labor_tax_rate = settings.repairLaborTaxRate
   if (settings.lowStockThreshold !== undefined) dbData.low_stock_threshold = settings.lowStockThreshold
   if (settings.sessionTimeout !== undefined) dbData.session_timeout = settings.sessionTimeout
   
@@ -224,6 +248,7 @@ export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string,
   if (settings.socialLinks !== undefined) dbData.social_links = settings.socialLinks
   if (settings.features !== undefined) dbData.features = settings.features
   if (settings.retentionDays !== undefined) dbData.retention_days = settings.retentionDays
+  if (settings.defaultInstallmentRates !== undefined) dbData.default_installment_rates = settings.defaultInstallmentRates
 
   if (settings.autoBackup !== undefined) dbData.auto_backup = settings.autoBackup
   if (settings.emailNotifications !== undefined) dbData.email_notifications = settings.emailNotifications
@@ -286,4 +311,3 @@ function sanitizeString(str: string): string {
     .replace(/<[^>]+>/g, '')
     .trim()
 }
-

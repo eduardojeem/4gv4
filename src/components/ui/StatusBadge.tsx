@@ -1,19 +1,16 @@
 'use client'
 
-import React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { 
-  CheckCircle, 
-  XCircle, 
-  Pause, 
-  AlertTriangle, 
+import {
+  CheckCircle,
+  XCircle, AlertTriangle,
   ChevronDown,
   Power,
   PowerOff,
@@ -94,7 +91,7 @@ export function StatusBadge({
 
   const config = statusConfig[normalizedKey]
   const sizeStyles = sizeConfig[size] ?? sizeConfig.md
-  const Icon = config.icon
+  void (config.icon);
 
   if (!interactive || !onStatusChange) {
     return (
@@ -141,7 +138,7 @@ export function StatusBadge({
         </div>
         
         {Object.entries(statusConfig).map(([key, statusItem]) => {
-          const StatusIcon = statusItem.icon
+          void (statusItem.icon);
           const isCurrentStatus = key === status
           
           return (
@@ -256,7 +253,7 @@ export function BulkStatusSelector({
         </div>
         
         {Object.entries(statusConfig).map(([key, statusItem]) => {
-          const StatusIcon = statusItem.icon
+          void (statusItem.icon);
           
           return (
             <DropdownMenuItem

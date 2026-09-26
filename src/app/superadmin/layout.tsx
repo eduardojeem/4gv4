@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { SuperAdminShell } from '@/components/superadmin/superadmin-shell'
+import { getPlatformBranding } from '@/lib/platform/branding'
 import { SupportSessionBanner } from '@/components/superadmin/SupportSessionBanner'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
 import { getActiveSupportSession } from '@/lib/superadmin/support-session'
@@ -22,13 +23,16 @@ export default async function SuperAdminLayout({ children }: { children: React.R
     redirect('/dashboard')
   }
 
-  const supportSession = await getActiveSupportSession()
+  const [supportSession, branding] = await Promise.all([
+    getActiveSupportSession(),
+    getPlatformBranding(),
+  ])
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-slate-950">
+    <div className="flex h-dvh flex-col overflow-hidden bg-sidebar">
       {supportSession && <SupportSessionBanner session={supportSession} />}
       <div className="min-h-0 flex-1">
-        <SuperAdminShell userEmail={user.email}>
+        <SuperAdminShell userEmail={user.email} branding={branding}>
           {children}
         </SuperAdminShell>
       </div>

@@ -53,3 +53,12 @@ export type { ProductQuickViewModalProps } from './ProductQuickViewModal'
 
 export { ImportProductsModal } from './ImportProductsModal'
 export type { ImportProductsModalProps } from './ImportProductsModal'
+
+export { GroupBySelector } from './GroupBySelector'
+export type { GroupBySelectorProps } from './GroupBySelector'
+
+export { ProductSectionGroup } from './ProductSectionGroup'
+export type { ProductSectionGroupProps } from './ProductSectionGroup'
+
+export { ProductSummaryOverview } from './ProductSummaryOverview'
+export type { ProductSummaryOverviewProps } from './ProductSummaryOverview'

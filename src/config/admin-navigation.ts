@@ -1,6 +1,8 @@
 import {
+    BookOpen,
     LayoutDashboard,
     Users,
+    Rocket,
     Settings,
     Shield,
     Package,
@@ -11,13 +13,22 @@ import {
     Building2,
     CreditCard,
     Star,
+    WalletCards,
+    MousePointerClick,
     type LucideIcon
 } from 'lucide-react'
+import type { OrganizationModule } from '@/lib/organization/business-profile'
 
 /**
  * Configuración de navegación del panel de administración
  * Centraliza todos los items de navegación con sus permisos y categorías
  */
+
+/**
+ * Contadores que puede mostrar el menu. El numero no vive aca —cambia solo—:
+ * la clave dice de donde sacarlo y `useAdminNavBadges` lo resuelve.
+ */
+export type NavBadgeKey = 'cash-alerts'
 
 export interface NavItem {
     key: string
@@ -28,6 +39,13 @@ export interface NavItem {
     description?: string
     /** If true, only super_admin users can see and access this item */
     superAdminOnly?: boolean
+    /** Módulo del plan requerido para ver este item. Si el plan activo (efectivo) no lo incluye, se oculta. */
+    module?: OrganizationModule
+    /**
+     * Contador a mostrar al lado del nombre. El monitor de cajas era la unica
+     * seccion que generaba alertas y no habia forma de saberlo sin entrar.
+     */
+    badge?: NavBadgeKey
 }
 
 export interface NavCategory {
@@ -55,12 +73,31 @@ export const adminNavCategories: NavCategory[] = [
                 permissions: [] // Accesible para todos los admins
             },
             {
+                key: 'finances',
+                label: 'Finanzas',
+                icon: WalletCards,
+                href: '/admin/finances',
+                description: 'Gestión de gastos, nómina y rentabilidad',
+                permissions: ['finances.read']
+            },
+            {
                 key: 'analytics',
                 label: 'Analytics',
                 icon: BarChart3,
                 href: '/admin/analytics',
                 description: 'Análisis avanzado de datos',
-                permissions: ['analytics.read']
+                permissions: ['analytics.read'],
+                module: 'analytics'
+            },
+            {
+                key: 'website-visits',
+                label: 'Visitas web',
+                icon: MousePointerClick,
+                href: '/admin/visitas',
+                description: 'Visitas e interacciones de tu tienda online',
+                permissions: ['analytics.read'],
+                // Mismo módulo que Analytics: disponible desde el plan Pro.
+                module: 'analytics'
             }
         ]
     },
@@ -74,7 +111,8 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Monitor,
                 href: '/admin/cash-monitor',
                 description: 'Control y monitoreo de cajas en tiempo real',
-                permissions: [] // Visible para todos los admins
+                permissions: [], // Visible para todos los admins
+                badge: 'cash-alerts'
             },
             {
                 key: 'inventory',
@@ -82,7 +120,12 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Package,
                 href: '/admin/inventory',
                 description: 'Gestión de productos y stock',
-                permissions: ['inventory.read']
+                // `inventory.read` se satisface con `products.read` O con
+                // `inventory.stock.manage`, pero /api/products exige
+                // `products.read` a secas: quien tenia solo el permiso de stock
+                // veia la seccion en el menu y encontraba el catalogo vacio.
+                permissions: ['products.read'],
+                module: 'inventory_admin'
             },
             {
                 key: 'reports',
@@ -116,10 +159,10 @@ export const adminNavCategories: NavCategory[] = [
             },
             {
                 key: 'subscriptions',
-                label: 'Suscripcion',
+                label: 'Suscripción',
                 icon: CreditCard,
                 href: '/admin/subscriptions',
-                description: 'Plan, pagos, limites y facturacion',
+                description: 'Plan, pagos, límites y facturación',
                 permissions: ['billing.manage']
             },
             {
@@ -144,7 +187,8 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Shield,
                 href: '/admin/security',
                 description: 'Logs de seguridad y auditoría',
-                permissions: ['settings.read']
+                permissions: ['settings.read'],
+                module: 'security'
             },
             {
                 key: 'settings',
@@ -153,6 +197,34 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/settings',
                 description: 'Configuración del sistema',
                 permissions: ['settings.read']
+            },
+            {
+                // Vive aca, y no en el menu del dia a dia, una vez que la
+                // configuracion inicial esta completa: deja de ser una tarea y
+                // pasa a ser algo que se busca junto al resto de los ajustes.
+                key: 'business-profile',
+                label: 'Configuración del negocio',
+                icon: Rocket,
+                href: '/dashboard/onboarding',
+                description: 'Datos, rubro, moneda y visibilidad de la tienda',
+                permissions: ['settings.read']
+            }
+        ]
+    },
+    {
+        // La ayuda estaba repartida en quince modales, cada uno visible solo si
+        // ya estabas parado en la pantalla correcta: el panel no tenia ninguna
+        // puerta de entrada a una guia completa.
+        id: 'help',
+        label: 'Ayuda',
+        items: [
+            {
+                key: 'guide',
+                label: 'Guía del sistema',
+                icon: BookOpen,
+                href: '/admin/guia',
+                description: 'Cómo funciona cada sección, con ejemplos, y los primeros pasos',
+                permissions: [] // Para cualquiera que pueda entrar al panel
             }
         ]
     }
@@ -183,16 +255,25 @@ export function getCategoryByItemKey(key: string): NavCategory | undefined {
 
 /**
  * Filtra items de navegación por permisos del usuario
+ * @param effectiveModules Módulos que el plan activo (ya descontada la selección de la
+ *   organización) habilita realmente. Si se omite, no se aplica filtro por plan.
  */
 export function filterNavItemsByPermissions(
     items: NavItem[],
     hasPermission: (permission: string) => boolean,
     isAdmin: boolean,
-    isSuperAdmin: boolean = false
+    isSuperAdmin: boolean = false,
+    effectiveModules?: readonly string[]
 ): NavItem[] {
     return items.filter(item => {
         // Super-admin-only items: only visible to super_admin
         if (item.superAdminOnly && !isSuperAdmin) {
+            return false
+        }
+
+        // Items atados a un módulo del plan: ocultar si el plan activo no lo incluye,
+        // sin importar el rol (un admin tampoco debería ver secciones fuera de su plan).
+        if (item.module && effectiveModules && !effectiveModules.includes(item.module)) {
             return false
         }
 
@@ -219,12 +300,13 @@ export function filterCategoriesByPermissions(
     categories: NavCategory[],
     hasPermission: (permission: string) => boolean,
     isAdmin: boolean,
-    isSuperAdmin: boolean = false
+    isSuperAdmin: boolean = false,
+    effectiveModules?: readonly string[]
 ): NavCategory[] {
     return categories
         .map(category => ({
             ...category,
-            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin)
+            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin, effectiveModules)
         }))
         .filter(category => category.items.length > 0)
 }

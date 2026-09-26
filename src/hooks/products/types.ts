@@ -1,4 +1,3 @@
-import type { Database } from '@/lib/supabase/types'
 import type { Product as UnifiedProduct, Category as UnifiedCategory, Supplier as UnifiedSupplier, ProductMovement as UnifiedProductMovement, ProductAlert as UnifiedProductAlert } from '@/types/product-unified'
 
 // Re-export unified types
@@ -12,11 +11,15 @@ export type ProductAlert = UnifiedProductAlert
 export interface ProductFilters {
   search?: string
   category?: string
+  categoryId?: string | null
   supplier?: string
+  supplierId?: string | null
   stockStatus?: 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | string[]
   marginStatus?: string[]
   priceMin?: number
   priceMax?: number
+  stockMin?: number
+  stockMax?: number
   isActive?: boolean
   featured?: boolean
   // Added properties based on usage
@@ -25,6 +28,8 @@ export interface ProductFilters {
   stockRange?: { min: number; max: number }
   marginRange?: { min: number; max: number }
   dateRange?: { start: Date | null; end: Date | null }
+  dateFrom?: Date
+  dateTo?: Date
 }
 
 export interface ProductSort {
@@ -58,7 +63,7 @@ export interface LoadingState {
 }
 
 // Respuesta de operaciones
-export interface OperationResult<T = any> {
+export interface OperationResult<T = unknown> {
   success: boolean
   data?: T
   error?: string
@@ -82,28 +87,30 @@ export interface AnalyticsConfig {
   }
 }
 
+export interface AdvancedFiltersState {
+  priceRange: { min: number; max: number }
+  stockRange: { min: number; max: number }
+  marginRange: { min: number; max: number }
+  dateRange: { start: Date | null; end: Date | null }
+  tags: string[]
+}
+
 // Retorno mínimo utilizado por componentes de filtros avanzados
 export interface ProductFilteringReturn {
   filteredProducts: Product[]
-  filters: ProductFilters & Record<string, any>
-  advancedFilters: {
-    priceRange: { min: number; max: number }
-    stockRange: { min: number; max: number }
-    marginRange: { min: number; max: number }
-    dateRange: { start: Date | null; end: Date | null }
-    tags: string[]
-  }
+  filters: ProductFilters
+  advancedFilters: AdvancedFiltersState
   filterPresets: Record<string, ProductFilters>
   searchTerm: string
   setSearchTerm: (term: string) => void
-  updateFilter: (key: keyof ProductFilters, value: any) => void
+  updateFilter: (key: keyof ProductFilters, value: ProductFilters[keyof ProductFilters]) => void
   updateFilters: (partial: Partial<ProductFilters>) => void
-  updateAdvancedFilter: (key: string, value: any) => void
+  updateAdvancedFilter: (key: string, value: unknown) => void
   clearFilters: () => void
   applyPreset: (presetName: string) => void
   savePreset: (name: string, filters: ProductFilters) => void
   setFilters: (filters: ProductFilters | ((prev: ProductFilters) => ProductFilters)) => void
-  setAdvancedFilters: (filters: any | ((prev: any) => any)) => void
+  setAdvancedFilters: (filters: AdvancedFiltersState | ((prev: AdvancedFiltersState) => AdvancedFiltersState)) => void
   activeFiltersCount: number
   categories: Category[]
   suppliers: Supplier[]
@@ -126,10 +133,10 @@ export interface ProductFilteringReturn {
   } | null
 
   // Added error handling and performance properties
-  lastError: any
+  lastError: unknown
   retryLastOperation: () => Promise<{ success: boolean; error?: string }>
   clearError: () => void
-  getPerformanceReport: () => any
+  getPerformanceReport: () => Record<string, unknown>
   clearPerformanceData: () => void
 
   // Added utility properties

@@ -26,28 +26,35 @@ export function sanitizeText(text: string): string {
     // Decodificar entidades comunes para no dejar texto distorsionado
     .replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&#x27;|&nbsp;/gi, (m) => NAMED_ENTITIES[m.toLowerCase()] ?? m)
 
-  // Trim y normalizar espacios
-  return sanitized.trim().replace(/\s+/g, ' ')
+  // Espacios de más se juntan, pero los saltos de línea quedan: juntar todo en un
+  // solo espacio convertía instrucciones de transferencia, avisos y mensajes de
+  // varias líneas en un renglón. Tres o más saltos seguidos quedan en dos.
+  return sanitized
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 /**
  * Sanitiza recursivamente cualquier valor (objeto, array o primitivo)
  */
-export function sanitizeValue(value: any): any {
+export function sanitizeValue<T>(value: T): T {
   if (typeof value === 'string') {
-    return sanitizeText(value)
+    return sanitizeText(value) as unknown as T
   }
   
   if (Array.isArray(value)) {
-    return value.map(item => sanitizeValue(item))
+    return value.map(item => sanitizeValue(item)) as unknown as T
   }
   
   if (typeof value === 'object' && value !== null) {
-    const sanitized: Record<string, any> = {}
+    const sanitized: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(value)) {
       sanitized[k] = sanitizeValue(v)
     }
-    return sanitized
+    return sanitized as unknown as T
   }
   
   return value
@@ -56,14 +63,14 @@ export function sanitizeValue(value: any): any {
 /**
  * Sanitiza un objeto recursivamente (Mantenida por compatibilidad)
  */
-export function sanitizeObject<T extends Record<string, any>>(obj: T): T {
-  return sanitizeValue(obj) as T
+export function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
+  return sanitizeValue(obj)
 }
 
 /**
  * Sanitiza configuración del sitio web
  */
-export function sanitizeWebsiteSettings(settings: any): any {
+export function sanitizeWebsiteSettings<T>(settings: T): T {
   return sanitizeValue(settings)
 }
 

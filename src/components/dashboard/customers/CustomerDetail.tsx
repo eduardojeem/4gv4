@@ -1,52 +1,54 @@
 "use client"
 
 /**
- * CustomerDetail Modernizado
- * 
- * Componente principal para la vista detallada del cliente.
- * Integra:
- * - CustomerDetailHeader: Encabezado con acciones y estado
- * - CustomerDetailMetrics: KPIs principales
- * - Sistema de pestañas reorganizado
+ * Ficha completa del cliente.
+ *
+ * Orden de lectura: quién es y cuánto vale (encabezado y métricas), qué debe
+ * (pendiente de cobro), qué hizo (actividad) y, al costado, cómo contactarlo,
+ * su cuenta y su perfil. El detalle de cada tema vive en su pestaña.
  */
 
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import dynamic from 'next/dynamic'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import { CustomerCreditInfo } from './CustomerCreditInfo'
+import { CustomerGlobalPaymentModal } from './CustomerGlobalPaymentModal'
+import { CustomerHistoryList } from './CustomerHistoryList'
+import { SaleDetailsModal } from '@/app/dashboard/pos/components/SaleDetailsModal'
+import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import {
-  FileText,
-  User,
-  History,
-  CreditCard,
-  LayoutDashboard,
-  Copy,
-  PhoneCall,
-  ExternalLink,
-  Calendar,
-  Clock,
-  Activity,
   AlertCircle,
+  ArrowLeft,
+  ChevronDown,
+  Coins,
+  Copy,
+  CreditCard,
+  Edit,
+  FileText,
+  Hash,
+  History,
+  LayoutDashboard,
+  Mail,
   MapPin,
-  Tag,
-  Plus,
   MessageSquare,
+  PhoneCall,
   Shield,
   ShieldCheck,
-  CheckCircle,
-  Building,
-  Star,
-  Edit,
-  Wrench
+  Tag,
+  User,
+  Wallet,
 } from 'lucide-react'
-import { Customer } from '@/hooks/use-customer-state'
-import { useCustomerData, useCustomerPurchases, prefetchCustomerPurchases } from '@/hooks/useCustomerData'
+import { Customer, keepComputedSpend } from '@/hooks/use-customer-state'
+import { useCustomerSalesMetricsMap } from '@/hooks/use-customer-metrics'
+import { useCustomerData } from '@/hooks/useCustomerData'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
+import { useCustomerCredits } from '@/hooks/use-customer-credits'
+import { useCustomerHistory } from '@/hooks/use-customer-history'
 import { useAuthorizedPersons, prefetchAuthorizedPersons } from '@/hooks/useAuthorizedPersons'
 import { createClient } from '@/lib/supabase/client'
 import { CustomerDetailHeader } from './CustomerDetailHeader'
@@ -54,6 +56,12 @@ import { CustomerDetailMetrics } from './CustomerDetailMetrics'
 import { CustomerLinkAccount } from './CustomerLinkAccount'
 import { WholesaleToggle } from './WholesaleToggle'
 import { formatCurrency } from '@/lib/currency'
+
+// Trae su propio fetch: se carga solo cuando el usuario abre la pestaña.
+const CustomerPointsHistory = dynamic(
+  () => import('@/components/dashboard/loyalty').then((m) => ({ default: m.CustomerPointsHistory })),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-xl border bg-muted/30" /> }
+)
 
 interface CustomerDetailProps {
   customer: Customer
@@ -63,270 +71,324 @@ interface CustomerDetailProps {
   compact?: boolean
 }
 
-function SalesHistoryList({
-  customerId,
-  limit,
-  onShowAll,
+// ─────────────────────────────────────────────────────────────────────────────
+// Piezas de la ficha
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Section({
+  title,
+  description,
+  icon: Icon,
+  action,
+  children,
+  className,
 }: {
-  customerId: string
-  limit?: number
-  onShowAll?: () => void
+  title: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  action?: React.ReactNode
+  children: React.ReactNode
+  className?: string
 }) {
-  const { data: sales, isLoading: salesLoading } = useCustomerPurchases(customerId)
-  const { repairs, loading: repairsLoading, fetchRepairs } = useCustomerRepairs()
-
-  React.useEffect(() => {
-    fetchRepairs(customerId)
-  }, [customerId, fetchRepairs])
-
-  const isLoading = salesLoading || repairsLoading
-
-  const combinedActivities = React.useMemo(() => {
-    const items: Array<{
-      id: string
-      type: 'sale' | 'repair'
-      date: string
-      title: string
-      description: string
-      amount: number
-      status: string
-    }> = []
-
-    if (Array.isArray(sales)) {
-      sales.forEach((sale: any) => {
-        items.push({
-          id: `sale-${sale.id}`,
-          type: 'sale',
-          date: sale.created_at || sale.date || new Date().toISOString(),
-          title: `Venta #${sale.id.toString().slice(-6)}`,
-          description: `${sale.items?.length || 0} producto(s) - ${sale.paymentMethod || 'Pago'}`,
-          amount: sale.total || 0,
-          status: sale.payment_status === 'completed' || sale.payment_status === 'paid' ? 'paid' : 'pending'
-        })
-      })
-    }
-
-    if (Array.isArray(repairs)) {
-      repairs.forEach((repair: any) => {
-        const cost = (repair.final_cost ?? repair.estimated_cost) || 0
-        const statusLower = (repair.status || 'recibido').toLowerCase()
-        const isDelivered = statusLower === 'entregado' || Boolean(repair.delivered_at)
-        const isPaid = repair.payment_status === 'pagado' || (repair.paid_amount != null && repair.paid_amount >= cost && cost > 0)
-        const isPartialPaid = !isPaid && (repair.paid_amount ?? 0) > 0
-
-        items.push({
-          id: `repair-${repair.id}`,
-          type: 'repair',
-          date: repair.created_at || new Date().toISOString(),
-          title: `Reparación: ${repair.device_brand || ''} ${repair.device_model || ''}`.trim(),
-          description: repair.problem_description || 'Sin descripción',
-          amount: cost,
-          status: statusLower,
-          ticketNumber: repair.ticket_number,
-          isDelivered,
-          isPaid,
-          isPartialPaid,
-          paidAmount: repair.paid_amount,
-        } as any)
-      })
-    }
-
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [sales, repairs])
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="flex items-center gap-3">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-          <span className="text-gray-600">Cargando historial...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (combinedActivities.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="mx-auto w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-          <History className="h-12 w-12 text-gray-400" />
-        </div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Sin historial de actividad</h3>
-        <p className="text-gray-500">Este cliente aún no tiene transacciones ni reparaciones registradas.</p>
-      </div>
-    )
-  }
-
-  const visibleActivities = typeof limit === 'number' ? combinedActivities.slice(0, limit) : combinedActivities
-  const hiddenCount = combinedActivities.length - visibleActivities.length
-
-  const getRepairStatusLabel = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'entregado': return 'Entregado'
-      case 'listo': return 'Listo para Retiro'
-      case 'cancelado': return 'Cancelado'
-      case 'reparacion': return 'En Reparación'
-      case 'diagnostico': return 'En Diagnóstico'
-      case 'pausado': return 'Pausado'
-      case 'recibido': return 'Recibido'
-      default: return status.charAt(0).toUpperCase() + status.slice(1)
-    }
-  }
-
-  const getRepairStatusBadgeStyles = (status: string) => {
-    const s = status.toLowerCase()
-    if (s === 'entregado') {
-      return 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300'
-    } else if (s === 'listo') {
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold animate-pulse'
-    } else if (s === 'cancelado') {
-      return 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
-    } else if (s === 'reparacion' || s === 'diagnostico') {
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
-    } else {
-      return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="font-medium text-gray-900 dark:text-white">
-          {typeof limit === 'number' ? 'Actividades Recientes' : 'Todas las Actividades'}
-        </h4>
-        <Badge variant="secondary">{combinedActivities.length} total</Badge>
+    <Card className={cn('gap-0 overflow-hidden py-0 shadow-sm', className)}>
+      <div className="flex items-start justify-between gap-3 border-b px-5 py-3.5">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+            {title}
+          </h3>
+          {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+        </div>
+        {action}
       </div>
+      <CardContent className="p-5">{children}</CardContent>
+    </Card>
+  )
+}
 
-      <div className="space-y-3">
-        {visibleActivities.map((activity: any, index: number) => (
-          <motion.div 
-            key={activity.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-900/40 rounded-xl hover:shadow-sm transition-all duration-200 border border-gray-200/50 dark:border-gray-800/50 gap-4"
-          >
-            <div className="flex items-start gap-4 min-w-0">
-              <div className={`p-2.5 rounded-xl text-white shadow-sm flex-shrink-0 bg-gradient-to-br ${
-                activity.type === 'sale' 
-                  ? 'from-blue-500 to-indigo-600' 
-                  : 'from-amber-500 to-orange-600'
-              }`}>
-                {activity.type === 'sale' ? (
-                  <CreditCard className="h-4.5 w-4.5" />
-                ) : (
-                  <Wrench className="h-4.5 w-4.5" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-gray-900 dark:text-white truncate">
-                    {activity.title}
-                  </p>
-                  {activity.ticketNumber && (
-                    <Badge variant="outline" className="font-mono text-[10px] px-1.5 h-4">
-                      #{activity.ticketNumber}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                  {activity.description}
-                </p>
-                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
-                  <Calendar className="h-3 w-3" />
-                  <span>
-                    {new Date(activity.date).toLocaleDateString('es-ES', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
-              <p className="font-bold tabular-nums text-base text-foreground">
-                {formatCurrency(activity.amount)}
-              </p>
-              {activity.type === 'sale' ? (
-                <Badge 
-                  variant={activity.status === 'paid' ? 'default' : 'secondary'}
-                  className={activity.status === 'paid' 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300 border-0 text-[10px] px-2 py-0.5' 
-                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300 border-0 text-[10px] px-2 py-0.5'
-                  }
-                >
-                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                  {activity.status === 'paid' ? 'Venta Pagada' : 'Pendiente'}
-                </Badge>
-              ) : (
-                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-                  {/* Badge 1: Estado de Reparación */}
-                  <Badge 
-                    className={`${getRepairStatusBadgeStyles(activity.status)} border-0 text-[10px] px-2 py-0.5`}
-                  >
-                    <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                    {getRepairStatusLabel(activity.status)}
-                  </Badge>
+type ContactAction = { label: string; icon: React.ComponentType<{ className?: string }>; onClick: () => void }
 
-                  {/* Badge 2: Retiro / Entrega */}
-                  {activity.isDelivered ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-0 text-[10px] px-2 py-0.5">
-                      📦 Retirado
-                    </Badge>
-                  ) : activity.status === 'listo' ? (
-                    <Badge className="bg-emerald-500 text-white border-0 text-[10px] px-2 py-0.5 animate-pulse font-semibold">
-                      🏬 Listo p/ Retiro
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-0 text-[10px] px-2 py-0.5">
-                      🛠 En Taller
-                    </Badge>
-                  )}
-
-                  {/* Badge 3: Estado de Pago */}
-                  {activity.isPaid ? (
-                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-0 text-[10px] px-2 py-0.5">
-                      💳 Pagado
-                    </Badge>
-                  ) : activity.isPartialPaid ? (
-                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-0 text-[10px] px-2 py-0.5">
-                      ⚡ Parcial
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border-0 text-[10px] px-2 py-0.5">
-                      ⏳ Deuda Pendiente
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ))}
+function ContactRow({
+  label,
+  icon: Icon,
+  value,
+  note,
+  mono,
+  actions = [],
+}: {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  value?: string | null
+  note?: string
+  mono?: boolean
+  actions?: ContactAction[]
+}) {
+  return (
+    <div className="flex items-start gap-3 py-2.5">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+        <dd className={cn('break-words text-sm text-foreground', mono && 'font-mono', !value && 'italic text-muted-foreground')}>
+          {value || 'No registrado'}
+        </dd>
+        {note && <dd className="text-xs text-muted-foreground">{note}</dd>}
       </div>
-
-      {hiddenCount > 0 && onShowAll && (
-        <div className="text-center pt-4 border-t border-gray-200/50 dark:border-gray-800/50">
-          <Button variant="outline" size="sm" onClick={onShowAll}>
-            <History className="h-4 w-4 mr-2" />
-            Ver historial completo ({hiddenCount} más)
-          </Button>
+      {value && actions.length > 0 && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          {actions.map((action) => (
+            <Button
+              key={action.label}
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={action.onClick}
+              aria-label={action.label}
+              title={action.label}
+            >
+              <action.icon className="h-3.5 w-3.5" />
+            </Button>
+          ))}
         </div>
       )}
     </div>
   )
 }
 
+function ProfileRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-right text-sm font-medium text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+function ScoreBar({ value }: { value: number }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+        <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.min(100, value * 10)}%` }} />
+      </span>
+      <span className="tabular-nums">{value}/10</span>
+    </span>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saldo a favor
+// ─────────────────────────────────────────────────────────────────────────────
+interface StoreCreditMovement {
+  id: string
+  amount: number
+  reason: string
+  source_type: 'after_sales' | 'sale' | 'repair' | 'manual'
+  source_id: string | null
+  created_at: string
+}
+
+function CustomerStoreCreditPanel({ customerId }: { customerId?: string | null }) {
+  const [balance, setBalance] = React.useState(0)
+  const [movements, setMovements] = React.useState<StoreCreditMovement[]>([])
+  const [loading, setLoading] = React.useState(Boolean(customerId))
+  const [error, setError] = React.useState<string | null>(null)
+  const [expanded, setExpanded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!customerId) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const resp = await fetch(`/api/customers/${customerId}/store-credit?page=1&pageSize=20`)
+        if (!resp.ok) throw new Error('Error al cargar saldo a favor')
+        const payload = await resp.json().catch(() => null)
+        if (!payload?.success) throw new Error(payload?.error || 'Error al cargar saldo a favor')
+        if (cancelled) return
+        setBalance(Number(payload.data?.balance || 0))
+        setMovements(payload.data?.movements ?? [])
+      } catch {
+        if (!cancelled) setError('No se pudo cargar el saldo a favor.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [customerId])
+
+  if (!customerId) return null
+
+  const sourceLabel = (s: StoreCreditMovement['source_type']) =>
+    ({ after_sales: 'Posventa', sale: 'Venta', repair: 'Reparación', manual: 'Ajuste manual' }[s] || 'Movimiento')
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Wallet className="h-4 w-4" />
+          Saldo a favor
+        </span>
+        {loading ? (
+          <span className="h-4 w-20 animate-pulse rounded bg-muted" aria-label="Cargando saldo" />
+        ) : error ? (
+          <span className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400">
+            <AlertCircle className="h-3.5 w-3.5" />
+            {error}
+          </span>
+        ) : (
+          <span className={cn('font-mono text-sm font-bold tabular-nums', balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+            {formatCurrency(balance)}
+          </span>
+        )}
+      </div>
+
+      {!loading && !error && (
+        <p className="text-xs text-muted-foreground">
+          {balance > 0
+            ? 'Se puede aplicar en la próxima compra o reparación.'
+            : 'Se genera con devoluciones, créditos o ajustes manuales.'}
+        </p>
+      )}
+
+      {!loading && !error && movements.length > 0 && (
+        <>
+          <button
+            type="button"
+            className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+          >
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} />
+            {expanded ? 'Ocultar movimientos' : `Ver ${movements.length} movimiento${movements.length !== 1 ? 's' : ''}`}
+          </button>
+          {expanded && (
+            <ul className="divide-y overflow-hidden rounded-lg border">
+              {movements.map((m) => (
+                <li key={m.id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">{m.reason}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {sourceLabel(m.source_type)} · {new Date(m.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <span className={cn('shrink-0 font-mono text-sm font-bold tabular-nums', m.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+                    {m.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(Number(m.amount)))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+const TAB_TRIGGER =
+  'h-11 shrink-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-1 text-sm font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none'
+
 export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compact }: CustomerDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
-  const { data: freshData } = useCustomerData(customer.id)
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null)
+  const [selectedRepairId, setSelectedRepairId] = useState<string | null>(null)
+  const { data: freshData, error: customerError, mutate: refreshCustomer } = useCustomerData(customer.id)
 
   // Use fresh data if available, otherwise fallback to prop
-  const currentCustomer = freshData ? { ...customer, ...freshData } : customer
+  // La recarga trae la fila cruda: se conservan los totales ya calculados.
+  const currentCustomer = freshData ? keepComputedSpend({ ...customer, ...freshData } as Customer, customer) : customer
+
+  const { repairs, fetchRepairs } = useCustomerRepairs()
+  const { creditSummary, refresh: refreshCredits } = useCustomerCredits(currentCustomer.id, currentCustomer)
+  const { summary: historySummary, refresh: refreshHistory } = useCustomerHistory(currentCustomer.id)
+  // Los totales salen de la misma regla que la lista y la analítica. Antes el
+  // detalle sumaba solo las últimas 100 ventas, ignoraba la tienda pública y
+  // contaba las reparaciones con otro criterio: el mismo cliente tenía dos
+  // «gastados» distintos.
+  const spendMap = useCustomerSalesMetricsMap([currentCustomer.id])
+  const spend = spendMap[currentCustomer.id]
+
+  // Las filas completas de las reparaciones, para abrir su ficha desde el historial.
+  React.useEffect(() => {
+    fetchRepairs(currentCustomer.id)
+  }, [currentCustomer.id, fetchRepairs])
+
+  const stats = React.useMemo(() => {
+    // Mientras llega el cálculo se usa lo que ya trae el cliente desde la lista,
+    // que sale de la misma regla. Nunca de las columnas viejas de la ficha.
+    const fromList = (currentCustomer as Customer & { spend_synced?: boolean }).spend_synced ? currentCustomer : null
+    const salesSum = spend?.purchaseTotal ?? 0
+    const repairsSum = spend?.repairTotal ?? 0
+    const totalSpent = spend?.total ?? fromList?.lifetime_value ?? 0
+    const salesCount = spend?.purchaseCount ?? fromList?.total_purchases ?? historySummary?.salesCount ?? 0
+    const repairsCount = spend?.repairCount ?? (fromList as { total_repairs?: number } | null)?.total_repairs ?? historySummary?.repairsCount ?? 0
+    const totalPurchases = salesCount + repairsCount
+    const averageTicket = totalPurchases > 0 ? Math.round(totalSpent / totalPurchases) : 0
+
+    // La última visita es la última operación, no la última edición de la ficha.
+    const lastVisit = spend?.lastDate ?? fromList?.last_visit ?? null
+
+    const creditLimit = creditSummary?.credit_limit ?? currentCustomer.credit_limit ?? 0
+    const customerDebt = currentCustomer as { credit_outstanding?: number; pending_amount?: number }
+    const pendingDebt = creditSummary?.total_pending ?? customerDebt.credit_outstanding ?? customerDebt.pending_amount ?? 0
+    const availableCredit = creditSummary?.available_credit ?? Math.max(0, creditLimit - pendingDebt)
+    const storeBalance = creditSummary?.store_balance ?? 0
+
+    return {
+      totalSpent,
+      salesTotal: salesSum,
+      repairsTotal: repairsSum,
+      totalPurchases,
+      salesCount,
+      repairsCount,
+      lastVisit,
+      averageTicket,
+      pendingDebt,
+      availableCredit,
+      creditLimit,
+      storeBalance,
+    }
+  }, [currentCustomer, creditSummary, spend, historySummary])
+
+  // Si la recarga falla se seguian mostrando los datos que traia la lista, sin
+  // ninguna senal: el credito y el saldo podian estar viejos y nadie lo sabia.
+  const isStale = Boolean(customerError) && !freshData
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>((currentCustomer as Customer & { profile_id?: string }).profile_id ?? null)
   const resolvedEmail = (freshData?.email ?? (customer as Customer & { email?: string }).email) as string | undefined
+
+  const selectedRepair = React.useMemo(
+    () => (selectedRepairId ? (repairs.find((r) => r.id === selectedRepairId) as unknown as Record<string, unknown> | undefined) ?? null : null),
+    [repairs, selectedRepairId]
+  )
+
+  const normalizedRepair = React.useMemo(() => {
+    if (!selectedRepair) return null
+    return {
+      ...selectedRepair,
+      ticketNumber: selectedRepair.ticketNumber || selectedRepair.ticket_number,
+      device: selectedRepair.device || `${selectedRepair.device_brand || ''} ${selectedRepair.device_model || ''}`.trim() || 'Dispositivo',
+      deviceType: selectedRepair.deviceType || selectedRepair.device_type || 'smartphone',
+      brand: selectedRepair.brand || selectedRepair.device_brand || '',
+      model: selectedRepair.model || selectedRepair.device_model || '',
+      serialNumber: selectedRepair.serialNumber || selectedRepair.serial_number || selectedRepair.imei || '',
+      problem: selectedRepair.problem || selectedRepair.problem_description || 'Sin descripción',
+      priority: selectedRepair.priority || 'medium',
+      urgency: selectedRepair.urgency || 'normal',
+      status: selectedRepair.status || 'recibido',
+      createdAt: selectedRepair.createdAt || selectedRepair.created_at || new Date().toISOString(),
+      finalCost: selectedRepair.finalCost ?? selectedRepair.final_cost ?? selectedRepair.estimatedCost ?? selectedRepair.estimated_cost ?? 0,
+      customer: selectedRepair.customer || {
+        id: currentCustomer.id,
+        name: currentCustomer.name,
+        customerCode: currentCustomer.customerCode || '',
+        phone: currentCustomer.phone || '',
+        email: currentCustomer.email || '',
+      }
+    }
+  }, [selectedRepair, currentCustomer])
 
   React.useEffect(() => {
     const fetchProfileId = async () => {
@@ -352,7 +414,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     activeTab === 'authorized'
   )
 
-  const formatDate = (dateString?: string) => {
+  const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'No disponible'
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -370,464 +432,474 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     }
   }
 
+  const copyAction = (text: string): ContactAction => ({ label: 'Copiar', icon: Copy, onClick: () => void copyToClipboard(text) })
 
+  const openPayment = () => setIsPaymentModalOpen(true)
+  const creditUsage = stats.creditLimit > 0 ? Math.min(100, Math.round((stats.pendingDebt / stats.creditLimit) * 100)) : 0
+  const address = currentCustomer.address || currentCustomer.city
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-10">
-      {/* 1. Header Section */}
+    <div className="mx-auto max-w-7xl space-y-6 pb-10">
       <CustomerDetailHeader
         customer={currentCustomer}
         onBack={onBack}
         onEdit={() => onEdit(currentCustomer)}
         onViewHistory={() => onViewHistory(currentCustomer)}
+        onOpenPayment={openPayment}
         compact={compact}
+        stats={stats}
       />
 
-      {/* 2. Key Metrics Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        <CustomerDetailMetrics customer={currentCustomer} />
-      </motion.div>
+      {isStale && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
+        >
+          <div className="text-amber-900 dark:text-amber-200">
+            <p className="font-semibold">Estos datos pueden estar desactualizados</p>
+            <p className="text-xs">No pudimos traer la ficha más reciente del cliente.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void refreshCustomer()}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
-      {/* 2.5. Account Link Section */}
-      <CustomerLinkAccount
-        customerId={currentCustomer.id}
-        customerName={currentCustomer.name}
-        customerEmail={resolvedEmail}
-        profileId={resolvedProfileId}
-        onLinked={() => window.location.reload()}
-      />
+      <CustomerDetailMetrics customer={currentCustomer} stats={stats} />
 
-      {/* 3. Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="border-b border-gray-200 dark:border-gray-800">
-          <TabsList className="h-12 bg-transparent p-0 gap-6">
-            <TabsTrigger
-              value="overview"
-              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
-            >
-              <LayoutDashboard className="h-4 w-4 mr-2" />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-6">
+        <div className="overflow-x-auto border-b">
+          <TabsList className="h-11 w-max gap-6 rounded-none bg-transparent p-0">
+            <TabsTrigger value="overview" className={TAB_TRIGGER}>
+              <LayoutDashboard className="mr-2 h-4 w-4" />
               Resumen
             </TabsTrigger>
-            <TabsTrigger
-              value="history"
-              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
-              onMouseEnter={() => prefetchCustomerPurchases(currentCustomer.id)}
-            >
-              <History className="h-4 w-4 mr-2" />
+            <TabsTrigger value="history" className={TAB_TRIGGER}>
+              <History className="mr-2 h-4 w-4" />
               Historial
+              {historySummary && historySummary.withBalance > 0 && (
+                <span className="ml-2 rounded-full bg-rose-500/15 px-1.5 text-[11px] font-semibold tabular-nums text-rose-700 dark:text-rose-300">
+                  {historySummary.withBalance}
+                </span>
+              )}
             </TabsTrigger>
-            <TabsTrigger
-              value="credits"
-              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              Créditos y Pagos
+            <TabsTrigger value="credits" className={TAB_TRIGGER}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              Créditos y pagos
+            </TabsTrigger>
+            <TabsTrigger value="points" className={TAB_TRIGGER}>
+              <Coins className="mr-2 h-4 w-4" />
+              Puntos
             </TabsTrigger>
             <TabsTrigger
               value="authorized"
-              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
+              className={TAB_TRIGGER}
               onMouseEnter={() => {
                 const pid = resolvedProfileId || (currentCustomer as Customer & { profile_id?: string }).profile_id
                 if (pid) prefetchAuthorizedPersons(pid as string)
               }}
             >
-              <ShieldCheck className="h-4 w-4 mr-2" />
+              <ShieldCheck className="mr-2 h-4 w-4" />
               Autorizados
             </TabsTrigger>
-            <TabsTrigger
-              value="notes"
-              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
-            >
-              <FileText className="h-4 w-4 mr-2" />
+            <TabsTrigger value="notes" className={TAB_TRIGGER}>
+              <FileText className="mr-2 h-4 w-4" />
               Notas
             </TabsTrigger>
           </TabsList>
         </div>
 
-        {/* Tab Content: Overview */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column: Personal Info & Summary */}
-            <div className="lg:col-span-2 space-y-6">
-              <Card className="border-0 shadow-lg">
-                <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-t-lg">
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                    <User className="h-5 w-5 text-blue-600" />
-                    Información Personal
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Nombre Completo</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.name}</p>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.name)}>
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Email</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.email || "No registrado"}</p>
-                        {currentCustomer.email && (
-                          <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.email)}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`)}>
-                              <ExternalLink className="h-3 w-3" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Teléfono</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.phone || "No registrado"}</p>
-                        {currentCustomer.phone && (
-                          <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.phone)}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`)}>
-                              <PhoneCall className="h-3 w-3" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`)}>
-                              <MessageSquare className="h-3 w-3" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-gray-500">Dirección</span>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium flex-1">{currentCustomer.address || currentCustomer.city || "No registrada"}</p>
-                        {(currentCustomer.address || currentCustomer.city) && (
-                          <>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.address || currentCustomer.city)}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(currentCustomer.address || currentCustomer.city)}`, '_blank')}>
-                              <MapPin className="h-3 w-3" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-blue-700 dark:text-blue-300">Fecha de Registro</label>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Calendar className="h-4 w-4 text-blue-500" />
-                        <p className="font-semibold text-blue-900 dark:text-blue-100">{formatDate(currentCustomer.registration_date)}</p>
-                      </div>
-                    </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-green-700 dark:text-green-300">Última Actividad</label>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Clock className="h-4 w-4 text-green-500" />
-                        <p className="font-semibold text-green-900 dark:text-green-100">{formatDate(currentCustomer.last_visit || currentCustomer.last_activity)}</p>
-                      </div>
-                    </div>
-                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                      <label className="text-sm font-medium text-purple-700 dark:text-purple-300">Estado</label>
-                      <div className="flex items-center gap-2 mt-2">
-                        <CheckCircle className="h-4 w-4 text-purple-500" />
-                        <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200">
-                          {currentCustomer.status === 'active' ? 'Activo' : currentCustomer.status || 'Activo'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Recent Activity Preview */}
-              <Card className="border-0 shadow-lg">
-                <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-t-lg">
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-gray-600" />
-                    Actividad Reciente
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <SalesHistoryList
+        {/* ── Resumen ─────────────────────────────────────────────────────── */}
+        <TabsContent value="overview" className="mt-0">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
+              {historySummary && historySummary.withBalance > 0 && (
+                <Section
+                  title="Pendiente de cobro"
+                  icon={Coins}
+                  description={[
+                    historySummary.owed > 0 ? `Debe ${formatCurrency(historySummary.owed)}` : null,
+                    historySummary.dueOnPickup > 0 ? `${formatCurrency(historySummary.dueOnPickup)} se cobran al retirar` : null,
+                  ].filter(Boolean).join(' · ') || undefined}
+                  action={
+                    <Button size="sm" onClick={openPayment}>
+                      <Coins className="mr-1.5 h-4 w-4" />
+                      Cobrar
+                    </Button>
+                  }
+                >
+                  <CustomerHistoryList
                     customerId={currentCustomer.id}
-                    limit={5}
+                    onlyWithBalance
+                    limit={4}
                     onShowAll={() => setActiveTab('history')}
+                    onViewSale={setSelectedSaleId}
+                    onViewRepair={setSelectedRepairId}
                   />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column: Quick Stats & Notes Preview */}
-            <div className="space-y-6">
-              <Card className="border-0 shadow-lg">
-                <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-t-lg">
-                  <CardTitle className="flex items-center gap-2">
-                    <Tag className="h-5 w-5 text-indigo-600" />
-                    Segmentación y Perfil
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 p-6">
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Cliente</label>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300">
-                        <Building className="h-3 w-3 mr-1" />
-                        {currentCustomer.customer_type === 'premium' ? 'Premium' : 
-                         currentCustomer.customer_type === 'empresa' ? 'Empresa' : 'Regular'}
-                      </Badge>
-                      <Badge variant="outline" className="bg-purple-50 border-purple-200 text-purple-800 dark:bg-purple-900/20 dark:border-purple-700 dark:text-purple-300">
-                        <Star className="h-3 w-3 mr-1" />
-                        {currentCustomer.segment === 'vip' ? 'VIP' : 
-                         currentCustomer.segment === 'premium' ? 'Premium' : 'Regular'}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Puntuaciones</label>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Crédito</span>
-                        {currentCustomer.credit_score ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
-                                style={{ width: `${currentCustomer.credit_score * 10}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium">{currentCustomer.credit_score}/10</span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400 italic">Sin datos</span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Satisfacción</span>
-                        {currentCustomer.satisfaction_score ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full"
-                                style={{ width: `${currentCustomer.satisfaction_score * 10}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium">{currentCustomer.satisfaction_score}/10</span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400 italic">Sin datos</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Etiquetas</label>
-                    <div className="flex flex-wrap gap-2">
-                      {currentCustomer.tags && currentCustomer.tags.length > 0 ? (
-                        currentCustomer.tags.map((tag, i) => (
-                          <Badge key={i} variant="secondary" className="bg-gray-100 dark:bg-gray-800">
-                            <Tag className="h-3 w-3 mr-1" />
-                            {tag}
-                          </Badge>
-                        ))
-                      ) : (
-                        <p className="text-sm text-gray-500 italic">Sin etiquetas</p>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-xs"
-                        onClick={() => onEdit(currentCustomer)}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Agregar
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Wholesale Access Toggle */}
-              {(resolvedProfileId || currentCustomer.id) && (
-                <WholesaleToggle
-                  profileId={resolvedProfileId || currentCustomer.id}
-                  customerName={currentCustomer.name}
-                />
+                </Section>
               )}
 
-              <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Nota Rápida
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    {currentCustomer.notes || "Sin notas adicionales."}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-3 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/20"
-                    onClick={() => onEdit(currentCustomer)}
-                  >
-                    <Edit className="h-3 w-3 mr-1" />
-                    Editar nota
-                  </Button>
-                </CardContent>
-              </Card>
+              <Section title="Actividad reciente" icon={History} description="Últimas ventas y reparaciones, con su estado de pago.">
+                <CustomerHistoryList
+                  customerId={currentCustomer.id}
+                  limit={6}
+                  onShowAll={() => setActiveTab('history')}
+                  onViewSale={setSelectedSaleId}
+                  onViewRepair={setSelectedRepairId}
+                  onCollect={openPayment}
+                />
+              </Section>
             </div>
+
+            <aside className="space-y-6">
+              <Section title="Contacto" icon={User}>
+                <dl className="-my-2.5 divide-y">
+                  <ContactRow
+                    label="Teléfono"
+                    icon={PhoneCall}
+                    value={currentCustomer.phone}
+                    mono
+                    actions={currentCustomer.phone ? [
+                      { label: 'Llamar', icon: PhoneCall, onClick: () => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`) },
+                      { label: 'WhatsApp', icon: MessageSquare, onClick: () => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`) },
+                      copyAction(currentCustomer.phone),
+                    ] : []}
+                  />
+
+                  {/* Contacto alternativo: el telefono del cliente suele ser el
+                      equipo que dejo en el taller, asi que ahi no se lo puede
+                      ubicar justo cuando hay algo que avisarle. */}
+                  {currentCustomer.alternate_phone && (
+                    <ContactRow
+                      label="Otro teléfono para avisarle"
+                      icon={PhoneCall}
+                      value={currentCustomer.alternate_phone}
+                      mono
+                      note={currentCustomer.alternate_phone_label
+                        ? `de ${currentCustomer.alternate_phone_label}`
+                        : 'sin aclarar de quién es'}
+                      actions={[
+                        { label: 'Llamar', icon: PhoneCall, onClick: () => window.open(`tel:${encodeURIComponent(currentCustomer.alternate_phone || '')}`) },
+                        { label: 'WhatsApp', icon: MessageSquare, onClick: () => window.open(`https://wa.me/${(currentCustomer.alternate_phone || '').replace(/[^\d]/g, '')}`) },
+                        copyAction(currentCustomer.alternate_phone || ''),
+                      ]}
+                    />
+                  )}
+
+                  <ContactRow
+                    label="Email"
+                    icon={Mail}
+                    value={currentCustomer.email}
+                    actions={currentCustomer.email ? [
+                      { label: 'Escribir', icon: Mail, onClick: () => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`) },
+                      copyAction(currentCustomer.email),
+                    ] : []}
+                  />
+
+                  <ContactRow
+                    label="Dirección"
+                    icon={MapPin}
+                    value={address}
+                    actions={address ? [
+                      { label: 'Ver en el mapa', icon: MapPin, onClick: () => window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, '_blank') },
+                      copyAction(address),
+                    ] : []}
+                  />
+
+                  {currentCustomer.ruc && (
+                    <ContactRow label="RUC / CI" icon={Hash} value={currentCustomer.ruc} mono actions={[copyAction(currentCustomer.ruc)]} />
+                  )}
+
+                  {currentCustomer.customerCode && (
+                    <ContactRow label="Código de cliente" icon={Hash} value={currentCustomer.customerCode} mono actions={[copyAction(currentCustomer.customerCode)]} />
+                  )}
+                </dl>
+              </Section>
+
+              <Section
+                title="Cuenta"
+                icon={Wallet}
+                action={
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setActiveTab('credits')}>
+                    Ver detalle
+                  </Button>
+                }
+              >
+                <div className="space-y-4">
+                  {stats.creditLimit > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-xs text-muted-foreground">Línea de crédito</span>
+                        <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                          {formatCurrency(stats.pendingDebt)}
+                          <span className="font-normal text-muted-foreground"> / {formatCurrency(stats.creditLimit)}</span>
+                        </span>
+                      </div>
+                      <div
+                        className="h-2 overflow-hidden rounded-full bg-muted"
+                        role="progressbar"
+                        aria-valuenow={creditUsage}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Uso de la línea de crédito"
+                      >
+                        <div
+                          className={cn(
+                            'h-full rounded-full transition-all',
+                            creditUsage > 80 ? 'bg-rose-500' : creditUsage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                          )}
+                          style={{ width: `${creditUsage}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>
+                          Disponible <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(stats.availableCredit)}</span>
+                        </span>
+                        <span className="tabular-nums">{creditUsage}% usado</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <CreditCard className="h-4 w-4" />
+                        Línea de crédito
+                      </span>
+                      <span className="text-xs text-muted-foreground">Sin línea asignada</span>
+                    </div>
+                  )}
+
+                  {stats.pendingDebt > 0 && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2">
+                      <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Deuda total</span>
+                      <span className="font-mono text-sm font-bold tabular-nums text-rose-700 dark:text-rose-300">{formatCurrency(stats.pendingDebt)}</span>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-4">
+                    <CustomerStoreCreditPanel customerId={currentCustomer.id} />
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                title="Perfil"
+                icon={Tag}
+                action={
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onEdit(currentCustomer)}>
+                    <Edit className="mr-1 h-3 w-3" />
+                    Editar
+                  </Button>
+                }
+              >
+                <dl className="-my-2 divide-y">
+                  <ProfileRow label="Estado">
+                    <Badge variant={currentCustomer.status === 'active' || !currentCustomer.status ? 'secondary' : 'outline'}>
+                      {currentCustomer.status === 'inactive' ? 'Inactivo' : currentCustomer.status === 'suspended' ? 'Suspendido' : 'Activo'}
+                    </Badge>
+                  </ProfileRow>
+                  <ProfileRow label="Tipo">
+                    {currentCustomer.customer_type === 'premium' ? 'Premium'
+                      : currentCustomer.customer_type === 'empresa' ? 'Empresa'
+                      : currentCustomer.customer_type === 'wholesale' ? 'Mayorista' : 'Regular'}
+                  </ProfileRow>
+                  <ProfileRow label="Segmento">
+                    {currentCustomer.segment === 'vip' ? 'VIP' : currentCustomer.segment === 'premium' ? 'Premium' : 'Regular'}
+                  </ProfileRow>
+                  <ProfileRow label="Cliente desde">{formatDate(currentCustomer.registration_date)}</ProfileRow>
+                  <ProfileRow label="Última visita">{stats.lastVisit ? formatDate(stats.lastVisit) : 'Sin operaciones'}</ProfileRow>
+                  {currentCustomer.credit_score ? (
+                    <ProfileRow label="Puntaje de crédito"><ScoreBar value={currentCustomer.credit_score} /></ProfileRow>
+                  ) : null}
+                  {currentCustomer.satisfaction_score ? (
+                    <ProfileRow label="Satisfacción"><ScoreBar value={currentCustomer.satisfaction_score} /></ProfileRow>
+                  ) : null}
+                </dl>
+
+                <div className="mt-4 space-y-2 border-t pt-4">
+                  <p className="text-xs text-muted-foreground">Etiquetas</p>
+                  {currentCustomer.tags && currentCustomer.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {currentCustomer.tags.map((tag, i) => (
+                        <Badge key={`${tag}-${i}`} variant="outline" className="font-normal">{tag}</Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs italic text-muted-foreground">Sin etiquetas</p>
+                  )}
+                </div>
+
+                <div className="mt-4 space-y-1 border-t pt-4">
+                  <p className="text-xs text-muted-foreground">Nota</p>
+                  <p className={cn('whitespace-pre-line text-sm', currentCustomer.notes ? 'text-foreground' : 'italic text-muted-foreground')}>
+                    {currentCustomer.notes || 'Sin notas.'}
+                  </p>
+                </div>
+              </Section>
+
+              <div className="space-y-3">
+                <h3 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Acceso online</h3>
+                <CustomerLinkAccount
+                  customerId={currentCustomer.id}
+                  customerName={currentCustomer.name}
+                  customerEmail={resolvedEmail}
+                  profileId={resolvedProfileId}
+                  onLinked={() => window.location.reload()}
+                />
+                {(resolvedProfileId || currentCustomer.id) && (
+                  <WholesaleToggle
+                    profileId={resolvedProfileId || currentCustomer.id}
+                    customerName={currentCustomer.name}
+                  />
+                )}
+              </div>
+            </aside>
           </div>
         </TabsContent>
 
-        {/* Tab Content: Credits */}
-        <TabsContent value="credits" className="space-y-6">
-          <CustomerCreditInfo 
-            customer={currentCustomer} 
+        {/* ── Historial ───────────────────────────────────────────────────── */}
+        <TabsContent value="history" className="mt-0">
+          <Section title="Historial de ventas y reparaciones" icon={History} description="Cada operación con lo que se cobró y lo que falta.">
+            <CustomerHistoryList
+              customerId={currentCustomer.id}
+              showSummary
+              onViewSale={setSelectedSaleId}
+              onViewRepair={setSelectedRepairId}
+              onCollect={openPayment}
+            />
+          </Section>
+        </TabsContent>
+
+        {/* ── Créditos y pagos ────────────────────────────────────────────── */}
+        <TabsContent value="credits" className="mt-0 space-y-6">
+          <CustomerCreditInfo
+            customer={currentCustomer}
             compact={compact}
             showActions={true}
+            onOpenPayment={openPayment}
+            onEditCustomer={() => onEdit(currentCustomer)}
           />
         </TabsContent>
 
-        {/* Tab Content: History */}
-        <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historial de Actividad</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SalesHistoryList customerId={currentCustomer.id} />
-            </CardContent>
-          </Card>
+        {/* ── Puntos ──────────────────────────────────────────────────────── */}
+        <TabsContent value="points" className="mt-0">
+          <CustomerPointsHistory customerId={currentCustomer.id} />
         </TabsContent>
 
-        {/* Tab Content: Authorized Persons */}
-        <TabsContent value="authorized">
-          <Card className="border-0 shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-t-lg">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-blue-600" />
-                Personas Autorizadas para Retiro
-                <Badge variant="secondary" className="ml-2">{authorizedLoading ? '...' : (authorizedPersons?.length || 0)}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              {authorizedError && (
-                <div className="mb-4 p-3 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  No se pudieron cargar los autorizados. Reintentá en unos segundos.
-                </div>
-              )}
-              {!authorizedError && !authorizedLoading && !resolvedProfileId && (
-                <div className="mb-4 p-3 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 rounded-md text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  Este cliente no tiene un perfil vinculado (falta email), por eso no se pueden mostrar autorizados.
-                </div>
-              )}
-              {authorizedLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="animate-pulse flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                      <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
-                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
-                      </div>
+        {/* ── Autorizados ─────────────────────────────────────────────────── */}
+        <TabsContent value="authorized" className="mt-0">
+          <Section
+            title="Personas autorizadas para retirar"
+            icon={ShieldCheck}
+            action={<Badge variant="secondary">{authorizedLoading ? '…' : (authorizedPersons?.length || 0)}</Badge>}
+          >
+            {authorizedError && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-sm text-rose-700 dark:text-rose-300">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                No se pudieron cargar los autorizados. Reintentá en unos segundos.
+              </div>
+            )}
+            {!authorizedError && !authorizedLoading && !resolvedProfileId && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Este cliente no tiene un perfil vinculado (falta email), por eso no se pueden mostrar autorizados.
+              </div>
+            )}
+            {authorizedLoading ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-20 animate-pulse rounded-lg border bg-muted/50" />
+                ))}
+              </div>
+            ) : authorizedPersons && authorizedPersons.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {authorizedPersons.map((person: { id: string; full_name: string; document_number: string; relationship?: string; phone?: string }) => (
+                  <div key={person.id} className="flex items-center gap-3 rounded-lg border p-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <User className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="truncate text-sm font-semibold text-foreground">{person.full_name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">CI {person.document_number}</p>
+                      {(person.relationship || person.phone) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[person.relationship, person.phone].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
                     </div>
-                  ))}
-                </div>
-              ) : authorizedPersons && authorizedPersons.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {authorizedPersons.map((person: { id: string; full_name: string; document_number: string; relationship?: string; phone?: string }) => (
-                    <div key={person.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 group hover:shadow-md transition-all">
-                      <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
-                        <User className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-gray-900 dark:text-white truncate">{person.full_name}</p>
-                        <div className="flex flex-col gap-0.5 mt-0.5">
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <FileText className="h-3 w-3" />
-                            CI: {person.document_number}
-                          </p>
-                          {person.relationship && (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">{person.relationship}</p>
-                          )}
-                          {person.phone && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <PhoneCall className="h-3 w-3" />
-                              {person.phone}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                    <Shield className="h-8 w-8 text-gray-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">Sin autorizados</h3>
-                  <p className="text-gray-500">Este cliente aún no ha designado personas autorizadas para el retiro.</p>
-                </div>
-              )}
-              
-              <div className="mt-8 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-xl flex gap-3">
-                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
-                  <strong>Verificación importante:</strong> Al momento del retiro por parte de un tercero, es obligatorio solicitar el documento de identidad original y verificar que coincida con los datos aquí registrados.
-                </p>
+                ))}
               </div>
-            </CardContent>
-          </Card>
+            ) : (
+              <div className="flex flex-col items-center gap-2 py-10 text-center">
+                <Shield className="h-8 w-8 text-muted-foreground/60" />
+                <p className="text-sm font-medium text-foreground">Sin autorizados</p>
+                <p className="text-xs text-muted-foreground">Este cliente aún no designó personas para retirar sus equipos.</p>
+              </div>
+            )}
+
+            <p className="mt-6 flex gap-2 rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>
+                <strong className="text-foreground">Al entregar a un tercero</strong> pedí el documento original y verificá que coincida con lo registrado acá.
+              </span>
+            </p>
+          </Section>
         </TabsContent>
 
-        {/* Tab Content: Notes */}
-        <TabsContent value="notes">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notas y Documentos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-900/10 border-yellow-100 dark:border-yellow-900/20">
-                  <p className="text-sm text-gray-800 dark:text-gray-200">
-                    {currentCustomer.notes || "No hay notas registradas para este cliente."}
-                  </p>
-                </div>
-                <Button className="w-full" onClick={() => onEdit(currentCustomer)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {currentCustomer.notes ? 'Editar nota' : 'Agregar nota'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        {/* ── Notas ───────────────────────────────────────────────────────── */}
+        <TabsContent value="notes" className="mt-0">
+          <Section
+            title="Notas"
+            icon={FileText}
+            action={
+              <Button size="sm" variant="outline" onClick={() => onEdit(currentCustomer)}>
+                <Edit className="mr-1.5 h-3.5 w-3.5" />
+                {currentCustomer.notes ? 'Editar nota' : 'Agregar nota'}
+              </Button>
+            }
+          >
+            <p className={cn('whitespace-pre-line text-sm', currentCustomer.notes ? 'text-foreground' : 'italic text-muted-foreground')}>
+              {currentCustomer.notes || 'No hay notas registradas para este cliente.'}
+            </p>
+          </Section>
         </TabsContent>
       </Tabs>
+
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={onBack} className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Volver a clientes
+        </Button>
+      </div>
+
+      {/* Modal de Cobro / Abono Unificado */}
+      <CustomerGlobalPaymentModal
+        open={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        customer={currentCustomer}
+        onSuccess={() => {
+          setIsPaymentModalOpen(false)
+          // Lo cobrado tiene que verse enseguida en el historial y en la cuenta.
+          void refreshHistory()
+          refreshCredits()
+          void refreshCustomer()
+          fetchRepairs(currentCustomer.id)
+        }}
+      />
+
+      {/* Modal de Detalle de Venta */}
+      <SaleDetailsModal
+        isOpen={Boolean(selectedSaleId)}
+        onClose={() => setSelectedSaleId(null)}
+        saleId={selectedSaleId}
+      />
+
+      {/* Modal de Detalle de Reparación */}
+      <RepairDetailDialog
+        open={Boolean(normalizedRepair)}
+        onClose={() => setSelectedRepairId(null)}
+        repair={normalizedRepair as unknown as React.ComponentProps<typeof RepairDetailDialog>['repair']}
+      />
     </div>
   )
 }

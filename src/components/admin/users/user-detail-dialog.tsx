@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Dialog,
@@ -56,6 +58,7 @@ import {
   ROLE_PERMISSIONS,
   WHOLESALE_PRICE_PERMISSION,
 } from '@/lib/auth/roles-permissions'
+import { isProtectedOrganizationOwner } from '@/lib/auth/organization-owner-policy'
 
 interface UserDetailDialogProps {
   user: SupabaseUser | null
@@ -221,6 +224,8 @@ function getRoleLabel(role: string) {
   switch (role) {
     case 'super_admin':
       return 'Super Admin'
+    case 'owner':
+      return 'Propietario'
     case 'admin':
       return 'Administrador'
     case 'tecnico':
@@ -236,7 +241,8 @@ function getRoleLabel(role: string) {
 
 function buildPermissionsFromRoleAndExtra(role: SupabaseUser['role'], extraPermissions: string[]) {
   const matrix: PermissionsMatrix = {}
-  const rolePermissionIds = (ROLE_PERMISSIONS[role]?.permissions || []).map((permission) => permission.id)
+  const permissionRole = role === 'owner' ? 'admin' : role
+  const rolePermissionIds = (ROLE_PERMISSIONS[permissionRole]?.permissions || []).map((permission) => permission.id)
   const combined = new Set<string>([...rolePermissionIds, ...extraPermissions])
 
   combined.forEach((permissionId) => {
@@ -387,7 +393,10 @@ export function UserDetailDialog({
   }, [open, user, isCustomerView, loadPermissions, loadActivity])
 
   const rolePermissions = useMemo(
-    () => new Set((user ? ROLE_PERMISSIONS[user.role]?.permissions || [] : []).map((permission) => permission.id)),
+    () => {
+      const permissionRole = user?.role === 'owner' ? 'admin' : user?.role
+      return new Set((permissionRole ? ROLE_PERMISSIONS[permissionRole]?.permissions || [] : []).map((permission) => permission.id))
+    },
     [user],
   )
 
@@ -431,6 +440,8 @@ export function UserDetailDialog({
     switch (role) {
       case 'super_admin':
         return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300'
+      case 'owner':
+        return 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300'
       case 'admin':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300'
       case 'tecnico':
@@ -491,8 +502,9 @@ export function UserDetailDialog({
     : effectivePermissions.has(WHOLESALE_PRICE_PERMISSION) || Boolean(user.isWholesale)
   const accountAgeDays = getAccountAgeDays(user.createdAt)
   const isSelfUser = currentUserId === user.id
+  const isOwner = isProtectedOrganizationOwner(user.role)
   const canRunStatusAction =
-    user.status === 'active' ? typeof onDeactivate === 'function' : typeof onReactivate === 'function'
+    !isOwner && (user.status === 'active' ? typeof onDeactivate === 'function' : typeof onReactivate === 'function')
   const statusActionLabel = user.status === 'active' ? 'Desactivar' : 'Reactivar'
   const statusActionDescription = user.status === 'active'
     ? 'Esta accion desactivara el acceso al sistema para este usuario.'
@@ -513,7 +525,7 @@ export function UserDetailDialog({
                 <div className="absolute -inset-0.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full blur opacity-30 group-hover:opacity-50 transition duration-500" />
                 <div className="relative h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl shadow-xl border-2 border-white dark:border-slate-900 overflow-hidden">
                   {user.avatar_url ? (
-                    <img
+                    <AppImage
                       src={user.avatar_url}
                       alt={user.name}
                       className="h-full w-full object-cover"
@@ -539,6 +551,9 @@ export function UserDetailDialog({
                   <Badge variant="outline" className={cn("px-2.5 py-0.5 font-medium border shadow-sm", getRoleBadgeColor(user.role))}>
                     {getRoleLabel(user.role)}
                   </Badge>
+                  {isOwner ? (
+                    <span className="text-xs text-muted-foreground">Responsable principal de la empresa</span>
+                  ) : null}
                   <Badge variant="outline" className={cn("px-2.5 py-0.5 font-medium border shadow-sm", getStatusBadgeColor(user.status))}>
                     {user.status === 'active' ? 'Activo' : user.status === 'inactive' ? 'Inactivo' : 'Suspendido'}
                   </Badge>
@@ -553,7 +568,7 @@ export function UserDetailDialog({
             </div>
 
             <div className="flex flex-wrap items-center gap-2 bg-slate-50/50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 backdrop-blur-sm shadow-sm">
-              {onEdit ? (
+              {onEdit && !isOwner ? (
                 <Button variant="ghost" size="sm" onClick={() => onEdit(user)} className="h-8 hover:bg-white dark:hover:bg-slate-800 shadow-sm transition-all text-slate-700 dark:text-slate-300">
                   <UserCog className="h-4 w-4 mr-2" />
                   Editar

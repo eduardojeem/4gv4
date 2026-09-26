@@ -8,6 +8,7 @@ import {
   type BranchInventoryClient,
 } from '@/lib/branches/inventory'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
+import type { FinanceSummaryReport } from '@/lib/finance/server'
 
 export type AnalyticsPreset = 'today' | '7d' | '30d' | '90d' | 'custom'
 const ANALYTICS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -45,7 +46,6 @@ export interface TrendPoint {
   posRevenue: number
   repairRevenue: number
   grossRevenue: number
-  estimatedProfit: number
   orders: number
 }
 
@@ -119,25 +119,52 @@ export interface AdminAnalyticsSnapshot {
     growth: number | null
   }
   repairs: {
+    /** Sin terminar y sin cancelar: siguen en el taller. */
     activeCount: number
+    /** Ingresadas en el periodo que HOY estan entregadas. */
     completedCount: number
+    /** Equipos que ingresaron en el periodo. */
+    receivedCount: number
+    /** Trabajo terminado: listas para retirar mas entregadas. */
+    finishedCount: number
+    /** Terminadas que el cliente todavia no retiro. */
+    readyForPickupCount: number
+    cancelledCount: number
+    /**
+     * Entregas hechas DENTRO del periodo, por `delivered_at`. Otra pregunta que
+     * `completedCount`. `null` si la instalacion no tiene esa fecha cargada.
+     */
+    deliveredInPeriodCount: number | null
     avgCycleDays: number
     revenue: number
   }
   finance: {
-    grossRevenue: number
+    operationalRevenue: number
     posRevenue: number
     repairsRevenue: number
+    accruedRevenue: number
+    accruedExpenses: number
+    netProfit: number | null
+    margin: number | null
+    grossRevenue: number
     visibleExpenses: number
-    estimatedProfit: number
-    margin: number
+    estimatedProfit: number | null
     growth: number | null
+    complete: boolean
+    coverageWarnings: FinanceSummaryReport['coverageWarnings']
   }
+}
+
+export interface AnalyticsBranchOption {
+  id: string
+  name: string
+  city?: string | null
+  code?: string | null
 }
 
 interface HookState {
   snapshot: AdminAnalyticsSnapshot
-  branchOptions: Array<{ id: string; name: string }>
+  branchOptions: AnalyticsBranchOption[]
   loading: boolean
   refreshing: boolean
   error: string | null
@@ -184,17 +211,28 @@ const EMPTY_SNAPSHOT: AdminAnalyticsSnapshot = {
   repairs: {
     activeCount: 0,
     completedCount: 0,
+    receivedCount: 0,
+    finishedCount: 0,
+    readyForPickupCount: 0,
+    cancelledCount: 0,
+    deliveredInPeriodCount: null,
     avgCycleDays: 0,
     revenue: 0,
   },
   finance: {
-    grossRevenue: 0,
+    operationalRevenue: 0,
     posRevenue: 0,
     repairsRevenue: 0,
+    accruedRevenue: 0,
+    accruedExpenses: 0,
+    netProfit: null,
+    margin: null,
+    grossRevenue: 0,
     visibleExpenses: 0,
-    estimatedProfit: 0,
-    margin: 0,
+    estimatedProfit: null,
     growth: null,
+    complete: true,
+    coverageWarnings: [],
   },
 }
 
@@ -313,6 +351,14 @@ function isBetween(date: Date | null, from: Date, to: Date): boolean {
   return true
 }
 
+// Una reparación cancelada nunca facturó: el cliente no siguió adelante, no
+// entró plata. Contarla como ingreso (o como carga de trabajo del técnico)
+// infla los números. Cubre las variantes de estado que usa el sistema.
+function isCancelledRepairStatus(status: unknown): boolean {
+  const value = String(status || '').toLowerCase()
+  return value === 'cancelado' || value === 'cancelada' || value === 'cancelled' || value === 'anulado'
+}
+
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('es-PY', {
     style: 'currency',
@@ -347,6 +393,24 @@ function maxDate(a: Date, b: Date): Date {
   return a.getTime() >= b.getTime() ? a : b
 }
 
+async function fetchFinanceSummary(filters: AdminAnalyticsFilters): Promise<FinanceSummaryReport> {
+  const params = new URLSearchParams({
+    startDate: format(startOfDay(filters.from), 'yyyy-MM-dd'),
+    endDate: format(endOfDay(filters.to), 'yyyy-MM-dd'),
+  })
+  if (filters.branch !== 'all') {
+    params.set('branchId', filters.branch)
+  }
+
+  const response = await fetch(`/api/admin/finances/summary?${params.toString()}`)
+  const payload = await response.json().catch(() => null) as FinanceSummaryReport | { error?: string } | null
+  if (!response.ok || !payload || !('accrued' in payload)) {
+    throw new Error(payload && 'error' in payload ? payload.error : 'No se pudo cargar el resumen financiero.')
+  }
+
+  return payload
+}
+
 function sumSales(records: SaleRecord[]): number {
   return records.reduce((sum, record) => {
     return sum + toNumber(record.total_amount ?? record.total ?? record.subtotal)
@@ -373,7 +437,9 @@ function createFallbackInsight(snapshot: AdminAnalyticsSnapshot): AnalyticsInsig
     tone: 'info',
     title: 'Todo en orden',
     description: 'No hay alertas importantes en este periodo. Buen momento para revisar márgenes, inventario y si los clientes están volviendo.',
-    context: `Margen actual ${snapshot.finance.margin.toFixed(1)}%`,
+    context: snapshot.finance.margin === null
+      ? 'Resultado financiero pendiente de cobertura completa'
+      : `Margen actual ${snapshot.finance.margin.toFixed(1)}%`,
   }
 }
 
@@ -502,6 +568,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         salesWindowResponse,
         previousSalesResponse,
         repairsResponse,
+        deliveredInPeriodResponse,
         previousRepairsResponse,
         cashClosuresResponse,
         cashMovementsResponse,
@@ -510,6 +577,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         productMovementsResponse,
         currentCustomersCountResponse,
         previousCustomersCountResponse,
+        financeSummary,
       ] = await Promise.all([
         // Sales: only select needed fields (not full row)
         supabase
@@ -527,6 +595,17 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, branch_id, technician:profiles!technician_id(id, full_name, email)')
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
+        // Entregas hechas DENTRO del periodo, por su propia fecha. La consulta
+        // de arriba filtra por `created_at` —cuando ingreso el equipo— y lee el
+        // estado de hoy: eso responde «de las que entraron, cuantas ya
+        // entregamos», que no es «cuantas entregamos». Un equipo que ingreso el
+        // mes pasado y se entrego este no aparecia en ningun lado.
+        supabase
+          .from('repairs')
+          .select('id, delivered_at, branch_id, final_cost, estimated_cost')
+          .eq('status', 'entregado')
+          .gte('delivered_at', selectedFrom.toISOString())
+          .lte('delivered_at', selectedTo.toISOString()),
         // Previous repairs: only need counts and revenue, minimal fields
         supabase
           .from('repairs')
@@ -569,6 +648,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .select('*', { count: 'exact', head: true })
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
+        fetchFinanceSummary(filters),
       ])
 
       if (salesWindowResponse.error) throw salesWindowResponse.error
@@ -609,6 +689,11 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
       const previousRepairs = ((previousRepairsResponse.data || []) as RepairRecord[])
         .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
+      // Para plata (ingresos, ganancia, carga real del técnico) se excluyen
+      // las canceladas: nunca facturaron. selectedRepairs se conserva completo
+      // para conteos operativos y el gráfico de estados, que sí deben mostrar
+      // las canceladas como una categoría más.
+      const revenueRepairs = selectedRepairs.filter((repair) => !isCancelledRepairStatus(repair.status))
       const allClosures = (cashClosuresResponse.data || []) as CashClosureRecord[]
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
@@ -639,30 +724,26 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           .map((item) => item.product_id)
       )
 
-      // Resolve branch names for the filter selector
-      let branchOptions: Array<{ id: string; name: string }> = []
+      // Opciones de sucursal para el filtro. Se traen de /api/branches (mismo
+      // origen que el selector global), que scopea por organización EN EL
+      // SERVIDOR e incluye ciudad/código. Antes esto consultaba la tabla
+      // `branches` directo desde el cliente sin filtro de organization_id,
+      // confiando solo en RLS: podía listar sucursales de otras organizaciones,
+      // mostraba únicamente el nombre (sucursales homónimas indistinguibles) y
+      // el fallback pintaba UUIDs crudos como nombre.
+      let branchOptions: AnalyticsBranchOption[] = []
       try {
-        const { data: branchesData } = await supabase
-          .from('branches')
-          .select('id, name')
-          .eq('is_active', true)
-          .order('name', { ascending: true })
+        const branchesResponse = await fetch('/api/branches', { cache: 'no-store' })
+        const branchesPayload = await branchesResponse.json().catch(() => null) as {
+          branches?: Array<{ id: string; name: string; city?: string | null; code?: string | null; is_active?: boolean | null }>
+        } | null
 
-        if (branchesData && branchesData.length > 0) {
-          branchOptions = branchesData.map(b => ({ id: b.id, name: b.name }))
-        } else {
-          // Fallback: use branch_ids from closures
-          const uniqueIds = Array.from(
-            new Set(allClosures.map((c) => String(c.branch_id || 'principal')).filter(Boolean))
-          )
-          branchOptions = uniqueIds.map(id => ({ id, name: id }))
-        }
-      } catch {
-        // branches table might not exist
-        const uniqueIds = Array.from(
-          new Set(allClosures.map((c) => String(c.branch_id || 'principal')).filter(Boolean))
-        )
-        branchOptions = uniqueIds.map(id => ({ id, name: id }))
+        branchOptions = (branchesPayload?.branches ?? [])
+          .filter((b) => b.is_active !== false)
+          .map((b) => ({ id: b.id, name: b.name, city: b.city ?? null, code: b.code ?? null }))
+      } catch (branchOptionsError) {
+        console.warn('[analytics] branch options fetch failed:', branchOptionsError)
+        branchOptions = []
       }
 
       const closureMap = new Map<string, CashClosureRecord>()
@@ -712,7 +793,12 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             (response) => (response.data ?? []) as unknown as SaleItemRecord[]
           )
         } catch (e) {
+          // Sin los items vendidos el reporte se contradice a si mismo: mostraria
+          // facturacion real junto a "0 unidades vendidas", categorias vacias y
+          // utilidad por producto en cero. Es preferible avisar que no se pudo
+          // construir el reporte antes que publicar esos ceros como dato.
           console.warn('[analytics] sale_items query failed:', e)
+          throw e
         }
       }
 
@@ -770,38 +856,63 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       })()
 
       const selectedPosRevenue = sumSales(selectedSales)
-      const selectedRepairRevenue = selectedRepairs.reduce((sum, repair) => {
+      const selectedRepairRevenue = revenueRepairs.reduce((sum, repair) => {
         return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
       }, 0)
       const currentGrossRevenue = selectedPosRevenue + selectedRepairRevenue
-      const previousGrossRevenue = sumSales(previousSales) + previousRepairs.reduce((sum, repair) => {
-        return sum + toNumber(repair.final_cost ?? repair.estimated_cost)
-      }, 0)
-
-      const costOfGoods = selectedSaleItems.reduce((sum, item) => {
-        const quantity = toNumber(item.quantity)
-        const purchasePrice = toNumber(item.product?.purchase_price)
-        return sum + (quantity * purchasePrice)
-      }, 0)
-      const repairDirectCost = selectedRepairs.reduce((sum, repair) => sum + toNumber(repair.parts_cost), 0)
+      // Costo directo de repuestos: solo de las que facturan. Contar el costo
+      // de una cancelada (sin contar su ingreso) hundiría la ganancia estimada.
       const withdrawals = scopedMovements
         .filter((movement) => movement.type === 'cash_out')
         .reduce((sum, movement) => sum + toNumber(movement.amount), 0)
       const deposits = scopedMovements
         .filter((movement) => movement.type === 'cash_in')
         .reduce((sum, movement) => sum + toNumber(movement.amount), 0)
-      const visibleExpenses = costOfGoods + repairDirectCost + withdrawals
-      const estimatedProfit = currentGrossRevenue - visibleExpenses
-      const margin = currentGrossRevenue > 0 ? (estimatedProfit / currentGrossRevenue) * 100 : 0
-      const growth = percentChange(currentGrossRevenue, previousGrossRevenue)
+      const financeExpenses =
+        financeSummary.accrued.directCosts +
+        financeSummary.accrued.operatingExpenses +
+        financeSummary.accrued.payrollCost
+      const financeMargin = financeSummary.accrued.netProfit === null || financeSummary.accrued.revenue <= 0
+        ? null
+        : (financeSummary.accrued.netProfit / financeSummary.accrued.revenue) * 100
+      const financeGrowth = percentChange(
+        financeSummary.accrued.revenue,
+        financeSummary.comparison.accrued.revenue,
+      )
 
       const selectedOrderCount = selectedSales.length
       const averageTicket = selectedOrderCount > 0 ? selectedPosRevenue / selectedOrderCount : 0
+      // "En proceso" = ni entregada, ni lista, ni cancelada. Antes una
+      // cancelada contaba como reparación activa (carga de trabajo fantasma).
       const activeRepairs = selectedRepairs.filter((repair) => {
         const status = String(repair.status || '').toLowerCase()
-        return !['entregado', 'listo'].includes(status)
+        return !['entregado', 'listo'].includes(status) && !isCancelledRepairStatus(status)
       }).length
+      // Tres cosas distintas, que hasta ahora se resumian en una sola cifra:
+      //
+      //   ingresadas  → equipos que ENTRARON en el periodo
+      //   terminadas  → el trabajo tecnico se acabo: listas para retirar + ya
+      //                 entregadas. Es un superconjunto de las entregadas.
+      //   entregadas  → el cliente ya se lo llevo
+      //
+      // Las tres miran los equipos ingresados en el periodo y su estado de HOY,
+      // asi que la de entregadas sube sola con el tiempo. Por eso ademas se
+      // cuenta aparte cuantas entregas se hicieron DENTRO del periodo, que no
+      // cambia si se vuelve a mirar el mismo periodo mas adelante.
+      const receivedRepairs = selectedRepairs.length
       const completedRepairs = selectedRepairs.filter((repair) => String(repair.status || '').toLowerCase() === 'entregado').length
+      const finishedRepairs = selectedRepairs.filter((repair) => {
+        const status = String(repair.status || '').trim().toLowerCase()
+        return status === 'listo' || status === 'entregado'
+      }).length
+      const readyForPickupRepairs = finishedRepairs - completedRepairs
+      const cancelledRepairs = selectedRepairs.filter((repair) => isCancelledRepairStatus(repair.status)).length
+
+      const deliveredInPeriodRows = ((deliveredInPeriodResponse.data || []) as Array<{ branch_id?: string | null }>)
+        .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
+      // Si la columna no esta poblada en esta instalacion, se avisa con null en
+      // vez de un cero que se leeria como «no entregamos nada».
+      const deliveredInPeriod = deliveredInPeriodResponse.error ? null : deliveredInPeriodRows.length
       const unresolvedAlerts = scopedAlerts.filter((alert) => !alert.is_resolved).length
       const criticalAlerts = scopedAlerts.filter((alert) => !alert.is_resolved && String(alert.severity) === 'critical').length
       const discrepancies = scopedClosures.reduce((sum, closure) => sum + Math.abs(toNumber(closure.discrepancy)), 0)
@@ -945,7 +1056,12 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
 
       selectedRepairs.forEach((repair) => {
         const status = String(repair.status || 'sin estado')
+        // El gráfico de estados sí muestra las canceladas (categoría válida).
         repairStatusMap.set(status, (repairStatusMap.get(status) || 0) + 1)
+
+        // Pero el ranking de técnicos no: una cancelada no es carga real ni
+        // facturación, así que no suma ni a "activas" ni a "revenue".
+        if (isCancelledRepairStatus(status)) return
 
         const technicianId = String(repair.technician_id || repair.technician?.id || 'unassigned')
         const current = technicianStats.get(technicianId) || {
@@ -1008,11 +1124,6 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       const trendMap = new Map<string, TrendPoint>()
 
       // Pre-build sale lookup map for O(1) access in trend builder (avoids O(n²))
-      const saleByIdMap = new Map<string, SaleRecord>()
-      selectedSales.forEach((sale) => {
-        saleByIdMap.set(String(sale.id), sale)
-      })
-
       selectedSales.forEach((sale) => {
         const saleDate = toDate(sale.created_at)
         if (!saleDate) return
@@ -1027,7 +1138,6 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           posRevenue: 0,
           repairRevenue: 0,
           grossRevenue: 0,
-          estimatedProfit: 0,
           orders: 0,
         }
         const total = toNumber(sale.total_amount ?? sale.total)
@@ -1037,7 +1147,8 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         trendMap.set(key, current)
       })
 
-      selectedRepairs.forEach((repair) => {
+      // El gráfico de tendencia refleja ingreso: las canceladas no aportan.
+      revenueRepairs.forEach((repair) => {
         const repairDate = toDate(repair.created_at)
         if (!repairDate) return
         const bucketDate = useWeeklyBuckets
@@ -1051,39 +1162,17 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           posRevenue: 0,
           repairRevenue: 0,
           grossRevenue: 0,
-          estimatedProfit: 0,
           orders: 0,
         }
         const repairRevenue = toNumber(repair.final_cost ?? repair.estimated_cost)
-        const repairCost = toNumber(repair.parts_cost)
         current.repairRevenue += repairRevenue
         current.grossRevenue += repairRevenue
-        current.estimatedProfit += repairRevenue - repairCost
-        trendMap.set(key, current)
-      })
-
-      selectedSaleItems.forEach((item) => {
-        const parentSale = saleByIdMap.get(String(item.sale_id))
-        const parentDate = toDate(parentSale?.created_at)
-        if (!parentDate) return
-        const bucketDate = useWeeklyBuckets
-          ? startOfDay(subDays(parentDate, parentDate.getDay()))
-          : startOfDay(parentDate)
-        const key = bucketDate.toISOString()
-        const current = trendMap.get(key)
-        if (!current) return
-        const quantity = toNumber(item.quantity)
-        const purchasePrice = toNumber(item.product?.purchase_price)
-        current.estimatedProfit += toNumber(item.subtotal ?? item.total ?? quantity * toNumber(item.unit_price)) - (quantity * purchasePrice)
         trendMap.set(key, current)
       })
 
       const salesTrend = Array.from(trendMap.entries())
         .sort((left, right) => new Date(left[0]).getTime() - new Date(right[0]).getTime())
-        .map(([, value]) => ({
-          ...value,
-          estimatedProfit: Math.max(value.estimatedProfit, 0),
-        }))
+        .map(([, value]) => value)
 
       const hourlySalesMap = new Map<number, number>()
       selectedSales.forEach((sale) => {
@@ -1098,28 +1187,23 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         value: hourlySalesMap.get(hour) || 0,
       }))
 
-      const financeComparison: FinanceComparisonPoint[] = (() => {
-        // Calculate previous period expenses using current margin ratio as estimate
-        // This is more accurate than a hardcoded 32% because it uses the real current margin
-        const currentMarginRatio = currentGrossRevenue > 0 ? visibleExpenses / currentGrossRevenue : 0.68
-        const previousEstimatedExpenses = previousGrossRevenue * currentMarginRatio
-        const previousEstimatedProfit = previousGrossRevenue - previousEstimatedExpenses
-
-        return [
-          {
-            label: 'Actual',
-            ingresos: currentGrossRevenue,
-            egresos: visibleExpenses,
-            ganancia: estimatedProfit,
-          },
-          {
-            label: 'Anterior',
-            ingresos: previousGrossRevenue,
-            egresos: Math.max(previousEstimatedExpenses, 0),
-            ganancia: Math.max(previousEstimatedProfit, 0),
-          },
-        ]
-      })()
+      const financeComparison: FinanceComparisonPoint[] = [
+        {
+          label: 'Actual',
+          ingresos: financeSummary.accrued.revenue,
+          egresos: financeExpenses,
+          ganancia: financeSummary.accrued.netProfit ?? 0,
+        },
+        {
+          label: 'Anterior',
+          ingresos: financeSummary.comparison.accrued.revenue,
+          egresos:
+            financeSummary.comparison.accrued.directCosts +
+            financeSummary.comparison.accrued.operatingExpenses +
+            financeSummary.comparison.accrued.payrollCost,
+          ganancia: financeSummary.comparison.accrued.netProfit ?? 0,
+        },
+      ]
 
       const avgCycleDaysBase = Array.from(technicianStats.values()).reduce((sum, technician) => {
         return sum + technician.cycleDays
@@ -1132,14 +1216,27 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         periodLabel: `${format(selectedFrom, 'dd MMM')} - ${format(selectedTo, 'dd MMM')}`,
         quickStats,
         headlineCards: [
+          // Los nombres dicen que incluye cada cifra. «Total vendido» a secas
+          // se compara con «Ventas Totales» de /admin/reports y no coincide:
+          // aquel es solo POS y este suma el taller. La tarjeta de POS existe
+          // justamente para que las dos secciones se puedan cuadrar.
           {
             id: 'gross',
-            label: 'Total vendido',
+            label: 'Facturación total (POS + taller)',
             value: formatMoney(currentGrossRevenue),
             rawValue: currentGrossRevenue,
-            delta: growth,
+            delta: financeGrowth,
             tone: currentGrossRevenue > 0 ? 'info' : 'neutral',
-            helper: 'Ventas + reparaciones del periodo',
+            helper: `POS ${formatMoney(selectedPosRevenue)} · Taller ${formatMoney(selectedRepairRevenue)}`,
+          },
+          {
+            id: 'pos-revenue',
+            label: 'Facturado en POS',
+            value: formatMoney(selectedPosRevenue),
+            rawValue: selectedPosRevenue,
+            delta: percentChange(selectedPosRevenue, sumSales(previousSales)),
+            tone: selectedPosRevenue > 0 ? 'info' : 'neutral',
+            helper: 'Es la misma cifra que «Ventas Totales» en Reportes',
           },
           {
             id: 'sales',
@@ -1148,24 +1245,24 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             rawValue: selectedOrderCount,
             delta: percentChange(selectedOrderCount, previousSales.length),
             tone: selectedOrderCount > 0 ? 'success' : 'neutral',
-            helper: `${formatMoney(selectedPosRevenue)} facturados`,
+            helper: 'Ventas POS del periodo, sin contar reparaciones',
           },
           {
             id: 'ticket',
-            label: 'Promedio por venta',
+            label: 'Promedio por venta (POS)',
             value: formatMoney(averageTicket),
             rawValue: averageTicket,
             delta: percentChange(averageTicket, previousSales.length > 0 ? sumSales(previousSales) / previousSales.length : 0),
             tone: 'neutral',
-            helper: 'Cuánto gasta cada cliente en promedio',
+            helper: 'Facturado en POS dividido por cantidad de ventas',
           },
           {
             id: 'margin',
             label: 'Margen de ganancia',
-            value: `${margin.toFixed(1)}%`,
-            rawValue: margin,
+            value: financeMargin === null ? 'Pendiente' : `${financeMargin.toFixed(1)}%`,
+            rawValue: financeMargin ?? 0,
             delta: null,
-            tone: margin >= 20 ? 'success' : margin >= 10 ? 'warning' : 'danger',
+            tone: financeMargin === null ? 'warning' : financeMargin >= 20 ? 'success' : financeMargin >= 10 ? 'warning' : 'danger',
             helper: 'Lo que queda después de costos y retiros',
           },
           {
@@ -1173,7 +1270,10 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
             label: 'Reparaciones en curso',
             value: String(activeRepairs),
             rawValue: activeRepairs,
-            delta: percentChange(activeRepairs, previousRepairs.filter((repair) => String(repair.status || '').toLowerCase() !== 'entregado').length),
+            delta: percentChange(activeRepairs, previousRepairs.filter((repair) => {
+              const status = String(repair.status || '').toLowerCase()
+              return status !== 'entregado' && !isCancelledRepairStatus(status)
+            }).length),
             tone: activeRepairs > 0 ? 'info' : 'neutral',
             helper: `${formatMoney(selectedRepairRevenue)} facturados en taller`,
           },
@@ -1229,17 +1329,28 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         repairs: {
           activeCount: activeRepairs,
           completedCount: completedRepairs,
+          receivedCount: receivedRepairs,
+          finishedCount: finishedRepairs,
+          readyForPickupCount: readyForPickupRepairs,
+          cancelledCount: cancelledRepairs,
+          deliveredInPeriodCount: deliveredInPeriod,
           avgCycleDays,
           revenue: selectedRepairRevenue,
         },
         finance: {
-          grossRevenue: currentGrossRevenue,
+          operationalRevenue: currentGrossRevenue,
           posRevenue: selectedPosRevenue,
           repairsRevenue: selectedRepairRevenue,
-          visibleExpenses,
-          estimatedProfit,
-          margin,
-          growth,
+          accruedRevenue: financeSummary.accrued.revenue,
+          accruedExpenses: financeExpenses,
+          netProfit: financeSummary.accrued.netProfit,
+          margin: financeMargin,
+          grossRevenue: financeSummary.accrued.revenue,
+          visibleExpenses: financeExpenses,
+          estimatedProfit: financeSummary.accrued.netProfit,
+          growth: financeGrowth,
+          complete: financeSummary.complete,
+          coverageWarnings: financeSummary.coverageWarnings,
         },
       }
 
@@ -1268,7 +1379,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         error: 'No se pudo construir el dashboard analytics con los datos actuales.',
       }))
     }
-  }, [filters.branch, filters.from, filters.to, supabase, isCacheFresh, filterKey])
+  }, [filters, supabase, isCacheFresh, filterKey])
 
   useEffect(() => {
     fetchAnalytics('initial')

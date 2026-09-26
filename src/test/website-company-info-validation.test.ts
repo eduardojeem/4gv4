@@ -41,4 +41,22 @@ describe('company info website setting validation', () => {
 
     expect(result.success).toBe(true)
   })
+
+  it('accepts a secure Google Maps location link', () => {
+    const result = validateSetting('company_info', {
+      name: '4G Celulares',
+      mapsUrl: 'https://maps.app.goo.gl/abc123',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a non-Google Maps location link', () => {
+    const result = validateSetting('company_info', {
+      name: '4G Celulares',
+      mapsUrl: 'https://example.com/maps',
+    })
+
+    expect(result.success).toBe(false)
+  })
 })

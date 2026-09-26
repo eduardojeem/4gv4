@@ -93,7 +93,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
 
     const validation = updateCaseSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const supabase = await createClient()

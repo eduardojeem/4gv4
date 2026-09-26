@@ -34,10 +34,10 @@ import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 
 // Schema de validación para persona autorizada
 const authorizedPersonSchema = z.object({
-  full_name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
-  document_number: z.string().min(5, 'El número de documento debe ser válido'),
-  phone: z.string().optional(),
-  relationship: z.string().optional()
+  full_name: z.string().trim().min(3, 'El nombre debe tener al menos 3 caracteres'),
+  document_number: z.string().trim().min(5, 'El número de documento debe ser válido'),
+  phone: z.string().trim().optional(),
+  relationship: z.string().trim().optional()
 })
 
 type AuthorizedPerson = z.infer<typeof authorizedPersonSchema> & { id: string; is_active?: boolean }
@@ -50,6 +50,7 @@ export default function AuthorizedPersonsPage() {
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [authorizedPersons, setAuthorizedPersons] = useState<AuthorizedPerson[]>([])
   const [isAdding, setIsAdding] = useState(false)
   const [editingPerson, setEditingPerson] = useState<AuthorizedPerson | null>(null)
@@ -63,39 +64,25 @@ export default function AuthorizedPersonsPage() {
 
   // Cargar personas autorizadas
   const loadAuthorizedPersons = useCallback(async () => {
-    if (!user) return
+    if (!user || !tenantSlug) return
     try {
-      let organizationId: string | null = null
-      if (tenantSlug) {
-        const { data: organization } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('slug', tenantSlug)
-          .maybeSingle()
-        organizationId = organization?.id ?? null
-      }
+      const { data: organization, error: organizationError } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('slug', tenantSlug)
+        .maybeSingle()
 
-      let query = supabase
+      if (organizationError || !organization?.id) {
+        throw organizationError || new Error('No se pudo identificar la tienda')
+      }
+      setOrganizationId(organization.id)
+
+      const { data, error } = await supabase
         .from('authorized_persons')
         .select('*')
         .eq('profile_id', user.id)
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
-
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId)
-      }
-
-      let { data, error } = await query
-
-      if (error && organizationId && error.message?.includes('organization_id')) {
-        const fallback = await supabase
-          .from('authorized_persons')
-          .select('*')
-          .eq('profile_id', user.id)
-          .order('created_at', { ascending: false })
-        data = fallback.data
-        error = fallback.error
-      }
 
       if (error) throw error
       setAuthorizedPersons(data || [])
@@ -113,15 +100,20 @@ export default function AuthorizedPersonsPage() {
         const authorizedPath = tenantPrefix ? `${tenantPrefix}/perfil/autorizados` : '/perfil/autorizados'
         const loginPath = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
         router.push(`${loginPath}?next=${encodeURIComponent(authorizedPath)}`)
+      } else if (!tenantSlug) {
+        router.replace('/marketplace/perfil')
       } else {
         loadAuthorizedPersons()
       }
     }
-  }, [user, loadingAuth, router, loadAuthorizedPersons, tenantPrefix])
+  }, [user, loadingAuth, router, loadAuthorizedPersons, tenantPrefix, tenantSlug])
 
   const handleAddPerson = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) return
+    if (!user || !organizationId) {
+      toast.error('No se pudo identificar la tienda. Volvé a intentarlo desde su perfil.')
+      return
+    }
 
     // Validar con Zod
     try {
@@ -140,16 +132,6 @@ export default function AuthorizedPersonsPage() {
 
     setSubmitting(true)
     try {
-      let organizationId: string | null = null
-      if (tenantSlug) {
-        const { data: organization } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('slug', tenantSlug)
-          .maybeSingle()
-        organizationId = organization?.id ?? null
-      }
-
       if (editingPerson) {
         // UPDATE EXISTING
         const updatePayload = {
@@ -162,6 +144,7 @@ export default function AuthorizedPersonsPage() {
           .update(updatePayload)
           .eq('id', editingPerson.id)
           .eq('profile_id', user.id)
+          .eq('organization_id', organizationId)
           .select()
           .single()
         
@@ -174,24 +157,14 @@ export default function AuthorizedPersonsPage() {
         const insertPayload = {
           ...formData,
           profile_id: user.id,
-          ...(organizationId ? { organization_id: organizationId } : {}),
+          organization_id: organizationId,
         }
 
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from('authorized_persons')
           .insert([insertPayload])
           .select()
           .single()
-
-        if (error && organizationId && error.message?.includes('organization_id')) {
-          const fallback = await supabase
-            .from('authorized_persons')
-            .insert([{ ...formData, profile_id: user.id }])
-            .select()
-            .single()
-          data = fallback.data
-          error = fallback.error
-        }
 
         if (error) throw error
 
@@ -223,6 +196,7 @@ export default function AuthorizedPersonsPage() {
   }
 
   const handleToggleStatus = async (person: AuthorizedPerson) => {
+    if (!organizationId) return
     try {
       const newStatus = !person.is_active
       const { data, error } = await supabase
@@ -230,6 +204,7 @@ export default function AuthorizedPersonsPage() {
         .update({ is_active: newStatus, updated_at: new Date().toISOString() })
         .eq('id', person.id)
         .eq('profile_id', user?.id)
+        .eq('organization_id', organizationId)
         .select()
         .single()
 
@@ -244,12 +219,16 @@ export default function AuthorizedPersonsPage() {
   }
 
   const handleDeletePerson = async (id: string) => {
+    if (!organizationId) return
+    const person = authorizedPersons.find((item) => item.id === id)
+    if (!window.confirm(`¿Eliminar la autorización de ${person?.full_name || 'esta persona'}?`)) return
     try {
-      let query = supabase
+      const query = supabase
         .from('authorized_persons')
         .delete()
         .eq('id', id)
         .eq('profile_id', user?.id)
+        .eq('organization_id', organizationId)
 
       const { error } = await query
 
@@ -272,59 +251,54 @@ export default function AuthorizedPersonsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 relative overflow-hidden flex flex-col">
-      {/* Background Blobs */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[10%] right-[10%] w-72 h-72 bg-blue-500/10 rounded-full blur-[100px] animate-pulse" />
-        <div className="absolute bottom-[10%] left-[10%] w-96 h-96 bg-purple-500/10 rounded-full blur-[120px] animate-pulse" />
-      </div>
-
-      <main className="container max-w-4xl py-12 px-4 relative z-10 pt-24 lg:pt-32 flex-1">
-        <div className="mb-8">
-          <Button asChild variant="ghost" size="sm" className="-ml-2 mb-4 group hover:bg-white/50 dark:hover:bg-slate-900/50 backdrop-blur-sm">
+    <div className="flex min-h-screen flex-col bg-muted/25">
+      <main className="container max-w-4xl flex-1 px-4 pb-12 pt-24 lg:pt-28">
+        <div className="mb-6">
+          <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3 group">
             <Link href={tenantPrefix ? `${tenantPrefix}/perfil` : '/perfil'}>
               <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
               Volver al perfil
             </Link>
           </Button>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-400 bg-clip-text text-transparent">
-                Personas Autorizadas
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Autorizaciones de esta tienda</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                Personas autorizadas
               </h1>
-              <p className="text-muted-foreground mt-2 font-medium">
-                Gestiona quiénes pueden retirar tus equipos en tu nombre.
+              <p className="mt-1 text-sm text-muted-foreground">
+                Elegí quién puede retirar tus equipos en esta tienda presentando su documento.
               </p>
             </div>
             {!isAdding && (
               <Button 
                 onClick={() => setIsAdding(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-12 px-6 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                className="h-10"
               >
                 <Plus className="mr-2 h-5 w-5" />
-                Nueva Autorización
+                Agregar persona
               </Button>
             )}
           </div>
         </div>
 
-        <div className="grid gap-8">
+        <div className="grid gap-6">
           {/* Add Form Section */}
           <AnimatePresence>
             {isAdding && (
               <motion.div
-                initial={{ opacity: 0, height: 0, scale: 0.95 }}
-                animate={{ opacity: 1, height: 'auto', scale: 1 }}
-                exit={{ opacity: 0, height: 0, scale: 0.95 }}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <Card className="border-none shadow-2xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20">
+                <Card className="border-border shadow-none">
                   <CardHeader className="flex flex-row items-center justify-between">
                     <div>
                       <CardTitle>{editingPerson ? 'Editar Persona Autorizada' : 'Agregar Persona Autorizada'}</CardTitle>
                       <CardDescription>{editingPerson ? 'Modifica los datos de la persona.' : 'Completa los datos de la persona que autorizas.'}</CardDescription>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => { setIsAdding(false); setEditingPerson(null); }} className="rounded-full">
+                    <Button variant="ghost" size="icon" aria-label="Cerrar formulario" onClick={() => { setIsAdding(false); setEditingPerson(null); }}>
                       <X className="h-5 w-5" />
                     </Button>
                   </CardHeader>
@@ -340,7 +314,7 @@ export default function AuthorizedPersonsPage() {
                           value={formData.full_name}
                           onChange={e => setFormData({ ...formData, full_name: e.target.value })}
                           placeholder="Ej: María Rodríguez"
-                          className={cn("h-11 rounded-xl", errors.full_name && "border-red-500")}
+                          className={cn("h-10", errors.full_name && "border-destructive")}
                         />
                         {errors.full_name && <p className="text-xs text-red-500 font-medium">{errors.full_name}</p>}
                       </div>
@@ -354,7 +328,7 @@ export default function AuthorizedPersonsPage() {
                           value={formData.document_number}
                           onChange={e => setFormData({ ...formData, document_number: e.target.value })}
                           placeholder="Ej: 1.234.567"
-                          className={cn("h-11 rounded-xl", errors.document_number && "border-red-500")}
+                          className={cn("h-10", errors.document_number && "border-destructive")}
                         />
                         {errors.document_number && <p className="text-xs text-red-500 font-medium">{errors.document_number}</p>}
                       </div>
@@ -368,7 +342,7 @@ export default function AuthorizedPersonsPage() {
                           value={formData.phone}
                           onChange={e => setFormData({ ...formData, phone: e.target.value })}
                           placeholder="+595 9xx xxx xxx"
-                          className="h-11 rounded-xl"
+                          className="h-10"
                         />
                       </div>
                       <div className="space-y-2">
@@ -381,18 +355,18 @@ export default function AuthorizedPersonsPage() {
                           value={formData.relationship}
                           onChange={e => setFormData({ ...formData, relationship: e.target.value })}
                           placeholder="Ej: Hermana, Esposo, Mensajero"
-                          className="h-11 rounded-xl"
+                          className="h-10"
                         />
                       </div>
                     </CardContent>
                     <CardFooter className="flex justify-end gap-3 pt-2">
-                      <Button type="button" variant="ghost" onClick={() => { setIsAdding(false); setEditingPerson(null); }} className="rounded-xl">
+                      <Button type="button" variant="ghost" onClick={() => { setIsAdding(false); setEditingPerson(null); }}>
                         Cancelar
                       </Button>
                       <Button 
                         type="submit" 
                         disabled={submitting}
-                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 px-6 shadow-md"
+                        className="h-10"
                       >
                         {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                         Guardar Autorización
@@ -410,7 +384,7 @@ export default function AuthorizedPersonsPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-center py-20 px-4 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-3xl border border-dashed border-slate-300 dark:border-slate-700"
+                className="rounded-xl border border-dashed border-border bg-card px-4 py-14 text-center"
               >
                 <div className="mx-auto w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
                   <Shield className="h-8 w-8 text-slate-400" />
@@ -435,7 +409,7 @@ export default function AuthorizedPersonsPage() {
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ delay: index * 0.05 }}
                     >
-                      <Card className={cn("group border-none shadow-xl backdrop-blur-md hover:shadow-2xl transition-all duration-300 hover:scale-[1.01] border border-white/10", person.is_active === false ? "bg-slate-200/50 dark:bg-slate-800/50 opacity-75 grayscale-[0.5]" : "bg-white/60 dark:bg-slate-900/60")}>
+                      <Card className={cn("border-border shadow-none transition-colors hover:border-primary/30", person.is_active === false && "bg-muted/60 opacity-75")}>
                         <CardContent className="p-6">
                           <div className="flex items-start justify-between">
                             <div className="flex gap-4">
@@ -473,13 +447,14 @@ export default function AuthorizedPersonsPage() {
                                 </div>
                               </div>
                             </div>
-                            <div className="flex flex-col sm:flex-row items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex shrink-0 items-center gap-1">
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
                                 onClick={() => handleEditClick(person)}
                                 className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
                                 title="Editar"
+                                aria-label={`Editar autorización de ${person.full_name}`}
                               >
                                 <Pencil className="h-5 w-5" />
                               </Button>
@@ -489,6 +464,7 @@ export default function AuthorizedPersonsPage() {
                                 onClick={() => handleToggleStatus(person)}
                                 className={cn("rounded-xl transition-colors", person.is_active !== false ? "text-slate-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20" : "text-slate-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20")}
                                 title={person.is_active !== false ? "Suspender" : "Activar"}
+                                aria-label={`${person.is_active !== false ? 'Suspender' : 'Activar'} autorización de ${person.full_name}`}
                               >
                                 {person.is_active !== false ? <Ban className="h-5 w-5" /> : <BadgeCheck className="h-5 w-5" />}
                               </Button>
@@ -498,6 +474,7 @@ export default function AuthorizedPersonsPage() {
                                 onClick={() => handleDeletePerson(person.id)}
                                 className="text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
                                 title="Eliminar"
+                                aria-label={`Eliminar autorización de ${person.full_name}`}
                               >
                                 <Trash2 className="h-5 w-5" />
                               </Button>
@@ -517,7 +494,7 @@ export default function AuthorizedPersonsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
-            className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6 flex gap-4 items-start"
+            className="flex items-start gap-3 rounded-xl border border-primary/15 bg-primary/5 p-4"
           >
             <Info className="h-6 w-6 text-blue-500 flex-shrink-0 mt-0.5" />
             <div className="space-y-2">

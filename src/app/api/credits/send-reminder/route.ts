@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
@@ -44,7 +44,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
     let skipped = 0
 
     for (const credit of credits) {
-      const customer = credit.customers as any
+      const customer = credit.customers as { name?: string | null; email?: string | null } | null
       const email = customer?.email
 
       if (!email) {

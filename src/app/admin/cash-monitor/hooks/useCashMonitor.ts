@@ -5,6 +5,12 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
+import { calculateSessionFigures, openDurationHours } from '@/lib/cash/session-figures'
+import { buildSessionPeriodFilter } from '@/lib/cash/session-period-filter'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import type { Database } from '@/lib/supabase/types'
+
+type CashClosureRow = Database['public']['Tables']['cash_closures']['Row']
 import type {
   CashSession,
   CashMovementAdmin,
@@ -16,7 +22,17 @@ import type {
 } from '../types'
 
 export function useCashMonitor() {
+  // `periodSessions` es todo lo del periodo; `sessions` es lo que ve la tabla
+  // despues del filtro de diferencia. Las metricas se calculan sobre el periodo:
+  // al filtrar «solo con diferencia», «Ventas Periodo» pasaba a ser «ventas de
+  // las sesiones con diferencia» sin cambiar de etiqueta.
+  const [periodSessions, setPeriodSessions] = useState<CashSession[]>([])
   const [sessions, setSessions] = useState<CashSession[]>([])
+  // Cuantas sesiones quedaron fuera del tope de seguridad, para poder decirlo.
+  const [truncatedSessions, setTruncatedSessions] = useState(0)
+  // Los contadores del globito salen de la base, no de la lista: con `.limit(50)`
+  // en la consulta, 60 alertas sin resolver se mostraban como menos de las que hay.
+  const [alertCounts, setAlertCounts] = useState({ unresolved: 0, critical: 0 })
   const [alerts, setAlerts] = useState<CashAlert[]>([])
   const [auditLog, setAuditLog] = useState<AdminAuditEntry[]>([])
   const [metrics, setMetrics] = useState<CashMonitorMetrics>({
@@ -26,14 +42,24 @@ export function useCashMonitor() {
     suspendedSessions: 0,
     blockedSessions: 0,
     totalBalance: 0,
+    totalSales: 0,
     totalDiscrepancies: 0,
+    totalOver: 0,
+    totalShort: 0,
+    perfectSessions: 0,
+    sessionsWithDiff: 0,
+    salesCash: 0,
+    salesCard: 0,
+    salesTransfer: 0,
+    salesMixed: 0,
     unresolvedAlerts: 0,
     criticalAlerts: 0
   })
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<SessionFilter>({ status: 'all' })
+  const [filter, setFilter] = useState<SessionFilter>({ status: 'all', period: 'week', discrepancy: 'all' })
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
 
   let supabase: ReturnType<typeof createClient> | null = null
   try {
@@ -46,53 +72,93 @@ export function useCashMonitor() {
   // FETCH SESSIONS
   // =========================================================================
   const fetchSessions = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
     try {
-      let query = supabase
-        .from('cash_closures')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100)
+      // La consulta se arma de cero en cada pagina: reutilizar el mismo builder
+      // despues de haberlo esperado es un camino conocido a resultados raros.
+      const buildQuery = () => {
+        let q = supabase!
+          .from('cash_closures')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', organization.id)
+          .order('created_at', { ascending: false })
 
-      query = withBranchFilter(query, selectedBranchId)
+        q = withBranchFilter(q, selectedBranchId)
 
-      // Apply filters - use date column as primary status indicator
-      // (compatible with both old schema without 'status' column and new schema with it)
-      if (filter.status && filter.status !== 'all') {
-        switch (filter.status) {
-          case 'open':
-            query = query.is('date', null)
-            break
-          case 'closed':
-            query = query.not('date', 'is', null)
-            break
-          case 'suspended':
-            query = query.eq('status', 'suspended')
-            break
-          case 'blocked':
-            query = query.eq('status', 'blocked')
-            break
+        if (filter.status && filter.status !== 'all') {
+          switch (filter.status) {
+            case 'open':
+              q = q.is('date', null)
+              break
+            case 'closed':
+              q = q.not('date', 'is', null)
+              break
+            case 'suspended':
+              q = q.eq('status', 'suspended')
+              break
+            case 'blocked':
+              q = q.eq('status', 'blocked')
+              break
+          }
         }
-      }
-      if (filter.registerId) {
-        query = query.eq('register_id', filter.registerId)
-      }
-      if (filter.dateFrom) {
-        query = query.gte('created_at', filter.dateFrom)
-      }
-      if (filter.dateTo) {
-        query = query.lte('created_at', filter.dateTo)
+        if (filter.registerId) {
+          q = q.eq('register_id', filter.registerId)
+        }
+
+        // Rango de fechas, y por que una caja abierta se lo saltea: ver
+        // `lib/cash/session-period-filter`.
+        const rango = buildSessionPeriodFilter(filter)
+
+        if (rango.orExpression) {
+          q = q.or(rango.orExpression)
+        } else {
+          if (rango.from) q = q.gte('created_at', rango.from)
+          if (rango.to) q = q.lte('created_at', rango.to)
+        }
+
+        return q
       }
 
-      const { data, error } = await query
+      // Se trae todo el periodo por paginas. Con `.limit(200)` las metricas
+      // —ventas, sobrantes, faltantes— se calculaban sobre las 200 mas recientes
+      // y nada avisaba: un mes con varias cajas pasa ese corte facil.
+      const PAGE_SIZE = 500
+      const SAFETY_CAP = 3000
+      const collected: CashClosureRow[] = []
+      let totalAvailable = 0
 
-      if (error) throw error
+      for (let offset = 0; offset < SAFETY_CAP; offset += PAGE_SIZE) {
+        const { data: page, error: pageError, count } = await buildQuery()
+          .range(offset, offset + PAGE_SIZE - 1)
 
-      // Fetch movement counts per session AND resolve who opened each session
+        if (pageError) throw pageError
+        if (count !== null && count !== undefined) totalAvailable = count
+        if (!page || page.length === 0) break
+
+        collected.push(...page)
+        if (page.length < PAGE_SIZE) break
+        if (totalAvailable > 0 && collected.length >= totalAvailable) break
+      }
+
+      setTruncatedSessions(Math.max(0, totalAvailable - collected.length))
+
+      const data = collected
+
+      // Fetch movement counts and breakdowns per session
       const sessionIds = data?.map(s => s.id) || []
-      const movementCounts: Record<string, { total: number; sales: number; lastMovement: CashMovementAdmin | null }> = {}
-      // Map session_id -> user who created the opening movement (fallback for opened_by)
+      const movementCounts: Record<string, {
+        total: number
+        sales: number
+        salesCash: number
+        salesCard: number
+        salesTransfer: number
+        salesMixed: number
+        totalSales: number
+        cashIn: number
+        cashOut: number
+        lastMovement: CashMovementAdmin | null
+      }> = {}
       const sessionOpenerMap: Record<string, string> = {}
 
       if (sessionIds.length > 0) {
@@ -108,15 +174,40 @@ export function useCashMonitor() {
         if (movements) {
           movements.forEach(m => {
             if (!movementCounts[m.session_id]) {
-              movementCounts[m.session_id] = { total: 0, sales: 0, lastMovement: m }
+              movementCounts[m.session_id] = {
+                total: 0,
+                sales: 0,
+                salesCash: 0,
+                salesCard: 0,
+                salesTransfer: 0,
+                salesMixed: 0,
+                totalSales: 0,
+                cashIn: 0,
+                cashOut: 0,
+                lastMovement: m
+              }
             } else {
-              // Update lastMovement to the most recent
               movementCounts[m.session_id].lastMovement = m
             }
+
+            const amt = Number(m.amount) || 0
             movementCounts[m.session_id].total++
-            if (m.type === 'sale') movementCounts[m.session_id].sales++
-            // Track who opened the session:
-            // Priority: opening movement creator > earliest movement creator
+
+            if (m.type === 'sale' || (m.type as string) === 'venta') {
+              movementCounts[m.session_id].sales++
+              movementCounts[m.session_id].totalSales += amt
+
+              const pm = m.payment_method || 'cash'
+              if (pm === 'cash' || pm === 'efectivo') movementCounts[m.session_id].salesCash += amt
+              else if (pm === 'card' || pm === 'tarjeta') movementCounts[m.session_id].salesCard += amt
+              else if (pm === 'transfer' || pm === 'transferencia' || pm === 'qr') movementCounts[m.session_id].salesTransfer += amt
+              else if (pm === 'mixed' || pm === 'mixto') movementCounts[m.session_id].salesMixed += amt
+            } else if (m.type === 'cash_in' || (m.type as string) === 'ingreso') {
+              movementCounts[m.session_id].cashIn += amt
+            } else if (m.type === 'cash_out' || (m.type as string) === 'egreso') {
+              movementCounts[m.session_id].cashOut += amt
+            }
+
             if (m.created_by) {
               if (m.type === 'opening') {
                 sessionOpenerMap[m.session_id] = m.created_by
@@ -128,13 +219,10 @@ export function useCashMonitor() {
         }
       }
 
-      // If we still can't identify openers, try to get the current user as ultimate fallback
-      // This handles the case where old sessions have no created_by at all
       let currentUserId: string | null = null
       const { data: userData } = await supabase.auth.getUser()
       currentUserId = userData.user?.id || null
 
-      // Collect ALL user IDs: from opened_by, closed_by, opening movements, and current user
       const userIds = new Set<string>()
       data?.forEach(s => {
         if (s.opened_by) userIds.add(s.opened_by)
@@ -143,7 +231,6 @@ export function useCashMonitor() {
       Object.values(sessionOpenerMap).forEach(uid => userIds.add(uid))
       if (currentUserId) userIds.add(currentUserId)
 
-      // Filter out non-UUID values (e.g. 'system') before querying profiles
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       const validUserIds = Array.from(userIds).filter(id => uuidRegex.test(id))
 
@@ -162,34 +249,41 @@ export function useCashMonitor() {
         }
       }
 
-      // Map known non-UUID identifiers
       userIds.forEach(id => {
         if (!uuidRegex.test(id)) {
           userMap[id] = id === 'system' ? 'Sistema' : id
         }
       })
 
-      // Map to CashSession
-      // Re-use the movements we already fetched (they're in movementCounts iteration)
-      // We need to re-fetch or store them. Let's store during the first iteration.
-      // Actually, let's rebuild from the movements query we already did above.
-      // The movements variable is scoped inside the if block, so let's restructure.
-
-      const mapped: CashSession[] = (data || []).map(s => {
-        const mc = movementCounts[s.id] || { total: 0, sales: 0, lastMovement: null }
-        const openedAt = new Date(s.created_at)
+      let mapped: CashSession[] = (data || []).map(s => {
+        const mc = movementCounts[s.id] || {
+          total: 0,
+          sales: 0,
+          salesCash: 0,
+          salesCard: 0,
+          salesTransfer: 0,
+          salesMixed: 0,
+          totalSales: 0,
+          cashIn: 0,
+          cashOut: 0,
+          lastMovement: null
+        }
         const now = new Date()
-        const durationHours = (now.getTime() - openedAt.getTime()) / (1000 * 60 * 60)
-
-        // Resolve who opened: prefer opened_by column, fallback to opening movement creator, then current user
         const effectiveOpenedBy = s.opened_by || sessionOpenerMap[s.id] || currentUserId || null
-
-        // Discrepancy logic:
-        // Use the stored discrepancy from DB if available (set by closeRegister)
-        // This is the REAL discrepancy calculated at close time:
-        //   discrepancy = actual_cash_counted - expected_balance
-        // where expected = opening + sales(cash) + cash_in - cash_out
         const discrepancy = Number(s.discrepancy) || 0
+
+        // Las cifras salen de `lib/cash/session-figures`: alli esta explicado por
+        // que un cero guardado no es lo mismo que una columna vacia.
+        const figures = calculateSessionFigures(s, {
+          total: mc.total,
+          totalSales: mc.totalSales,
+          salesCash: mc.salesCash,
+          salesCard: mc.salesCard,
+          salesTransfer: mc.salesTransfer,
+          salesMixed: mc.salesMixed,
+          cashIn: mc.cashIn,
+          cashOut: mc.cashOut,
+        })
 
         return {
           id: s.id,
@@ -201,10 +295,19 @@ export function useCashMonitor() {
           opened_by_name: effectiveOpenedBy ? userMap[effectiveOpenedBy] : undefined,
           closed_by: s.closed_by,
           closed_by_name: s.closed_by ? userMap[s.closed_by] : undefined,
-          opening_balance: s.opening_balance || 0,
+          opening_balance: figures.openingBalance,
           closing_balance: s.closing_balance,
-          expected_balance: Number(s.expected_balance) || 0,
+          current_balance: figures.currentBalance,
+          expected_balance: figures.expectedBalance,
           discrepancy,
+          total_sales: figures.totalSales,
+          sales_by_cash: figures.salesCash,
+          sales_by_card: figures.salesCard,
+          sales_by_transfer: figures.salesTransfer,
+          sales_by_mixed: figures.salesMixed,
+          income_total: figures.incomeTotal,
+          expense_total: figures.expenseTotal,
+          sales_mismatch: figures.salesMismatch,
           branch_id: s.branch_id || selectedBranchId || 'principal',
           created_at: s.created_at,
           date: s.date,
@@ -216,87 +319,95 @@ export function useCashMonitor() {
           movements_count: mc.total,
           sales_count: mc.sales,
           last_movement: mc.lastMovement,
-          duration_hours: s.status === 'open' ? Math.round(durationHours * 10) / 10 : undefined
+          // Mientras no tenga fecha de cierre, la plata sigue en la gaveta. Antes
+          // se preguntaba por el `status` CRUDO de la base, que la apertura no
+          // escribe —la RPC inserta sin tocarlo— mientras que el estado de arriba
+          // se deriva de `date`: dos definiciones de «abierta» a tres lineas de
+          // distancia, y ninguna caja abierta mostraba cuanto llevaba abierta.
+          duration_hours: openDurationHours(s, now)
         }
       })
+
+      // El periodo completo alimenta las metricas; el filtro de diferencia solo
+      // recorta la tabla.
+      setPeriodSessions(mapped)
+
+      if (filter.discrepancy && filter.discrepancy !== 'all') {
+        mapped = mapped.filter(s => {
+          if (s.status === 'open') return true
+          if (filter.discrepancy === 'perfect') return Math.abs(s.discrepancy) < 1
+          if (filter.discrepancy === 'with_diff') return Math.abs(s.discrepancy) >= 1
+          if (filter.discrepancy === 'over') return s.discrepancy > 0.5
+          if (filter.discrepancy === 'short') return s.discrepancy < -0.5
+          return true
+        })
+      }
 
       setSessions(mapped)
     } catch (error) {
       console.error('Error fetching sessions:', error)
       toast.error('Error al cargar sesiones de caja')
     }
-  }, [filter, selectedBranchId, supabase])
+  }, [filter, organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // FETCH ALERTS
   // =========================================================================
   const fetchAlerts = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
     try {
+      // La tienda se filtra contra la columna de la propia tabla. Antes habia
+      // que traer primero hasta 500 cierres y pasar sus ids: las alertas de
+      // sesiones mas viejas que ese corte desaparecian de la lista sin aviso.
       let query = supabase
         .from('cash_alerts')
         .select('*')
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (selectedBranchId) {
-        const { data: branchSessions, error: sessionsError } = await supabase
-          .from('cash_closures')
-          .select('id')
-          .eq('branch_id', selectedBranchId)
-          .limit(500)
-
-        if (sessionsError) throw sessionsError
-
-        const sessionIds = (branchSessions || []).map((session) => session.id)
-        if (sessionIds.length === 0) {
-          setAlerts([])
-          return
-        }
-
-        query = query.in('session_id', sessionIds)
-      }
+        .limit(200)
+      query = withBranchFilter(query, selectedBranchId)
 
       const { data, error } = await query
 
       if (error) throw error
       setAlerts(data || [])
+
+      // Conteos exactos, aparte de la lista: la lista es lo ultimo que paso, los
+      // contadores son cuantas hay.
+      const buildAlertCountBase = () => {
+        const q = supabase!
+          .from('cash_alerts')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', organization.id)
+          .eq('is_resolved', false)
+        return withBranchFilter(q, selectedBranchId)
+      }
+
+      const [{ count: unresolved }, { count: critical }] = await Promise.all([
+        buildAlertCountBase(),
+        buildAlertCountBase().eq('severity', 'critical'),
+      ])
+
+      setAlertCounts({ unresolved: unresolved ?? 0, critical: critical ?? 0 })
     } catch (error) {
       console.error('Error fetching alerts:', error)
     }
-  }, [selectedBranchId, supabase])
+  }, [organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // FETCH AUDIT LOG
   // =========================================================================
   const fetchAuditLog = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
     try {
-      let query = supabase
+      const query = supabase
         .from('cash_admin_audit')
         .select('*')
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
         .limit(100)
-
-      if (selectedBranchId) {
-        const { data: branchSessions, error: sessionsError } = await supabase
-          .from('cash_closures')
-          .select('id')
-          .eq('branch_id', selectedBranchId)
-          .limit(500)
-
-        if (sessionsError) throw sessionsError
-
-        const sessionIds = (branchSessions || []).map((session) => session.id)
-        if (sessionIds.length === 0) {
-          setAuditLog([])
-          return
-        }
-
-        query = query.in('session_id', sessionIds)
-      }
 
       const { data, error } = await query
 
@@ -333,7 +444,7 @@ export function useCashMonitor() {
     } catch (error) {
       console.error('Error fetching audit log:', error)
     }
-  }, [selectedBranchId, supabase])
+  }, [organization?.id, supabase])
 
   // =========================================================================
   // COMPUTE METRICS
@@ -342,33 +453,58 @@ export function useCashMonitor() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const open = sessions.filter(s => s.status === 'open')
-    const closedToday = sessions.filter(s =>
+    const open = periodSessions.filter(s => s.status === 'open')
+    const closedToday = periodSessions.filter(s =>
       s.status === 'closed' && s.date && new Date(s.date) >= today
     )
-    const suspended = sessions.filter(s => s.status === 'suspended')
-    const blocked = sessions.filter(s => s.status === 'blocked')
+    const suspended = periodSessions.filter(s => s.status === 'suspended')
+    const blocked = periodSessions.filter(s => s.status === 'blocked')
 
-    const totalBalance = open.reduce((sum, s) => sum + (s.opening_balance || 0), 0)
-    const totalDiscrepancies = sessions
-      .filter(s => Math.abs(s.discrepancy) > 0)
+    const totalBalance = open.reduce((sum, s) => sum + (s.current_balance || s.opening_balance || 0), 0)
+    const totalSales = periodSessions.reduce((sum, s) => sum + (s.total_sales || 0), 0)
+    const salesCash = periodSessions.reduce((sum, s) => sum + (s.sales_by_cash || 0), 0)
+    const salesCard = periodSessions.reduce((sum, s) => sum + (s.sales_by_card || 0), 0)
+    const salesTransfer = periodSessions.reduce((sum, s) => sum + (s.sales_by_transfer || 0), 0)
+    const salesMixed = periodSessions.reduce((sum, s) => sum + (s.sales_by_mixed || 0), 0)
+
+    const closedSessions = periodSessions.filter(s => s.status !== 'open')
+    const totalOver = closedSessions
+      .filter(s => s.discrepancy > 0.5)
+      .reduce((sum, s) => sum + s.discrepancy, 0)
+
+    const totalShort = closedSessions
+      .filter(s => s.discrepancy < -0.5)
       .reduce((sum, s) => sum + Math.abs(s.discrepancy), 0)
 
-    const unresolvedAlerts = alerts.filter(a => !a.is_resolved).length
-    const criticalAlerts = alerts.filter(a => !a.is_resolved && a.severity === 'critical').length
+    const totalDiscrepancies = closedSessions.reduce((sum, s) => sum + (s.discrepancy || 0), 0)
+    const perfectSessions = closedSessions.filter(s => Math.abs(s.discrepancy) < 1).length
+    const sessionsWithDiff = closedSessions.filter(s => Math.abs(s.discrepancy) >= 1).length
+
+    // De la base, no de las 50 traidas.
+    const unresolvedAlerts = alertCounts.unresolved
+    const criticalAlerts = alertCounts.critical
 
     setMetrics({
-      totalRegisters: new Set(sessions.map(s => s.register_id)).size,
+      totalRegisters: new Set(periodSessions.map(s => s.register_id)).size,
       openSessions: open.length,
       closedToday: closedToday.length,
       suspendedSessions: suspended.length,
       blockedSessions: blocked.length,
       totalBalance,
+      totalSales,
       totalDiscrepancies,
+      totalOver,
+      totalShort,
+      perfectSessions,
+      sessionsWithDiff,
+      salesCash,
+      salesCard,
+      salesTransfer,
+      salesMixed,
       unresolvedAlerts,
       criticalAlerts
     })
-  }, [sessions, alerts])
+  }, [periodSessions, alertCounts])
 
   useEffect(() => {
     computeMetrics()
@@ -478,12 +614,13 @@ export function useCashMonitor() {
   // FETCH SESSION MOVEMENTS (for detail view)
   // =========================================================================
   const fetchSessionMovements = useCallback(async (sessionId: string): Promise<CashMovementAdmin[]> => {
-    if (!supabase) return []
+    if (!supabase || !organization?.id) return []
 
     try {
       let query = supabase
         .from('cash_movements')
         .select('*')
+        .eq('organization_id', organization.id)
         .eq('session_id', sessionId)
         .order('created_at', { ascending: false })
 
@@ -529,20 +666,29 @@ export function useCashMonitor() {
       console.error('Error fetching movements:', error)
       return []
     }
-  }, [selectedBranchId, supabase])
+  }, [organization?.id, selectedBranchId, supabase])
 
   // =========================================================================
   // REALTIME SUBSCRIPTIONS
   // =========================================================================
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase || !organization?.id) return
 
+    // Cada suscripcion se acota a la organizacion. Sin esto, el camino de tiempo
+    // real no repetia ninguno de los filtros que si aplica la consulta inicial:
+    // entraban avisos de otras sucursales, y de otras tiendas, y quedaban en la
+    // lista hasta que un refresco los sacaba.
+    const deLaTienda = `organization_id=eq.${organization.id}`
+
+    // El nombre incluye la organizacion: un canal compartido entre tiendas
+    // mezcla suscriptores que no tienen nada que ver entre si.
     const channel = supabase
-      .channel('cash-admin-monitor')
+      .channel(`cash-admin-monitor:${organization.id}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'cash_closures'
+        table: 'cash_closures',
+        filter: deLaTienda,
       }, () => {
         // Refresh sessions on any change
         fetchSessions()
@@ -550,7 +696,8 @@ export function useCashMonitor() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'cash_movements'
+        table: 'cash_movements',
+        filter: deLaTienda,
       }, () => {
         // Refresh sessions to update movement counts
         fetchSessions()
@@ -558,11 +705,26 @@ export function useCashMonitor() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'cash_alerts'
+        table: 'cash_alerts',
+        filter: deLaTienda,
       }, (payload) => {
-        // Add new alert to state
         const newAlert = payload.new as CashAlert
-        setAlerts(prev => [newAlert, ...prev])
+
+        // La sucursal no se puede filtrar en el servidor junto con la tienda, asi
+        // que se descarta aca: la lista debe contener lo mismo que devolveria un
+        // refresco con el filtro puesto.
+        if (selectedBranchId && newAlert.branch_id && newAlert.branch_id !== selectedBranchId) return
+
+        setAlerts(prev => {
+          if (prev.some(a => a.id === newAlert.id)) return prev
+          // El contador vive aparte de la lista: sin esto el globito no se movia
+          // hasta el siguiente refresco.
+          setAlertCounts(counts => ({
+            unresolved: counts.unresolved + 1,
+            critical: counts.critical + (newAlert.severity === 'critical' ? 1 : 0),
+          }))
+          return [newAlert, ...prev]
+        })
         toast.warning(`Nueva alerta: ${newAlert.title}`, {
           duration: 8000
         })
@@ -576,7 +738,7 @@ export function useCashMonitor() {
         supabase!.removeChannel(channelRef.current)
       }
     }
-  }, [supabase, fetchSessions])
+  }, [supabase, fetchSessions, organization?.id, selectedBranchId])
 
   // =========================================================================
   // INITIAL LOAD
@@ -602,6 +764,7 @@ export function useCashMonitor() {
   return {
     // Data
     sessions,
+    truncatedSessions,
     alerts,
     auditLog,
     metrics,

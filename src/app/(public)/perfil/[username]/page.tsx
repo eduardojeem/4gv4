@@ -33,7 +33,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   const { data: content, error: contentError } = await supabase
     .from('content')
     .select('id, user_id, title, description, image_url, category, type, date, views, likes, comments, link, tags')
-    .eq('user_id', (profile as any).user_id)
+    .eq('user_id', profile.user_id)
     .eq('is_public', true)
     .order('date', { ascending: false })
     .limit(20)
@@ -42,27 +42,44 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     // No bloqueamos la página por error de contenido; mostramos sin contenido
   }
 
+  const socialLinks = Array.isArray(profile.social_links) ? profile.social_links : []
+  const stats = Array.isArray(profile.user_stats) ? profile.user_stats[0] : profile.user_stats
+  const publicContent: PublicData['content'] = (content ?? []).map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    image_url: item.image_url,
+    category: item.category,
+    type: item.type === 'project' ? 'project' : 'post',
+    date: item.date,
+    views: item.views,
+    likes: item.likes,
+    comments: item.comments,
+    link: item.link,
+    tags: item.tags,
+  }))
+
   const data: PublicData = {
     profile: {
-      username: (profile as any).username,
-      display_name: (profile as any).display_name,
-      title: (profile as any).title,
-      bio: (profile as any).bio,
-      location: (profile as any).location,
-      avatar_url: (profile as any).avatar_url,
-      updated_at: (profile as any).updated_at,
+      username: profile.username,
+      display_name: profile.display_name,
+      title: profile.title,
+      bio: profile.bio,
+      location: profile.location,
+      avatar_url: profile.avatar_url,
+      updated_at: profile.updated_at,
     },
-    socialLinks: ((profile as any).social_links ?? []) as any,
-    stats: ((profile as any).user_stats ?? {
+    socialLinks,
+    stats: stats ?? {
       followers_count: 0,
       following_count: 0,
       posts_count: 0,
       projects_count: 0,
-    }) as any,
-    content: (content as any) ?? [],
+    },
+    content: publicContent,
   }
 
-  const isOwnProfile = sessionUserId && sessionUserId === (profile as any).user_id
+  const isOwnProfile = sessionUserId && sessionUserId === profile.user_id
 
   return <PublicProfileClient data={data} isOwnProfile={!!isOwnProfile} />
 }
@@ -79,9 +96,9 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
       .maybeSingle()
 
     if (!profile) return { title: 'Perfil público', description: 'Perfil no encontrado' }
-    const name = (profile as any).display_name || username
-    const title = (profile as any).title ? `${(profile as any).title} • ${name}` : `${name} • Perfil`
-    const desc = (profile as any).bio || `Explora el perfil de ${name}`
+    const name = profile.display_name || username
+    const title = profile.title ? `${profile.title} • ${name}` : `${name} • Perfil`
+    const desc = profile.bio || `Explora el perfil de ${name}`
     return { title, description: desc }
   } catch {
     return { title: 'Perfil público' }

@@ -1,11 +1,8 @@
 import { Customer } from '@/hooks/use-customer-state'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  createCustomerSchema, 
-  updateCustomerSchema,
-  validateCustomerData,
-  getValidationErrors,
-  preprocessCustomerData
+import {
+  createCustomerSchema,
+  updateCustomerSchema, preprocessCustomerData
 } from '@/lib/validations/customer'
 
 export interface CreateCustomerRequest {
@@ -31,7 +28,7 @@ export interface CreateCustomerRequest {
   birthday?: string
   discount_percentage?: number
   preferred_contact?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface UpdateCustomerRequest extends Partial<CreateCustomerRequest> {
@@ -54,6 +51,17 @@ export interface CustomersListResponse {
     total: number
     totalPages: number
   }
+}
+
+export interface AuthorizedPerson {
+  id: string
+  profile_id: string
+  full_name: string
+  document_number: string
+  relationship?: string | null
+  phone?: string | null
+  is_active: boolean
+  created_at: string
 }
 
 class CustomerService {
@@ -253,6 +261,29 @@ class CustomerService {
     try {
       const queryId = String(id)
 
+      // 1. Intentar actualizar a través de la API del servidor (Tenant Auth y bypass RLS seguro)
+      if (typeof window !== 'undefined') {
+        try {
+          const apiRes = await fetch('/api/customers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: queryId, ...customerData })
+          })
+
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json()
+            if (apiJson.success && apiJson.data) {
+              return {
+                success: true,
+                data: this.mapSupabaseToCustomer(apiJson.data)
+              }
+            }
+          }
+        } catch (apiErr) {
+          console.warn('API update failed, fallbacking to client supabase:', apiErr)
+        }
+      }
+
       // Debug: Check session
       const { data: { session }, error: sessionError } = await this.supabase.auth.getSession()
       if (sessionError) {
@@ -333,13 +364,22 @@ class CustomerService {
         .maybeSingle()
 
       if (updateError) {
-        const errInfo: any = {
-          code: (updateError as any)?.code,
-          message: (updateError as any)?.message,
-          details: (updateError as any)?.details,
-          hint: (updateError as any)?.hint,
-          status: (updateError as any)?.status,
-          name: (updateError as any)?.name || 'SupabaseUpdateError',
+        const errorRecord = updateError as {
+          code?: string
+          message?: string
+          details?: string
+          hint?: string
+          status?: number
+          name?: string
+        }
+        const errInfo = {
+          code: errorRecord.code,
+          message: errorRecord.message,
+          details: errorRecord.details,
+          hint: errorRecord.hint,
+          status: errorRecord.status,
+          name: errorRecord.name || 'SupabaseUpdateError',
+          raw: '' as unknown,
         }
         try {
           errInfo.raw = JSON.parse(JSON.stringify(updateError))
@@ -348,23 +388,29 @@ class CustomerService {
         }
         console.error('Supabase error details:', JSON.stringify(errInfo))
 
-        const fullError: any = new Error(errInfo.message || 'Error al actualizar cliente en Supabase')
-        fullError.code = errInfo.code
-        fullError.details = errInfo.details
-        fullError.hint = errInfo.hint
-        fullError.status = errInfo.status
-        fullError.name = errInfo.name || 'SupabaseUpdateError'
+        const fullError = Object.assign(new Error(errInfo.message || 'Error al actualizar cliente en Supabase'), {
+          code: errInfo.code,
+          details: errInfo.details,
+          hint: errInfo.hint,
+          status: errInfo.status,
+          name: errInfo.name || 'SupabaseUpdateError',
+        })
         throw fullError
       }
 
       // If update returned a row, use it; otherwise perform a safe fetch
-      const { data: refreshed, error: fetchError } = updatedRow
-        ? { data: updatedRow, error: null as any }
-        : await this.supabase
-            .from('customers')
-            .select('*')
-            .eq('id', queryId)
-            .maybeSingle()
+      let refreshed = updatedRow
+      let fetchError: { message: string } | null = null
+
+      if (!refreshed) {
+        const fetchResult = await this.supabase
+          .from('customers')
+          .select('*')
+          .eq('id', queryId)
+          .maybeSingle()
+        refreshed = fetchResult.data
+        fetchError = fetchResult.error
+      }
 
       if (fetchError || !refreshed) {
         return {
@@ -389,8 +435,13 @@ class CustomerService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
       // If error is an object with code/details, include them in the error message or return them
       const fullError = error instanceof Error ? error : new Error(errorMessage)
-      if ((error as any).code) (fullError as any).code = (error as any).code
-      if ((error as any).details) (fullError as any).details = (error as any).details
+      const errRecord = typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null
+      if (errRecord?.code) {
+        Object.assign(fullError, { code: errRecord.code })
+      }
+      if (errRecord?.details) {
+        Object.assign(fullError, { details: errRecord.details })
+      }
       
       throw fullError // Re-throw to be caught by the hook which now handles error details
     }
@@ -403,16 +454,19 @@ class CustomerService {
     const invalidValues = ['[REDACTED]', 'undefined', 'null', 'N/A', '--']
 
     // Limpiar strings - convertir cadenas inválidas a undefined
-    const stringFields = ['name', 'email', 'phone', 'whatsapp', 'address', 'city', 'company', 'position', 'ruc', 'payment_terms', 'notes', 'birthday']
+    const stringFields = [
+      'name', 'email', 'phone', 'whatsapp', 'address', 'city',
+      'company', 'position', 'ruc', 'payment_terms', 'notes', 'birthday'
+    ] as const
     
     stringFields.forEach(field => {
-      const value = data[field as keyof CreateCustomerRequest] as string
-      if (value !== undefined) {
+      const value = data[field]
+      if (typeof value === 'string') {
         const trimmed = value.trim()
         // Solo filtrar si el valor COMPLETO es inválido, no si lo contiene
         // Permitir strings vacíos para poder limpiar campos
         if (!invalidValues.includes(trimmed)) {
-          cleaned[field as keyof CreateCustomerRequest] = trimmed as any
+          (cleaned as Record<string, unknown>)[field] = trimmed
         }
       }
     })
@@ -460,10 +514,10 @@ class CustomerService {
     return cleaned
   }
 
-  private async syncProfileFromCustomer(customerRow: any, updatedFields: Partial<CreateCustomerRequest>) {
-    const profileId = customerRow?.profile_id as string | undefined
+  private async syncProfileFromCustomer(customerRow: Record<string, unknown> | null, updatedFields: Partial<CreateCustomerRequest>) {
+    const profileId = typeof customerRow?.profile_id === 'string' ? customerRow.profile_id : undefined
     if (!profileId) return
-    const profileUpdate: Record<string, any> = {}
+    const profileUpdate: Record<string, unknown> = {}
     if (updatedFields.name) profileUpdate.full_name = updatedFields.name
     if (updatedFields.email) profileUpdate.email = updatedFields.email
     if (updatedFields.phone) profileUpdate.phone = updatedFields.phone
@@ -613,11 +667,15 @@ class CustomerService {
    // Obtener el crédito (id) del cliente si existe
    private async getCustomerCreditId(customerId: string): Promise<{ success: boolean; creditId?: string; error?: string }> {
      try {
+       // Un cliente puede tener mas de un credito: con .single() PostgREST
+       // fallaba y el detalle se quedaba sin resumen. Se toma el mas reciente.
        const { data, error } = await this.supabase
          .from('customer_credits')
          .select('id')
          .eq('customer_id', customerId)
-         .single()
+         .order('created_at', { ascending: false })
+         .limit(1)
+         .maybeSingle()
  
        if (error) {
          // Si no existe registro de crédito, devolver success con creditId undefined
@@ -635,6 +693,92 @@ class CustomerService {
      }
    }
  
+   /**
+    * Saldo pendiente de varios clientes de una sola vez.
+    *
+    * La alerta de "clientes con saldo pendiente" filtraba por
+    * `customers.current_balance`, que nadie actualiza: nunca aparecia nadie.
+    */
+   async getCustomersCreditOutstanding(customerIds: string[]): Promise<Map<string, number>> {
+     const outstanding = new Map<string, number>()
+     const ids = Array.from(new Set(customerIds.filter(Boolean)))
+     if (ids.length === 0) return outstanding
+
+     try {
+       const { data: credits, error: creditsError } = await this.supabase
+         .from('customer_credits')
+         .select('id, customer_id')
+         .in('customer_id', ids)
+
+       if (creditsError) throw creditsError
+
+       const customerByCredit = new Map<string, string>()
+       for (const row of (credits ?? []) as Array<{ id: string; customer_id: string }>) {
+         customerByCredit.set(row.id, row.customer_id)
+       }
+       if (customerByCredit.size === 0) return outstanding
+
+       const { data, error } = await this.supabase
+         .from('credit_summary')
+         .select('credit_id, saldo_pendiente')
+         .in('credit_id', Array.from(customerByCredit.keys()))
+
+       if (error) throw error
+
+       for (const row of (data ?? []) as Array<{ credit_id: string; saldo_pendiente?: number | string | null }>) {
+         const customerId = customerByCredit.get(row.credit_id)
+         if (!customerId) continue
+         outstanding.set(customerId, (outstanding.get(customerId) ?? 0) + (Number(row.saldo_pendiente) || 0))
+       }
+     } catch (error: unknown) {
+       const message = error instanceof Error ? error.message : 'Unknown error occurred'
+       console.warn('Error obteniendo saldos pendientes:', message)
+     }
+
+     return outstanding
+   }
+
+   /**
+    * Saldo pendiente total del cliente, sumando todos sus creditos.
+    *
+    * Es el mismo numero que decide si se le puede vender a credito
+    * (`canSellOnCredit` y `createCreditAccount` usan las cuotas pendientes).
+    * El detalle del cliente mostraba `credit_limit - customers.current_balance`,
+    * y esa columna no la actualiza nadie: quedaba en 0 y el credito disponible
+    * se veia siempre igual al limite, aunque el cliente debiera todo.
+    */
+   async getCustomerCreditOutstanding(customerId: string): Promise<{ success: boolean; outstanding: number; error?: string }> {
+     try {
+       const { data: credits, error: creditsError } = await this.supabase
+         .from('customer_credits')
+         .select('id')
+         .eq('customer_id', customerId)
+
+       if (creditsError) throw creditsError
+
+       const creditIds = (credits ?? []).map((row: { id: string }) => row.id)
+       if (creditIds.length === 0) return { success: true, outstanding: 0 }
+
+       const { data, error } = await this.supabase
+         .from('credit_summary')
+         .select('saldo_pendiente')
+         .in('credit_id', creditIds)
+
+       if (error) throw error
+
+       const outstanding = (data ?? []).reduce(
+         (total: number, row: { saldo_pendiente?: number | string | null }) =>
+           total + (Number(row.saldo_pendiente) || 0),
+         0,
+       )
+       return { success: true, outstanding }
+     } catch (error: unknown) {
+       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+       console.warn('Error obteniendo saldo pendiente del cliente:', errorMessage)
+       return { success: false, outstanding: 0, error: errorMessage }
+     }
+   }
+
    // Resumen de crédito del cliente desde la vista credit_summary
    async getCustomerCreditSummary(customerId: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
      try {
@@ -939,17 +1083,18 @@ class CustomerService {
         imported,
         errors
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error importing CSV:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error al procesar el archivo CSV'
       return {
         success: false,
-        error: error.message || 'Error al procesar el archivo CSV'
+        error: errorMessage
       }
     }
   }
 
   // Obtener personas autorizadas vinculadas al perfil del cliente
-  async getCustomerAuthorizedPersons(profileId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  async getCustomerAuthorizedPersons(profileId: string): Promise<{ success: boolean; data?: AuthorizedPerson[]; error?: string }> {
     try {
       const { data, error } = await this.supabase
         .from('authorized_persons')

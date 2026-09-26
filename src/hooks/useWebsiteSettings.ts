@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import useSWR, { mutate } from 'swr'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import useSWR, { useSWRConfig } from 'swr'
+import type { ScopedMutator } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { usePathname } from 'next/navigation'
@@ -14,16 +15,23 @@ let publicRealtimeRefCount = 0
 let publicRealtimeSupabase: RealtimeClient | null = null
 let publicRealtimeChannel: RealtimeChannel | null = null
 
-let adminRealtimeRefCount = 0
-let adminRealtimeSupabase: RealtimeClient | null = null
-let adminRealtimeChannel: RealtimeChannel | null = null
-
 const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
 const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
 
 const subscribeToHydration = () => () => undefined
 const getClientHydrationSnapshot = () => true
 const getServerHydrationSnapshot = () => false
+
+/**
+ * La app envuelve todo en `SWRConfig` con un proveedor de caché propio
+ * (`PersistentCache`). Con un proveedor propio, el `mutate` importado de 'swr'
+ * escribe en la caché por defecto, que no es la que leen los componentes: la
+ * pantalla no se entera. El ligado a la caché real sólo se obtiene desde un
+ * componente, así que el canal de realtime —que vive fuera de React— se lo
+ * guarda acá.
+ */
+let publicRealtimeMutate: ScopedMutator | null = null
+let publicRealtimeKey: string = WEBSITE_SETTINGS_CACHE_KEY
 
 function ensurePublicWebsiteSettingsRealtime() {
   if (publicRealtimeChannel) return
@@ -42,7 +50,7 @@ function ensurePublicWebsiteSettingsRealtime() {
         table: 'website_settings'
       },
       async () => {
-        await mutate(WEBSITE_SETTINGS_CACHE_KEY)
+        await publicRealtimeMutate?.(publicRealtimeKey)
       }
     )
     .subscribe()
@@ -55,34 +63,19 @@ function releasePublicWebsiteSettingsRealtime() {
   publicRealtimeChannel = null
 }
 
-function ensureAdminWebsiteSettingsRealtime() {
-  if (adminRealtimeChannel) return
-
-  if (!adminRealtimeSupabase) {
-    adminRealtimeSupabase = createSupabaseClient()
+// Fetcher estable a nivel de módulo — la URL se construye desde la key de SWR,
+// así todos los componentes comparten la misma referencia de función.
+async function publicSettingsFetcher(url: string): Promise<WebsiteSettings> {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    const message = errBody?.error || res.statusText || 'Error'
+    const err: FetchError = new Error(message)
+    err.status = res.status
+    throw err
   }
-
-  adminRealtimeChannel = adminRealtimeSupabase
-    .channel('realtime:website_settings_admin')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'website_settings'
-      },
-      async () => {
-        await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
-      }
-    )
-    .subscribe()
-}
-
-function releaseAdminWebsiteSettingsRealtime() {
-  if (!adminRealtimeSupabase || !adminRealtimeChannel) return
-
-  adminRealtimeSupabase.removeChannel(adminRealtimeChannel)
-  adminRealtimeChannel = null
+  const data = await res.json()
+  return data.data as WebsiteSettings
 }
 
 export function useWebsiteSettings() {
@@ -95,24 +88,14 @@ export function useWebsiteSettings() {
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
 
-  const fetcher = useMemo(() => async () => {
-    const res = await fetch(cacheKey)
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}))
-      const statusText = res.statusText || 'Error'
-      const message = errBody?.error || statusText
-      const err: FetchError = new Error(message)
-      err.status = res.status
-      throw err
-    }
-    const data = await res.json()
-    return data.data as WebsiteSettings
-  }, [cacheKey])
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, publicSettingsFetcher)
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, fetcher)
+  const { mutate: mutateCache } = useSWRConfig()
 
   // Share a single realtime subscription across all consumers of this hook.
   useEffect(() => {
+    publicRealtimeMutate = mutateCache
+    publicRealtimeKey = cacheKey
     publicRealtimeRefCount += 1
     try {
       ensurePublicWebsiteSettingsRealtime()
@@ -126,7 +109,7 @@ export function useWebsiteSettings() {
         releasePublicWebsiteSettingsRealtime()
       }
     }
-  }, [])
+  }, [mutateCache, cacheKey])
 
   const hydrationSafeState = getHydrationSafeWebsiteSettingsState(isHydrated, data, isLoading)
 
@@ -136,44 +119,64 @@ export function useWebsiteSettings() {
   }
 }
 
+// Fetcher para el panel admin (autenticado, sin caché agresiva).
+async function adminSettingsFetcher(url: string): Promise<WebsiteSettings> {
+  const adminRes = await fetch(url, { cache: 'no-store' })
+  if (adminRes.ok) {
+    const adminData = await adminRes.json()
+    return adminData.data as WebsiteSettings
+  }
+  const errBody = await adminRes.json().catch(() => ({}))
+  const message = errBody?.error || adminRes.statusText || 'Error'
+  const err: FetchError = new Error(message)
+  err.status = adminRes.status
+  throw err
+}
+
 export function useAdminWebsiteSettings() {
+  // Ligado a la caché del proveedor de la app: el `mutate` global de 'swr'
+  // escribiría en otra caché y el guardado no se vería hasta recargar.
+  const { mutate: mutateCache } = useSWRConfig()
   const [isSaving, setIsSaving] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const fetcher = useMemo(() => async () => {
-    const adminRes = await fetch(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
-    if (adminRes.ok) {
-      const adminData = await adminRes.json()
-      return adminData.data as WebsiteSettings
+  const { data, error, isLoading, mutate: swrMutate } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, adminSettingsFetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+    refreshInterval: 0,
+  })
+
+  const refresh = async () => {
+    try {
+      setIsRefreshing(true)
+      await swrMutate()
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to refresh settings'
+      return { success: false, error: message }
+    } finally {
+      setIsRefreshing(false)
     }
+  }
 
-    const errBody = await adminRes.json().catch(() => ({}))
-    const statusText = adminRes.statusText || 'Error'
-    const message = errBody?.error || statusText
-    const err: FetchError = new Error(message)
-    err.status = adminRes.status
-    throw err
-  }, [])
-
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, fetcher)
-
-  // Optimistic update helper
-  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) => {
+  const updateSettings = async (values: Partial<WebsiteSettings>) => {
     const previous = data
 
     try {
       setIsSaving(true)
 
       // Optimistically update cache
-      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
+      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
-        return { ...current, [key]: value } as WebsiteSettings
+        return { ...current, ...values } as WebsiteSettings
       }, false)
 
-      const res = await fetch(`${ADMIN_WEBSITE_SETTINGS_CACHE_KEY}/${key}`, {
+      const res = await fetch(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
+        body: JSON.stringify({ values })
       })
 
       const body = await res.json().catch(() => ({}))
@@ -182,24 +185,27 @@ export function useAdminWebsiteSettings() {
         throw new Error(msg)
       }
 
-      const persistedValue = body?.data ?? value
-      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
+      const persistedValues = body?.data ?? values
+      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
-        return { ...current, [key]: persistedValue } as WebsiteSettings
+        return { ...current, ...persistedValues } as WebsiteSettings
       }, false)
 
       // Revalidate to ensure server truth
-      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
       return { success: true }
     } catch (err) {
       // Rollback on error
-      if (previous) await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, previous, false)
+      if (previous) await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, previous, false)
       const message = err instanceof Error ? err.message : 'Failed to update setting'
       return { success: false, error: message }
     } finally {
       setIsSaving(false)
     }
   }
+
+  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) =>
+    updateSettings({ [key]: value } as Pick<WebsiteSettings, K>)
 
   const initializeMissingSettings = async () => {
     try {
@@ -215,7 +221,7 @@ export function useAdminWebsiteSettings() {
         throw new Error(message)
       }
 
-      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+      await mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
       return {
         success: true,
         insertedCount: Number(body?.insertedCount || 0),
@@ -229,33 +235,17 @@ export function useAdminWebsiteSettings() {
     }
   }
 
-  // Realtime subscription: reflect changes done by other admins
-  useEffect(() => {
-    adminRealtimeRefCount += 1
-    try {
-      ensureAdminWebsiteSettingsRealtime()
-    } catch {
-      // Supabase not configured; skip realtime
-      adminRealtimeRefCount = Math.max(0, adminRealtimeRefCount - 1)
-      return
-    }
-
-    return () => {
-      adminRealtimeRefCount = Math.max(0, adminRealtimeRefCount - 1)
-      if (adminRealtimeRefCount === 0) {
-        releaseAdminWebsiteSettingsRealtime()
-      }
-    }
-  }, [])
-
   return {
     settings: data ?? null,
     isLoading,
     error: error ? (error as Error).message : null,
     isSaving,
     isInitializing,
+    isRefreshing,
     updateSetting,
+    updateSettings,
     initializeMissingSettings,
-    refetch: () => mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+    refetch: () => mutateCache(ADMIN_WEBSITE_SETTINGS_CACHE_KEY),
+    refresh,
   }
 }

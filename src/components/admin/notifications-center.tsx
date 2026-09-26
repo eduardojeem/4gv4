@@ -1,17 +1,17 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useMemo } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  Bell, BellRing, AlertTriangle, CheckCircle, Info, X, 
-  Users, ShoppingCart, Shield, Server, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  Bell, BellRing, CheckCircle, X,
+  Users, ShoppingCart, Shield, Server,
   Clock, Search, Trash2
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
@@ -101,15 +101,19 @@ export default function NotificationsCenter() {
   // Simular notificaciones en tiempo real
   useEffect(() => {
     const interval = setInterval(() => {
+      const types: Notification['type'][] = ['info', 'success', 'warning', 'error']
+      const categories: Notification['category'][] = ['system', 'sales', 'users', 'security', 'inventory']
+      const priorities: Notification['priority'][] = ['low', 'medium', 'high']
+
       const newNotification: Notification = {
         id: Date.now().toString(),
-        type: ['info', 'success', 'warning', 'error'][Math.floor(Math.random() * 4)] as any,
+        type: types[Math.floor(Math.random() * types.length)] || 'info',
         title: 'Nueva Notificación',
         message: `Notificación automática generada a las ${format(new Date(), 'HH:mm:ss')}`,
         timestamp: new Date(),
         read: false,
-        category: ['system', 'sales', 'users', 'security', 'inventory'][Math.floor(Math.random() * 5)] as any,
-        priority: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)] as any
+        category: categories[Math.floor(Math.random() * categories.length)] || 'system',
+        priority: priorities[Math.floor(Math.random() * priorities.length)] || 'medium'
       }
       
       setNotifications(prev => [newNotification, ...prev])

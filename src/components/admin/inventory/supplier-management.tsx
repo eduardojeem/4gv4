@@ -1,29 +1,26 @@
 'use client'
 
 import React, { useCallback, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { 
-  Building, 
-  Plus, 
-  Search, 
-  Edit, 
-  Trash2, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Globe, 
-  Package, 
-  BarChart3,
-  CreditCard,
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  Building,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Phone,
+  Mail,
+  MapPin,
+  Globe,
+  Package, CreditCard,
   Eye,
   CheckCircle,
   Save,
@@ -46,15 +43,27 @@ interface SupplierProduct {
 
 const SUPPLIER_PRODUCTS_PAGE_SIZE = 10
 
-const SupplierManagement: React.FC = () => {
-  const { 
-    suppliers, 
-    loading, 
-    createSupplier, 
-    updateSupplier, 
+interface SupplierManagementProps {
+  /**
+   * El componente padre tiene su propia lista de proveedores para el formulario
+   * de producto. Sin este aviso, dar de alta un proveedor aca no lo hacia
+   * aparecer alli hasta recargar la pagina.
+   */
+  onSuppliersChanged?: () => void
+}
+
+const SupplierManagement: React.FC<SupplierManagementProps> = ({ onSuppliersChanged }) => {
+  // Sin catalogo ni indicadores: esta pantalla solo administra proveedores, y
+  // montar el hook completo volvia a traer todos los productos en cada entrada
+  // a la pestaña.
+  const {
+    suppliers,
+    loading,
+    createSupplier,
+    updateSupplier,
     deleteSupplier,
-    refreshSuppliers 
-  } = useInventory()
+    refreshSuppliers: _refreshSuppliers
+  } = useInventory({ loadProducts: false, loadStats: false })
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([])
@@ -127,6 +136,7 @@ const SupplierManagement: React.FC = () => {
     }
 
     const result = await createSupplier(supplierData)
+    if (result.success) onSuppliersChanged?.()
     
     if (result.success) {
       setNewSupplier({})
@@ -151,6 +161,7 @@ const SupplierManagement: React.FC = () => {
     }
 
     const result = await updateSupplier(editingSupplier.id, editingSupplier)
+    if (result.success) onSuppliersChanged?.()
 
     if (result.success) {
       setEditingSupplier({})
@@ -164,6 +175,7 @@ const SupplierManagement: React.FC = () => {
   const handleDeleteSupplier = async (supplierId: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar este proveedor?')) {
       const result = await deleteSupplier(supplierId)
+      if (result.success) onSuppliersChanged?.()
       if (!result.success) {
         setErrors({ form: result.error || 'Error al eliminar proveedor' })
       }

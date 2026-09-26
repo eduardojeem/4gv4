@@ -21,11 +21,17 @@ const ALLOWED_TRANSITIONS: Record<RepairStatus, RepairStatus[]> = {
 /** Precondiciones para transicionar a un estado específico */
 type RepairContext = {
   technician_id?: string | null
+  quality_check_result?: 'passed' | 'failed' | 'unrepairable' | 'withdrawn' | null
 }
 
 const PRECONDITIONS: Partial<Record<RepairStatus, (ctx: RepairContext) => string | null>> = {
   reparacion: (ctx) => {
     if (!ctx.technician_id) return 'Se requiere un técnico asignado para pasar a reparación'
+    return null
+  },
+  listo: (ctx) => {
+    if (!ctx.quality_check_result) return 'Completá la verificación técnica antes de marcar el equipo como listo'
+    if (ctx.quality_check_result === 'failed') return 'El equipo falló la prueba final y debe continuar en reparación'
     return null
   },
 }

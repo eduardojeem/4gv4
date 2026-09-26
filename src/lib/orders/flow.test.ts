@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { canTransitionOrderStatus, getNextOrderStatus, normalizeOrderStatus } from './flow'
 
 describe('order flow', () => {
+  it('finishes pickup orders directly from ready', () => {
+    expect(getNextOrderStatus('READY', 'PICKUP')).toBe('DELIVERED')
+    expect(getNextOrderStatus('READY', 'DELIVERY')).toBe('SHIPPED')
+  })
+
   it('allows only the next forward status', () => {
     expect(getNextOrderStatus('PENDING')).toBe('CONFIRMED')
     expect(canTransitionOrderStatus('PENDING', 'CONFIRMED')).toBe(true)

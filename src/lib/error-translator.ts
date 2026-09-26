@@ -52,19 +52,21 @@ const ERROR_MAPPINGS: ErrorMapping[] = [
     }
 ]
 
-export function translateError(error: any): string {
+export function translateError(error: unknown): string {
     if (!error) {
         return 'Ocurrió un error inesperado'
     }
 
+    const errObj = typeof error === 'object' && error !== null ? (error as { code?: string; message?: string }) : undefined
+
     // Check for error code
-    if (error.code) {
-        const mapping = ERROR_MAPPINGS.find(m => m.code === error.code)
+    if (errObj?.code) {
+        const mapping = ERROR_MAPPINGS.find(m => m.code === errObj.code)
         if (mapping) return mapping.message
     }
 
     // Check error message patterns
-    const errorMessage = error.message || error.toString()
+    const errorMessage = errObj?.message || (typeof error === 'string' ? error : String(error))
     for (const mapping of ERROR_MAPPINGS) {
         if (mapping.pattern && mapping.pattern.test(errorMessage)) {
             return mapping.message
@@ -75,7 +77,7 @@ export function translateError(error: any): string {
     return 'Error al procesar la solicitud. Por favor, intenta de nuevo.'
 }
 
-export function logAndTranslateError(error: any, context?: string): string {
+export function logAndTranslateError(error: unknown, context?: string): string {
     // Log full error for debugging (only in development)
     if (process.env.NODE_ENV === 'development') {
         console.error(`[Error${context ? ` - ${context}` : ''}]:`, error)

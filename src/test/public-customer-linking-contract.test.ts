@@ -14,7 +14,8 @@ describe('public customer linking contract', () => {
     for (const source of [registerRoute, linkRoute]) {
       expect(source).toContain('linkPublicCustomerAccount')
     }
-    expect(orderRoute).toContain('create_public_order_with_customer_account_atomic')
+    expect(orderRoute).toContain('create_public_order_idempotent_atomic')
+    expect(orderRoute).toContain('p_profile_id: buyer?.id ?? null')
   })
 
   it('keeps customer profiles unique per organization and repairs incomplete links', () => {

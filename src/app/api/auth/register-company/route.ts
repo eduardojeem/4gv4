@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { registerCompanySchema } from '@/lib/validation/saas'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
+import { normalizeTenantSlug, validateTenantSlug } from '@/lib/saas/reserved-slugs'
 import { sendEmail } from '@/lib/email/resend'
 import { renderWelcomeEmail } from '@/lib/email/templates'
 import {
@@ -12,6 +13,7 @@ import {
   getProvisioningFailures,
   isExistingConfirmedAuthUser,
 } from './provisioning'
+import { provisionStarterKit } from '@/lib/organization/starter-kit'
 
 type RegisterAdminClient = ReturnType<typeof createAdminSupabase>
 type RegisteredAuthUser = {
@@ -62,9 +64,20 @@ export async function POST(request: Request) {
     const selectedPlan = input.selectedPlan
     const selectedPlanTier = selectedPlan.toLowerCase()
 
-    if (!input.companySlug) {
+    // El slug se normaliza y se valida aca, no solo en el navegador. El esquema
+    // aceptaba cualquier texto de hasta 64 caracteres y la unica limpieza vivia
+    // en el formulario, asi que una llamada directa a la API podia crear una
+    // tienda con slug `Admin`, `mi tienda` o uno que tapa una ruta del sistema.
+    const companySlug = normalizeTenantSlug(input.companySlug ?? input.companyName)
+    const slugCheck = validateTenantSlug(companySlug)
+
+    if (slugCheck.ok === false) {
       return NextResponse.json(
-        { success: false, error: 'El slug de la empresa no es valido.' },
+        {
+          success: false,
+          error: slugCheck.message,
+          fieldErrors: [{ field: 'companySlug', message: slugCheck.message }],
+        },
         { status: 400 }
       )
     }
@@ -81,12 +94,24 @@ export async function POST(request: Request) {
 
     const admin = createAdminSupabase()
 
-    const { data: subscriptionPlan, error: planError } = await admin
+    // Se acepta el tier o el slug publico: los enlaces que circulan usan el
+    // slug, y la API no deberia depender de que el navegador ya lo tradujera.
+    //
+    // El slug manda y el tier es respaldo, en dos consultas y no en un `or`: los
+    // dos espacios de nombres se cruzan —`pro` puede ser el slug de un plan y el
+    // tier de otro— y un `or` con limit(1) deja el resultado a merced del orden
+    // que devuelva la base.
+    const buscarPlan = (columna: 'public_slug' | 'tier') => admin
       .from('subscription_plans')
       .select('tier, name, is_active, trial_days')
-      .eq('tier', selectedPlanTier)
       .eq('is_active', true)
+      .eq(columna, selectedPlanTier)
       .maybeSingle()
+
+    const porSlug = await buscarPlan('public_slug')
+    const { data: subscriptionPlan, error: planError } = porSlug.data || porSlug.error
+      ? porSlug
+      : await buscarPlan('tier')
 
     if (planError) {
       logger.error('Failed to validate selected plan', { error: planError.message, plan: selectedPlanTier })
@@ -97,16 +122,27 @@ export async function POST(request: Request) {
     }
 
     if (!subscriptionPlan) {
+      // Antes esto solo podia pasar con un `?plan=` armado a mano. Ahora tambien
+      // cubre el plan que se desactivo despues de que alguien guardara el enlace:
+      // el mensaje tiene que decir que hacer, no solo que fallo.
       return NextResponse.json(
-        { success: false, error: 'El plan seleccionado no esta disponible.' },
+        {
+          success: false,
+          error: 'Ese plan ya no está disponible. Elegí uno de los planes vigentes.',
+          fieldErrors: [{ field: 'plan', message: 'Ese plan ya no está disponible.' }],
+        },
         { status: 400 }
       )
     }
 
+    // El tier real sale de la fila, no de lo que llego: si vino por slug publico,
+    // lo que se guarda tiene que ser el tier.
+    const resolvedPlanTier = String(subscriptionPlan.tier).toUpperCase()
+
     const { data: existingOrganization, error: slugError } = await admin
       .from('organizations')
       .select('id')
-      .eq('slug', input.companySlug)
+      .eq('slug', companySlug)
       .maybeSingle()
 
     if (slugError) {
@@ -118,8 +154,15 @@ export async function POST(request: Request) {
     }
 
     if (existingOrganization) {
+      // Va tambien como error de campo: como banner suelto el usuario tenia que
+      // adivinar cual de los campos revisar, y el captcha ya se reinicio.
+      const mensaje = 'Esa dirección ya está en uso. Elegí otra.'
       return NextResponse.json(
-        { success: false, error: 'Ese subdominio ya esta en uso. Elige otro.' },
+        {
+          success: false,
+          error: mensaje,
+          fieldErrors: [{ field: 'companySlug', message: mensaje }],
+        },
         { status: 409 }
       )
     }
@@ -134,12 +177,13 @@ export async function POST(request: Request) {
       email: input.email,
       password: input.password,
       options: {
+        captchaToken: input.captchaToken,
         emailRedirectTo: buildCompanyRegistrationRedirectUrl(request),
         data: {
           full_name: input.fullName,
           company_name: input.companyName,
-          company_slug: input.companySlug,
-          selected_plan: selectedPlan,
+          company_slug: companySlug,
+          selected_plan: resolvedPlanTier,
           registration_type: 'company_owner',
         },
       },
@@ -160,7 +204,7 @@ export async function POST(request: Request) {
     if (isExistingConfirmedAuthUser(authData.user)) {
       logger.warn('Company owner signup attempted with an existing confirmed email', {
         email: input.email,
-        slug: input.companySlug,
+        slug: companySlug,
       })
 
       return NextResponse.json(
@@ -178,9 +222,10 @@ export async function POST(request: Request) {
       .from('organizations')
       .insert({
         name: input.companyName,
-        slug: input.companySlug,
-        plan: selectedPlan,
+        slug: companySlug,
+        plan: resolvedPlanTier,
         owner_id: userId,
+        ...(input.businessVertical ? { business_vertical: input.businessVertical } : {}),
       })
       .select('id, name, slug, plan')
       .single()
@@ -189,7 +234,7 @@ export async function POST(request: Request) {
       logger.error('Failed to create organization after signup', {
         error: organizationError?.message,
         userId,
-        slug: input.companySlug,
+        slug: companySlug,
       })
 
       // Only the auth user needs cleanup at this stage — org doesn't exist yet.
@@ -226,7 +271,7 @@ export async function POST(request: Request) {
           modules: {
             onboarding: {
               status: 'pending',
-              selected_plan: selectedPlan,
+              selected_plan: resolvedPlanTier,
               started_at: new Date().toISOString(),
             },
           },
@@ -236,7 +281,7 @@ export async function POST(request: Request) {
       admin.from('subscriptions').upsert(
         {
           organization_id: organization.id,
-          plan: selectedPlan,
+          plan: resolvedPlanTier,
           status: 'trialing',
           trial_ends_at: new Date(
             Date.now() + (subscriptionPlan.trial_days ?? 14) * 24 * 60 * 60 * 1000
@@ -311,11 +356,20 @@ export async function POST(request: Request) {
       )
     }
 
+    // Caja principal y categorías del rubro: lo que hace falta para vender el
+    // primer día. Si algo no se crea, el alta sigue: se puede crear a mano.
+    const starterKit = await provisionStarterKit(
+      admin,
+      { organizationId: organization.id, vertical: input.businessVertical ?? null, userId },
+      (message, meta) => logger.warn(message, meta),
+    )
+
     logger.info('Company registered', {
+      starterKit,
       userId,
       organizationId: organization.id,
       slug: organization.slug,
-      plan: selectedPlan,
+      plan: resolvedPlanTier,
     })
 
     // Send welcome email (non-blocking — don't fail registration if email fails)
@@ -326,7 +380,7 @@ export async function POST(request: Request) {
       html: renderWelcomeEmail({
         ownerName: input.fullName,
         companyName: input.companyName,
-        plan: subscriptionPlan.name || selectedPlan,
+        plan: subscriptionPlan.name || resolvedPlanTier,
         loginUrl: `${appUrl}/login`,
       }),
       log: { organizationId: organization.id, customerName: input.fullName },
@@ -339,7 +393,7 @@ export async function POST(request: Request) {
         success: true,
         data: {
           organization,
-          selectedPlan,
+          selectedPlan: resolvedPlanTier,
           planName: subscriptionPlan.name,
           requiresEmailConfirmation: !authData.session,
         },

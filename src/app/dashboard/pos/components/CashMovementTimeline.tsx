@@ -1,16 +1,15 @@
 'use client'
 
-import React from 'react'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
-import { 
-  ArrowUpCircle, ArrowDownCircle, DollarSign, History, 
-  Clock, FileText 
+import {
+  ArrowUpCircle, ArrowDownCircle, DollarSign, History,
+  Clock, FileText
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
+import { normalizeCashMovementType, type CashMovement } from '../types'
 
 interface CashMovementTimelineProps {
-  movements: any[]
+  movements: CashMovement[]
 }
 
 export function CashMovementTimeline({ movements }: CashMovementTimelineProps) {
@@ -27,10 +26,11 @@ export function CashMovementTimeline({ movements }: CashMovementTimelineProps) {
     <ScrollArea className="h-[400px] w-full pr-4">
       <div className="relative border-l border-muted ml-4 space-y-6 py-2">
         {movements.map((movement, i) => {
-          const isSale = movement.type === 'sale'
-          const isIn = movement.type === 'in' || movement.type === 'cash_in'
-          const isOut = movement.type === 'out' || movement.type === 'cash_out'
-          const isSystem = movement.type === 'opening' || movement.type === 'closing'
+          const canonical = normalizeCashMovementType(movement.type)
+          const isSale = canonical === 'sale'
+          const isIn = canonical === 'cash_in'
+          const isOut = canonical === 'cash_out'
+          const isSystem = canonical === 'opening' || canonical === 'closing'
 
           return (
             <div key={movement.id || i} className="relative pl-6">
@@ -63,7 +63,7 @@ export function CashMovementTimeline({ movements }: CashMovementTimelineProps) {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   <span>
-                    {new Date((movement as any).timestamp || (movement as any).created_at).toLocaleTimeString()}
+                    {new Date(movement.timestamp || movement.created_at || '').toLocaleTimeString()}
                   </span>
                   {(movement.note || movement.reason) && (
                     <>

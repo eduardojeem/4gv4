@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { canViewProductCost } from '@/lib/auth/role-utils'
+import { deriveVariantAttributeConfig, normalizeVariantAttributeValues } from '@/lib/products/variant-attributes'
 
 type ProductSummaryRow = {
   sale_price: number | null
@@ -26,36 +28,22 @@ type ProductVariantRow = {
   sku: string | null
   variant_name: string | null
   price_adjustment: number | null
+  sale_price?: number | null
+  wholesale_price?: number | null
+  purchase_price?: number | null
+  min_stock?: number | null
+  barcode?: string | null
   stock_quantity: number | null
   is_active: boolean | null
   created_at: string | null
   updated_at: string | null
   product?: ProductSummaryRow | ProductSummaryRow[] | null
-  attributes?: VariantAttributeValue[] | null
+  attributes?: Record<string, string> | VariantAttributeValue[] | null
 }
 
 function toSafeNumber(value: unknown, fallback = 0): number {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
-}
-
-function normalizeAttributeValues(value: unknown): VariantAttributeValue[] {
-  if (!Array.isArray(value)) return []
-
-  return value
-    .filter((entry) => entry && typeof entry === 'object')
-    .map((entry) => {
-      const item = entry as Record<string, unknown>
-      return {
-        attribute_id: String(item.attribute_id ?? ''),
-        attribute_name: String(item.attribute_name ?? ''),
-        option_id: String(item.option_id ?? ''),
-        value: String(item.value ?? ''),
-        display_value: item.display_value ? String(item.display_value) : undefined,
-        color_hex: item.color_hex ? String(item.color_hex) : undefined,
-      }
-    })
-    .filter((entry) => entry.attribute_id && entry.option_id && entry.value)
 }
 
 function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
@@ -74,18 +62,18 @@ function normalizeProductSummary(value: unknown): ProductSummaryRow | null {
   return null
 }
 
-function mapVariantRow(row: ProductVariantRow) {
+function mapVariantRow(row: ProductVariantRow, includeCost: boolean) {
   const product = normalizeProductSummary(row.product)
   const basePrice = toSafeNumber(product?.sale_price, 0)
   const baseWholesalePrice = toSafeNumber(product?.wholesale_price, 0)
   const baseCostPrice = toSafeNumber(product?.purchase_price, 0)
   const priceAdjustment = toSafeNumber(row.price_adjustment, 0)
 
-  const price = basePrice + priceAdjustment
-  const wholesalePrice = baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : undefined
-  const costPrice = baseCostPrice > 0 ? baseCostPrice : undefined
+  const price = toSafeNumber(row.sale_price, basePrice + priceAdjustment)
+  const wholesalePrice = toSafeNumber(row.wholesale_price, baseWholesalePrice > 0 ? baseWholesalePrice + priceAdjustment : 0) || undefined
+  const costPrice = toSafeNumber(row.purchase_price, baseCostPrice) || undefined
 
-  const minStock = toSafeNumber(product?.min_stock, 0)
+  const minStock = toSafeNumber(row.min_stock, toSafeNumber(product?.min_stock, 0))
   const maxStockNumber = toSafeNumber(product?.max_stock, NaN)
   const maxStock = Number.isFinite(maxStockNumber) ? maxStockNumber : undefined
 
@@ -93,11 +81,12 @@ function mapVariantRow(row: ProductVariantRow) {
     id: row.id,
     product_id: row.product_id,
     sku: row.sku ?? '',
+    barcode: row.barcode ?? undefined,
     name: row.variant_name ?? row.sku ?? `Variante ${row.id.slice(0, 8)}`,
-    attributes: normalizeAttributeValues(row.attributes),
+    attributes: normalizeVariantAttributeValues(row.attributes),
     price,
     wholesale_price: wholesalePrice,
-    cost_price: costPrice,
+    ...(includeCost ? { cost_price: costPrice } : {}),
     stock: toSafeNumber(row.stock_quantity, 0),
     min_stock: minStock,
     max_stock: maxStock,
@@ -112,14 +101,8 @@ function isTruthy(value: string | null): boolean {
 }
 
 // GET /api/variants - Obtener todas las variantes con filtros
-export async function GET(request: NextRequest) {
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { organization, user }) => {
   try {
-    const auth = await requireAuth()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('product_id')
     const sku = searchParams.get('sku')
@@ -132,6 +115,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('product_variants')
       .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
+      .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
 
     if (productId) {
@@ -153,7 +137,8 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
-    const mappedVariants = ((data || []) as ProductVariantRow[]).map(mapVariantRow)
+    const includeCost = canViewProductCost(user.role)
+    const mappedVariants = ((data || []) as ProductVariantRow[]).map((row) => mapVariantRow(row, includeCost))
     const filteredVariants = lowStock
       ? mappedVariants.filter((variant) => variant.stock <= variant.min_stock)
       : mappedVariants
@@ -178,17 +163,11 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
 // POST /api/variants - Crear nueva variante (staff only)
-export async function POST(request: NextRequest) {
+export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { organization, user }) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
     const body = await request.json()
     const productId = String(body?.product_id || '').trim()
     const sku = String(body?.sku || '').trim()
@@ -206,6 +185,7 @@ export async function POST(request: NextRequest) {
     const { data: existingVariant, error: existingVariantError } = await supabase
       .from('product_variants')
       .select('id')
+      .eq('organization_id', organization.id)
       .eq('sku', sku)
       .maybeSingle()
 
@@ -226,8 +206,9 @@ export async function POST(request: NextRequest) {
 
     const { data: product, error: productError } = await supabase
       .from('products')
-      .select('id, sale_price')
+      .select('id, sale_price, variant_attribute_config')
       .eq('id', productId)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (productError) {
@@ -257,8 +238,17 @@ export async function POST(request: NextRequest) {
       .from('product_variants')
       .insert({
         product_id: productId,
+        organization_id: organization.id,
         sku,
         variant_name: name,
+        attributes: body?.attributes && typeof body.attributes === 'object' ? body.attributes : {},
+        barcode: body?.barcode ? String(body.barcode).trim() : null,
+        purchase_price: Math.max(0, toSafeNumber(body?.purchase_price ?? body?.cost_price, 0)),
+        sale_price: Math.max(0, price),
+        wholesale_price: body?.wholesale_price === undefined
+          ? null
+          : Math.max(0, toSafeNumber(body.wholesale_price, 0)),
+        min_stock: Math.max(0, toSafeNumber(body?.min_stock, 0)),
         price_adjustment: priceAdjustment,
         stock_quantity: Math.max(0, toSafeNumber(body?.stock, 0)),
         is_active: body?.active !== false,
@@ -275,10 +265,48 @@ export async function POST(request: NextRequest) {
       throw insertError
     }
 
+    const { data: siblingVariants, error: siblingVariantsError } = await supabase
+      .from('product_variants')
+      .select('attributes')
+      .eq('organization_id', organization.id)
+      .eq('product_id', productId)
+
+    const configuredAttributes = Array.isArray(product.variant_attribute_config)
+      ? product.variant_attribute_config
+      : []
+    const derivedAttributes = deriveVariantAttributeConfig(siblingVariants ?? [])
+    const { error: parentUpdateError } = siblingVariantsError
+      ? { error: siblingVariantsError }
+      : await supabase
+          .from('products')
+          .update({
+            has_variants: true,
+            variant_attribute_config: configuredAttributes.length > 0
+              ? configuredAttributes
+              : derivedAttributes,
+          })
+          .eq('id', productId)
+          .eq('organization_id', organization.id)
+
+    if (parentUpdateError) {
+      // Evitar dejar otra combinación huérfana si no se pudo sincronizar el padre.
+      await supabase
+        .from('product_variants')
+        .delete()
+        .eq('id', insertedVariant.id)
+        .eq('organization_id', organization.id)
+      logger.error('Failed to synchronize variant product parent', {
+        productId,
+        variantId: insertedVariant.id,
+        error: parentUpdateError.message,
+      })
+      throw parentUpdateError
+    }
+
     return NextResponse.json(
       {
         success: true,
-        data: mapVariantRow(insertedVariant as ProductVariantRow),
+        data: mapVariantRow(insertedVariant as ProductVariantRow, canViewProductCost(user.role)),
       },
       { status: 201 }
     )
@@ -289,17 +317,11 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
 // PUT /api/variants - Actualización masiva de variantes (staff only)
-export async function PUT(request: NextRequest) {
+export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { organization, user }) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
     const body = await request.json()
     const variants = Array.isArray(body?.variants) ? body.variants : null
 
@@ -321,6 +343,7 @@ export async function PUT(request: NextRequest) {
         .from('product_variants')
         .select('id, sku, product:products(sale_price)')
         .eq('id', variantId)
+        .eq('organization_id', organization.id)
         .maybeSingle()
 
       if (existingError) {
@@ -349,6 +372,7 @@ export async function PUT(request: NextRequest) {
             .from('product_variants')
             .select('id')
             .neq('id', variantId)
+            .eq('organization_id', organization.id)
             .eq('sku', nextSku)
             .maybeSingle()
 
@@ -397,6 +421,23 @@ export async function PUT(request: NextRequest) {
         patch.price_adjustment = toSafeNumber(variantData.price_adjustment, 0)
       } else if (variantData.price !== undefined) {
         patch.price_adjustment = toSafeNumber(variantData.price, baseSalePrice) - baseSalePrice
+        patch.sale_price = Math.max(0, toSafeNumber(variantData.price, baseSalePrice))
+      }
+
+      if (variantData.purchase_price !== undefined || variantData.cost_price !== undefined) {
+        patch.purchase_price = Math.max(0, toSafeNumber(variantData.purchase_price ?? variantData.cost_price, 0))
+      }
+      if (variantData.wholesale_price !== undefined) {
+        patch.wholesale_price = Math.max(0, toSafeNumber(variantData.wholesale_price, 0))
+      }
+      if (variantData.min_stock !== undefined) {
+        patch.min_stock = Math.max(0, toSafeNumber(variantData.min_stock, 0))
+      }
+      if (variantData.barcode !== undefined) {
+        patch.barcode = String(variantData.barcode).trim() || null
+      }
+      if (variantData.attributes && typeof variantData.attributes === 'object') {
+        patch.attributes = variantData.attributes
       }
 
       if (Object.keys(patch).length === 0) continue
@@ -405,6 +446,7 @@ export async function PUT(request: NextRequest) {
         .from('product_variants')
         .update(patch)
         .eq('id', variantId)
+        .eq('organization_id', organization.id)
         .select('*, product:products(sale_price, wholesale_price, purchase_price, min_stock, max_stock)')
         .maybeSingle()
 
@@ -423,7 +465,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: updatedVariants.map(mapVariantRow),
+      data: updatedVariants.map((row) => mapVariantRow(row, canViewProductCost(user.role))),
       message: `${updatedVariants.length} variantes actualizadas`,
     })
   } catch (error) {
@@ -433,4 +475,4 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})

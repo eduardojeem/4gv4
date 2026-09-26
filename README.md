@@ -71,7 +71,7 @@ Variables recomendadas en `.env.local`:
 
 ```env
 RESEND_API_KEY=re_xxxxxxxxx
-EMAIL_FROM="SERVIX 360 <onboarding@resend.dev>"
+EMAIL_FROM="MiTiendaPy <onboarding@resend.dev>"
 EMAIL_REPLY_TO=soporte@tudominio.com
 ```
 

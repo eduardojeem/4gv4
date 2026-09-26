@@ -6,30 +6,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  Zap, 
-  Database, 
-  Shield, 
-  BarChart3, 
-  Clock, 
-  Users, 
-  Activity,
+import {
+  Database, Clock, Activity,
   RefreshCw,
   Trash2,
   Settings,
   TrendingUp,
   TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  Server,
-  Network,
-  HardDrive,
-  Cpu
+  AlertTriangle
 } from 'lucide-react'
 import { LineChart } from 'recharts/es6/chart/LineChart'
 import { Line } from 'recharts/es6/cartesian/Line'
@@ -176,9 +164,9 @@ export default function OptimizationDashboard() {
     // Simular datos de tiempo de respuesta
     return Array.from({ length: 24 }, (_, i) => ({
       hour: `${i}:00`,
-      responseTime: Math.random() * 200 + 50,
-      cacheHitRate: Math.random() * 30 + 70,
-      requestCount: Math.floor(Math.random() * 1000) + 100
+      responseTime: 50 + ((i * 37) % 200),
+      cacheHitRate: 70 + ((i * 11) % 30),
+      requestCount: 100 + ((i * 137) % 1000)
     }))
   }, [])
 
@@ -298,7 +286,7 @@ export default function OptimizationDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Tiempo de Respuesta</CardTitle>
-                <CardDescription>Rendimiento de API en tiempo real</CardDescription>
+                <CardDescription>Datos ilustrativos; no representan mediciones en tiempo real</CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -706,7 +694,7 @@ export default function OptimizationDashboard() {
                         </td>
                         <td className="p-2 text-right">
                           <span className="text-blue-600">
-                            {(Math.random() * 30 + 70).toFixed(1)}%
+                            —
                           </span>
                         </td>
                       </tr>

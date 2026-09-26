@@ -6,6 +6,7 @@ import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
 
 type UpdatePlanBody = {
   name?: unknown
+  public_slug?: unknown
   price?: unknown
   price_note?: unknown
   description?: unknown
@@ -75,6 +76,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     patch.price = price
   }
 
+  if ('public_slug' in body) {
+    const slug = optionalText(body.public_slug)
+    // La base ya garantiza unicidad y formato; aca se valida antes para poder
+    // devolver un mensaje claro en vez de un error crudo de Postgres.
+    if (!slug || !/^[a-z0-9][a-z0-9-]{0,47}$/.test(slug)) {
+      return NextResponse.json(
+        { error: 'La URL del plan solo admite minúsculas, números y guiones.' },
+        { status: 400 }
+      )
+    }
+    patch.public_slug = slug
+  }
+
   if ('price_note' in body) patch.price_note = optionalText(body.price_note)
   if ('description' in body) patch.description = optionalText(body.description)
   if ('is_popular' in body) patch.is_popular = Boolean(body.is_popular)
@@ -112,14 +126,41 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
   }
 
-  const { error: technicalPlanError } = await admin
+  // "Popular" es excluyente: la pagina publica y el panel muestran UN destacado
+  // (`plans.find(p => p.is_popular)`). Antes nada desmarcaba a los demas, asi que
+  // marcar un segundo plan dejaba dos con la insignia y la UI elegia el primero
+  // que encontraba. Se desmarca aca, en el servidor, para que valga sin importar
+  // desde donde se haga el cambio.
+  if (patch.is_popular === true) {
+    const { error: exclusivityError } = await admin
+      .from('subscription_plans')
+      .update({ is_popular: false, updated_at: new Date().toISOString() })
+      .neq('id', id)
+      .eq('is_popular', true)
+
+    if (exclusivityError) {
+      return NextResponse.json(
+        { error: `El plan se marcó como popular, pero no se pudo quitar la marca de los demás: ${exclusivityError.message}` },
+        { status: 500 }
+      )
+    }
+  }
+
+  // Ademas del error, se verifica que haya coincidido una fila: un `code` sin
+  // plan tecnico dejaba el plan comercial vendible pero sin modulos habilitados,
+  // y la actualizacion de cero filas no devuelve error.
+  const { error: technicalPlanError, count: technicalPlanCount } = await admin
     .from('plans')
-    .update({ modules: deriveTechnicalModules(plan.tier, plan.features) })
+    .update({ modules: deriveTechnicalModules(plan.tier, plan.features) }, { count: 'exact' })
     .eq('code', String(plan.tier).toUpperCase())
 
-  if (technicalPlanError) {
+  if (technicalPlanError || !technicalPlanCount) {
     return NextResponse.json(
-      { error: `El plan comercial se guardó, pero no se pudieron sincronizar sus módulos: ${technicalPlanError.message}` },
+      {
+        error: technicalPlanError
+          ? `El plan comercial se guardó, pero no se pudieron sincronizar sus módulos: ${technicalPlanError.message}`
+          : `El plan comercial se guardó, pero no existe el plan técnico con código ${String(plan.tier).toUpperCase()}: sus módulos no quedaron actualizados.`,
+      },
       { status: 500 }
     )
   }

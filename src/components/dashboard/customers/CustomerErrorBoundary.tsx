@@ -5,14 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { 
-  AlertTriangle, 
-  RefreshCw, 
-  Users, 
-  Database, 
-  Wifi, 
+import {
+  AlertTriangle,
+  RefreshCw, Database,
+  Wifi,
   Shield,
-  ExternalLink 
+  ExternalLink
 } from 'lucide-react'
 
 interface Props {

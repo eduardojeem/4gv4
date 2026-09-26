@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { CreditsClient } from '@/components/profile/credits/credits-client'
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+import { loadCustomerCreditPortal } from '@/lib/credits/customer-portal.server'
 
 export const metadata: Metadata = {
   title: 'Mis Creditos',
@@ -28,6 +30,9 @@ export default async function OrganizationCreditsPage({
     redirect(`/${organizationSlug}/cliente/login?next=${encodeURIComponent(creditPath)}`)
   }
 
+  const portal = await loadCustomerCreditPortal(user.id, organizationSlug)
+  if (!portal) notFound()
+
   return (
     <div className="min-h-screen bg-background relative flex flex-col">
       <main className="container max-w-4xl py-12 px-4 relative flex-1">
@@ -41,7 +46,7 @@ export default async function OrganizationCreditsPage({
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                Mis Creditos
+                Mis créditos · {portal.organization.name}
               </h1>
               <p className="text-muted-foreground mt-1 font-medium">
                 Consulta los montos por pagar, fechas de vencimiento y tu historial.
@@ -50,7 +55,11 @@ export default async function OrganizationCreditsPage({
           </div>
         </div>
 
-        <CreditsClient organizationSlug={organizationSlug} />
+        <CreditsClient
+          credits={portal.credits}
+          payments={portal.payments}
+          productsHref={`/${organizationSlug}/productos`}
+        />
       </main>
     </div>
   )

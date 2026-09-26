@@ -195,7 +195,7 @@ export const logger = {
   /**
    * Log error messages
    */
-  error(message: string, data?: any, context?: Record<string, any>) {
+  error(message: string, data?: unknown, context?: Record<string, unknown>) {
     const entry = createLogEntry('error', message, data, context)
     outputLog(entry)
   }

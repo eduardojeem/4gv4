@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CommunicationStore, expandTemplate, validateContent } from "@/services/communication-service";
+import { expandTemplate, validateContent } from "@/services/communication-service";
 
 describe("communications", () => {
   it("expands variables in templates", () => {

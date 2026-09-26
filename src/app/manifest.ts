@@ -1,7 +1,44 @@
 import { MetadataRoute } from 'next'
+import { headers } from 'next/headers'
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/branding'
+import { getTenantSlugFromHost } from '@/lib/saas/tenant'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { buildWebManifest } from '@/lib/pwa/manifest'
 
+/**
+ * Manifest por defecto del origen.
+ *
+ * Sirve dos casos:
+ *
+ * 1. Dominio de tienda (`mitienda.midominio.com`): ahi las rutas no llevan slug
+ *    (`/inicio`, no `/mitienda/inicio`), asi que el manifest por slug nunca se
+ *    pide. Sin esto, quien instalara desde el dominio de su tienda recibia la
+ *    app del panel.
+ * 2. Dominio principal: la app del comerciante, que abre en /dashboard porque
+ *    quien instala desde el panel entra a trabajar, no a la landing.
+ *
+ * El marketplace y las tiendas por ruta (`/<slug>/...`) declaran el suyo en su
+ * propio layout.
+ */
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const headerStore = await headers()
+  const tenantSlug = getTenantSlugFromHost(headerStore.get('host') ?? '')
+
+  if (tenantSlug) {
+    const organization = await resolvePublicOrganizationBySlug(tenantSlug).catch(() => null)
+
+    if (organization) {
+      return buildWebManifest({
+        id: '/?app=tienda',
+        name: organization.name,
+        shortName: organization.name,
+        description: `Compra en ${organization.name}`,
+        startUrl: '/inicio',
+        scope: '/',
+      })
+    }
+  }
+
   let branding = DEFAULT_PLATFORM_BRANDING
 
   try {
@@ -10,25 +47,12 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     branding = DEFAULT_PLATFORM_BRANDING
   }
 
-  return {
+  return buildWebManifest({
+    id: '/?app=panel',
     name: branding.platformName,
-    short_name: branding.platformName.slice(0, 30),
+    shortName: branding.platformName,
     description: branding.seoDescription,
-    start_url: '/',
-    display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#000000',
-    icons: [
-      {
-        src: '/icons/icon-192x192.png',
-        sizes: '192x192',
-        type: 'image/png',
-      },
-      {
-        src: '/icons/icon-512x512.png',
-        sizes: '512x512',
-        type: 'image/png',
-      },
-    ],
-  }
+    startUrl: '/dashboard',
+    scope: '/',
+  })
 }

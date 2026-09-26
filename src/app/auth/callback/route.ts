@@ -73,9 +73,12 @@ export async function GET(request: NextRequest) {
   // que el SDK del navegador establezca la sesión allí.
   // IMPORTANTE: no agregar ?error=, porque supabase-js descarta los tokens del
   // hash si detecta un parámetro de error en la URL.
+  // Una ruta protegida no puede recibirla: el servidor no ve el `#`, no hay
+  // cookie todavía y el proxy manda a `/saas`. Se pasa por `/auth/confirm`,
+  // que sí lo lee, establece la sesión y después sigue a `next`.
   console.warn('[auth/callback] no query token; forwarding hash to client page', {
     next,
     paramKeys: Array.from(requestUrl.searchParams.keys()),
   })
-  return buildRedirect(request, requestUrl.origin, next)
+  return buildRedirect(request, requestUrl.origin, `/auth/confirm?next=${encodeURIComponent(next)}`)
 }

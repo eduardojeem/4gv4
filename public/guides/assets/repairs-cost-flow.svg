@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" role="img" aria-labelledby="title desc">
+  <title id="title">Flujo del precio y el cobro</title>
+  <desc id="desc">Repuestos más mano de obra menos descuento forman el total; los adelantos reducen el saldo que se cobra por caja o crédito.</desc>
+  <rect width="1120" height="420" rx="24" fill="#f8fafc"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">
+    <g fill="#0f172a"><rect x="45" y="55" width="210" height="70" rx="15"/><rect x="310" y="55" width="210" height="70" rx="15"/><rect x="575" y="55" width="210" height="70" rx="15"/></g>
+    <g fill="#fff" font-size="21"><text x="150" y="97">Precio repuestos</text><text x="415" y="97">Mano de obra</text><text x="680" y="97">Descuento</text></g>
+    <text x="282" y="99" fill="#334155" font-size="28">+</text><text x="548" y="99" fill="#334155" font-size="28">-</text>
+    <rect x="850" y="55" width="220" height="70" rx="15" fill="#047857"/><text x="960" y="97" fill="#fff" font-size="22">Total cliente</text>
+    <path d="M785 90h65" stroke="#10b981" stroke-width="5"/>
+    <rect x="215" y="210" width="220" height="70" rx="15" fill="#0ea5e9"/><text x="325" y="252" fill="#fff" font-size="21">Adelantos</text>
+    <rect x="530" y="210" width="220" height="70" rx="15" fill="#047857"/><text x="640" y="252" fill="#fff" font-size="21">Saldo pendiente</text>
+    <path d="M435 245h95" stroke="#64748b" stroke-width="5"/>
+    <rect x="350" y="335" width="220" height="60" rx="15" fill="#334155"/><rect x="680" y="335" width="220" height="60" rx="15" fill="#7c3aed"/>
+    <text x="460" y="372" fill="#fff" font-size="19">Pago + Caja</text><text x="790" y="372" fill="#fff" font-size="19">Crédito + Cuotas</text>
+    <path d="M640 280v30l-180 25" stroke="#64748b" stroke-width="4" fill="none"/><path d="M640 310l150 25" stroke="#64748b" stroke-width="4" fill="none"/>
+  </g>
+</svg>

@@ -1,17 +1,13 @@
 'use client'
 
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import { useMemo } from 'react'
 import {
   Package,
   AlertTriangle,
   TrendingUp,
-  TrendingDown,
-  ShoppingCart,
-  Star,
-  Building,
-  Calendar,
-  BarChart3,
+  TrendingDown, Star,
+  Building, BarChart3,
   PieChart,
   Activity
 } from 'lucide-react'

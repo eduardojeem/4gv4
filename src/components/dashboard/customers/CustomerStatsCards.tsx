@@ -1,6 +1,5 @@
 'use client'
 
-import React from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,13 +9,8 @@ import {
   CreditCard,
   TrendingUp,
   TrendingDown,
-  Star,
-  Award,
-  AlertTriangle,
-  DollarSign,
-  Activity,
-  Clock,
-  Target
+  Star, AlertTriangle,
+  DollarSign, Target
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { cn } from '@/lib/utils'

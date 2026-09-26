@@ -171,7 +171,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     const validation = categorySchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación' }, { status: 400 })
     }
 
     const payload = validation.data
@@ -210,8 +210,9 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : JSON.stringify(error)
-    const errCode = (error as any)?.code || ''
-    const errDetails = (error as any)?.details || (error as any)?.hint || ''
+    const errObj = error as { code?: string; details?: string; hint?: string } | null
+    const errCode = errObj?.code || ''
+    const errDetails = errObj?.details || errObj?.hint || ''
     console.error('[CATEGORIES POST] Failed:', errMsg, errCode, errDetails)
     logger.error('Categories API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear la categoria.', _debug: `${errMsg} | code: ${errCode} | ${errDetails}` }, { status: 500 })
@@ -223,7 +224,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const validation = categoryUpdateSchema.safeParse(await request.json())
 
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación' }, { status: 400 })
     }
 
     const { id, ...updates } = validation.data

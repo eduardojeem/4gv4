@@ -7,7 +7,7 @@ export interface ValidationRule {
   table: string
   field?: string
   type: 'required' | 'unique' | 'foreign_key' | 'data_type' | 'range' | 'format' | 'custom'
-  constraint: any
+  constraint: unknown
   severity: 'error' | 'warning' | 'info'
   description: string
   enabled: boolean
@@ -48,7 +48,7 @@ export interface DataConsistencyCheck {
   description: string
   tables: string[]
   query: string
-  expectedResult: any
+  expectedResult: unknown
   tolerance?: number
   enabled: boolean
 }
@@ -57,8 +57,8 @@ export interface ConsistencyResult {
   checkId: string
   checkName: string
   passed: boolean
-  expected: any
-  actual: any
+  expected: unknown
+  actual: unknown
   difference?: number
   message: string
   timestamp: Date
@@ -386,8 +386,8 @@ export class DataIntegrityValidator {
       throw new Error(`Error validating unique field: ${error.message}`)
     }
 
-    const records = data || []
-    const valueMap = new Map<any, any[]>()
+    const records = (data || []) as unknown as Record<string, unknown>[]
+    const valueMap = new Map<unknown, Record<string, unknown>[]>()
     
     records.forEach(record => {
       const value = record[rule.field!]

@@ -1,49 +1,19 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { 
-  Package, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  Copy, 
-  MoreHorizontal,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Star,
-  StarOff,
-  ExternalLink,
-  ShoppingCart,
-  Calendar,
-  User,
-  Tag,
-  BarChart3,
-  Filter,
-  SortAsc,
-  SortDesc,
-  Grid3X3,
-  List,
-  Download,
-  Upload,
-  RefreshCw
+import { useState } from 'react'
+import {
+  Package,
+  Edit,
+  Trash2,
+  Eye, Star,
+  StarOff, SortAsc,
+  SortDesc, Download
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 // import { Progress } from '@/components/ui/progress' // Comentado para evitar error de React
-import { Separator } from '@/components/ui/separator'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -114,7 +84,7 @@ const getStockStatus = (product: Product) => {
 const getMarginInfo = (product: Product) => {
   const margin = product.sale_price - product.purchase_price
   const marginPercentage = (margin / product.sale_price) * 100
-  
+
   if (marginPercentage < 10) {
     return { margin, marginPercentage, color: 'text-red-600', bgColor: 'bg-red-100', label: 'Margen bajo' }
   } else if (marginPercentage < 30) {
@@ -124,17 +94,9 @@ const getMarginInfo = (product: Product) => {
   }
 }
 
-const formatDate = (dateString?: string) => {
-  if (!dateString) return 'N/A'
-  return new Date(dateString).toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
 
 // Componentes auxiliares
-const ProductActions = ({ product, onEdit, onDelete, onView, onDuplicate }: {
+const ProductActions = ({ product, onEdit, onDelete, onView, onDuplicate: _onDuplicate }: {
   product: Product
   onEdit?: (product: Product) => void
   onDelete?: (product: Product) => void
@@ -170,8 +132,8 @@ const ProductActions = ({ product, onEdit, onDelete, onView, onDuplicate }: {
 
 const StockIndicator = ({ product }: { product: Product }) => {
   const stockInfo = getStockStatus(product)
-  const stockPercentage = product.max_stock 
-    ? (product.stock_quantity / product.max_stock) * 100 
+  const stockPercentage = product.max_stock
+    ? (product.stock_quantity / product.max_stock) * 100
     : 0
 
   return (
@@ -184,8 +146,8 @@ const StockIndicator = ({ product }: { product: Product }) => {
       </div>
       {product.max_stock && (
         <div className="w-full bg-gray-200 rounded-full h-2">
-          <div 
-            className="bg-blue-600 h-2 rounded-full transition-all" 
+          <div
+            className="bg-blue-600 h-2 rounded-full transition-all"
             style={{ width: `${Math.min(stockPercentage, 100)}%` }}
           />
         </div>
@@ -214,7 +176,7 @@ const MarginIndicator = ({ product }: { product: Product }) => {
 export default function EnhancedProductList({
   products,
   loading = false,
-  viewMode = 'table',
+  viewMode: _viewMode = 'table',
   selectedProducts = [],
   onProductSelect,
   onProductSelectAll,
@@ -229,7 +191,7 @@ export default function EnhancedProductList({
   className
 }: EnhancedProductListProps) {
   const [favorites, setFavorites] = useState<string[]>([])
-  
+
   const someSelected = selectedProducts.length > 0
   const allSelected = selectedProducts.length === products.length && products.length > 0
 
@@ -239,8 +201,8 @@ export default function EnhancedProductList({
   }
 
   const toggleFavorite = (productId: string) => {
-    setFavorites(prev => 
-      prev.includes(productId) 
+    setFavorites(prev =>
+      prev.includes(productId)
         ? prev.filter(id => id !== productId)
         : [...prev, productId]
     )
@@ -322,7 +284,7 @@ export default function EnhancedProductList({
                 />
               </TableHead>
               <TableHead className="w-12"></TableHead>
-              <TableHead 
+              <TableHead
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => onSort?.('name')}
               >
@@ -331,7 +293,7 @@ export default function EnhancedProductList({
                   {getSortIcon('name')}
                 </div>
               </TableHead>
-              <TableHead 
+              <TableHead
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => onSort?.('sku')}
               >
@@ -340,7 +302,7 @@ export default function EnhancedProductList({
                   {getSortIcon('sku')}
                 </div>
               </TableHead>
-              <TableHead 
+              <TableHead
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => onSort?.('category')}
               >
@@ -349,7 +311,7 @@ export default function EnhancedProductList({
                   {getSortIcon('category')}
                 </div>
               </TableHead>
-              <TableHead 
+              <TableHead
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => onSort?.('stock_quantity')}
               >
@@ -358,7 +320,7 @@ export default function EnhancedProductList({
                   {getSortIcon('stock_quantity')}
                 </div>
               </TableHead>
-              <TableHead 
+              <TableHead
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() => onSort?.('sale_price')}
               >
@@ -376,7 +338,7 @@ export default function EnhancedProductList({
             {products.map((product) => {
               const isSelected = selectedProducts.includes(product.id)
               const isFavorite = favorites.includes(product.id)
-              
+
               return (
                 <TableRow key={product.id} className={isSelected ? "bg-muted/50" : ""}>
                   <TableCell>
@@ -447,7 +409,7 @@ export default function EnhancedProductList({
                     <div className="text-sm">{product.supplier}</div>
                   </TableCell>
                   <TableCell>
-                    <ProductActions 
+                    <ProductActions
                       product={product}
                       onView={onProductView}
                       onEdit={onProductEdit}

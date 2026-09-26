@@ -1,11 +1,28 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, MessageCircle, Phone, Mail, MapPin, Clock } from 'lucide-react'
+import {
+  Car,
+  Check,
+  Clock,
+  Compass,
+  Copy,
+  ExternalLink,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Navigation,
+  Phone, Sparkles,
+  Store
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
+import { getCompanyMapsHref, isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
+import { getSocialLinks } from '@/lib/public/social-links'
+import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
 
 interface ContactCTAProps {
   companyInfo: CompanyInfo
@@ -14,118 +31,337 @@ interface ContactCTAProps {
   contactHref: string
 }
 
-export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: ContactCTAProps) {
+export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref }: ContactCTAProps) {
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+  const exactMapsUrl = companyInfo.mapsUrl?.trim()
+  const mapsHref = getCompanyMapsHref(exactMapsUrl, companyInfo.address)
+  const [copied, setCopied] = useState(false)
+
+  // Priorizar siempre el enlace exacto configurado en /admin/website para evitar direcciones ambiguas
+  const directionsHref = (exactMapsUrl && isValidGoogleMapsUrl(exactMapsUrl))
+    ? exactMapsUrl
+    : companyInfo.address?.trim()
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(companyInfo.address.trim())}`
+      : mapsHref
+
+  const copyAddress = () => {
+    if (!companyInfo.address) return
+    navigator.clipboard.writeText(companyInfo.address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const contactItems = [
     companyInfo.phone && {
       icon: Phone,
-      label: 'Teléfono',
+      label: 'Llamadas & Atención',
       value: companyInfo.phone,
       href: `tel:${(companyInfo.phone || '').replace(/\D/g, '')}`,
     },
     companyInfo.email && {
       icon: Mail,
-      label: 'Email',
+      label: 'Correo Electrónico',
       value: companyInfo.email,
       href: `mailto:${companyInfo.email}`,
     },
-    companyInfo.address && {
+    (companyInfo.address || mapsHref) && {
       icon: MapPin,
-      label: 'Dirección',
-      value: companyInfo.address,
-      href: null,
+      label: 'Local y Dirección',
+      value: companyInfo.address || 'Ver ubicación en Google Maps',
+      href: mapsHref,
     },
-    // Hours are handled separately below as a multi-line card
   ].filter(Boolean) as Array<{ icon: typeof Phone; label: string; value: string; href: string | null }>
 
+  const hourRows = [
+    ['Lun - Vie', companyInfo.hours?.weekdays],
+    ['Sábado', companyInfo.hours?.saturday],
+    ['Domingo', companyInfo.hours?.sunday],
+  ].filter((row): row is [string, string] => Boolean(row[1]))
+
+  const cleanHourValue = (value: string) =>
+    value.replace(/^(lun(?:es)?\s*-?\s*vie(?:rnes)?|s[aá]b(?:ado)?|dom(?:ingo)?)\s*:\s*/i, '').trim()
+
+  const mapQuery = companyInfo.address ? encodeURIComponent(companyInfo.address) : null
+  // Quien llega hasta «Contacto» ya esta buscando como seguir a la tienda.
+  const hasSocials = getSocialLinks(companyInfo).length > 0
+
   return (
-    <section id="contacto" className={`relative overflow-hidden border-t bg-gradient-to-br ${brand.cta} py-16 text-white md:py-24`}>
-      {/* Background decoration */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-black/10 blur-3xl" />
-      </div>
+    <section id="contacto" aria-labelledby="contact-title" className="py-14 sm:py-20 bg-background border-t border-border/80">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
-      <div className="container relative">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            ¿Listo para reparar tu celular?
-          </h2>
-          <p className={`mt-4 text-lg ${brand.ctaText}`}>
-            Visitanos o contáctanos para un diagnóstico gratuito
-          </p>
+        {/* Tarjeta Principal de Atención al Cliente */}
+        <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-b from-card via-card to-muted/30 p-8 sm:p-12 shadow-lg">
 
-          {/* CTAs */}
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
-            <Button asChild size="lg" className={`rounded-xl bg-white ${brand.ctaBtn} font-bold shadow-lg shadow-black/20 hover:bg-white/90`}>
-              <Link href={`${tenantPrefix}/mis-reparaciones`}>
-                Rastrear mi reparación
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="rounded-xl border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20">
-              <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
-                <MessageCircle className="mr-2 h-5 w-5" />
-                Escribinos
-              </a>
-            </Button>
+          <div className="mx-auto max-w-3xl text-center space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3.5 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-xs">
+              <MessageCircle className="h-3.5 w-3.5" />
+              <span>Atención Directa & Ventas</span>
+            </div>
+
+            <h2 id="contact-title" className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+              ¿Tenés dudas o querés hacer un pedido?
+            </h2>
+
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-xl mx-auto">
+              Comunicate con nosotros para consultar stock, medios de pago, envíos o asesoramiento técnico en el acto.
+            </p>
+
+            {/* Botones de Acción */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                asChild
+                size="lg"
+                className="w-full sm:w-auto rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-md shadow-emerald-700/20 gap-2"
+              >
+                <a
+                  href={contactHref}
+                  target={phoneClean ? '_blank' : undefined}
+                  rel={phoneClean ? 'noopener noreferrer' : undefined}
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  <span>{phoneClean ? 'Escribir por WhatsApp' : 'Contactar por Email'}</span>
+                </a>
+              </Button>
+
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="w-full sm:w-auto rounded-xl border-border bg-background font-bold text-foreground hover:bg-muted shadow-xs gap-2"
+              >
+                <Link href={`${tenantPrefix}/productos`}>
+                  <Store className="h-4 w-4 text-primary" />
+                  <span>Explorar Catálogo</span>
+                </Link>
+              </Button>
+            </div>
           </div>
 
-          {/* Contact info + hours — only rendered for non-empty fields */}
-          {(contactItems.length > 0 || companyInfo.hours?.weekdays) && (
-            <div className="mt-14 grid gap-6 text-left sm:grid-cols-2 lg:grid-cols-4">
-              {/* Simple contact items */}
+          {/* Redes de la tienda */}
+          {hasSocials && (
+            <div className="mt-10 rounded-2xl border border-border/60 bg-muted/30 p-5 sm:p-6">
+              <div className="flex flex-col items-center gap-1 text-center">
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Seguinos en redes</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Novedades, ofertas y los productos que van entrando.
+                </p>
+              </div>
+
+              <div className="mt-4 flex justify-center">
+                <StoreSocialLinks
+                  company={companyInfo}
+                  companyName={companyInfo.name || 'la tienda'}
+                  className="max-w-2xl"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Tarjetas de Información de Contacto */}
+          {(contactItems.length > 0 || hourRows.length > 0) && (
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 pt-8 border-t border-border/60">
               {contactItems.map(({ icon: Icon, label, value, href }) => (
-                <div key={label} className="flex items-start gap-3 rounded-xl bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm">
-                  <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${brand.text300}`} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-white/60">{label}</p>
+                <div
+                  key={label}
+                  className="flex items-start gap-3.5 rounded-2xl border border-border/60 bg-background/80 p-4 transition-all hover:border-primary/40 hover:shadow-xs"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
                     {href ? (
-                      <a href={href} className="mt-1 block truncate text-sm font-medium text-white hover:underline">
+                      <a
+                        href={href}
+                        target={label === 'Local y Dirección' ? '_blank' : undefined}
+                        rel={label === 'Local y Dirección' ? 'noopener noreferrer' : undefined}
+                        className="mt-1 block text-xs font-semibold text-foreground hover:text-primary transition-colors truncate"
+                      >
                         {value}
                       </a>
                     ) : (
-                      <p className="mt-1 text-sm font-medium text-white/90 leading-snug">{value}</p>
+                      <p className="mt-1 text-xs font-semibold text-foreground truncate">{value}</p>
                     )}
                   </div>
                 </div>
               ))}
 
-              {/* Hours card — shows all three days */}
-              {companyInfo.hours?.weekdays && (
-                <div className="flex items-start gap-3 rounded-xl bg-white/10 p-4 ring-1 ring-white/15 backdrop-blur-sm sm:col-span-2 lg:col-span-1">
-                  <Clock className={`mt-0.5 h-5 w-5 shrink-0 ${brand.text300}`} />
-                  <div className="min-w-0 w-full">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Horarios</p>
-                    <ul className="mt-1.5 space-y-1">
-                      {companyInfo.hours.weekdays && (
-                        <li className="flex justify-between gap-2 text-sm">
-                          <span className="text-white/60">Lun – Vie</span>
-                          <span className="font-medium text-white">{companyInfo.hours.weekdays}</span>
+              {/* Horarios */}
+              {hourRows.length > 0 && (
+                <div className="flex items-start gap-3.5 rounded-2xl border border-border/60 bg-background/80 p-4 transition-all hover:border-primary/40 hover:shadow-xs">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Horarios</p>
+                    <ul className="mt-1 space-y-1">
+                      {hourRows.map(([day, val]) => (
+                        <li key={day} className="flex items-center justify-between text-[11px]">
+                          <span className="text-muted-foreground">{day}:</span>
+                          <span className="font-semibold text-foreground">{cleanHourValue(val)}</span>
                         </li>
-                      )}
-                      {companyInfo.hours.saturday && (
-                        <li className="flex justify-between gap-2 text-sm">
-                          <span className="text-white/60">Sábado</span>
-                          <span className="font-medium text-white">{companyInfo.hours.saturday}</span>
-                        </li>
-                      )}
-                      {companyInfo.hours.sunday && (
-                        <li className="flex justify-between gap-2 text-sm">
-                          <span className="text-white/60">Domingo</span>
-                          <span className="font-medium text-white">{companyInfo.hours.sunday}</span>
-                        </li>
-                      )}
+                      ))}
                     </ul>
                   </div>
                 </div>
               )}
             </div>
           )}
+
         </div>
+
+        {/* ── Tarjeta de Ubicación y Mapa Interactivo ── */}
+        {(companyInfo.address || mapsHref) && (
+          <div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-md">
+            <div className="grid lg:grid-cols-12">
+
+              {/* Mapa embebido */}
+              <div className="relative min-h-[260px] sm:min-h-[320px] lg:col-span-7 bg-muted/40 overflow-hidden">
+                {mapQuery ? (
+                  <iframe
+                    title="Ubicación en Google Maps"
+                    src={`https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                    className="h-full w-full border-0 min-h-[280px] lg:min-h-[360px]"
+                    loading="lazy"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="flex h-full min-h-[280px] flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-primary/5 via-muted/40 to-background">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+                      <MapPin className="h-7 w-7" />
+                    </div>
+                    <h3 className="font-bold text-foreground text-base">Ubicación Disponible</h3>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Hacé clic abajo para abrir el mapa interactivo y obtener indicaciones exactas.
+                    </p>
+                  </div>
+                )}
+
+                {/* Badge flotante sobre el mapa */}
+                <div className="absolute left-3 top-3 z-10 pointer-events-none">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1 text-xs font-bold text-foreground shadow-md backdrop-blur-md border border-border/60">
+                    <MapPin className="h-3.5 w-3.5 text-rose-500" />
+                    <span>Ubicación del Local</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Información y Acciones del Mapa */}
+              <div className="flex flex-col justify-between p-6 sm:p-8 lg:col-span-5 bg-card">
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+                    <Compass className="h-3.5 w-3.5" />
+                    <span>Visitanos en nuestro local</span>
+                  </div>
+
+                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                    {companyInfo.name || 'Nuestra Tienda'}
+                  </h3>
+
+                  {companyInfo.address && (
+                    <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <MapPin className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                        <p className="text-sm font-semibold text-foreground leading-relaxed">
+                          {companyInfo.address}
+                        </p>
+                      </div>
+
+                      <button suppressHydrationWarning
+                        type="button"
+                        onClick={copyAddress}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors pt-1"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            <span className="text-emerald-600 font-semibold">¡Dirección copiada!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Copiar dirección</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {companyInfo.hours?.weekdays && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span>{companyInfo.hours.weekdays}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botones de Acción del Mapa */}
+                <div className="pt-6 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {mapsHref && (
+                      <Button
+                        asChild
+                        className="rounded-xl font-bold gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md h-11"
+                      >
+                        <a href={mapsHref} target="_blank" rel="noopener noreferrer">
+                          <MapPin className="h-4 w-4 text-rose-300" />
+                          <span>Google Maps</span>
+                          <ExternalLink className="h-3.5 w-3.5 ml-auto opacity-70" />
+                        </a>
+                      </Button>
+                    )}
+
+                    {directionsHref && (
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="rounded-xl font-bold gap-2 border-border bg-background hover:bg-muted h-11"
+                      >
+                        <a href={directionsHref} target="_blank" rel="noopener noreferrer">
+                          <Navigation className="h-4 w-4 text-primary" />
+                          <span>Iniciar GPS</span>
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+
+                  {companyInfo.address && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        <Car className="h-3.5 w-3.5 text-emerald-500" />
+                        <span>¿Venís en <strong>Bolt</strong> o <strong>Uber</strong>?</span>
+                      </span>
+                      <button suppressHydrationWarning
+                        type="button"
+                        onClick={copyAddress}
+                        className="font-semibold text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="h-3 w-3 text-emerald-500" />
+                            <span className="text-emerald-600 font-semibold">¡Dirección copiada!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            <span>Copiar para pedir tu viaje</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </section>
   )

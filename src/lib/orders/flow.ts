@@ -1,4 +1,4 @@
-import type { OrderStatus } from './types'
+import type { FulfillmentType, OrderStatus } from './types'
 
 export const ORDER_FLOW: OrderStatus[] = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED']
 export const TERMINAL_ORDER_STATUSES: OrderStatus[] = ['DELIVERED', 'CANCELLED']
@@ -59,13 +59,14 @@ export function isTerminalOrderStatus(status: OrderStatus) {
   return TERMINAL_ORDER_STATUSES.includes(status)
 }
 
-export function getNextOrderStatus(status: OrderStatus) {
+export function getNextOrderStatus(status: OrderStatus, fulfillmentType?: FulfillmentType) {
+  if (status === 'READY' && fulfillmentType === 'PICKUP') return 'DELIVERED'
   return NEXT_STATUS[status] ?? null
 }
 
-export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus) {
+export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus, fulfillmentType?: FulfillmentType) {
   if (from === to) return true
   if (isTerminalOrderStatus(from)) return false
   if (to === 'CANCELLED') return true
-  return NEXT_STATUS[from] === to
+  return getNextOrderStatus(from, fulfillmentType) === to
 }

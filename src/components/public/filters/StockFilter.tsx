@@ -16,26 +16,27 @@ interface StockFilterProps {
 
 export function StockFilter({ inStock, onChange }: StockFilterProps) {
   return (
-    <AccordionItem value="stock" className="border-b border-border/50 px-3">
-      <AccordionTrigger className="hover:no-underline py-4 text-sm font-medium">
-        <span className="flex items-center gap-2">
-          <Package className="h-4 w-4 text-muted-foreground" />
-          Disponibilidad
+    <AccordionItem value="stock" className="border-b border-border/50 px-2.5">
+      <AccordionTrigger className="hover:no-underline py-2.5 text-xs font-semibold">
+        <span className="flex items-center gap-1.5">
+          <Package className="h-3.5 w-3.5 text-primary" />
+          <span className="text-foreground font-semibold">Disponibilidad</span>
         </span>
       </AccordionTrigger>
-      <AccordionContent className="pb-4">
-        <div className="flex items-center justify-between rounded-lg p-3 bg-muted/30 hover:bg-muted/50 transition-colors">
+      <AccordionContent className="pb-2.5">
+        <div className="flex items-center justify-between rounded-lg p-2 bg-muted/30 hover:bg-muted/50 transition-colors">
           <Label
             htmlFor="in-stock"
-            className="cursor-pointer text-sm font-medium flex items-center gap-2"
+            className="cursor-pointer text-xs font-medium flex items-center gap-1.5"
           >
-            <span className={`w-2 h-2 rounded-full ${inStock ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
-            Solo productos en stock
+            <span className={`w-1.5 h-1.5 rounded-full ${inStock ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+            <span>En stock</span>
           </Label>
           <Switch
             id="in-stock"
             checked={inStock}
             onCheckedChange={onChange}
+            className="scale-90"
           />
         </div>
       </AccordionContent>

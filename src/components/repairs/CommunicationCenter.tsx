@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,31 +25,23 @@ export function CommunicationCenter({ repair, templates, messages, onSendMessage
   const [selectedChannel, setSelectedChannel] = useState<CommunicationChannel>("whatsapp");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("custom");
   const [customMessage, setCustomMessage] = useState("");
-  
+
   const variables = useMemo(() => ({
     customerName: repair?.customer?.name || "",
     repairId: repair?.id || "",
     deviceModel: repair?.device || "",
   }), [repair]);
-  
-  const [preview, setPreview] = useState<string>("");
+
+  const template = templates.find(t => t.id === selectedTemplateId);
+  const preview = selectedTemplateId === "custom"
+    ? customMessage
+    : template ? expandTemplate(template.content, variables) : "";
 
   // Filtrar plantillas por canal seleccionado
-  const channelTemplates = useMemo(() => 
+  const channelTemplates = useMemo(() =>
     templates.filter(t => t.channel === selectedChannel),
   [templates, selectedChannel]);
 
-  // Actualizar mensaje cuando cambia la plantilla o las variables
-  useEffect(() => {
-    if (selectedTemplateId === "custom") {
-      setPreview(customMessage);
-    } else {
-      const tmpl = templates.find(t => t.id === selectedTemplateId);
-      if (tmpl) {
-        setPreview(expandTemplate(tmpl.content, variables));
-      }
-    }
-  }, [selectedTemplateId, variables, templates, customMessage]);
 
   const handleSend = async () => {
     if (!repair) {
@@ -63,18 +55,18 @@ export function CommunicationCenter({ repair, templates, messages, onSendMessage
 
     try {
       const success = await onSendMessage(selectedChannel, preview, selectedTemplateId === 'custom' ? undefined : selectedTemplateId);
-      
+
       if (success) {
         toast.success(`Mensaje enviado por ${selectedChannel === 'whatsapp' ? 'WhatsApp' : selectedChannel}`);
         // Resetear a custom para permitir escribir otro mensaje
         if (selectedTemplateId !== "custom") {
-            setCustomMessage(""); 
+            setCustomMessage("");
             setSelectedTemplateId("custom");
         } else {
             setCustomMessage("");
         }
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Error inesperado al enviar mensaje");
     }
   };
@@ -110,7 +102,7 @@ export function CommunicationCenter({ repair, templates, messages, onSendMessage
         <CardContent className="space-y-6">
           <Tabs value={selectedChannel} onValueChange={(v) => {
             setSelectedChannel(v as CommunicationChannel);
-            setSelectedTemplateId("custom"); 
+            setSelectedTemplateId("custom");
           }} className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="whatsapp" className="flex gap-2 items-center">
@@ -143,9 +135,9 @@ export function CommunicationCenter({ repair, templates, messages, onSendMessage
               {selectedTemplateId === "custom" && (
                 <div className="grid gap-2">
                   <Label>Mensaje Personalizado</Label>
-                  <Textarea 
-                    value={customMessage} 
-                    onChange={(e) => setCustomMessage(e.target.value)} 
+                  <Textarea
+                    value={customMessage}
+                    onChange={(e) => setCustomMessage(e.target.value)}
                     placeholder="Escribe tu mensaje aquí..."
                     className="min-h-[100px]"
                   />

@@ -28,6 +28,8 @@ type OrganizationRow = {
   slug: string
   plan: string | null
   owner_id: string | null
+  storefront_public?: boolean | null
+  marketplace_public?: boolean | null
 }
 
 type ProfileRow = {
@@ -85,7 +87,7 @@ export default async function SuperAdminSubscriptionsPage() {
     ? (await Promise.all(chunkValues(organizationIds).map(async (ids) => {
         const { data, error } = await admin
           .from('organizations')
-          .select('id, name, slug, plan, owner_id')
+          .select('id, name, slug, plan, owner_id, storefront_public, marketplace_public')
           .in('id', ids)
         if (error) throw new Error(error.message)
         return data ?? []
@@ -161,7 +163,12 @@ export default async function SuperAdminSubscriptionsPage() {
         ? {
             code: planDetails.code,
             name: commercialPlan?.name || planDetails.name,
-            price_monthly: Number(commercialPlan?.price || 0),
+            // Sin fila comercial no se sabe cuanto cuesta. Un 0 aca hacia que
+            // un plan pago mal configurado se viera igual que uno gratuito, y
+            // ademas restaba en silencio del MRR.
+            price_monthly: commercialPlan?.price === null || commercialPlan?.price === undefined
+              ? null
+              : Number(commercialPlan.price),
             currency: 'PYG',
             limits: planDetails.limits || {},
             modules: planDetails.modules || [],
@@ -181,6 +188,8 @@ export default async function SuperAdminSubscriptionsPage() {
       members_count: memberCountMap.get(subscription.organization_id) ?? 0,
       products_count: productCountMap.get(subscription.organization_id) ?? 0,
       sales_count: salesCountMap.get(subscription.organization_id) ?? 0,
+      storefront_public: organization?.storefront_public ?? false,
+      marketplace_public: organization?.marketplace_public ?? false,
     }
   })
 

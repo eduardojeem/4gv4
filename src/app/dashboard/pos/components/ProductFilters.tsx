@@ -5,8 +5,7 @@
 
 'use client'
 
-import React from 'react'
-import { Search, Filter, X, Grid, List, ChevronDown } from 'lucide-react'
+import { Search, Filter, X, Grid, List } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -16,8 +15,7 @@ import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
 import {
   Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
+  CollapsibleContent
 } from '@/components/ui/collapsible'
 import { formatCurrency } from '@/lib/currency'
 import type { POSFiltersState, POSFiltersActions } from '../hooks/usePOSFilters'
@@ -196,7 +194,7 @@ export function ProductFilters({
         <span>{totalResults} productos encontrados</span>
         {state.searchTerm && (
           <Badge variant="secondary">
-            Buscando: "{state.searchTerm}"
+            Buscando: &quot;{state.searchTerm}&quot;
           </Badge>
         )}
       </div>

@@ -24,16 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 404 })
     }
 
-    const { data: profile, error: profileError } = await admin
-      .from('profiles')
-      .select('phone')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError) throw profileError
-
     const email = user.email?.trim().toLowerCase() || ''
-    const phone = typeof profile?.phone === 'string' ? profile.phone.trim() : ''
 
     let customerQuery = admin
       .from('customers')
@@ -41,8 +32,7 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organization.id)
 
     const customerFilters = [`profile_id.eq.${user.id}`]
-    if (email) customerFilters.push(`email.ilike.${email}`)
-    if (phone) customerFilters.push(`phone.eq.${phone}`)
+    if (email) customerFilters.push(`email.eq.${email}`)
 
     customerQuery = customerQuery.or(customerFilters.join(','))
 
@@ -57,8 +47,7 @@ export async function GET(request: NextRequest) {
     if (customerIds.length > 0) {
       orderFilters.push(`customer_id.in.(${customerIds.join(',')})`)
     }
-    if (email) orderFilters.push(`customer_email.ilike.${email}`)
-    if (phone) orderFilters.push(`customer_phone.eq.${phone}`)
+    if (email) orderFilters.push(`customer_email.eq.${email}`)
 
     if (orderFilters.length === 0) {
       return NextResponse.json({ success: true, data: { orders: [], organization } })

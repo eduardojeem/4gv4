@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
-import { applyWebsiteSettingsDefaults, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
+import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
+import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
+import { rateLimiter } from '@/lib/rate-limiter'
+import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
+
+/**
+ * Guardados por minuto por persona. El límite vivía solo en la ruta de una
+ * clave, que el panel ya no usa; y era un mapa en memoria de cada instancia.
+ */
+const SAVE_RATE_LIMIT = 30
+const SAVE_RATE_WINDOW_MS = 60 * 1000
 
 /**
  * GET /api/admin/website/settings
@@ -39,21 +51,24 @@ async function handler(
 
     const [
       { data: settings, error },
-      { data: orgSettings },
-      { data: organization },
-      { data: branch },
+      { data: orgSettings, error: orgSettingsError },
+      { data: organization, error: organizationError },
+      { data: branch, error: branchError },
     ] = await Promise.all([
       settingsQuery,
-      userSupabase.from('organization_settings').select('display_name').maybeSingle(),
+      userSupabase.from('organization_settings').select('display_name').eq('organization_id', orgId).maybeSingle(),
       orgId
-        ? adminSupabase.from('organizations').select('name, marketplace_public, slug').eq('id', orgId).maybeSingle()
-        : Promise.resolve({ data: null }),
-      userSupabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
+        ? adminSupabase.from('organizations').select('name, marketplace_public, storefront_public, slug').eq('id', orgId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      userSupabase.from('branches').select('phone, email, address, city').eq('organization_id', orgId).eq('is_default', true).maybeSingle(),
     ])
 
     if (error) {
       console.error('Failed to fetch website settings', { error: error.message })
       throw error
+    }
+    if (orgSettingsError || branchError || organizationError) {
+      throw orgSettingsError || branchError || organizationError
     }
 
     // Transformar array a objeto
@@ -73,6 +88,7 @@ async function handler(
       email:   ci.email   || branch?.email   || '',
       address: ci.address || branch?.address || '',
       marketplacePublic: organization?.marketplace_public !== false,
+      storefrontPublic: organization?.storefront_public === true,
       slug: organization?.slug || ci.slug || '',
     }
 
@@ -101,6 +117,98 @@ async function handler(
 
 export const GET = withAdminAuth(handler)
 
+async function updateHandler(
+  request: NextRequest,
+  context: AdminAuthContext
+) {
+  try {
+    if (!(await rateLimiter.check(`website-settings:${context.user.id}`, SAVE_RATE_LIMIT, SAVE_RATE_WINDOW_MS))) {
+      return NextResponse.json(
+        { success: false, error: 'Guardaste muchas veces seguidas. Esperá un minuto y probá de nuevo.' },
+        { status: 429 }
+      )
+    }
+
+    const body = await request.json().catch(() => null)
+    const values = body?.values
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+      return NextResponse.json({ success: false, error: 'Configuraciones invalidas' }, { status: 400 })
+    }
+
+    const entries = Object.entries(values)
+    if (entries.length === 0 || entries.length > 10) {
+      return NextResponse.json({ success: false, error: 'Envia entre 1 y 10 configuraciones' }, { status: 400 })
+    }
+
+    const orgId = await resolveWebsiteAdminOrganizationId(context)
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'No se encontro una organizacion activa' }, { status: 403 })
+    }
+
+    const validatedEntries: Array<{ key: string; value: unknown }> = []
+    for (const [key, rawValue] of entries) {
+      if (!isWebsiteSettingKey(key) || rawValue === undefined) {
+        return NextResponse.json({ success: false, error: `Configuracion no permitida: ${key}` }, { status: 400 })
+      }
+
+      const validation = validateSetting(key, sanitizeWebsiteSettings(rawValue))
+      if (!validation.success) {
+        return NextResponse.json({ success: false, error: validation.error, key }, { status: 400 })
+      }
+      validatedEntries.push({ key, value: validation.data })
+    }
+
+    const adminSupabase = createAdminSupabase()
+    const now = new Date().toISOString()
+    const { data: persistedRows, error: updateError } = await adminSupabase
+      .from('website_settings')
+      .upsert(
+        validatedEntries.map(({ key, value }) => ({
+          organization_id: orgId,
+          key,
+          value,
+          updated_by: context.user.id,
+          updated_at: now,
+        })),
+        { onConflict: 'organization_id,key' }
+      )
+      .select('key, value')
+
+    if (updateError) throw updateError
+
+    const data = Object.fromEntries((persistedRows || []).map((row) => [row.key, row.value]))
+    const userSupabase = await createClient()
+    await userSupabase.from('audit_log').insert({
+      organization_id: orgId,
+      user_id: context.user.id,
+      action: 'update_website_settings_batch',
+      resource: 'website_settings',
+      new_values: { organization_id: orgId, keys: validatedEntries.map(({ key }) => key) },
+    })
+
+    const hasMarketplaceKeys = validatedEntries.some(({ key }) => key === 'company_info' || key === 'hero_content')
+    if (hasMarketplaceKeys) {
+      try {
+        revalidateTag('marketplace:organizations', 'max')
+        revalidatePath('/marketplace/empresas')
+        revalidatePath('/marketplace', 'layout')
+      } catch (cacheError) {
+        console.warn('Could not revalidate marketplace cache on settings batch update:', cacheError)
+      }
+    }
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error('Website settings batch update error', { error })
+    return NextResponse.json(
+      { success: false, error: 'No se pudieron guardar las configuraciones' },
+      { status: 500 }
+    )
+  }
+}
+
+export const PUT = withAdminAuth(updateHandler)
+
 /**
  * POST /api/admin/website/settings
  * Inicializa claves faltantes en website_settings sin sobrescribir existentes
@@ -119,7 +227,25 @@ async function initHandler(
       )
     }
 
-    const defaults = getWebsiteSettingsDefaults()
+    // Los predeterminados del rubro de la tienda, no los genéricos: una tienda de
+    // ropa recibía la portada y los pasos de un catálogo general.
+    const { data: organization } = await adminSupabase
+      .from('organizations')
+      .select('business_vertical, operating_model')
+      .eq('id', orgId)
+      .maybeSingle()
+    const generic = getWebsiteSettingsDefaults()
+    const vertical = getWebsiteDefaultsForVertical(
+      (organization?.business_vertical || 'general') as BusinessVertical,
+      (organization?.operating_model || 'retail') as OperatingModel,
+    )
+    const defaults: WebsiteSettings = {
+      ...generic,
+      ...vertical,
+      company_info: { ...generic.company_info, ...(vertical.company_info ?? {}) },
+      hero_content: { ...generic.hero_content, ...(vertical.hero_content ?? {}) },
+      hero_stats: { ...generic.hero_stats, ...(vertical.hero_stats ?? {}) },
+    }
     const allKeys = Object.keys(defaults) as Array<keyof WebsiteSettings>
 
     const { data: existingRows, error: existingError } = await adminSupabase

@@ -4,6 +4,7 @@ import {
   getPagoparAmountInPyg,
   isPagoparConfigured,
   type PagoparPaymentMethod,
+  PagoparOrderCreationError,
 } from '@/lib/payments/pagopar'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
@@ -22,6 +23,7 @@ export class SubscriptionCheckoutError extends Error {
     message: string,
     readonly status: number,
     readonly conflictingResources?: Array<{ resource: string; current: number; limit: number }>,
+    readonly correlationId?: string,
   ) {
     super(message)
   }
@@ -48,8 +50,9 @@ export async function createSubscriptionPagoparCheckout(params: {
   targetPlanCode?: string | null
   canChangePlan: boolean
   paymentMethod: PagoparPaymentMethod
+  correlationId?: string
 }) {
-  const { organization, userEmail, targetPlanCode, canChangePlan, paymentMethod } = params
+  const { organization, userEmail, targetPlanCode, canChangePlan, paymentMethod, correlationId } = params
 
   if (!isPagoparConfigured()) {
     throw new SubscriptionCheckoutError('Pagopar no está configurado.', 501)
@@ -116,6 +119,7 @@ export async function createSubscriptionPagoparCheckout(params: {
       checkoutUrl: reusablePayment.receipt_url,
       planCode: targetPlan.code,
       paymentMethod,
+      correlationId,
       reused: true,
     }
   }
@@ -187,6 +191,8 @@ export async function createSubscriptionPagoparCheckout(params: {
     throw new SubscriptionCheckoutError(
       error instanceof Error ? error.message : 'No se pudo iniciar el pago con Pagopar.',
       502,
+      undefined,
+      error instanceof PagoparOrderCreationError ? error.correlationId : correlationId,
     )
   }
 }

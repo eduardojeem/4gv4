@@ -1,8 +1,11 @@
 export interface CompanyInfo {
   name?: string
+  slogan?: string
+  description?: string
   phone: string
   email: string
   address: string
+  mapsUrl?: string
   hours: {
     weekdays: string
     saturday: string
@@ -12,6 +15,8 @@ export interface CompanyInfo {
   brandColor?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky' | 'custom'
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
+  /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport'
   headerColor?: string
   showTopBar?: boolean
   whatsapp?: string
@@ -21,7 +26,9 @@ export interface CompanyInfo {
   facebook?: string
   tiktok?: string
   servicesPageEnabled?: boolean
+  repairTrackingEnabled?: boolean
   marketplacePublic?: boolean
+  storefrontPublic?: boolean
   processSectionEnabled?: boolean
   slug?: string
 }
@@ -33,6 +40,7 @@ export interface HeroStats {
 }
 
 export interface HeroContent {
+  enabled?: boolean
   badge: string
   title: string
   subtitle: string
@@ -42,12 +50,102 @@ export interface HeroContent {
   trackRepairText?: string
 }
 
+/** Carrusel destacado que se muestra arriba de la grilla en /ofertas. */
+export interface OffersCarouselSettings {
+  /** Muestra u oculta el carrusel en la página pública de ofertas. */
+  enabled: boolean
+  /** Encabezado de la banda del carrusel. */
+  title: string
+  /** Bajada opcional debajo del título. */
+  subtitle: string
+  /** Avance automático entre slides. */
+  autoplay: boolean
+  /** Segundos entre slides cuando autoplay está activo. */
+  intervalSeconds: number
+  /** Cantidad máxima de ofertas que entran al carrusel. */
+  maxItems: number
+}
+
 export interface OffersSectionSettings {
   enabled: boolean
   eyebrow: string
   title: string
   subtitle: string
   accentColor: 'brand' | 'rose' | 'amber' | 'orange' | 'emerald' | 'blue' | 'sky' | 'violet' | 'fuchsia' | 'red' | 'teal'
+  carousel: OffersCarouselSettings
+}
+
+/** Un plan de cuotas: cantidad y recargo porcentual sobre la base. */
+export interface CreditPlanDefault {
+  count: number
+  rate: number
+}
+
+/**
+ * Predeterminados del modulo de productos a credito.
+ * Se aplican al activar cuotas en un producto, que puede aceptarlos tal cual
+ * o cargar los suyos desde cero.
+ */
+export interface ProductCreditDefaults {
+  /** Ofrecer estos predeterminados al activar cuotas en un producto. */
+  enabled: boolean
+  /** Sobre que precio se calculan las cuotas. */
+  calculationBase: 'sale' | 'cost'
+  /** Con base 'sale', usar el precio de oferta cuando el producto tiene una. */
+  respectOffer: boolean
+  /** Margen % que se suma al costo cuando la base es 'cost'. */
+  costMarkupPercent: number
+  /** Periodicidad de las cuotas. */
+  frequency: 'weekly' | 'biweekly' | 'monthly'
+  /** Entrega inicial en % del total, descontada antes de financiar. */
+  downPaymentPercent: number
+  /** Planes ofrecidos por defecto. */
+  plans: CreditPlanDefault[]
+  /** Marcar las cuotas como visibles en la tienda publica al activarlas. */
+  publicByDefault: boolean
+}
+
+export interface PromotionalCarouselSlide {
+  id: string
+  title: string
+  message: string
+  imageUrl: string
+  imageAlt: string
+  ctaText?: string
+  ctaHref?: string
+  active: boolean
+  textTone: 'light' | 'dark'
+  contentAlign: 'left' | 'center' | 'right'
+  /** Ocultar textos superpuestos en el banner (modo banner gráfico/diseñado) */
+  hideText?: boolean
+  /** Insignia o etiqueta destacada arriba del título (ej: 🔥 30% OFF) */
+  badge?: string
+  /** Tamaño tipográfico del título */
+  titleSize?: 'normal' | 'large' | 'compact'
+  /** Intensidad del oscurecimiento / degradé de fondo */
+  overlayIntensity?: 'none' | 'subtle' | 'medium' | 'strong'
+  /** Color o tinte del degradé de fondo */
+  overlayColor?: 'black' | 'white' | 'brand'
+  /** Color de fondo base de la diapositiva */
+  backgroundColor?: string
+  /** Color de letra personalizado para el título (ej: #facc15, #ffffff) */
+  titleColor?: string
+  /** Estilo o familia tipográfica del banner */
+  fontFamily?: 'sans' | 'display' | 'serif' | 'mono'
+}
+
+export interface PromotionalCarouselSettings {
+  enabled: boolean
+  autoplay: boolean
+  intervalSeconds: number
+  layoutMode?: 'contained' | 'full' | 'compact'
+  slides: PromotionalCarouselSlide[]
+}
+
+export interface ServicesSectionSettings {
+  badge: string
+  title: string
+  subtitle: string
 }
 
 export interface Service {
@@ -64,6 +162,7 @@ export interface Service {
   ctaUrl?: string     // optional link override per service
   featured?: boolean
   category?: string
+  source?: 'catalog' | 'inventory' | 'template'
 }
 
 export interface Testimonial {
@@ -158,17 +257,100 @@ export interface CheckoutSettings {
   confirmationMessage?: string  // shown on success screen
 }
 
+export interface TrustBarItem {
+  id?: string
+  icon?: string
+  title: string
+  description: string
+  active?: boolean
+}
+
+export interface TrustBarSettings {
+  enabled: boolean
+  position: 'above_carousel' | 'below_carousel' | 'bottom'
+  items: TrustBarItem[]
+}
+
+export interface BrandItemSettings {
+  id: string
+  name: string
+  active: boolean
+  imageUrl?: string
+  href?: string
+}
+
+export interface BrandsSectionSettings {
+  enabled: boolean
+  title: string
+  subtitle?: string
+  items: BrandItemSettings[]
+  /** Mostrar la marquesina en la página de inicio (por defecto true) */
+  showOnHome?: boolean
+  /** Mostrar la marquesina en el catálogo general de productos (/productos) */
+  showOnProducts?: boolean
+  /** Mostrar la marquesina en la página de ofertas (/ofertas) */
+  showOnOffers?: boolean
+}
+
+/**
+ * Cartel que aparece al entrar a la tienda. Misma forma que el del marketplace,
+ * que edita el superadmin.
+ */
+export interface StoreAnnouncement {
+  /** Identifica al aviso dentro de la lista. */
+  id?: string
+  enabled: boolean
+  title: string
+  message: string
+  /** Compatibilidad: los avisos viejos tenían una sola imagen. */
+  imageUrl?: string
+  images?: Array<{ url: string; alt?: string; href?: string }>
+  ctaLabel?: string
+  ctaHref?: string
+  /** Vigencia opcional, en formato AAAA-MM-DD. */
+  startsAt?: string
+  endsAt?: string
+  /** Cambia en cada guardado: quien ya lo cerró vuelve a verlo. */
+  updatedAt?: string
+}
+
+/** Sección donde se originó o utilizó la imagen */
+export type WebsiteMediaSection = 'logo' | 'promotions' | 'announcements' | 'brands' | 'general'
+
+/** Imagen registrada en el historial de medios del sitio web */
+export interface WebsiteMediaItem {
+  id: string
+  url: string
+  path: string
+  name: string
+  size?: number
+  section?: WebsiteMediaSection
+  createdAt: string
+}
+
 export interface WebsiteSettings {
   company_info: CompanyInfo
-  hero_stats: HeroStats
-  hero_content: HeroContent
-  offers_section: OffersSectionSettings
+  hero_content?: HeroContent
+  hero_stats?: HeroStats
+  offers_section?: OffersSectionSettings
+  promotional_carousel?: PromotionalCarouselSettings
+  /** Mismo banner que promotional_carousel, pero para la pagina /ofertas. */
+  offers_carousel?: PromotionalCarouselSettings
+  trust_bar?: TrustBarSettings
+  brands_section?: BrandsSectionSettings
+  product_credit_defaults?: ProductCreditDefaults
+  services_section?: ServicesSectionSettings
   services: Service[]
   testimonials: Testimonial[]
   process_steps: ProcessStep[]
   process_flows: ProcessFlow[]
-  maintenance_mode: MaintenanceMode
-  checkout: CheckoutSettings
+  /** Compatibilidad: antes habia un solo aviso. */
+  announcement?: StoreAnnouncement
+  announcements?: StoreAnnouncement[]
+  maintenance_mode?: MaintenanceMode
+  checkout?: CheckoutSettings
+  /** Historial de imágenes usadas en el sitio web (máximo 20 por organización) */
+  media_library?: WebsiteMediaItem[]
 }
 
 export type WebsiteSettingKey = keyof WebsiteSettings
