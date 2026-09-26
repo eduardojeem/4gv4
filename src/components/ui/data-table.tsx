@@ -31,7 +31,7 @@ export interface DataTableProps<T> {
 
 type SortDirection = 'asc' | 'desc' | null
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends object>({
     data,
     columns,
     keyExtractor,
@@ -60,8 +60,8 @@ export function DataTable<T extends Record<string, any>>({
     // Sort data
     const sortedData = sortColumn && sortDirection
         ? [...filteredData].sort((a, b) => {
-            const aVal = a[sortColumn]
-            const bVal = b[sortColumn]
+            const aVal = (a as Record<string, unknown>)[sortColumn]
+            const bVal = (b as Record<string, unknown>)[sortColumn]
 
             if (aVal === bVal) return 0
 

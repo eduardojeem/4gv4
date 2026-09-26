@@ -278,8 +278,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudo crear la reparación')
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const mapped = mapSupabaseRepairToUi(payload?.repair as any)
+            const mapped = mapSupabaseRepairToUi(payload?.repair as unknown as Parameters<typeof mapSupabaseRepairToUi>[0])
             const transformedRepair = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev => [transformedRepair, ...prev])

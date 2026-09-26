@@ -390,7 +390,7 @@ async function initializeSyncSystem() {
               },
               {
                 name: 'metadata',
-                type: 'Record<string, any>',
+                type: 'Record<string, unknown>',
                 description: 'Metadatos adicionales de la operación',
                 required: false
               }

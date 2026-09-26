@@ -166,8 +166,7 @@ type RepairUpdateData = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
     // Wrapper para actualizar reparación manteniendo compatibilidad
     const updateRepair = async (id: string, data: RepairUpdateData) => {
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = await globalUpdateRepair(id, data as any)
+            const result = await globalUpdateRepair(id, data as unknown as Parameters<typeof globalUpdateRepair>[1])
             return result
         } catch (error) {
             logger.error('Error updating repair', { error })
