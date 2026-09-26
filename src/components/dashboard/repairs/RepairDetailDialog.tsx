@@ -341,7 +341,7 @@ export function RepairDetailDialog({
   const isPaused = activeRepair.status === 'pausado'
   const isCancelled = activeRepair.status === 'cancelado'
   const isFinished = activeRepair.status === 'listo' || activeRepair.status === 'entregado'
-  const reportedProblem = activeRepair.issue || activeRepair.description || (activeRepair as any).problemDescription
+  const reportedProblem = activeRepair.issue || activeRepair.description || (activeRepair as { problemDescription?: string }).problemDescription
   const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(activeRepair.status)
   const statusGuidance = getRepairStatusGuidance(activeRepair.status)
   const availableTransitions = getAvailableTransitions(activeRepair.status)

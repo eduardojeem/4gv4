@@ -348,7 +348,7 @@ interface KanbanColumnProps {
     id: string
     status: RepairStatus
     title: string
-    icon: any
+    icon: React.ComponentType<{ className?: string }>
     count: number
     children: React.ReactNode
 }

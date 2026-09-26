@@ -33,7 +33,7 @@ const MetricCard = ({
     title: string
     value: number
     change: number
-    icon: any
+    icon: React.ComponentType<{ className?: string }>
     format?: 'number' | 'currency' | 'rating' | 'days'
     colorScheme?: 'blue' | 'green' | 'orange' | 'purple'
 }) => {

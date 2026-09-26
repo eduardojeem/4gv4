@@ -392,7 +392,7 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
               <div className="grid grid-cols-3 gap-3">
                 {organization.featured_products.slice(0, 3).map((prod) => {
                   const img = resolveProductImageUrl(prod.image)
-                  const regularPrice = prod.sale_price ?? (prod as any).price ?? 0
+                  const regularPrice = prod.sale_price ?? (prod as { price?: number }).price ?? 0
                   const hasOffer = Boolean(
                     prod.has_offer &&
                     prod.offer_price != null &&

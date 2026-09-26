@@ -34,7 +34,7 @@ interface SearchSuggestion {
   value: string
   label: string
   icon: React.ReactNode
-  data?: any
+  data?: Product
 }
 
 export function SmartSearch({ 

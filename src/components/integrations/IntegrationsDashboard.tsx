@@ -230,7 +230,7 @@ export default function IntegrationsDashboard() {
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="integration-type">Tipo de Integración</Label>
-                  <Select value={configType} onValueChange={(value: any) => setConfigType(value)}>
+                  <Select value={configType} onValueChange={(value: 'payment' | 'accounting' | 'supplier') => setConfigType(value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

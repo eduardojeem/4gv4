@@ -34,7 +34,7 @@ const StatCard = ({
     title: string
     value: number | string
     subtitle: string
-    icon: any
+    icon: React.ComponentType<{ className?: string }>
     progress?: number
     color?: 'blue' | 'green' | 'orange' | 'purple' | 'red'
     format?: 'number' | 'currency' | 'percentage' | 'rating'

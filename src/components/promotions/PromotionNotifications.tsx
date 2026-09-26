@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { usePromotions } from '@/hooks/use-promotions'
+import type { Promotion } from '@/types/promotion'
 import { differenceInDays, parseISO } from 'date-fns'
 
 interface PromotionNotification {
@@ -13,7 +14,7 @@ interface PromotionNotification {
   type: 'expiring' | 'new' | 'usage_limit'
   title: string
   message: string
-  promotion: any
+  promotion: Promotion
   priority: 'high' | 'medium' | 'low'
 }
 

@@ -75,10 +75,10 @@ export function FilterPanel({
 
   if (!isOpen) return null
 
-  const handleFilterChange = (key: keyof DashboardFilters, value: any) => {
+  const handleFilterChange = (key: keyof DashboardFilters, value: unknown) => {
     onFiltersChange({
       ...filters,
-      [key]: value
+      [key]: value as DashboardFilters[keyof DashboardFilters]
     })
   }
 
