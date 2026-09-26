@@ -98,6 +98,26 @@ export type ProductsResponse = {
 
 const SIN_CELULARES: DeviceOptions = { brands: [], modelsByBrand: {} }
 
+type DynamicQueryBuilder = {
+  eq: (col: string, val: unknown) => DynamicQueryBuilder
+  in: (col: string, vals: unknown[]) => DynamicQueryBuilder
+  or: (filters: string) => DynamicQueryBuilder
+  ilike: (col: string, val: string) => DynamicQueryBuilder
+  contains: (col: string, val: unknown[]) => DynamicQueryBuilder
+  gte: (col: string, val: unknown) => DynamicQueryBuilder
+  lte: (col: string, val: unknown) => DynamicQueryBuilder
+  gt: (col: string, val: unknown) => DynamicQueryBuilder
+  order: (col: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) => DynamicQueryBuilder
+  range: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null; count: number | null }>
+  single: () => PromiseLike<{ data: unknown; error: { message: string } | null }>
+}
+
+type DynamicSupabaseClient = {
+  from: (table: string) => {
+    select: (fields: string, opts?: { count?: string }) => DynamicQueryBuilder
+  }
+}
+
 const MAX_PRICE = PRODUCTS_MAX_PRICE
 
 /**
@@ -413,14 +433,12 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 
   /** Arma el query completo. `withBranchJoin` permite reintentar sin el join. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buildQuery = (withBranchJoin: boolean): any => {
+  const buildQuery = (withBranchJoin: boolean): DynamicQueryBuilder => {
     const selectFields = withBranchJoin
       ? `${baseSelectFields}, branch_stock:branch_inventory!inner(branch_id, stock_quantity)`
       : baseSelectFields
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q = (supabase as any)
+    let q = (supabase as unknown as DynamicSupabaseClient)
       .from('products')
       .select(selectFields, { count: 'exact' })
       .eq('organization_id', organization.id)
@@ -732,8 +750,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)' + campoPrecioOculto
     : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, category:categories(id, name), brand_details:brands(name)' + campoPrecioOculto
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let queryBuilder = (supabase as any)
+  let queryBuilder = (supabase as unknown as DynamicSupabaseClient)
     .from('products')
     .select(selectFields)
     .eq('id', cleanId)

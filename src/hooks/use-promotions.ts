@@ -306,8 +306,9 @@ export function usePromotions() {
   // which opens the modal so the user can review/edit before saving.
   // Exporting this function would create a second, silent path that bypasses the modal.
   const _duplicatePromotion = useCallback(async (promotion: Promotion) => {
+    const { id: _id, created_at: _created_at, updated_at: _updated_at, ...rest } = promotion
     const duplicatedData = {
-      ...promotion,
+      ...rest,
       name: `${promotion.name} (Copia)`,
       code: `PROMO${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       is_active: false,
@@ -315,12 +316,6 @@ export function usePromotions() {
       start_date: null,
       end_date: null
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (duplicatedData as any).id
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (duplicatedData as any).created_at
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (duplicatedData as any).updated_at
     return createPromotion(duplicatedData)
   }, [createPromotion])
 
