@@ -10,6 +10,7 @@ const baseProps = {
   items: [], ...handlers, isWholesale: false, discount: 0, subtotalApplied: 0,
   subtotalNonWholesale: 0, generalDiscountAmount: 0, wholesaleDiscountAmount: 0,
   totalSavings: 0, cartTax: 0, cartTotal: 0, cartItemCount: 0,
+  checkoutEligibility: { canOpen: true, canConfirm: true },
 }
 
 describe('POSCart current component contract', () => {
@@ -48,7 +49,7 @@ describe('POSCart current component contract', () => {
     render(<POSCart {...baseProps}
       items={[{ id: 'cart-1', name: 'Producto', price: 50_000, quantity: 1 }]}
       subtotalApplied={50_000} subtotalNonWholesale={50_000} cartTotal={50_000} cartItemCount={1}
-      canCheckout={false} checkoutDisabledReason="Seleccioná una caja abierta"
+      checkoutEligibility={{ canOpen: true, canConfirm: false, reason: 'Seleccioná una caja abierta' }}
     />)
     expect(screen.getByRole('button', { name: /cobrar ahora/i })).toBeDisabled()
     expect(screen.getByText('Seleccioná una caja abierta')).toBeInTheDocument()

@@ -23,6 +23,19 @@ describe('RecommendationEngine', () => {
     expect(recommendation).toMatchObject({ product_id: 'phone-pro', product_name: 'Teléfono Pro' })
   })
 
+  it('marca como upsell a la versión más cara de la misma categoría (hasta +50%)', () => {
+    const recommendation = engine.getRecommendations(['phone']).find((item) => item.product_id === 'phone-pro')
+    expect(recommendation?.reason).toBe('upsell')
+  })
+
+  it('prioriza el historial del cliente sobre la categoría', () => {
+    engine.setProductMetadata('charger', 'Cargador', 'Tecnología', 150_000, 5)
+    engine.recordPurchase(['charger'], 'customer-1')
+
+    const recommendation = engine.getRecommendations(['phone'], 'customer-1').find((item) => item.product_id === 'charger')
+    expect(recommendation?.reason).toBe('customer_history')
+  })
+
   it('respeta el máximo configurable de recomendaciones', () => {
     engine.updateConfig({ maxRecommendations: 1 })
     expect(engine.getRecommendations(['phone'])).toHaveLength(1)

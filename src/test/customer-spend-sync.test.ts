@@ -54,7 +54,7 @@ describe('todas las pantallas de clientes usan la misma cuenta', () => {
   it('la analítica suma lo gastado real y descarta ventas anuladas por mes', () => {
     const metricas = leer('src/hooks/use-customer-metrics.ts')
     expect(metricas).not.toContain('total_spent_this_year ?? c.lifetime_value')
-    expect(metricas).toContain('if (!isCountableSale((row as { status?: string | null }).status)) continue')
+    expect(metricas).toMatch(/if \(!isCountableSale\([\w.]+\.status\)\) continue/)
   })
 
   it('el detalle toma el mismo cálculo que la lista y no la última edición como visita', () => {
