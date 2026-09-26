@@ -308,7 +308,7 @@ export function CustomerDetailHeader({
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   {getStatusBadge(customer.status)}
                   {getSegmentBadge(customer.segment)}
-                  {(customer as any).profile_id ? (
+                  {(customer as { profile_id?: string | null }).profile_id ? (
                     <Badge className="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
                       <Shield className="h-3 w-3" />
                       Cuenta vinculada

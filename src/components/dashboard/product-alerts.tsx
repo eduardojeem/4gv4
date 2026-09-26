@@ -51,7 +51,7 @@ export function ProductAlerts() {
     }
   }
 
-  const getAlertColor = (alertType: string) => {
+  const getAlertColor = (alertType: string): 'destructive' | 'secondary' | 'default' => {
     switch (alertType) {
       case 'out_of_stock':
         return 'destructive'
@@ -206,7 +206,7 @@ export function ProductAlerts() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={getAlertColor(alert.alert_type) as any} className="text-xs">
+                            <Badge variant={getAlertColor(alert.alert_type)} className="text-xs">
                               {alert.alert_type === 'out_of_stock' ? 'Agotado' : 'Stock Bajo'}
                             </Badge>
                             {alert.product && (

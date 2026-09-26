@@ -185,7 +185,7 @@ export function CommunicationCenter({ customer, onClose: _onClose }: Communicati
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col p-0">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'whatsapp' | 'email' | 'sms')} className="flex-1 flex flex-col">
           <div className="px-6 pb-3">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="whatsapp" className="flex items-center gap-2">

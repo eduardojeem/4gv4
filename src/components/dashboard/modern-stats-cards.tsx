@@ -26,7 +26,7 @@ interface StatsCardProps {
   title: string
   value: string | number
   subtitle?: string
-  icon: React.ComponentType<any>
+  icon: React.ComponentType<{ className?: string }>
   trend?: "up" | "down" | "neutral"
   trendValue?: string
   color?: "blue" | "green" | "amber" | "red" | "purple" | "indigo"

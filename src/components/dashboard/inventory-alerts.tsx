@@ -79,7 +79,7 @@ const AlertCard = ({
 }: {
   title: string
   products: Product[]
-  icon: any
+  icon: React.ComponentType<{ className?: string }>
   variant: 'destructive' | 'default' | 'secondary'
   alertType: string
   onDismiss: (alertId: string) => void

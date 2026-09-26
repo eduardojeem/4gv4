@@ -107,8 +107,9 @@ export function CustomerCreditSheetModal({
       toast.success(`Pago de ${formatCurrency(amt)} registrado exitosamente`)
       setPayingInst(null)
       refresh()
-    } catch (e: any) {
-      toast.error(e?.message || 'Error al procesar el pago')
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : (e as { message?: string } | null)?.message || 'Error al procesar el pago'
+      toast.error(message)
     } finally {
       setIsSubmittingPayment(false)
     }

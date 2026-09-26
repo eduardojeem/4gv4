@@ -113,7 +113,7 @@ interface HistoryItem {
   description: string
   amount?: number
   status: 'completed' | 'pending' | 'cancelled' | 'refunded' | 'in_progress'
-  details?: any
+  details?: unknown
   /** Estado de pago calculado en el servidor (pagado, parcial, con deuda, a crédito). */
   payment?: CustomerHistoryItem
 }
