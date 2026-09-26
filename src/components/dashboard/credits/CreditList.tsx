@@ -15,13 +15,13 @@ import { Users, DollarSign, Calendar, Percent, TrendingUp, Eye, LayoutGrid, List
 import { formatCurrency } from '@/lib/currency'
 import { formatCustomerId } from '@/lib/utils'
 import { CreditRow, InstallmentRow } from '@/hooks/use-credits'
-import { getCreditDisplayInfo } from '@/lib/credits/display'
+import { getCreditDisplayInfo, type SaleLike, type SaleItemLike } from '@/lib/credits/display'
 
 interface CreditListProps {
     credits: CreditRow[]
     installments?: InstallmentRow[]
-    sales?: any[]
-    saleItems?: any[]
+    sales?: SaleLike[]
+    saleItems?: SaleItemLike[]
     remainingByCredit: Record<string, number>
     paidByCredit: Record<string, number>
     onRegisterPayment: (creditId: string) => void

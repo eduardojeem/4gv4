@@ -198,8 +198,8 @@ export function BrandsSectionEditor() {
         throw new Error(data.error || 'No se pudo subir la imagen')
       }
       return data.url
-    } catch (err: any) {
-      toast.error(err?.message || 'Error al subir el logo')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al subir el logo')
       return null
     }
   }
@@ -340,8 +340,8 @@ export function BrandsSectionEditor() {
       } else {
         toast.error(res?.error || 'No se pudo guardar la sección de marcas')
       }
-    } catch (err: any) {
-      toast.error(err?.message || 'Ocurrió un error al guardar')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Ocurrió un error al guardar')
     }
   }
 

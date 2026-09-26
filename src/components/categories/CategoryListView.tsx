@@ -90,8 +90,8 @@ export function CategoryListView({
 
     const sortedCategories = React.useMemo(() => {
         return [...categories].sort((a, b) => {
-            let aValue: any = a[sortField]
-            let bValue: any = b[sortField]
+            let aValue: string | number = 0
+            let bValue: string | number = 0
 
             // Handle special cases
             if (sortField === 'products_count') {
@@ -103,9 +103,9 @@ export function CategoryListView({
             } else if (sortField === 'is_active') {
                 aValue = a.is_active ? 1 : 0
                 bValue = b.is_active ? 1 : 0
-            } else if (typeof aValue === 'string') {
-                aValue = aValue.toLowerCase()
-                bValue = bValue.toLowerCase()
+            } else {
+                aValue = (a.name || '').toLowerCase()
+                bValue = (b.name || '').toLowerCase()
             }
 
             if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1

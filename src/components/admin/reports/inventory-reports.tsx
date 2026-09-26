@@ -589,14 +589,14 @@ const InventoryReports: React.FC = () => {
       const msg = error instanceof Error
         ? error.stack || error.message
         : error && typeof error === 'object' && 'message' in error
-          ? String((error as any).message)
+          ? String((error as { message: unknown }).message)
           : JSON.stringify(error)
       console.error('Error generating report:', msg)
       setLoadError(
         error instanceof Error
           ? error.message
           : error && typeof error === 'object' && 'message' in error
-            ? String((error as any).message)
+            ? String((error as { message: unknown }).message)
             : 'No se pudo generar el reporte de inventario.'
       )
     } finally {

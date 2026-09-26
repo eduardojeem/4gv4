@@ -14,13 +14,13 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { useState, useMemo } from 'react'
-import { getInstallmentDisplayInfo } from '@/lib/credits/display'
+import { getInstallmentDisplayInfo, type SaleLike, type SaleItemLike } from '@/lib/credits/display'
 
 interface UpcomingInstallmentsProps {
     installments: InstallmentRow[]
     creditById: Record<string, CreditRow>
-    sales?: any[]
-    saleItems?: any[]
+    sales?: SaleLike[]
+    saleItems?: SaleItemLike[]
     onMarkPaid: (id: string, method: string, amount: number) => Promise<{ success: boolean; error?: string } | void>
 }
 

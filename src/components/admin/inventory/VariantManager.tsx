@@ -209,7 +209,7 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
               </div>
               <Select
                 value={editData.type}
-                onValueChange={(value: any) => setEditData(prev => ({ ...prev, type: value }))}
+                onValueChange={(value: VariantAttribute['type']) => setEditData(prev => ({ ...prev, type: value }))}
               >
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -415,7 +415,7 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
                     <Label>Tipo</Label>
                     <Select
                       value={newAttribute.type}
-                      onValueChange={(value: any) => setNewAttribute(prev => ({ ...prev, type: value }))}
+                      onValueChange={(value: VariantAttribute['type']) => setNewAttribute(prev => ({ ...prev, type: value }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
