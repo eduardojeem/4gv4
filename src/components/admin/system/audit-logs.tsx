@@ -36,7 +36,7 @@ interface AuditLog {
   resource?: string
   ip?: string
   userAgent?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
   status: 'success' | 'failed' | 'pending'
 }
 

@@ -150,8 +150,8 @@ function CreditPaymentDialogContent({
                 date: new Date()
             })
             setSubmitting(false)
-        } catch (err: any) {
-            setError(err.message || 'Error inesperado al registrar el pago')
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : (err as { message?: string } | null)?.message || 'Error inesperado al registrar el pago')
             setSubmitting(false)
         }
     }

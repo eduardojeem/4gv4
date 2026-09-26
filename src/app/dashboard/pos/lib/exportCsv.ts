@@ -28,7 +28,7 @@ export function downloadCsvReport({
   const dateStr = now.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const timeStr = now.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  const escapeCell = (val: any) => {
+  const escapeCell = (val: unknown) => {
     if (val === null || val === undefined) return '""'
     const str = String(val).replace(/"/g, '""')
     return `"${str}"`

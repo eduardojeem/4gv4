@@ -235,7 +235,7 @@ export function ServicesTab() {
                 <ToggleGroup
                   type="single"
                   value={viewMode}
-                  onValueChange={(val) => val && setViewMode(val as any)}
+                  onValueChange={(val) => val && setViewMode(val as 'all' | 'retail' | 'wholesale')}
                   className="justify-start"
                 >
                   <ToggleGroupItem value="all" aria-label="Ver todo" className="gap-2 px-3 h-7 text-xs font-medium">

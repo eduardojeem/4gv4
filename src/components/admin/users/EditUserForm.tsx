@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Search, Mail, Lock, User as UserIcon, ShieldCheck, KeyRound, Eraser, Loader2 } from 'lucide-react'
@@ -115,7 +115,7 @@ export function EditUserForm({
   )
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(schema) as any,
+    resolver: zodResolver(schema) as Resolver<FormValues>,
     defaultValues,
     mode: 'onChange',
   })

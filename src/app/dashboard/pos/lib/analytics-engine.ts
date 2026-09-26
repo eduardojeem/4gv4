@@ -105,7 +105,7 @@ export interface Alert {
   title: string
   message: string
   timestamp: Date
-  data?: any
+  data?: unknown
   acknowledged: boolean
 }
 

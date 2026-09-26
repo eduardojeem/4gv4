@@ -123,8 +123,9 @@ export function TrustBarEditor() {
       } else {
         toast.error(res?.error || 'No se pudo guardar la barra de beneficios')
       }
-    } catch (err: any) {
-      toast.error(err?.message || 'Ocurrió un error al guardar')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string } | null)?.message || 'Ocurrió un error al guardar'
+      toast.error(message)
     }
   }
 

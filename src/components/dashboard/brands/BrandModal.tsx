@@ -179,7 +179,7 @@ export function BrandModal({
     return Object.keys(newErrors).length === 0
   }
 
-  const handleInputChange = (field: keyof BrandInsert, value: any) => {
+  const handleInputChange = <K extends keyof BrandInsert>(field: K, value: BrandInsert[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))

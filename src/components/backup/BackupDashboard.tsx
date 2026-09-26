@@ -654,9 +654,9 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                 <Label htmlFor="frequency">Frecuencia</Label>
                 <Select
                   value={newConfig.schedule?.frequency}
-                  onValueChange={(value) => setNewConfig(prev => ({
+                  onValueChange={(value: NonNullable<BackupConfig['schedule']>['frequency']) => setNewConfig(prev => ({
                     ...prev,
-                    schedule: { ...prev.schedule!, frequency: value as any }
+                    schedule: { ...prev.schedule!, frequency: value }
                   }))}
                 >
                   <SelectTrigger>
