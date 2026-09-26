@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import {
   dashboardNavGroups,
@@ -9,6 +11,7 @@ import {
 
 const findItem = (key: string) =>
   dashboardNavGroups.flatMap((group) => group.items).find((item) => item.key === key)
+const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 describe('dashboard navigation information architecture', () => {
   it('organizes daily work by user intent', () => {
@@ -84,5 +87,28 @@ describe('dashboard navigation information architecture', () => {
       'repairs',
       'customers',
     ])
+  })
+
+  it('drives sidebar, header and mobile navigation from the shared source', () => {
+    const sidebar = read('src/components/dashboard/sidebar.tsx')
+    const header = read('src/components/dashboard/header.tsx')
+    const mobile = read('src/components/dashboard/mobile-nav.tsx')
+
+    expect(sidebar).toContain("from '@/config/dashboard-navigation'")
+    expect(sidebar).not.toContain('const NAV_GROUPS')
+    expect(header).toContain('getDashboardNavItemByPath(pathname)')
+    expect(header).not.toContain('const sectionMap')
+    expect(mobile).toContain('getMobileDashboardItems')
+    expect(mobile).not.toContain('const MOBILE_NAV_ITEMS')
+  })
+
+  it('uses a compact, collapsible and accessible sidebar like administration', () => {
+    const sidebar = read('src/components/dashboard/sidebar.tsx')
+
+    expect(sidebar).toContain("const DASHBOARD_NAV_STORAGE_KEY = 'dashboard-nav-expanded-groups'")
+    expect(sidebar).toContain('aria-expanded={isExpanded}')
+    expect(sidebar).toContain('<TooltipContent side="right"')
+    expect(sidebar).toContain("collapsed ? 'w-20")
+    expect(sidebar).not.toContain('sm:w-80')
   })
 })

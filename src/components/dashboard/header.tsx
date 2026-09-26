@@ -31,6 +31,7 @@ import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { getDashboardNavItemByPath } from '@/config/dashboard-navigation'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -187,33 +188,22 @@ export const Header = memo(function Header() {
 
   const pathname = usePathname()
   const breadcrumb = useMemo(() => {
-    const sectionMap: Array<{ prefix: string; label: string }> = [
-      { prefix: '/dashboard/customers', label: 'Clientes' },
-      { prefix: '/dashboard/orders', label: 'Pedidos' },
-      { prefix: '/dashboard/products', label: 'Productos' },
-      { prefix: '/dashboard/suppliers', label: 'Proveedores' },
-      { prefix: '/dashboard/pos/caja', label: 'Caja' },
-      { prefix: '/dashboard/pos', label: 'Punto de Venta' },
-      { prefix: '/dashboard/repairs', label: 'Reparaciones' },
-      { prefix: '/dashboard/technician', label: 'Panel Técnico' },
+    const navigationItem = getDashboardNavItemByPath(pathname)
+    if (navigationItem) return navigationItem.label
+
+    const secondarySections: Array<{ prefix: string; label: string }> = [
       { prefix: '/dashboard/reports', label: 'Reportes' },
       { prefix: '/dashboard/settings', label: 'Configuración' },
       { prefix: '/dashboard/catalog', label: 'Catálogo' },
       { prefix: '/dashboard/posts', label: 'Publicaciones' },
       { prefix: '/dashboard/profile', label: 'Perfil' },
-      { prefix: '/dashboard/brands', label: 'Marcas' },
-      { prefix: '/dashboard/categories', label: 'Categorías' },
-      { prefix: '/dashboard/promotions', label: 'Promociones' },
-      { prefix: '/dashboard/credits', label: 'Créditos' },
-      { prefix: '/admin', label: 'Administración' },
-      { prefix: '/dashboard', label: 'Dashboard' },
     ]
 
-    const mapped = sectionMap.find(section => pathname === section.prefix || pathname.startsWith(`${section.prefix}/`))
+    const mapped = secondarySections.find(section => pathname === section.prefix || pathname.startsWith(`${section.prefix}/`))
     if (mapped) return mapped.label
 
     const lastSegment = pathname.split('/').filter(Boolean).pop()
-    if (!lastSegment) return 'Dashboard'
+    if (!lastSegment) return 'Resumen'
     return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1).replace(/-/g, ' ')
   }, [pathname])
 
@@ -252,9 +242,9 @@ export const Header = memo(function Header() {
 
           {/* Breadcrumb + Title */}
           <div className="min-w-0 flex flex-col">
-            {breadcrumb !== 'Dashboard' && (
+            {breadcrumb !== 'Resumen' && (
               <div className={cn("text-xs text-muted-foreground hidden sm:block", isCompact && "opacity-80")}>
-                Dashboard / {breadcrumb}
+                Resumen / {breadcrumb}
               </div>
             )}
             <h2 className={cn("font-semibold truncate leading-tight transition-all duration-200", isCompact ? "text-base" : "text-lg")}>
