@@ -30,7 +30,7 @@ export const MobileNav = memo(function MobileNav() {
       effectiveModules,
       hasPermission,
     })
-    return getMobileDashboardItems(groups, 5)
+    return getMobileDashboardItems(groups, 4)
   }, [userRole, effectiveModules, hasPermission])
   const activeItem = useMemo(() => getDashboardNavItemByPath(pathname), [pathname])
 
@@ -54,7 +54,7 @@ export const MobileNav = memo(function MobileNav() {
                 "h-5 w-5 transition-transform",
                 isActive && "scale-110"
               )} />
-              <span className="max-w-14 truncate text-[10px] font-medium leading-none">{item.label}</span>
+              <span className="max-w-14 truncate text-[10px] font-medium leading-none">{item.mobileLabel ?? item.label}</span>
               {isActive && (
                 <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-t-full" />
               )}

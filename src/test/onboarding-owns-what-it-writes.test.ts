@@ -155,7 +155,9 @@ describe('la configuración inicial vive en Administración', () => {
     expect(MENU).not.toContain("name: 'Onboarding'")
     expect(MENU).not.toContain("name: 'Configuración del negocio'")
     expect(MENU).not.toContain("href: '/dashboard/onboarding'")
-    expect(MENU).toContain('canRoleAccessSection(userRole, item.href)')
+    const NAVEGACION = leer('src/config/dashboard-navigation.ts')
+    expect(MENU).toContain('filterDashboardNavGroups')
+    expect(NAVEGACION).toContain('canRoleAccessSection(role, item.href)')
   })
 
   it('queda junto a los ajustes relacionados', () => {

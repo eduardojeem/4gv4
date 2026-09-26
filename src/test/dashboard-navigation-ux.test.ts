@@ -56,6 +56,7 @@ describe('dashboard navigation information architecture', () => {
       key: 'repair-inventory',
       label: 'Inventario del taller',
     })
+    expect(getDashboardNavItemByPath('/dashboard/profile')).toBeUndefined()
   })
 
   it('filters by role, permission and enabled module from one source', () => {
@@ -87,6 +88,14 @@ describe('dashboard navigation information architecture', () => {
       'repairs',
       'customers',
     ])
+  })
+
+  it('keeps the bottom bar readable on 320px screens', () => {
+    expect(findItem('pos')).toMatchObject({ mobileLabel: 'POS' })
+
+    const mobile = read('src/components/dashboard/mobile-nav.tsx')
+    expect(mobile).toContain('getMobileDashboardItems(groups, 4)')
+    expect(mobile).toContain('item.mobileLabel ?? item.label')
   })
 
   it('drives sidebar, header and mobile navigation from the shared source', () => {

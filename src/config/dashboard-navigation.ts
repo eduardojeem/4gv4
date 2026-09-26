@@ -30,6 +30,7 @@ export type DashboardNavItem = {
   href: string
   icon: LucideIcon
   description: string
+  mobileLabel?: string
   permission?: string
   module?: OrganizationModule
   mobilePriority?: number
@@ -47,7 +48,7 @@ export const dashboardNavGroups: DashboardNavGroup[] = [
     label: 'Principal',
     items: [
       { key: 'overview', label: 'Resumen', href: '/dashboard', icon: Gauge, description: 'Estado general del negocio', mobilePriority: 10 },
-      { key: 'pos', label: 'Punto de venta', href: '/dashboard/pos', icon: ShoppingCart, description: 'Registrar una venta', permission: 'pos.read', module: 'pos', mobilePriority: 20 },
+      { key: 'pos', label: 'Punto de venta', mobileLabel: 'POS', href: '/dashboard/pos', icon: ShoppingCart, description: 'Registrar una venta', permission: 'pos.read', module: 'pos', mobilePriority: 20 },
       { key: 'cash-register', label: 'Caja', href: '/dashboard/pos/caja', icon: Banknote, description: 'Apertura, movimientos y cierre', permission: 'pos.read', module: 'pos', mobilePriority: 70 },
     ],
   },
@@ -96,7 +97,11 @@ export function getDashboardNavItemByPath(pathname: string): DashboardNavItem | 
 
   return dashboardNavGroups
     .flatMap((group) => group.items)
-    .filter((item) => path === item.href || path.startsWith(`${item.href}/`))
+    .filter((item) => (
+      item.href === '/dashboard'
+        ? path === item.href
+        : path === item.href || path.startsWith(`${item.href}/`)
+    ))
     .sort((a, b) => b.href.length - a.href.length)[0]
 }
 
