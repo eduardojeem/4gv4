@@ -147,10 +147,10 @@ function getInitials(name: string | null, email: string | null) {
 
 function ActionDetailsPreview({ details }: { details: unknown }) {
   if (!details || typeof details !== 'object') return null
-  const d = details as Record<string, any>
+  const d = details as Record<string, unknown>
   
   const entries: string[] = []
-  if (d.message) entries.push(d.message)
+  if (d.message) entries.push(String(d.message))
   if (d.target_email) entries.push(`Destino: ${d.target_email}`)
   if (d.role) entries.push(`Rol: ${d.role}`)
   if (d.reason) entries.push(`Motivo: ${d.reason}`)

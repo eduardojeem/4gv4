@@ -681,16 +681,16 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                       </span>
                     </div>
                     <div className="grid grid-cols-4 gap-2 pt-1">
-                      {[
-                        { key: 'sm', label: 'Compacto', height: '32px' },
+                      {([
+                      { key: 'sm', label: 'Compacto', height: '32px' },
                         { key: 'md', label: 'Estándar', height: '44px' },
                         { key: 'lg', label: 'Grande', height: '56px' },
                         { key: 'xl', label: 'Extra Grande', height: '64px' },
-                      ].map((preset) => (
+                      ] as const).map((preset) => (
                         <button
                           key={preset.key}
                           type="button"
-                          onClick={() => updateField('logoHeight', preset.key as any)}
+                          onClick={() => updateField('logoHeight', preset.key)}
                           className={`flex flex-col items-center justify-center rounded-lg border py-2 px-1 text-center transition-all ${
                             (draft.logoHeight || 'md') === preset.key
                               ? 'border-cyan-500 bg-cyan-50 text-cyan-900 font-bold shadow-xs dark:bg-cyan-950/50 dark:text-cyan-200'

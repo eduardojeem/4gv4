@@ -272,7 +272,7 @@ export function SupplierDetailModal({
                     </div>
 
                     {/* Pestañas de contenido */}
-                    <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full">
+                    <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'info' | 'products' | 'orders' | 'notes')} className="w-full">
                         <TabsList className="grid w-full grid-cols-4 h-9">
                             <TabsTrigger value="info" className="text-xs font-medium">Información</TabsTrigger>
                             <TabsTrigger value="products" className="text-xs font-medium">

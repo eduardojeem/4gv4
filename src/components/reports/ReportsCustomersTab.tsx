@@ -721,7 +721,7 @@ export function ReportsCustomersTab({
 
               {/* Controles: Orden y Límite */}
               <div className="flex items-center gap-2">
-                <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'sales' | 'orders' | 'recent' | 'pos' | 'web' | 'repairs')}>
                   <SelectTrigger className="h-9 w-44 text-xs font-medium">
                     <SelectValue placeholder="Ordenar por" />
                   </SelectTrigger>
