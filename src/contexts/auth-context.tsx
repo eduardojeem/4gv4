@@ -343,7 +343,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Register active session for session management UI
           if (data.session?.access_token) {
-            const { getSessionIdFromAccessToken } = await import('@/lib/session-id')
+            const { getSessionIdFromAccessToken, markSessionRegistered } = await import('@/lib/session-id')
             const sessionId = await getSessionIdFromAccessToken(data.session.access_token)
             if (sessionId) {
               const ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
@@ -352,7 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const browser = ua.match(/(Chrome|Firefox|Safari|Edge|Brave|Opera)\/?\s*(\d+)/)?.[1] || 'Unknown'
               const os = ua.match(/(Windows|Mac OS|Linux|Android|iOS)/)?.[1] || 'Unknown'
 
-              await supabase.from('user_sessions').upsert({
+              const { error: sessionError } = await supabase.from('user_sessions').upsert({
                 user_id: data.user.id,
                 session_id: sessionId,
                 user_agent: ua,
@@ -362,6 +362,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 is_active: true,
                 last_activity: new Date().toISOString(),
               }, { onConflict: 'session_id' })
+              if (!sessionError) markSessionRegistered(sessionId)
             }
           }
         } catch (logError) {
@@ -592,9 +593,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Register/refresh current session for session management
           try {
-            const { getSessionIdFromAccessToken } = await import('@/lib/session-id')
+            const { getSessionIdFromAccessToken, isSessionRegistered, markSessionRegistered } = await import('@/lib/session-id')
             const sessionId = await getSessionIdFromAccessToken(nextSession.access_token)
-            if (sessionId) {
+            // Ya registrada en esta pestaña: no repetir el upsert en cada carga.
+            if (sessionId && !isSessionRegistered(sessionId)) {
               const ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
               const isMobile = /Mobile|Android|iPhone/i.test(ua)
               const isTablet = /iPad|Tablet/i.test(ua)
@@ -603,7 +605,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
               void (async () => {
                 try {
-                  await supabase.from('user_sessions').upsert({
+                  const { error } = await supabase.from('user_sessions').upsert({
                     user_id: nextSession.user.id,
                     session_id: sessionId,
                     user_agent: ua,
@@ -613,6 +615,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     is_active: true,
                     last_activity: new Date().toISOString(),
                   }, { onConflict: 'session_id' })
+                  if (!error) markSessionRegistered(sessionId)
                 } catch {}
               })()
             }

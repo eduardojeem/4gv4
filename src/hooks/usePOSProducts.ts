@@ -505,14 +505,17 @@ export function usePOSProducts() {
     return cart.reduce((count, item) => count + item.quantity, 0)
   }, [cart])
 
-  // Realtime sync (products already loaded above)
+  // Realtime sync (products already loaded above).
+  // Depende solo de subscribe/unsubscribe: el objeto realTimeSync cambia con
+  // cada cambio de estado y recreaba los canales en bucle.
+  const { subscribe: subscribeRealTime, unsubscribe: unsubscribeRealTime } = realTimeSync
   useEffect(() => {
     if (!config.supabase.isConfigured) return
     if (!realTimeEnabled) return
 
-    realTimeSync.subscribe()
-    return () => realTimeSync.unsubscribe()
-  }, [realTimeEnabled, realTimeSync])
+    subscribeRealTime()
+    return () => unsubscribeRealTime()
+  }, [realTimeEnabled, subscribeRealTime, unsubscribeRealTime])
 
   // Función para alternar tiempo real
   const toggleRealTime = useCallback(() => {

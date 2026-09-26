@@ -21,3 +21,23 @@ export async function getSessionIdFromAccessToken(accessToken?: string | null): 
   }
   return `sid_${Math.abs(hash)}_${accessToken.length}`
 }
+
+// Marca por pestaña de que la sesión actual ya quedó registrada en
+// user_sessions, para no repetir el upsert en cada carga de página.
+export const REGISTERED_SESSION_STORAGE_KEY = 'dashboard-registered-session-id'
+
+export function isSessionRegistered(sessionId: string): boolean {
+  try {
+    return typeof window !== 'undefined' && sessionStorage.getItem(REGISTERED_SESSION_STORAGE_KEY) === sessionId
+  } catch {
+    return false
+  }
+}
+
+export function markSessionRegistered(sessionId: string): void {
+  try {
+    if (typeof window !== 'undefined') sessionStorage.setItem(REGISTERED_SESSION_STORAGE_KEY, sessionId)
+  } catch {
+    // sessionStorage puede no estar disponible (modo privado, iframes).
+  }
+}
