@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { AnalyticsGuideDialog } from '@/app/admin/analytics/components/AnalyticsGuideDialog'
 import type { DateRange } from 'react-day-picker'
 import { endOfDay, startOfDay, subDays } from 'date-fns'
@@ -11,6 +12,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -20,23 +22,24 @@ import {
 } from 'recharts'
 import {
   Activity,
+  Boxes,
   Building2,
   CalendarRange,
   Gauge,
   HelpCircle,
+  LayoutDashboard,
   RefreshCw,
   ShieldAlert,
   ShoppingBag,
-  Sparkles,
   TrendingUp,
+  Users,
   Wallet,
   Wrench,
+  type LucideIcon,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -44,7 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
 import {
   Table,
   TableBody,
@@ -74,20 +76,29 @@ import {
   InsightItem,
   MetricCard,
   MiniStat,
-  SectionFrame,
 } from './analytics-widgets'
+import { WebsiteSnapshotCard } from './website-snapshot-card'
 import { ChartExporter, type ChartSection } from '@/components/reports/ChartExporter'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import type { SiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
 
 const PRESET_OPTIONS: Array<{ value: AnalyticsPreset; label: string }> = [
   { value: 'today', label: 'Hoy' },
-  { value: '7d', label: '7 dias' },
-  { value: '30d', label: '30 dias' },
-  { value: '90d', label: '90 dias' },
+  { value: '7d', label: '7 días' },
+  { value: '30d', label: '30 días' },
+  { value: '90d', label: '90 días' },
 ]
+
+const PRESET_DAYS: Record<Exclude<AnalyticsPreset, 'custom'>, SiteAnalyticsRangeDays> = {
+  today: 1,
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+}
 
 const KPI_ICONS: Record<string, typeof Wallet> = {
   gross: Wallet,
+  'pos-revenue': Wallet,
   sales: ShoppingBag,
   ticket: Gauge,
   margin: TrendingUp,
@@ -95,7 +106,25 @@ const KPI_ICONS: Record<string, typeof Wallet> = {
   alerts: ShieldAlert,
 }
 
+/** Las tarjetas de arriba: lo que responde «¿cómo va el negocio?» de un vistazo. */
+const OVERVIEW_CARD_IDS = ['gross', 'sales', 'ticket', 'margin']
+
 const PIE_COLORS = ['#2563eb', '#0f766e', '#d97706', '#7c3aed', '#dc2626', '#4f46e5']
+
+type TabId = 'resumen' | 'ventas' | 'dinero' | 'inventario' | 'clientes' | 'taller'
+
+const TABS: Array<{ id: TabId; label: string; icon: LucideIcon; module?: 'repairs' }> = [
+  { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
+  { id: 'ventas', label: 'Ventas', icon: ShoppingBag },
+  { id: 'dinero', label: 'Dinero y cajas', icon: Wallet },
+  { id: 'inventario', label: 'Inventario', icon: Boxes },
+  { id: 'clientes', label: 'Clientes', icon: Users },
+  { id: 'taller', label: 'Taller', icon: Wrench, module: 'repairs' },
+]
+
+function isTabId(value: string | null): value is TabId {
+  return TABS.some((tab) => tab.id === value)
+}
 
 function buildPresetRange(preset: AnalyticsPreset): DateRange {
   const now = new Date()
@@ -126,37 +155,6 @@ function formatCompact(value: number): string {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(value)
-}
-
-
-function HeroQuickStat({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-800">
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-50">{value}</p>
-    </div>
-  )
-}
-
-function SectionBadge({
-  children,
-}: {
-  children: string
-}) {
-  return (
-    <Badge
-      variant="outline"
-      className="border-blue-200 text-blue-600 dark:border-blue-900 dark:text-blue-400"
-    >
-      {children}
-    </Badge>
-  )
 }
 
 function ChartTooltip({
@@ -217,12 +215,43 @@ function NumberTooltip({
   )
 }
 
+/** Tarjeta de sección: título corto, una línea que explica para qué sirve, y el contenido. */
+function Panel({
+  title,
+  description,
+  action,
+  className,
+  children,
+}: {
+  title: string
+  description?: string
+  action?: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Card className={cn('min-w-0 gap-0 border border-gray-200 py-0 shadow-sm dark:border-slate-800', className)}>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 px-5 pt-5 pb-3">
+        <div className="min-w-0">
+          <CardTitle className="text-base">{title}</CardTitle>
+          {description ? <CardDescription className="mt-1">{description}</CardDescription> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </CardHeader>
+      <CardContent className="px-5 pb-5">{children}</CardContent>
+    </Card>
+  )
+}
+
 function RankingTable({
   rows,
+  columns,
   emptyTitle,
   emptyDescription,
 }: {
   rows: AnalyticsTableRow[]
+  /** Encabezados de nombre, métrica, dato secundario y detalle. */
+  columns: [string, string, string, string?]
   emptyTitle: string
   emptyDescription: string
 }) {
@@ -230,39 +259,48 @@ function RankingTable({
     return <EmptyState title={emptyTitle} description={emptyDescription} />
   }
 
+  const [nameLabel, metricLabel, secondaryLabel, detailLabel] = columns
+
   return (
-    <ScrollArea className="h-[320px] pr-3">
+    <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Nombre</TableHead>
-            <TableHead>Metrica</TableHead>
-            <TableHead>Secundario</TableHead>
-            <TableHead>Detalle</TableHead>
+            <TableHead className="w-10">#</TableHead>
+            <TableHead>{nameLabel}</TableHead>
+            <TableHead className="text-right">{metricLabel}</TableHead>
+            <TableHead className="text-right">{secondaryLabel}</TableHead>
+            {detailLabel ? <TableHead className="hidden md:table-cell">{detailLabel}</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
-              <TableCell className="font-medium text-foreground">{row.label}</TableCell>
-              <TableCell>{row.metric}</TableCell>
-              <TableCell>{row.secondary}</TableCell>
-              <TableCell className="text-muted-foreground">{row.detail || '--'}</TableCell>
+              <TableCell className="text-muted-foreground tabular-nums">{index + 1}</TableCell>
+              <TableCell className="max-w-[260px] truncate font-medium text-foreground">{row.label}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{row.metric}</TableCell>
+              <TableCell className="text-right tabular-nums text-muted-foreground">{row.secondary}</TableCell>
+              {detailLabel ? (
+                <TableCell className="hidden text-muted-foreground md:table-cell">{row.detail || '--'}</TableCell>
+              ) : null}
             </TableRow>
           ))}
         </TableBody>
       </Table>
-    </ScrollArea>
+    </div>
   )
 }
 
 function MetricGrid({
   cards,
+  className,
 }: {
   cards: AnalyticsMetricCard[]
+  className?: string
 }) {
+  if (!cards.length) return null
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+    <div className={cn('grid gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
       {cards.map((card) => {
         const Icon = KPI_ICONS[card.id] || Activity
         return (
@@ -281,7 +319,59 @@ function MetricGrid({
   )
 }
 
+function SalesTrendChart({
+  data,
+  height = 300,
+  chartRef,
+}: {
+  data: Array<{ shortLabel: string; posRevenue: number; repairRevenue: number }>
+  height?: number
+  chartRef?: React.RefObject<HTMLDivElement | null>
+}) {
+  return (
+    <div ref={chartRef} style={{ height }} role="img" aria-label="Gráfico de ventas POS y reparaciones por día">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="analytics-pos" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#2563eb" stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id="analytics-repairs" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#0f766e" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#0f766e" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+          <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} minTickGap={16} />
+          <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={64} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Area type="monotone" dataKey="posRevenue" stroke="#2563eb" fill="url(#analytics-pos)" name="POS" strokeWidth={2.5} />
+          <Area type="monotone" dataKey="repairRevenue" stroke="#0f766e" fill="url(#analytics-repairs)" name="Reparaciones" strokeWidth={2.5} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
 export default function AnalyticsDashboard() {
+  const searchParams = useSearchParams()
+  const requestedTab = searchParams.get('vista')
+  const [tab, setTab] = useState<TabId>(isTabId(requestedTab) ? requestedTab : 'resumen')
+  const { status: subscriptionStatus, effectiveModules } = useSubscriptionStatus()
+  // Mientras carga la suscripción (status null) no se esconde el taller.
+  const repairsEnabled = subscriptionStatus === null || effectiveModules.includes('repairs')
+  const visibleTabs = TABS.filter((item) => !item.module || repairsEnabled)
+  const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'resumen'
+  const handleTabChange = useCallback((value: string) => {
+    if (!isTabId(value)) return
+    setTab(value)
+    const url = new URL(window.location.href)
+    url.searchParams.set('vista', value)
+    window.history.replaceState(null, '', url)
+  }, [])
+
   const [preset, setPreset] = useState<AnalyticsPreset>('30d')
   const [branch, setBranch] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange | undefined>(buildPresetRange('30d'))
@@ -395,366 +485,402 @@ export default function AnalyticsDashboard() {
     )
   }
 
+
+  const cardsById = new Map(snapshot.headlineCards.map((card) => [card.id, card]))
+  const pickCards = (ids: string[]) =>
+    ids.map((id) => cardsById.get(id)).filter((card): card is AnalyticsMetricCard => Boolean(card))
+
+  const websiteDays: SiteAnalyticsRangeDays = preset === 'custom' ? 30 : PRESET_DAYS[preset]
+  const websiteNote = preset === 'custom' ? 'Últimos 30 días: las visitas usan períodos fijos' : undefined
+
+  const goToTab = (id: TabId) => (
+    <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => handleTabChange(id)}>
+      Ver detalle
+    </Button>
+  )
+
+  const financeStats = (
+    <div className="space-y-4">
+      <div className="grid gap-3 grid-cols-2">
+        <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
+        <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
+        <MiniStat label="Quedó" value={snapshot.finance.estimatedProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit === null ? 'warning' : snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
+        <MiniStat label="Margen" value={snapshot.finance.margin === null ? 'Pendiente' : `${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin === null ? 'warning' : snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
+      </div>
+      {!snapshot.finance.complete ? (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-semibold">Resultado financiero incompleto</p>
+          <p className="mt-1">{snapshot.finance.coverageWarnings[0]?.message || 'Faltan costos o cobros fechados para completar el resultado.'}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+
+  const categoryTotal = snapshot.topCategories.reduce((sum, item) => sum + (item.value || 0), 0)
+
   return (
     <div className="space-y-6">
       <AnalyticsGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-violet-600 text-white shadow-sm">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
-              ¿Cómo va el negocio?
-            </h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setGuideOpen(true)}
-              className="h-7 gap-1.5 text-xs rounded-xl border-violet-200 text-violet-700 dark:border-violet-800 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-              ¿Cómo funciona?
-            </Button>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 ml-10">
-            Ventas, inventario, cajas, reparaciones y clientes — comparado automáticamente con el período anterior.
+      {/* Encabezado */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">¿Cómo va el negocio?</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ventas, dinero, inventario, clientes y taller, comparados automáticamente con el período anterior.
           </p>
         </div>
-
-        <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
-          {snapshot.quickStats.map((stat) => (
-            <HeroQuickStat key={stat.id} label={stat.label} value={stat.formattedValue} />
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setGuideOpen(true)}>
+            <HelpCircle className="h-4 w-4" />
+            ¿Cómo funciona?
+          </Button>
+          <ChartExporter
+            title={`Analytics — ${organizationName || 'Mi Negocio'}`}
+            data={snapshot.salesTrend}
+            metrics={exportMetrics}
+            chartRefs={exportChartRefs}
+            chartTitles={exportChartTitles}
+            chartData={exportChartData}
+          />
         </div>
       </div>
 
-      {/* Filtros y acciones */}
-      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
-        <CardContent className="space-y-4 p-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
+      {/* Filtros */}
+      <div className="space-y-2">
+        <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-card p-3 shadow-sm dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="inline-flex w-fit rounded-lg border bg-muted/40 p-0.5" role="group" aria-label="Período">
               {PRESET_OPTIONS.map((option) => (
-                <Button
+                <button
                   key={option.value}
-                  variant={preset === option.value ? 'default' : 'outline'}
-                  size="sm"
+                  type="button"
                   onClick={() => handlePresetChange(option.value)}
+                  aria-pressed={preset === option.value}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                    preset === option.value
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
                 >
                   {option.label}
-                </Button>
+                </button>
               ))}
             </div>
-
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <DatePickerWithRange
-                date={dateRange}
-                onDateChange={handleDateChange}
-                className="w-full"
-              />
-
-              <Select value={branch} onValueChange={setBranch}>
-                <SelectTrigger className="w-full min-w-[180px] md:w-[220px]">
-                  <Building2 className="mr-2 h-4 w-4 text-gray-500 dark:text-gray-400" />
-                  <SelectValue placeholder="Sucursal operativa" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las sucursales</SelectItem>
-                  {branchOptions.map((option) => {
-                    // Subtítulo para distinguir sucursales con nombre igual o parecido.
-                    const subtitle = [option.city, option.code].filter(Boolean).join(' · ')
-                    return (
-                      <SelectItem key={option.id} value={option.id}>
-                        <div className="flex min-w-0 flex-col">
-                          <span className="truncate">{option.name}</span>
-                          {subtitle ? (
-                            <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
-                          ) : null}
-                        </div>
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-
-              <Button variant="outline" onClick={forceRefresh}>
-                <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-                Actualizar
-              </Button>
-            </div>
+            <DatePickerWithRange date={dateRange} onDateChange={handleDateChange} className="w-full sm:w-auto" />
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-gray-200 pt-3 text-sm text-gray-500 dark:border-slate-800 dark:text-gray-400 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2">
-                <CalendarRange className="h-4 w-4" />
-                {snapshot.periodLabel}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                Se compara con el periodo anterior
-              </span>
-            </div>
-            <span className="inline-flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Ultima actualizacion {lastUpdatedLabel}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Select value={branch} onValueChange={setBranch}>
+              <SelectTrigger className="w-full sm:w-[220px]">
+                <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Sucursal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las sucursales</SelectItem>
+                {branchOptions.map((option) => {
+                  // Subtítulo para distinguir sucursales con nombre igual o parecido.
+                  const subtitle = [option.city, option.code].filter(Boolean).join(' · ')
+                  return (
+                    <SelectItem key={option.id} value={option.id}>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">{option.name}</span>
+                        {subtitle ? <span className="truncate text-xs text-muted-foreground">{subtitle}</span> : null}
+                      </div>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
 
-      {/* Descargas con gráficos y detalle */}
-      <div className="flex flex-wrap justify-end gap-2">
-        <ChartExporter
-          title={`Analytics — ${organizationName || 'Mi Negocio'}`}
-          data={snapshot.salesTrend}
-          metrics={exportMetrics}
-          chartRefs={exportChartRefs}
-          chartTitles={exportChartTitles}
-          chartData={exportChartData}
-        />
+            <Button variant="outline" onClick={forceRefresh} disabled={refreshing}>
+              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+              Actualizar
+            </Button>
+          </div>
+        </div>
+
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarRange className="h-3.5 w-3.5" />
+            {snapshot.periodLabel} · comparado con el período anterior
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5" />
+            Actualizado {lastUpdatedLabel}
+          </span>
+        </p>
       </div>
 
-      <MetricGrid cards={snapshot.headlineCards} />
+      {error ? (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          Algunos datos no se pudieron cargar: {error}
+        </div>
+      ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-12">
-        <SectionFrame
-          title="Ventas del periodo"
-          description="Cuánto vendiste por día, de dónde viene el ingreso (POS y reparaciones), y en qué horarios se vende más."
-          badge={<SectionBadge>Ventas</SectionBadge>}
-          className="xl:col-span-8"
-        >
-          {snapshot.salesTrend.length ? (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_280px]">
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <MiniStat label="Total vendido" value={formatCurrency(snapshot.finance.operationalRevenue)} tone="info" />
-                  <MiniStat label="Ganancia neta devengada" value={snapshot.finance.netProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.netProfit)} tone={snapshot.finance.netProfit === null ? 'warning' : snapshot.finance.netProfit >= 0 ? 'success' : 'danger'} />
-                  <MiniStat label="vs. periodo anterior" value={formatPercent(snapshot.finance.growth)} tone={snapshot.finance.growth !== null && snapshot.finance.growth >= 0 ? 'success' : 'warning'} />
-                </div>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-0">
+        <div className="overflow-x-auto border-b border-gray-200 dark:border-slate-800">
+          <TabsList variant="line" className="h-auto w-max min-w-full justify-start gap-1 rounded-none bg-transparent p-0">
+            {visibleTabs.map((item) => {
+              const Icon = item.icon
+              return (
+                <TabsTrigger key={item.id} value={item.id} className="flex-none px-3 py-2.5">
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
+        </div>
 
-                <div ref={salesTrendRef} className="h-[320px]" role="img" aria-label="Gráfico de tendencia de ventas POS y reparaciones">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={snapshot.salesTrend}>
-                      <defs>
-                        <linearGradient id="analytics-pos" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
-                          <stop offset="95%" stopColor="#2563eb" stopOpacity={0.02} />
-                        </linearGradient>
-                        <linearGradient id="analytics-repairs" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0f766e" stopOpacity={0.28} />
-                          <stop offset="95%" stopColor="#0f766e" stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
-                      <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} />
-                      <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={80} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Area type="monotone" dataKey="posRevenue" stroke="#2563eb" fill="url(#analytics-pos)" name="POS" strokeWidth={2.5} />
-                      <Area type="monotone" dataKey="repairRevenue" stroke="#0f766e" fill="url(#analytics-repairs)" name="Reparaciones" strokeWidth={2.5} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+        {/* ── Resumen ─────────────────────────────────────────────────────── */}
+        <TabsContent value="resumen" className="mt-6 space-y-6">
+          <MetricGrid cards={pickCards(OVERVIEW_CARD_IDS)} />
 
-              <div className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
-                <div className="mb-4">
-                  <p className="text-sm font-semibold text-foreground">¿A qué hora se vende más?</p>
-                  <p className="text-sm text-muted-foreground">Útil para planificar turnos y horarios de caja.</p>
-                </div>
-                <div ref={hourlyRef} className="h-[320px]" role="img" aria-label="Gráfico de ventas por hora del día">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={snapshot.hourlySales}>
-                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} interval={3} tickMargin={8} />
-                      <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
-                      <Tooltip content={<NumberTooltip />} />
-                      <Bar dataKey="value" fill="#0f172a" radius={[10, 10, 0, 0]} name="Ingreso por hora" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              title="No hay ventas en el rango actual"
-              description="Ajusta la fecha o revisa si el periodo seleccionado todavia no tiene transacciones completadas."
-            />
-          )}
-        </SectionFrame>
+          <div className="grid gap-6 xl:grid-cols-3">
+            <Panel
+              title="Ventas del período"
+              description="Lo que entró por POS y por reparaciones, día por día."
+              action={goToTab('ventas')}
+              className="xl:col-span-2"
+            >
+              {snapshot.salesTrend.length ? (
+                <SalesTrendChart data={snapshot.salesTrend} height={360} chartRef={salesTrendRef} />
+              ) : (
+                <EmptyState
+                  title="No hay ventas en el rango actual"
+                  description="Ajustá la fecha o revisá si el período todavía no tiene transacciones completadas."
+                />
+              )}
+            </Panel>
 
-        <SectionFrame
-          title="Dinero: ingresos vs gastos"
-          description="Cuánto entró, cuánto salió y cuánto quedó de ganancia. Se compara con el periodo anterior."
-          badge={<SectionBadge>Finanzas</SectionBadge>}
-          className="xl:col-span-4"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <MiniStat label="Entró" value={formatCurrency(snapshot.finance.grossRevenue)} tone="info" />
-            <MiniStat label="Salió" value={formatCurrency(snapshot.finance.visibleExpenses)} tone="warning" />
-            <MiniStat label="Quedó" value={snapshot.finance.estimatedProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.estimatedProfit)} tone={snapshot.finance.estimatedProfit === null ? 'warning' : snapshot.finance.estimatedProfit >= 0 ? 'success' : 'danger'} />
-            <MiniStat label="Margen" value={snapshot.finance.margin === null ? 'Pendiente' : `${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin === null ? 'warning' : snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
-          </div>
-
-          {!snapshot.finance.complete ? (
-            <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-              <p className="font-semibold">Resultado financiero incompleto</p>
-              <p className="mt-1">{snapshot.finance.coverageWarnings[0]?.message || 'Faltan costos o cobros fechados para completar el resultado.'}</p>
-            </div>
-          ) : null}
-
-          <div ref={financeRef} className="mt-6 h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={snapshot.financeComparison}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="ingresos" fill="#2563eb" radius={[10, 10, 0, 0]} name="Ingresos" />
-                <Bar dataKey="egresos" fill="#d97706" radius={[10, 10, 0, 0]} name="Egresos" />
-                <Bar dataKey="ganancia" fill="#0f766e" radius={[10, 10, 0, 0]} name="Ganancia" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </SectionFrame>
-
-        <SectionFrame
-          title="Alertas Automáticas del Período"
-          description="Qué mejoró, qué bajó y dónde hay riesgo en este período. El sistema analiza los datos y te avisa automáticamente."
-          badge={<SectionBadge>Alertas</SectionBadge>}
-          className="xl:col-span-4"
-        >
-          <div className="space-y-3">
-            {snapshot.insights.map((insight) => (
-              <InsightItem
-                key={insight.id}
-                title={insight.title}
-                description={insight.description}
-                context={insight.context}
-                tone={insight.tone}
-              />
-            ))}
-          </div>
-
-          {/* "Clientes que vuelven" es el único dato que no tiene sección
-              propia en otro lado, así que se queda acá. Margen, cajas abiertas
-              y poco stock se quitaron: ya se muestran en Dinero, Estado de
-              cajas e Inventario respectivamente — repetirlos era ruido. */}
-          <Separator className="my-6" />
-
-          <MiniStat
-            label="Clientes que vuelven"
-            value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`}
-            tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'info'}
-          />
-        </SectionFrame>
-
-        <SectionFrame
-          title="Estado de cajas"
-          description="Cuántas cajas están abiertas, si hay diferencias de dinero, y cuánto se retiró en el periodo."
-          badge={<SectionBadge>Cajas</SectionBadge>}
-          className="xl:col-span-4"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <MiniStat label="Cajas abiertas" value={String(snapshot.operations.openRegisters)} tone="info" />
-            <MiniStat label="Alertas graves" value={String(snapshot.operations.criticalAlerts)} tone={snapshot.operations.criticalAlerts > 0 ? 'danger' : 'success'} />
-            <MiniStat label="Diferencias de dinero" value={formatCurrency(snapshot.operations.discrepancies)} tone={snapshot.operations.discrepancies > 0 ? 'warning' : 'success'} />
-            <MiniStat label="Dinero retirado" value={formatCurrency(snapshot.operations.withdrawals)} tone="warning" />
-          </div>
-
-          <div ref={branchRef} className="mt-6 h-[220px]">
-            {snapshot.salesByBranch.length ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={snapshot.salesByBranch}>
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                  <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={70} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="value" fill="#2563eb" radius={[10, 10, 0, 0]} name="Movimiento POS" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState
-                title="Sin movimiento por sucursal"
-                description="No hay sesiones o movimientos POS suficientes para dibujar el reparto operativo."
-              />
-            )}
-          </div>
-        </SectionFrame>
-
-        <SectionFrame
-          title="Inventario"
-          description="Qué categorías se venden más, qué productos están por agotarse y cuáles no se mueven."
-          badge={<SectionBadge>Inventario</SectionBadge>}
-          className="xl:col-span-4"
-        >
-          {snapshot.topCategories.length ? (
-            <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <MiniStat label="Poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
-                <MiniStat label="Sin ventas" value={String(snapshot.inventory.idleProductsCount)} tone="info" />
-                <MiniStat label="Rotación" value={`${snapshot.inventory.turnover.toFixed(1)}%`} tone="neutral" />
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <div ref={categoriesRef} className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={snapshot.topCategories}
-                        dataKey="value"
-                        nameKey="label"
-                        innerRadius={52}
-                        outerRadius={84}
-                        paddingAngle={3}
-                      >
-                        {snapshot.topCategories.map((entry, index) => (
-                          <Cell key={entry.label} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<ChartTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
+            <Panel title="Lo que tenés que mirar" description="El sistema compara el período y te avisa qué cambió.">
+              {snapshot.insights.length ? (
                 <div className="space-y-3">
-                  {snapshot.lowStockProducts.slice(0, 4).map((row) => (
-                    <div key={row.id} className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-foreground">{row.label}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{row.detail}</p>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className="rounded-full border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                        >
-                          {row.metric}
-                        </Badge>
-                      </div>
-                      <p className="mt-3 text-sm text-muted-foreground">{row.secondary}</p>
-                    </div>
+                  {snapshot.insights.map((insight) => (
+                    <InsightItem
+                      key={insight.id}
+                      title={insight.title}
+                      description={insight.description}
+                      context={insight.context}
+                      tone={insight.tone}
+                    />
                   ))}
                 </div>
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              title="Sin suficiente detalle de inventario"
-              description="Todavia no hay ventas o movimientos que permitan componer una lectura de rotacion util."
-            />
-          )}
-        </SectionFrame>
+              ) : (
+                <EmptyState title="Todo en orden" description="No hay alertas para este período." />
+              )}
+            </Panel>
+          </div>
 
-        <SectionFrame
-          title="Clientes"
-          description="Cuántos clientes nuevos entraron, cuántos vuelven a comprar y quiénes son los mejores compradores."
-          badge={<SectionBadge>Clientes</SectionBadge>}
-          className="xl:col-span-4"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <Panel title="Dinero" description="Lo que entró, lo que salió y lo que quedó." action={goToTab('dinero')}>
+              {financeStats}
+            </Panel>
+
+            <WebsiteSnapshotCard days={websiteDays} rangeNote={websiteNote} />
+
+            <Panel title="Para atender" description="Señales de la operación que conviene revisar.">
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat label="Cajas abiertas" value={String(snapshot.operations.openRegisters)} tone="info" />
+                <MiniStat label="Alertas graves" value={String(snapshot.operations.criticalAlerts)} tone={snapshot.operations.criticalAlerts > 0 ? 'danger' : 'success'} />
+                <MiniStat label="Poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
+                {repairsEnabled ? (
+                  <MiniStat label="En el taller" value={String(snapshot.repairs.activeCount)} tone="info" />
+                ) : (
+                  <MiniStat label="Clientes nuevos" value={String(snapshot.customers.newCount)} tone="info" />
+                )}
+              </div>
+            </Panel>
+          </div>
+        </TabsContent>
+
+        {/* ── Ventas ──────────────────────────────────────────────────────── */}
+        <TabsContent value="ventas" className="mt-6 space-y-6">
+          <MetricGrid cards={pickCards(['gross', 'pos-revenue', 'sales', 'ticket'])} />
+
+          <Panel title="Ventas por día" description="POS y reparaciones del período elegido.">
+            {snapshot.salesTrend.length ? (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <MiniStat label="Total vendido" value={formatCurrency(snapshot.finance.operationalRevenue)} tone="info" />
+                  <MiniStat label="Ganancia neta devengada" value={snapshot.finance.netProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.netProfit)} tone={snapshot.finance.netProfit === null ? 'warning' : snapshot.finance.netProfit >= 0 ? 'success' : 'danger'} />
+                  <MiniStat label="vs. período anterior" value={formatPercent(snapshot.finance.growth)} tone={snapshot.finance.growth !== null && snapshot.finance.growth >= 0 ? 'success' : 'warning'} />
+                </div>
+                <SalesTrendChart data={snapshot.salesTrend} height={320} chartRef={salesTrendRef} />
+              </div>
+            ) : (
+              <EmptyState
+                title="No hay ventas en el rango actual"
+                description="Ajustá la fecha o revisá si el período todavía no tiene transacciones completadas."
+              />
+            )}
+          </Panel>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Panel title="¿A qué hora se vende más?" description="Útil para planificar turnos y horarios de caja.">
+              <div ref={hourlyRef} className="h-[260px]" role="img" aria-label="Gráfico de ventas por hora del día">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={snapshot.hourlySales}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval={3} tickMargin={8} />
+                    <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={56} />
+                    <Tooltip content={<NumberTooltip />} />
+                    <Bar dataKey="value" fill="#2563eb" radius={[6, 6, 0, 0]} name="Ingreso por hora" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Panel>
+
+            <Panel title="Ventas por sucursal" description="Movimiento del POS en cada local.">
+              <div ref={branchRef} className="h-[260px]">
+                {snapshot.salesByBranch.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={snapshot.salesByBranch}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                      <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={56} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar dataKey="value" fill="#0f766e" radius={[6, 6, 0, 0]} name="Movimiento POS" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState
+                    title="Sin movimiento por sucursal"
+                    description="No hay sesiones o movimientos POS suficientes para comparar sucursales."
+                  />
+                )}
+              </div>
+            </Panel>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Panel title="Productos más vendidos" description="Ordenados por lo facturado en el período.">
+              <RankingTable
+                rows={snapshot.topProducts}
+                columns={['Producto', 'Vendido', 'Unidades', 'Margen y stock']}
+                emptyTitle="Todavía no hay ranking de productos"
+                emptyDescription="Se necesita al menos una venta con ítems para armar la tabla."
+              />
+            </Panel>
+            <Panel title="Ventas por cajero" description="Quién facturó más en el período.">
+              <RankingTable
+                rows={snapshot.salesByCashier}
+                columns={['Cajero', 'Facturado', 'Ventas', 'Ticket medio']}
+                emptyTitle="Sin desempeño por cajero"
+                emptyDescription="Cuando las ventas tengan cajero asociado, el ranking aparece acá."
+              />
+            </Panel>
+          </div>
+
+          {snapshot.quickStats.length ? (
+            <Panel title="Atajo: ventas POS recientes" description="Siempre sobre hoy, los últimos 7 y los últimos 30 días, sin importar el filtro.">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {snapshot.quickStats.map((stat) => (
+                  <MiniStat key={stat.id} label={stat.label} value={stat.formattedValue} tone="neutral" />
+                ))}
+              </div>
+            </Panel>
+          ) : null}
+        </TabsContent>
+
+        {/* ── Dinero y cajas ─────────────────────────────────────────────── */}
+        <TabsContent value="dinero" className="mt-6 space-y-6">
+          <MetricGrid cards={pickCards(['gross', 'margin', 'alerts'])} className="xl:grid-cols-3" />
+
+          <div className="grid gap-6 xl:grid-cols-5">
+            <Panel title="Resultado del período" description="Ingresos, egresos y ganancia comparados con el período anterior." className="xl:col-span-3">
+              {financeStats}
+              <div ref={financeRef} className="mt-6 h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={snapshot.financeComparison}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={56} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="ingresos" fill="#2563eb" radius={[6, 6, 0, 0]} name="Ingresos" />
+                    <Bar dataKey="egresos" fill="#d97706" radius={[6, 6, 0, 0]} name="Egresos" />
+                    <Bar dataKey="ganancia" fill="#0f766e" radius={[6, 6, 0, 0]} name="Ganancia" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Panel>
+
+            <Panel title="Estado de cajas" description="Cajas abiertas, diferencias y movimientos de efectivo." className="xl:col-span-2">
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat label="Cajas abiertas" value={String(snapshot.operations.openRegisters)} tone="info" />
+                <MiniStat label="Alertas graves" value={String(snapshot.operations.criticalAlerts)} tone={snapshot.operations.criticalAlerts > 0 ? 'danger' : 'success'} />
+                <MiniStat label="Diferencias de dinero" value={formatCurrency(snapshot.operations.discrepancies)} tone={snapshot.operations.discrepancies > 0 ? 'warning' : 'success'} />
+                <MiniStat label="Alertas sin resolver" value={String(snapshot.operations.unresolvedAlerts)} tone={snapshot.operations.unresolvedAlerts > 0 ? 'warning' : 'success'} />
+                <MiniStat label="Dinero retirado" value={formatCurrency(snapshot.operations.withdrawals)} tone="warning" />
+                <MiniStat label="Dinero ingresado" value={formatCurrency(snapshot.operations.deposits)} tone="info" />
+              </div>
+            </Panel>
+          </div>
+        </TabsContent>
+
+        {/* ── Inventario ─────────────────────────────────────────────────── */}
+        <TabsContent value="inventario" className="mt-6 space-y-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniStat label="Productos con poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
+            <MiniStat label="Productos sin ventas" value={String(snapshot.inventory.idleProductsCount)} tone="info" />
+            <MiniStat label="Rotación" value={`${snapshot.inventory.turnover.toFixed(1)}%`} tone="neutral" />
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Panel title="Categorías que más venden" description="Participación de cada categoría en lo vendido.">
+              {snapshot.topCategories.length ? (
+                <div className="grid items-center gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
+                  <div ref={categoriesRef} className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={snapshot.topCategories} dataKey="value" nameKey="label" innerRadius={52} outerRadius={84} paddingAngle={3}>
+                          {snapshot.topCategories.map((entry, index) => (
+                            <Cell key={entry.label} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <ul className="space-y-2">
+                    {snapshot.topCategories.map((entry, index) => (
+                      <li key={entry.label} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                          <span className="truncate">{entry.label}</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {categoryTotal > 0 ? `${Math.round((entry.value / categoryTotal) * 100)}%` : '--'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Sin suficiente detalle de inventario"
+                  description="Todavía no hay ventas que permitan ver qué categorías rotan."
+                />
+              )}
+            </Panel>
+
+            <Panel title="Por agotarse" description="Productos en o por debajo del stock mínimo.">
+              <RankingTable
+                rows={snapshot.lowStockProducts}
+                columns={['Producto', 'Stock', 'Mínimo', 'Categoría']}
+                emptyTitle="Nada por agotarse"
+                emptyDescription="Ningún producto está por debajo de su stock mínimo."
+              />
+            </Panel>
+          </div>
+        </TabsContent>
+
+        {/* ── Clientes ───────────────────────────────────────────────────── */}
+        <TabsContent value="clientes" className="mt-6 space-y-6">
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             <MiniStat
               label="Clientes nuevos"
               value={String(snapshot.customers.newCount)}
@@ -766,126 +892,66 @@ export default function AnalyticsDashboard() {
             <MiniStat label="Crecimiento" value={formatPercent(snapshot.customers.growth)} tone={snapshot.customers.growth !== null && snapshot.customers.growth >= 0 ? 'success' : 'warning'} />
           </div>
 
-          <div className="mt-5 space-y-3">
-            {snapshot.customerLeaders.slice(0, 4).length ? (
-              snapshot.customerLeaders.slice(0, 4).map((row) => (
-                <div key={row.id} className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-foreground">{row.label}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{row.secondary}</p>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">{row.metric}</p>
-                  </div>
-                  <p className="mt-3 text-sm text-muted-foreground">{row.detail}</p>
+          <Panel title="Mejores clientes" description="Quiénes más compraron en el período.">
+            <RankingTable
+              rows={snapshot.customerLeaders}
+              columns={['Cliente', 'Compró', 'Compras', 'Perfil']}
+              emptyTitle="Sin compradores destacados"
+              emptyDescription="Todavía no hay suficientes clientes identificados en el rango para armar el ranking."
+            />
+          </Panel>
+        </TabsContent>
+
+        {/* ── Taller ─────────────────────────────────────────────────────── */}
+        {repairsEnabled ? (
+          <TabsContent value="taller" className="mt-6 space-y-6">
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <MiniStat label="Ingresadas" value={String(repairs.receivedCount)} tone="info" />
+              <MiniStat label="En curso" value={String(repairs.activeCount)} tone="info" />
+              <MiniStat label="Terminadas" value={String(repairs.finishedCount)} tone="success" hint="Listas para retirar más entregadas" />
+              <MiniStat label="Listas sin retirar" value={String(repairs.readyForPickupCount)} tone={repairs.readyForPickupCount > 0 ? 'warning' : 'success'} />
+              <MiniStat label="Entregadas" value={String(repairs.completedCount)} tone="success" hint="De las ingresadas en el período" />
+              <MiniStat label="Demora promedio" value={`${repairs.avgCycleDays.toFixed(1)} días`} tone="neutral" />
+              <MiniStat label="Facturado" value={formatCurrency(repairs.revenue)} tone="success" />
+              {repairs.cancelledCount > 0 ? (
+                <MiniStat label="Canceladas" value={String(repairs.cancelledCount)} tone="warning" />
+              ) : null}
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <Panel title="Estado de las reparaciones" description="Dónde están hoy los equipos ingresados.">
+                <div ref={repairsRef} className="h-[260px]">
+                  {snapshot.repairStatus.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={snapshot.repairStatus} layout="vertical">
+                        <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
+                        <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
+                        <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={110} />
+                        <Tooltip content={<NumberTooltip />} />
+                        <Bar dataKey="value" fill="#0f766e" radius={[0, 6, 6, 0]} name="Reparaciones" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <EmptyState
+                      title="Sin reparaciones en el período"
+                      description="Cuando ingresen equipos al taller, acá vas a ver en qué estado está cada uno."
+                    />
+                  )}
                 </div>
-              ))
-            ) : (
-              <EmptyState
-                title="Sin compradores destacados"
-                description="Todavia no hay suficientes clientes identificados en el rango para construir un ranking confiable."
-              />
-            )}
-          </div>
-        </SectionFrame>
+              </Panel>
 
-        <SectionFrame
-          title="Taller de reparaciones"
-          description="Cuántas reparaciones hay en curso, cuántas se entregaron, cuánto tardan en promedio y cuánto facturó el taller."
-          badge={<SectionBadge>Taller</SectionBadge>}
-          className="xl:col-span-8"
-        >
-          <div className="grid gap-3 md:grid-cols-4">
-            <MiniStat label="En curso" value={String(snapshot.repairs.activeCount)} tone="info" />
-            <MiniStat label="Entregadas" value={String(snapshot.repairs.completedCount)} tone="success" />
-            <MiniStat label="Demora promedio" value={`${snapshot.repairs.avgCycleDays.toFixed(1)} días`} tone="neutral" />
-            <MiniStat label="Facturado" value={formatCurrency(snapshot.repairs.revenue)} tone="success" />
-          </div>
-
-          <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <div ref={repairsRef} className="h-[260px]">
-              {snapshot.repairStatus.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={snapshot.repairStatus} layout="vertical">
-                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
-                    <XAxis type="number" tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={100} />
-                    <Tooltip content={<NumberTooltip />} />
-                    <Bar dataKey="value" fill="#0f766e" radius={[0, 10, 10, 0]} name="Reparaciones" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <EmptyState
-                  title="Sin reparaciones en el periodo"
-                  description="Cuando existan ingresos de taller, aqui veras el reparto de estados y cuello de botella."
+              <Panel title="Técnicos" description="Entregas, facturación y demora de cada técnico.">
+                <RankingTable
+                  rows={snapshot.technicians}
+                  columns={['Técnico', 'Entregadas', 'Facturado', 'Demora']}
+                  emptyTitle="Sin técnicos evaluables"
+                  emptyDescription="Se necesitan reparaciones con técnico asignado para comparar."
                 />
-              )}
+              </Panel>
             </div>
-
-            <div className="space-y-3">
-              {snapshot.technicians.slice(0, 4).map((row) => (
-                <div key={row.id} className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
-                  <p className="font-medium text-foreground">{row.label}</p>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-sm text-muted-foreground">{row.metric}</span>
-                    <span className="text-sm font-semibold text-foreground">{row.secondary}</span>
-                  </div>
-                  <p className="mt-3 text-sm text-muted-foreground">{row.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </SectionFrame>
-
-        <SectionFrame
-          title="Rankings de Desempeño"
-          description="Los productos más vendidos, los cajeros que más facturaron, los mejores clientes y los técnicos más eficientes del período."
-          badge={<SectionBadge>Rankings</SectionBadge>}
-          className="xl:col-span-12"
-          contentClassName="pt-0"
-        >
-          <Tabs defaultValue="productos" className="mt-6">
-            <TabsList variant="line" className="w-full justify-start gap-2 overflow-x-auto rounded-none px-0">
-              <TabsTrigger value="productos">Productos</TabsTrigger>
-              <TabsTrigger value="cajeros">Cajeros</TabsTrigger>
-              <TabsTrigger value="clientes">Clientes</TabsTrigger>
-              <TabsTrigger value="tecnicos">Tecnicos</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="productos" className="pt-6">
-              <RankingTable
-                rows={snapshot.topProducts}
-                emptyTitle="Todavia no hay ranking de productos"
-                emptyDescription="Se necesita al menos una venta con items para construir la tabla de productos top."
-              />
-            </TabsContent>
-
-            <TabsContent value="cajeros" className="pt-6">
-              <RankingTable
-                rows={snapshot.salesByCashier}
-                emptyTitle="Sin desempeño por cajero"
-                emptyDescription="Cuando el sistema registre ventas con usuario o cajero asociado, el ranking aparecera aqui."
-              />
-            </TabsContent>
-
-            <TabsContent value="clientes" className="pt-6">
-              <RankingTable
-                rows={snapshot.customerLeaders}
-                emptyTitle="Sin cartera destacada"
-                emptyDescription="Todavia no hay suficiente actividad de clientes identificados para construir el ranking."
-              />
-            </TabsContent>
-
-            <TabsContent value="tecnicos" className="pt-6">
-              <RankingTable
-                rows={snapshot.technicians}
-                emptyTitle="Sin tecnicos evaluables"
-                emptyDescription="Se necesitan reparaciones con tecnico asignado para armar una comparativa util."
-              />
-            </TabsContent>
-          </Tabs>
-        </SectionFrame>
-      </div>
+          </TabsContent>
+        ) : null}
+      </Tabs>
     </div>
   )
 }
