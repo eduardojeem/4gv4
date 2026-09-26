@@ -87,8 +87,11 @@ describe('los indicadores del PDF', () => {
   })
 
   it('siguen saliendo las tarjetas de arriba', () => {
-    // El detalle de taller se suma, no reemplaza.
-    expect(TABLERO).toContain('...Object.fromEntries(snapshot.headlineCards.map((c) => [c.label, c.value]))')
+    // El detalle de taller se suma, no reemplaza. Las tarjetas pasan antes por
+    // el filtro de modulos: sin taller no se exportan las que hablan de el.
+    expect(TABLERO).toContain('const headlineCards = snapshot.headlineCards.filter((card) => isHeadlineCardVisible(card.id, modules))')
+    expect(TABLERO).toContain('...Object.fromEntries(headlineCards.map((c) => [c.label, c.value]))')
+    expect(TABLERO).toContain('...(modules.repairs ? repairMetrics : {})')
   })
 
   it('la grilla no dibuja tarjetas fuera de la hoja', () => {

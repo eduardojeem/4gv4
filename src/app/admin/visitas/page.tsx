@@ -1,5 +1,6 @@
 import { MousePointerClick } from 'lucide-react'
 import { SiteAnalyticsDashboard } from '@/components/site-analytics/SiteAnalyticsDashboard'
+import { PlanGate } from '@/components/admin/PlanGate'
 
 export default function WebsiteVisitsPage() {
   return (
@@ -22,7 +23,14 @@ export default function WebsiteVisitsPage() {
         </div>
       </section>
 
-      <SiteAnalyticsDashboard endpoint="/api/admin/analytics/website" variant="organization" />
+      <PlanGate
+        module="analytics"
+        requiredPlan="Pro"
+        title="Visitas web"
+        description="Las visitas de tu tienda online están disponibles desde el plan Pro. Subí tu plan para ver de dónde llegan tus clientes y qué miran."
+      >
+        <SiteAnalyticsDashboard endpoint="/api/admin/analytics/website" variant="organization" />
+      </PlanGate>
     </div>
   )
 }
