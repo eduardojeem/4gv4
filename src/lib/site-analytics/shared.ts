@@ -23,6 +23,8 @@ export const SITE_ANALYTICS_ENDPOINT = '/api/public/analytics/track'
 const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,47}$/
 const SAFE_ENTITY_RE = /^[A-Za-z0-9_-]{1,64}$/
 const TENANT_SECTIONS = new Set<string>(TENANT_PUBLIC_SECTION_NAMES)
+/** Páginas de la cuenta del cliente: no son visitas a la tienda y no se miden. */
+const PRIVATE_TENANT_SECTIONS = new Set(['perfil', 'cliente', 'mis-reparaciones'])
 const MARKETPLACE_SECTIONS = new Set(['productos', 'categorias', 'buscar', 'empresas'])
 
 export type ClassifiedPage = {
@@ -62,7 +64,13 @@ export function classifySitePage(pathname: string): ClassifiedPage | null {
     return { site: 'marketplace', orgSlug: null, path: `/marketplace/${second}`, pageType: second, entityId: null }
   }
 
-  if (!first || !second || !SAFE_SLUG_RE.test(first) || !TENANT_SECTIONS.has(second)) {
+  if (
+    !first ||
+    !second ||
+    !SAFE_SLUG_RE.test(first) ||
+    !TENANT_SECTIONS.has(second) ||
+    PRIVATE_TENANT_SECTIONS.has(second)
+  ) {
     return null
   }
 

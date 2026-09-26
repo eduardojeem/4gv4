@@ -244,6 +244,44 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
     ],
   },
+  {
+    id: 'website-visits',
+    navKey: 'website-visits',
+    title: 'Visitas web',
+    summary: 'Cuánta gente entra a tu tienda online y a tu perfil del Marketplace, de dónde llega, qué mira y cuántos terminan en WhatsApp o en un pedido.',
+    group: 'analytics',
+    href: '/admin/visitas',
+    permissions: ['analytics.read'],
+    keywords: ['visitas', 'trafico', 'tienda online', 'marketplace', 'busquedas', 'whatsapp', 'conversion', 'google analytics'],
+    steps: [
+      {
+        title: 'Se mide solo, sin instalar nada',
+        description: 'Cada página de tu tienda y de tu perfil en el Marketplace cuenta como visita. No se guarda la IP de nadie, no se cuentan los robots, se respeta «No rastrear» y tampoco cuentan las visitas de tu equipo con la sesión iniciada.',
+      },
+      {
+        title: 'De dónde llegan y qué hacen',
+        description: 'Ves las fuentes (Google, Instagram, directo), el dispositivo, el país, las páginas y productos más vistos, y los clics a WhatsApp, a llamar, al carrito y los pedidos enviados.',
+      },
+      {
+        title: 'Qué vende cada fuente',
+        description: 'Los pedidos del carrito se atribuyen a la fuente por la que llegó el cliente, con el monto real del pedido.',
+      },
+      {
+        title: 'Lo que buscan y no encuentran',
+        description: 'Las búsquedas del catálogo quedan registradas; las que no dieron resultados son productos que te piden y no tenés cargados.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Quiero saber si me conviene seguir pagando publicidad en Instagram',
+        setup: [
+          'Entrás a Visitas web y elegís los últimos 30 días.',
+          'En Fuentes de tráfico mirás las sesiones, los pedidos y el monto que trajo instagram.',
+        ],
+        result: 'Sabés cuánto vendió cada canal, no solo cuánta gente entró.',
+      },
+    ],
+  },
 
   // ── Operaciones ───────────────────────────────────────────────────────────
   {

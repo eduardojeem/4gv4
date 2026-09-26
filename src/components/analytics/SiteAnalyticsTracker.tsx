@@ -2,16 +2,27 @@
 
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { trackSiteEvent, trackSitePageView } from '@/lib/site-analytics/client'
+import { setSiteAnalyticsTenant, trackSiteEvent, trackSitePageView } from '@/lib/site-analytics/client'
 
 const WHATSAPP_HREF_RE = /^(https?:\/\/(wa\.me|api\.whatsapp\.com|web\.whatsapp\.com)\/|whatsapp:)/i
 
-export function SiteAnalyticsTracker() {
+/**
+ * `tenantSlug` solo hace falta en tiendas servidas por su propio dominio, donde
+ * la ruta no incluye el slug de la tienda.
+ */
+export function SiteAnalyticsTracker({ tenantSlug = null }: { tenantSlug?: string | null } = {}) {
   const pathname = usePathname()
 
   useEffect(() => {
-    if (pathname) trackSitePageView(pathname)
-  }, [pathname])
+    setSiteAnalyticsTenant(tenantSlug)
+    return () => setSiteAnalyticsTenant(null)
+  }, [tenantSlug])
+
+  useEffect(() => {
+    if (!pathname) return
+    setSiteAnalyticsTenant(tenantSlug)
+    trackSitePageView(pathname)
+  }, [pathname, tenantSlug])
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {

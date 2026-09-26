@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setSiteAnalyticsTenant, trackSitePageView } from '@/lib/site-analytics/client'
 import { classifySitePage, normalizeSearchTerm, parseSiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
 import { getCountryFromHeaders, getDeviceFromUserAgent, isBotUserAgent } from '@/lib/site-analytics/server'
 
@@ -23,8 +26,14 @@ describe('classifySitePage', () => {
     })
   })
 
-  it('agrupa subrutas privadas en su sección para no guardar ids de tickets', () => {
-    expect(classifySitePage('/mi-tienda/mis-reparaciones/TCK-991')?.path).toBe('/mi-tienda/mis-reparaciones')
+  it('no mide las páginas de la cuenta del cliente', () => {
+    expect(classifySitePage('/mi-tienda/mis-reparaciones/TCK-991')).toBeNull()
+    expect(classifySitePage('/mi-tienda/perfil')).toBeNull()
+    expect(classifySitePage('/mi-tienda/cliente/login')).toBeNull()
+  })
+
+  it('agrupa el seguimiento en su sección para no guardar ids de pedidos', () => {
+    expect(classifySitePage('/mi-tienda/track/PED-991')?.path).toBe('/mi-tienda/track')
   })
 
   it('atribuye el perfil de empresa del marketplace a la organización', () => {
@@ -89,5 +98,82 @@ describe('detección de visitantes', () => {
     expect(getCountryFromHeaders(new Headers({ 'x-vercel-ip-country': 'py' }))).toBe('PY')
     expect(getCountryFromHeaders(new Headers({ 'cf-ipcountry': 'XX' }))).toBeNull()
     expect(getCountryFromHeaders(new Headers())).toBeNull()
+  })
+})
+
+describe('contador en el navegador', () => {
+  const beacon = vi.fn((_url: string, _body?: BodyInit | null) => true)
+
+  async function sentBodies() {
+    const readText = (blob: Blob) =>
+      new Promise<string>((done) => {
+        const reader = new FileReader()
+        reader.onload = () => done(String(reader.result))
+        reader.readAsText(blob)
+      })
+    return Promise.all(beacon.mock.calls.map(async ([, body]) => JSON.parse(await readText(body as Blob))))
+  }
+
+  beforeEach(() => {
+    beacon.mockClear()
+    Object.defineProperty(navigator, 'sendBeacon', { value: beacon, configurable: true })
+    Object.defineProperty(navigator, 'doNotTrack', { value: null, configurable: true })
+  })
+
+  afterEach(() => {
+    setSiteAnalyticsTenant(null)
+  })
+
+  it('respeta «No rastrear» del navegador', () => {
+    Object.defineProperty(navigator, 'doNotTrack', { value: '1', configurable: true })
+
+    trackSitePageView('/mi-tienda/ofertas')
+
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('en una tienda con dominio propio agrega el slug a la ruta', async () => {
+    setSiteAnalyticsTenant('mi-tienda')
+
+    trackSitePageView('/productos')
+    trackSitePageView('/')
+
+    expect((await sentBodies()).map((body) => body.path)).toEqual(['/mi-tienda/productos', '/mi-tienda/inicio'])
+  })
+
+  it('no manda nada desde el panel ni la API', () => {
+    trackSitePageView('/admin/visitas')
+    trackSitePageView('/dashboard/pos')
+
+    expect(beacon).not.toHaveBeenCalled()
+  })
+})
+
+describe('un solo registro de visitas', () => {
+  const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
+
+  it('las dos plantillas de tienda y el marketplace montan el contador', () => {
+    expect(leer('src/app/[organizationSlug]/layout.tsx')).toContain('<SiteAnalyticsTracker />')
+    expect(leer('src/app/(public)/layout.tsx')).toContain('<SiteAnalyticsTracker tenantSlug={storefrontOrganization.slug} />')
+    expect(leer('src/app/marketplace/layout.tsx')).toContain('<SiteAnalyticsTracker />')
+  })
+
+  it('el panel de Landing lee los contadores del registro nuevo', () => {
+    const landing = leer('src/app/superadmin/web-content/landing/page.tsx')
+    expect(landing).toContain("admin.rpc('get_storefront_daily_visits'")
+    expect(landing).not.toContain("from('storefront_daily_visits')")
+  })
+
+  it('solo el servidor lee los eventos y los contadores', () => {
+    for (const archivo of [
+      'supabase/migrations/20260925120000_site_analytics.sql',
+      'supabase/migrations/20260926100000_storefront_visits_from_site_analytics.sql',
+    ]) {
+      const sql = leer(archivo)
+      expect(sql).not.toMatch(/create policy/i)
+      expect(sql).not.toMatch(/ip_address|user_agent/i)
+    }
+    expect(leer('supabase/migrations/20260926100000_storefront_visits_from_site_analytics.sql'))
+      .toContain('grant execute on function public.get_storefront_daily_visits(date, date, text) to service_role')
   })
 })

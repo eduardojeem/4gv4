@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { localDay, summarizeCommerce } from './landing-commerce'
 import { resolveCommerceRange } from './commerce-range'
-import { classifyStorefrontPath, isBotUserAgent } from '@/lib/public/storefront-visits'
 
 // Mediodía en Paraguay (UTC-3): el día local es el 16.
 const NOW = new Date('2026-09-16T15:00:00Z').getTime()
@@ -109,27 +108,4 @@ describe('métricas comerciales de las tiendas', () => {
     ])
   })
 
-})
-
-describe('qué cuenta como visita', () => {
-  it('clasifica la página sin el prefijo de la tienda', () => {
-    expect(classifyStorefrontPath('/hca-celular', 'hca-celular')).toBe('inicio')
-    expect(classifyStorefrontPath('/hca-celular/inicio', 'hca-celular')).toBe('inicio')
-    expect(classifyStorefrontPath('/hca-celular/productos', 'hca-celular')).toBe('productos')
-    expect(classifyStorefrontPath('/hca-celular/productos/abc-123', 'hca-celular')).toBe('producto')
-    expect(classifyStorefrontPath('/ofertas', null)).toBe('ofertas')
-  })
-
-  it('el carrito, el perfil y el seguimiento no son visitas a la tienda', () => {
-    expect(classifyStorefrontPath('/hca-celular/carrito', 'hca-celular')).toBeNull()
-    expect(classifyStorefrontPath('/perfil', null)).toBeNull()
-    expect(classifyStorefrontPath('/track', null)).toBeNull()
-  })
-
-  it('los buscadores y las vistas previas de enlaces no cuentan', () => {
-    expect(isBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1)')).toBe(true)
-    expect(isBotUserAgent('WhatsApp/2.23.20')).toBe(true)
-    expect(isBotUserAgent(null)).toBe(true)
-    expect(isBotUserAgent('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/128 Mobile Safari/537.36')).toBe(false)
-  })
 })

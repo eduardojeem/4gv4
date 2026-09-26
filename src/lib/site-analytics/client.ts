@@ -86,9 +86,30 @@ type TrackExtras = {
   resultsCount?: number | null
 }
 
+// Tiendas servidas por su propio dominio: las rutas llegan sin el slug.
+let hostTenantSlug: string | null = null
+
+export function setSiteAnalyticsTenant(slug: string | null) {
+  hostTenantSlug = slug
+}
+
+function withTenantPrefix(pathname: string) {
+  if (!hostTenantSlug) return pathname
+  if (pathname === `/${hostTenantSlug}` || pathname.startsWith(`/${hostTenantSlug}/`)) return pathname
+  return `/${hostTenantSlug}${pathname === '/' ? '/inicio' : pathname}`
+}
+
+function doNotTrack() {
+  try {
+    return navigator.doNotTrack === '1'
+  } catch {
+    return false
+  }
+}
+
 function track(type: SiteAnalyticsEventType, pathname: string, extras: TrackExtras = {}) {
-  if (typeof window === 'undefined') return
-  const page = classifySitePage(pathname)
+  if (typeof window === 'undefined' || doNotTrack()) return
+  const page = classifySitePage(withTenantPrefix(pathname))
   if (!page) return
 
   const now = Date.now()

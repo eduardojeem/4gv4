@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createAdminSupabase()
     const organizationId = page.orgSlug
-      ? await resolveOrganizationIdForAnalytics(page.orgSlug, supabase)
+      ? await resolveOrganizationIdForAnalytics(page.orgSlug, page.site, supabase)
       : null
 
     if (page.site === 'storefront' && !organizationId) {

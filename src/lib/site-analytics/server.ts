@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
-import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { resolvePublicOrganizationBySlug, resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
 import type { SiteAnalyticsSite, SiteAnalyticsSummary } from '@/lib/site-analytics/shared'
 
 export const SITE_ANALYTICS_TIMEZONE = 'America/Asuncion'
@@ -28,15 +28,26 @@ const ORG_CACHE_TTL_MS = 5 * 60 * 1000
 const ORG_CACHE_MAX = 500
 const orgIdCache = new Map<string, { id: string | null; expiresAt: number }>()
 
-export async function resolveOrganizationIdForAnalytics(slug: string, supabase: SupabaseClient) {
-  const cached = orgIdCache.get(slug)
+/**
+ * Tienda: solo cuenta si está publicada (el slug viaja en la ruta y cualquiera
+ * puede mandarlo). Perfil en el marketplace: la organización existente.
+ */
+export async function resolveOrganizationIdForAnalytics(
+  slug: string,
+  site: SiteAnalyticsSite,
+  supabase: SupabaseClient
+) {
+  const cacheKey = `${site}:${slug}`
+  const cached = orgIdCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.id
 
-  const organization = await resolvePublicOrganizationBySlug(slug, supabase)
+  const organization = site === 'storefront'
+    ? await resolvePublicStorefrontOrganizationBySlug(slug, supabase)
+    : await resolvePublicOrganizationBySlug(slug, supabase)
   const id = organization?.id ?? null
 
   if (orgIdCache.size >= ORG_CACHE_MAX) orgIdCache.clear()
-  orgIdCache.set(slug, { id, expiresAt: Date.now() + ORG_CACHE_TTL_MS })
+  orgIdCache.set(cacheKey, { id, expiresAt: Date.now() + ORG_CACHE_TTL_MS })
   return id
 }
 

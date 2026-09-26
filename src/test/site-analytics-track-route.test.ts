@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 
 const insert = vi.fn()
 const resolveOrg = vi.fn()
+const resolveStorefront = vi.fn()
 const db: {
   order: { total: number; created_at: string } | null
   userRole: { role: string; is_active: boolean } | null
@@ -31,6 +32,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 vi.mock('@/lib/saas/public-tenant', () => ({
   resolvePublicOrganizationBySlug: (slug: string) => resolveOrg(slug),
+  resolvePublicStorefrontOrganizationBySlug: (slug: string) => resolveStorefront(slug),
 }))
 
 vi.mock('@supabase/ssr', () => ({
@@ -76,6 +78,10 @@ describe('POST /api/public/analytics/track', () => {
     resolveOrg.mockReset().mockImplementation(async (slug: string) =>
       slug.startsWith('tienda') ? { id: `org-${slug}` } : null
     )
+    // Solo las tiendas publicadas: «tienda-privada» existe pero no está abierta.
+    resolveStorefront.mockReset().mockImplementation(async (slug: string) =>
+      slug.startsWith('tienda') && slug !== 'tienda-privada' ? { id: `org-${slug}` } : null
+    )
     db.order = null
     db.userRole = null
     db.memberRole = null
@@ -120,10 +126,19 @@ describe('POST /api/public/analytics/track', () => {
     }))
   })
 
+  it('no cuenta visitas a tiendas sin publicar, pero sí su perfil en el marketplace', async () => {
+    await POST(makeRequest({ ...baseEvent, path: '/tienda-privada/inicio' }))
+    expect(insert).not.toHaveBeenCalled()
+
+    await POST(makeRequest({ ...baseEvent, path: '/marketplace/empresas/tienda-privada' }))
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ organization_id: 'org-tienda-privada', site: 'marketplace' }))
+  })
+
   it('registra el marketplace general sin organización', async () => {
     await POST(makeRequest({ ...baseEvent, path: '/marketplace' }))
 
     expect(resolveOrg).not.toHaveBeenCalled()
+    expect(resolveStorefront).not.toHaveBeenCalled()
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ organization_id: null, site: 'marketplace' }))
   })
 
