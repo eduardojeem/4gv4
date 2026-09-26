@@ -95,7 +95,9 @@ export const adminNavCategories: NavCategory[] = [
                 icon: MousePointerClick,
                 href: '/admin/visitas',
                 description: 'Visitas e interacciones de tu tienda online',
-                permissions: ['analytics.read']
+                permissions: ['analytics.read'],
+                // Mismo módulo que Analytics: disponible desde el plan Pro.
+                module: 'analytics'
             }
         ]
     },

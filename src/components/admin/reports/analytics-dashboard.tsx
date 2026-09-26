@@ -81,6 +81,15 @@ import { WebsiteSnapshotCard } from './website-snapshot-card'
 import { ChartExporter, type ChartSection } from '@/components/reports/ChartExporter'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import type { SiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
+import {
+  type AnalyticsModuleFlags,
+  type AnalyticsModuleKey,
+  describeAnalyticsSections,
+  filterInsightsByModules,
+  isHeadlineCardVisible,
+  resolveAnalyticsModules,
+  revenueCardId,
+} from './analytics-modules'
 
 const PRESET_OPTIONS: Array<{ value: AnalyticsPreset; label: string }> = [
   { value: 'today', label: 'Hoy' },
@@ -106,19 +115,17 @@ const KPI_ICONS: Record<string, typeof Wallet> = {
   alerts: ShieldAlert,
 }
 
-/** Las tarjetas de arriba: lo que responde «¿cómo va el negocio?» de un vistazo. */
-const OVERVIEW_CARD_IDS = ['gross', 'sales', 'ticket', 'margin']
-
 const PIE_COLORS = ['#2563eb', '#0f766e', '#d97706', '#7c3aed', '#dc2626', '#4f46e5']
 
 type TabId = 'resumen' | 'ventas' | 'dinero' | 'inventario' | 'clientes' | 'taller'
 
-const TABS: Array<{ id: TabId; label: string; icon: LucideIcon; module?: 'repairs' }> = [
+/** Las pestañas con `module` solo aparecen si la empresa tiene ese módulo activo. */
+const TABS: Array<{ id: TabId; label: string; icon: LucideIcon; module?: AnalyticsModuleKey }> = [
   { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
   { id: 'ventas', label: 'Ventas', icon: ShoppingBag },
   { id: 'dinero', label: 'Dinero y cajas', icon: Wallet },
-  { id: 'inventario', label: 'Inventario', icon: Boxes },
-  { id: 'clientes', label: 'Clientes', icon: Users },
+  { id: 'inventario', label: 'Inventario', icon: Boxes, module: 'inventory' },
+  { id: 'clientes', label: 'Clientes', icon: Users, module: 'crm' },
   { id: 'taller', label: 'Taller', icon: Wrench, module: 'repairs' },
 ]
 
@@ -323,13 +330,21 @@ function SalesTrendChart({
   data,
   height = 300,
   chartRef,
+  showRepairs = true,
 }: {
   data: Array<{ shortLabel: string; posRevenue: number; repairRevenue: number }>
   height?: number
   chartRef?: React.RefObject<HTMLDivElement | null>
+  /** Sin taller, la serie de reparaciones sería una línea plana en cero. */
+  showRepairs?: boolean
 }) {
   return (
-    <div ref={chartRef} style={{ height }} role="img" aria-label="Gráfico de ventas POS y reparaciones por día">
+    <div
+      ref={chartRef}
+      style={{ height }}
+      role="img"
+      aria-label={showRepairs ? 'Gráfico de ventas POS y reparaciones por día' : 'Gráfico de ventas POS por día'}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
@@ -346,9 +361,11 @@ function SalesTrendChart({
           <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} minTickGap={16} />
           <YAxis tickFormatter={(value) => formatCompact(value)} tickLine={false} axisLine={false} width={64} />
           <Tooltip content={<ChartTooltip />} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {showRepairs ? <Legend wrapperStyle={{ fontSize: 12 }} /> : null}
           <Area type="monotone" dataKey="posRevenue" stroke="#2563eb" fill="url(#analytics-pos)" name="POS" strokeWidth={2.5} />
-          <Area type="monotone" dataKey="repairRevenue" stroke="#0f766e" fill="url(#analytics-repairs)" name="Reparaciones" strokeWidth={2.5} />
+          {showRepairs ? (
+            <Area type="monotone" dataKey="repairRevenue" stroke="#0f766e" fill="url(#analytics-repairs)" name="Reparaciones" strokeWidth={2.5} />
+          ) : null}
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -360,9 +377,11 @@ export default function AnalyticsDashboard() {
   const requestedTab = searchParams.get('vista')
   const [tab, setTab] = useState<TabId>(isTabId(requestedTab) ? requestedTab : 'resumen')
   const { status: subscriptionStatus, effectiveModules } = useSubscriptionStatus()
-  // Mientras carga la suscripción (status null) no se esconde el taller.
-  const repairsEnabled = subscriptionStatus === null || effectiveModules.includes('repairs')
-  const visibleTabs = TABS.filter((item) => !item.module || repairsEnabled)
+  const modules: AnalyticsModuleFlags = useMemo(
+    () => resolveAnalyticsModules(subscriptionStatus, effectiveModules),
+    [subscriptionStatus, effectiveModules],
+  )
+  const visibleTabs = TABS.filter((item) => !item.module || modules[item.module])
   const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : 'resumen'
   const handleTabChange = useCallback((value: string) => {
     if (!isTabId(value)) return
@@ -421,13 +440,22 @@ export default function AnalyticsDashboard() {
   const repairsRef = useRef<HTMLDivElement>(null)
   const financeRef = useRef<HTMLDivElement>(null)
 
-  const exportChartRefs = [salesTrendRef, hourlyRef, branchRef, categoriesRef, repairsRef, financeRef]
+  // Sin taller no se exporta su grafico. Las tres listas se arman con el
+  // mismo criterio para que ref, titulo y datos sigan alineados.
+  const exportChartRefs = [
+    salesTrendRef,
+    hourlyRef,
+    branchRef,
+    categoriesRef,
+    ...(modules.repairs ? [repairsRef] : []),
+    financeRef,
+  ]
   const exportChartTitles = [
     'Ventas del período',
     'Ventas por hora',
     'Movimiento por sucursal',
     'Categorías top',
-    'Estados de reparación',
+    ...(modules.repairs ? ['Estados de reparación'] : []),
     'Ingresos vs egresos',
   ]
   // Cada dataset dice que es: el exportador elegia el tipo de grafico y la
@@ -439,7 +467,9 @@ export default function AnalyticsDashboard() {
     { id: 'generic', kind: 'bar', rows: snapshot.hourlySales, formatValue: formatCurrency },
     { id: 'generic', kind: 'bar', rows: snapshot.salesByBranch, formatValue: formatCurrency },
     { id: 'generic', kind: 'donut', rows: snapshot.topCategories, formatValue: formatCurrency },
-    { id: 'generic', kind: 'donut', rows: snapshot.repairStatus, formatValue: (v) => `${v} equipos` },
+    ...(modules.repairs
+      ? [{ id: 'generic', kind: 'donut', rows: snapshot.repairStatus, formatValue: (v: number) => `${v} equipos` } satisfies ChartSection]
+      : []),
     { id: 'generic', kind: 'bar', rows: snapshot.financeComparison, formatValue: formatCurrency },
   ]
   // Los KPI del PDF salen de las tarjetas de arriba, mas el detalle de taller.
@@ -450,8 +480,8 @@ export default function AnalyticsDashboard() {
   // secas puede significar cuatro cosas distintas y las cuatro dan numeros
   // distintos.
   const repairs = snapshot.repairs
-  const exportMetrics = {
-    ...Object.fromEntries(snapshot.headlineCards.map((c) => [c.label, c.value])),
+  const headlineCards = snapshot.headlineCards.filter((card) => isHeadlineCardVisible(card.id, modules))
+  const repairMetrics: Record<string, string> = {
     'Reparaciones ingresadas': String(repairs.receivedCount),
     'Reparaciones terminadas (listas + entregadas)': String(repairs.finishedCount),
     'Reparaciones entregadas (de las ingresadas)': String(repairs.completedCount),
@@ -463,6 +493,10 @@ export default function AnalyticsDashboard() {
       : {}),
     ...(repairs.cancelledCount > 0 ? { 'Reparaciones canceladas': String(repairs.cancelledCount) } : {}),
     'Facturado en taller': formatCurrency(repairs.revenue),
+  }
+  const exportMetrics = {
+    ...Object.fromEntries(headlineCards.map((c) => [c.label, c.value])),
+    ...(modules.repairs ? repairMetrics : {}),
   }
 
   const lastUpdatedLabel = snapshot.generatedAt
@@ -486,7 +520,7 @@ export default function AnalyticsDashboard() {
   }
 
 
-  const cardsById = new Map(snapshot.headlineCards.map((card) => [card.id, card]))
+  const cardsById = new Map(headlineCards.map((card) => [card.id, card]))
   const pickCards = (ids: string[]) =>
     ids.map((id) => cardsById.get(id)).filter((card): card is AnalyticsMetricCard => Boolean(card))
 
@@ -517,6 +551,25 @@ export default function AnalyticsDashboard() {
   )
 
   const categoryTotal = snapshot.topCategories.reduce((sum, item) => sum + (item.value || 0), 0)
+  const insights = filterInsightsByModules(snapshot.insights, modules)
+  const revenueCard = revenueCardId(modules)
+  const salesSourcesLabel = modules.repairs ? 'POS y reparaciones' : 'POS'
+
+  // «Para atender»: cajas siempre; el resto según lo que use la empresa, hasta completar cuatro.
+  const attentionStats = [
+    { key: 'registers', label: 'Cajas abiertas', value: String(snapshot.operations.openRegisters), tone: 'info' as const },
+    { key: 'critical', label: 'Alertas graves', value: String(snapshot.operations.criticalAlerts), tone: snapshot.operations.criticalAlerts > 0 ? 'danger' as const : 'success' as const },
+    ...(modules.inventory
+      ? [{ key: 'stock', label: 'Poco stock', value: String(snapshot.inventory.lowStockCount), tone: snapshot.inventory.lowStockCount > 0 ? 'warning' as const : 'success' as const }]
+      : []),
+    ...(modules.repairs
+      ? [{ key: 'workshop', label: 'En el taller', value: String(snapshot.repairs.activeCount), tone: 'info' as const }]
+      : []),
+    ...(modules.crm
+      ? [{ key: 'customers', label: 'Clientes nuevos', value: String(snapshot.customers.newCount), tone: 'info' as const }]
+      : []),
+    { key: 'unresolved', label: 'Alertas sin resolver', value: String(snapshot.operations.unresolvedAlerts), tone: snapshot.operations.unresolvedAlerts > 0 ? 'warning' as const : 'success' as const },
+  ].slice(0, 4)
 
   return (
     <div className="space-y-6">
@@ -527,7 +580,7 @@ export default function AnalyticsDashboard() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">¿Cómo va el negocio?</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ventas, dinero, inventario, clientes y taller, comparados automáticamente con el período anterior.
+            {describeAnalyticsSections(modules)}, comparados automáticamente con el período anterior.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -636,17 +689,17 @@ export default function AnalyticsDashboard() {
 
         {/* ── Resumen ─────────────────────────────────────────────────────── */}
         <TabsContent value="resumen" className="mt-6 space-y-6">
-          <MetricGrid cards={pickCards(OVERVIEW_CARD_IDS)} />
+          <MetricGrid cards={pickCards([revenueCard, 'sales', 'ticket', 'margin'])} />
 
           <div className="grid gap-6 xl:grid-cols-3">
             <Panel
               title="Ventas del período"
-              description="Lo que entró por POS y por reparaciones, día por día."
+              description={modules.repairs ? 'Lo que entró por POS y por reparaciones, día por día.' : 'Lo que entró por POS, día por día.'}
               action={goToTab('ventas')}
               className="xl:col-span-2"
             >
               {snapshot.salesTrend.length ? (
-                <SalesTrendChart data={snapshot.salesTrend} height={360} chartRef={salesTrendRef} />
+                <SalesTrendChart data={snapshot.salesTrend} height={360} chartRef={salesTrendRef} showRepairs={modules.repairs} />
               ) : (
                 <EmptyState
                   title="No hay ventas en el rango actual"
@@ -656,9 +709,9 @@ export default function AnalyticsDashboard() {
             </Panel>
 
             <Panel title="Lo que tenés que mirar" description="El sistema compara el período y te avisa qué cambió.">
-              {snapshot.insights.length ? (
+              {insights.length ? (
                 <div className="space-y-3">
-                  {snapshot.insights.map((insight) => (
+                  {insights.map((insight) => (
                     <InsightItem
                       key={insight.id}
                       title={insight.title}
@@ -683,14 +736,9 @@ export default function AnalyticsDashboard() {
 
             <Panel title="Para atender" description="Señales de la operación que conviene revisar.">
               <div className="grid grid-cols-2 gap-3">
-                <MiniStat label="Cajas abiertas" value={String(snapshot.operations.openRegisters)} tone="info" />
-                <MiniStat label="Alertas graves" value={String(snapshot.operations.criticalAlerts)} tone={snapshot.operations.criticalAlerts > 0 ? 'danger' : 'success'} />
-                <MiniStat label="Poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
-                {repairsEnabled ? (
-                  <MiniStat label="En el taller" value={String(snapshot.repairs.activeCount)} tone="info" />
-                ) : (
-                  <MiniStat label="Clientes nuevos" value={String(snapshot.customers.newCount)} tone="info" />
-                )}
+                {attentionStats.map((stat) => (
+                  <MiniStat key={stat.key} label={stat.label} value={stat.value} tone={stat.tone} />
+                ))}
               </div>
             </Panel>
           </div>
@@ -698,9 +746,9 @@ export default function AnalyticsDashboard() {
 
         {/* ── Ventas ──────────────────────────────────────────────────────── */}
         <TabsContent value="ventas" className="mt-6 space-y-6">
-          <MetricGrid cards={pickCards(['gross', 'pos-revenue', 'sales', 'ticket'])} />
+          <MetricGrid cards={pickCards(modules.repairs ? ['gross', 'pos-revenue', 'sales', 'ticket'] : ['pos-revenue', 'sales', 'ticket', 'margin'])} />
 
-          <Panel title="Ventas por día" description="POS y reparaciones del período elegido.">
+          <Panel title="Ventas por día" description={`${salesSourcesLabel} del período elegido.`}>
             {snapshot.salesTrend.length ? (
               <div className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -708,7 +756,7 @@ export default function AnalyticsDashboard() {
                   <MiniStat label="Ganancia neta devengada" value={snapshot.finance.netProfit === null ? 'Pendiente' : formatCurrency(snapshot.finance.netProfit)} tone={snapshot.finance.netProfit === null ? 'warning' : snapshot.finance.netProfit >= 0 ? 'success' : 'danger'} />
                   <MiniStat label="vs. período anterior" value={formatPercent(snapshot.finance.growth)} tone={snapshot.finance.growth !== null && snapshot.finance.growth >= 0 ? 'success' : 'warning'} />
                 </div>
-                <SalesTrendChart data={snapshot.salesTrend} height={320} chartRef={salesTrendRef} />
+                <SalesTrendChart data={snapshot.salesTrend} height={320} chartRef={salesTrendRef} showRepairs={modules.repairs} />
               </div>
             ) : (
               <EmptyState
@@ -787,7 +835,7 @@ export default function AnalyticsDashboard() {
 
         {/* ── Dinero y cajas ─────────────────────────────────────────────── */}
         <TabsContent value="dinero" className="mt-6 space-y-6">
-          <MetricGrid cards={pickCards(['gross', 'margin', 'alerts'])} className="xl:grid-cols-3" />
+          <MetricGrid cards={pickCards([revenueCard, 'margin', 'alerts'])} className="xl:grid-cols-3" />
 
           <div className="grid gap-6 xl:grid-cols-5">
             <Panel title="Resultado del período" description="Ingresos, egresos y ganancia comparados con el período anterior." className="xl:col-span-3">
@@ -822,88 +870,92 @@ export default function AnalyticsDashboard() {
         </TabsContent>
 
         {/* ── Inventario ─────────────────────────────────────────────────── */}
-        <TabsContent value="inventario" className="mt-6 space-y-6">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MiniStat label="Productos con poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
-            <MiniStat label="Productos sin ventas" value={String(snapshot.inventory.idleProductsCount)} tone="info" />
-            <MiniStat label="Rotación" value={`${snapshot.inventory.turnover.toFixed(1)}%`} tone="neutral" />
-          </div>
+        {modules.inventory ? (
+          <TabsContent value="inventario" className="mt-6 space-y-6">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MiniStat label="Productos con poco stock" value={String(snapshot.inventory.lowStockCount)} tone={snapshot.inventory.lowStockCount > 0 ? 'warning' : 'success'} />
+              <MiniStat label="Productos sin ventas" value={String(snapshot.inventory.idleProductsCount)} tone="info" />
+              <MiniStat label="Rotación" value={`${snapshot.inventory.turnover.toFixed(1)}%`} tone="neutral" />
+            </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <Panel title="Categorías que más venden" description="Participación de cada categoría en lo vendido.">
-              {snapshot.topCategories.length ? (
-                <div className="grid items-center gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
-                  <div ref={categoriesRef} className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={snapshot.topCategories} dataKey="value" nameKey="label" innerRadius={52} outerRadius={84} paddingAngle={3}>
-                          {snapshot.topCategories.map((entry, index) => (
-                            <Cell key={entry.label} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<ChartTooltip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
+            <div className="grid gap-6 xl:grid-cols-2">
+              <Panel title="Categorías que más venden" description="Participación de cada categoría en lo vendido.">
+                {snapshot.topCategories.length ? (
+                  <div className="grid items-center gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
+                    <div ref={categoriesRef} className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={snapshot.topCategories} dataKey="value" nameKey="label" innerRadius={52} outerRadius={84} paddingAngle={3}>
+                            {snapshot.topCategories.map((entry, index) => (
+                              <Cell key={entry.label} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <ul className="space-y-2">
+                      {snapshot.topCategories.map((entry, index) => (
+                        <li key={entry.label} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                            <span className="truncate">{entry.label}</span>
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {categoryTotal > 0 ? `${Math.round((entry.value / categoryTotal) * 100)}%` : '--'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-2">
-                    {snapshot.topCategories.map((entry, index) => (
-                      <li key={entry.label} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                          <span className="truncate">{entry.label}</span>
-                        </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {categoryTotal > 0 ? `${Math.round((entry.value / categoryTotal) * 100)}%` : '--'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <EmptyState
-                  title="Sin suficiente detalle de inventario"
-                  description="Todavía no hay ventas que permitan ver qué categorías rotan."
-                />
-              )}
-            </Panel>
+                ) : (
+                  <EmptyState
+                    title="Sin suficiente detalle de inventario"
+                    description="Todavía no hay ventas que permitan ver qué categorías rotan."
+                  />
+                )}
+              </Panel>
 
-            <Panel title="Por agotarse" description="Productos en o por debajo del stock mínimo.">
-              <RankingTable
-                rows={snapshot.lowStockProducts}
-                columns={['Producto', 'Stock', 'Mínimo', 'Categoría']}
-                emptyTitle="Nada por agotarse"
-                emptyDescription="Ningún producto está por debajo de su stock mínimo."
-              />
-            </Panel>
-          </div>
-        </TabsContent>
+              <Panel title="Por agotarse" description="Productos en o por debajo del stock mínimo.">
+                <RankingTable
+                  rows={snapshot.lowStockProducts}
+                  columns={['Producto', 'Stock', 'Mínimo', 'Categoría']}
+                  emptyTitle="Nada por agotarse"
+                  emptyDescription="Ningún producto está por debajo de su stock mínimo."
+                />
+              </Panel>
+            </div>
+          </TabsContent>
+        ) : null}
 
         {/* ── Clientes ───────────────────────────────────────────────────── */}
-        <TabsContent value="clientes" className="mt-6 space-y-6">
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-            <MiniStat
-              label="Clientes nuevos"
-              value={String(snapshot.customers.newCount)}
-              tone="info"
-              hint={branch !== 'all' ? 'Todo el negocio (los clientes no son por sucursal)' : undefined}
-            />
-            <MiniStat label="Volvieron a comprar" value={String(snapshot.customers.recurrentCount)} tone="success" />
-            <MiniStat label="% que vuelven" value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`} tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'neutral'} />
-            <MiniStat label="Crecimiento" value={formatPercent(snapshot.customers.growth)} tone={snapshot.customers.growth !== null && snapshot.customers.growth >= 0 ? 'success' : 'warning'} />
-          </div>
+        {modules.crm ? (
+          <TabsContent value="clientes" className="mt-6 space-y-6">
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <MiniStat
+                label="Clientes nuevos"
+                value={String(snapshot.customers.newCount)}
+                tone="info"
+                hint={branch !== 'all' ? 'Todo el negocio (los clientes no son por sucursal)' : undefined}
+              />
+              <MiniStat label="Volvieron a comprar" value={String(snapshot.customers.recurrentCount)} tone="success" />
+              <MiniStat label="% que vuelven" value={`${snapshot.customers.recurrenceRate.toFixed(1)}%`} tone={snapshot.customers.recurrenceRate >= 35 ? 'success' : 'neutral'} />
+              <MiniStat label="Crecimiento" value={formatPercent(snapshot.customers.growth)} tone={snapshot.customers.growth !== null && snapshot.customers.growth >= 0 ? 'success' : 'warning'} />
+            </div>
 
-          <Panel title="Mejores clientes" description="Quiénes más compraron en el período.">
-            <RankingTable
-              rows={snapshot.customerLeaders}
-              columns={['Cliente', 'Compró', 'Compras', 'Perfil']}
-              emptyTitle="Sin compradores destacados"
-              emptyDescription="Todavía no hay suficientes clientes identificados en el rango para armar el ranking."
-            />
-          </Panel>
-        </TabsContent>
+            <Panel title="Mejores clientes" description="Quiénes más compraron en el período.">
+              <RankingTable
+                rows={snapshot.customerLeaders}
+                columns={['Cliente', 'Compró', 'Compras', 'Perfil']}
+                emptyTitle="Sin compradores destacados"
+                emptyDescription="Todavía no hay suficientes clientes identificados en el rango para armar el ranking."
+              />
+            </Panel>
+          </TabsContent>
+        ) : null}
 
         {/* ── Taller ─────────────────────────────────────────────────────── */}
-        {repairsEnabled ? (
+        {modules.repairs ? (
           <TabsContent value="taller" className="mt-6 space-y-6">
             <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
               <MiniStat label="Ingresadas" value={String(repairs.receivedCount)} tone="info" />

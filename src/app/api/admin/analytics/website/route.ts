@@ -5,10 +5,12 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
 import { parseSiteAnalyticsRangeDays } from '@/lib/site-analytics/shared'
 import { fetchSiteAnalyticsSummary } from '@/lib/site-analytics/server'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 /**
  * GET /api/admin/analytics/website?days=1|7|30|90
  * Visitas e interacciones del sitio público de la organización activa.
+ * Requiere el módulo `analytics` (plan Pro o superior), igual que la página.
  */
 async function getHandler(request: NextRequest, context: AdminAuthContext) {
   let organizationId = context.organizationId
@@ -20,6 +22,24 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
 
   if (!organizationId) {
     return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 403 })
+  }
+
+  if (context.user.role !== 'super_admin') {
+    const planInfo = await getOrganizationPlanInfo(organizationId)
+    if (!planInfo.modules.includes('analytics')) {
+      const commerciallyAvailable = planInfo.entitledModules.includes('analytics')
+        || planInfo.moduleTrials.some((trial) => trial.module === 'analytics')
+      return NextResponse.json(
+        {
+          success: false,
+          error: commerciallyAvailable
+            ? 'El módulo de analytics está desactivado para esta organización.'
+            : 'Las visitas web están disponibles desde el plan Pro.',
+          code: commerciallyAvailable ? 'MODULE_DISABLED' : 'MODULE_NOT_ENTITLED',
+        },
+        { status: commerciallyAvailable ? 403 : 402 },
+      )
+    }
   }
 
   const days = parseSiteAnalyticsRangeDays(request.nextUrl.searchParams.get('days'))
