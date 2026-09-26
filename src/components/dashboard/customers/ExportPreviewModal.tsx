@@ -48,7 +48,7 @@ export function ExportPreviewModal({
 
   const previewData = searchTerm ? filteredCustomers.slice(0, 20) : customers.slice(0, 20)
 
-  const formatValue = (value: any) => {
+  const formatValue = (value: unknown) => {
     if (value === null || value === undefined) return '-'
     if (Array.isArray(value)) return value.join(', ')
     if (typeof value === 'boolean') return value ? 'Sí' : 'No'
@@ -87,7 +87,7 @@ export function ExportPreviewModal({
               />
             </div>
             
-            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as any)}>
+            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'table' | 'list')}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="table" className="text-xs">
                   <Table className="h-3 w-3 mr-1" />

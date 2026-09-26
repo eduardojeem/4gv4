@@ -25,9 +25,9 @@ function CorrectionForm({ open, repair, onOpenChange, onSaved }: {
   open: boolean; repair: Repair; onOpenChange: (open: boolean) => void; onSaved: () => void | Promise<void>
 }) {
   const initialRows = useMemo<EditableCost[]>(() => (repair.parts || [])
-    .filter((part) => Boolean(part.databaseId || (part as any).id))
+    .filter((part) => Boolean(part.databaseId || part.id))
     .map((part) => ({
-      partId: String(part.databaseId || (part as any).id),
+      partId: String(part.databaseId || part.id),
       name: part.name,
       quantity: part.quantity,
       previousUnitCost: part.internalCost ?? part.cost ?? 0,

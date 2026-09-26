@@ -3,7 +3,7 @@
 import { AppImage } from '@/components/ui/app-image'
 
 import { useCallback, useState } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useDropzone, type FileRejection, type FileError } from 'react-dropzone'
 import { X, Upload, Image as ImageIcon, Loader2, AlertCircle, Link as LinkIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -100,13 +100,13 @@ export function ImageUploader({
     })
   }, [onUploadFiles])
 
-  const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: any[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
     if (disabled) return
 
     // Validar archivos rechazados
     if (rejectedFiles.length > 0) {
       rejectedFiles.forEach(({ file, errors }) => {
-        errors.forEach((error: any) => {
+        errors.forEach((error: FileError) => {
           if (error.code === 'file-too-large') {
             toast.error(`${file.name} es muy grande`, {
               description: `Tamaño máximo: ${maxSize / 1024 / 1024}MB`

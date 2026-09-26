@@ -332,7 +332,8 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     const lastVisit = spend?.lastDate ?? fromList?.last_visit ?? null
 
     const creditLimit = creditSummary?.credit_limit ?? currentCustomer.credit_limit ?? 0
-    const pendingDebt = creditSummary?.total_pending ?? (currentCustomer as any).credit_outstanding ?? (currentCustomer as any).pending_amount ?? 0
+    const customerDebt = currentCustomer as { credit_outstanding?: number; pending_amount?: number }
+    const pendingDebt = creditSummary?.total_pending ?? customerDebt.credit_outstanding ?? customerDebt.pending_amount ?? 0
     const availableCredit = creditSummary?.available_credit ?? Math.max(0, creditLimit - pendingDebt)
     const storeBalance = creditSummary?.store_balance ?? 0
 

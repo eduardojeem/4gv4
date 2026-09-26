@@ -99,17 +99,19 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
     });
 
     return filtered.sort((a, b) => {
-      let aValue: any = a[sortField];
-      let bValue: any = b[sortField];
+      let aValue: string | number = 0;
+      let bValue: string | number = 0;
 
       if (sortField === 'createdAt' || sortField === 'updatedAt') {
-        aValue = aValue ? new Date(aValue).getTime() : 0;
-        bValue = bValue ? new Date(bValue).getTime() : 0;
-      }
-
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
+        const aDate = a[sortField];
+        const bDate = b[sortField];
+        aValue = aDate ? new Date(aDate).getTime() : 0;
+        bValue = bDate ? new Date(bDate).getTime() : 0;
+      } else {
+        const aRaw = a[sortField];
+        const bRaw = b[sortField];
+        aValue = typeof aRaw === 'number' ? aRaw : String(aRaw ?? '').toLowerCase();
+        bValue = typeof bRaw === 'number' ? bRaw : String(bRaw ?? '').toLowerCase();
       }
 
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;

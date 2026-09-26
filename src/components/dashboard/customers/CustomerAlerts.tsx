@@ -88,11 +88,11 @@ export function CustomerAlerts({ customers, onViewCustomer }: CustomerAlertsProp
     const result: AlertGroup[] = []
     const debtOf = (customer: Customer): number => {
       if (!outstandingByCustomer) return 0
-      if (typeof (outstandingByCustomer as any)?.get === 'function') {
-        return (outstandingByCustomer as any).get(customer.id) ?? 0
+      if (outstandingByCustomer instanceof Map) {
+        return outstandingByCustomer.get(customer.id) ?? 0
       }
-      if (typeof outstandingByCustomer === 'object') {
-        return (outstandingByCustomer as unknown as Record<string, number>)[customer.id] ?? 0
+      if (typeof outstandingByCustomer === 'object' && outstandingByCustomer !== null) {
+        return (outstandingByCustomer as Record<string, number>)[customer.id] ?? 0
       }
       return 0
     }

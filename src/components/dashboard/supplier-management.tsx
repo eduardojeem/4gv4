@@ -241,7 +241,7 @@ export function SupplierManagement() {
                         <Label htmlFor="status">Estado</Label>
                         <Select 
                           value={formData.status} 
-                          onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
+                          onValueChange={(value: Supplier['status']) => setFormData(prev => ({ ...prev, status: value }))}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -374,7 +374,7 @@ export function SupplierManagement() {
                 className="pl-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+            <Select value={statusFilter} onValueChange={(value: 'all' | 'active' | 'inactive' | 'suspended') => setStatusFilter(value)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Estado" />
               </SelectTrigger>

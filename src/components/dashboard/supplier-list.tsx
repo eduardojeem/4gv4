@@ -129,7 +129,8 @@ export default function SupplierList({
 
     // Ordenar
     filtered.sort((a, b) => {
-      let aValue: any, bValue: any
+      let aValue: string | number = 0
+      let bValue: string | number = 0
 
       switch (sortBy) {
         case 'name':

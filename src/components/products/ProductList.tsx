@@ -186,7 +186,7 @@ const ProductCard = memo(function ProductCard({
                 <div className="space-y-2">
                     <div className="flex justify-between items-center">
                         <span className="text-xs text-muted-foreground">Stock</span>
-                        <Badge variant={stockStatus.variant as any}>
+                        <Badge variant={stockStatus.variant} className={stockStatus.className}>
                             {product.stock_quantity}
                         </Badge>
                     </div>
@@ -238,7 +238,7 @@ const ProductRow = memo(function ProductRow({
             <TableCell className="font-mono text-sm">{product.sku}</TableCell>
             <TableCell>{product.category?.name || '-'}</TableCell>
             <TableCell>
-                <Badge variant={stockStatus.variant as any}>
+                <Badge variant={stockStatus.variant} className={stockStatus.className}>
                     {product.stock_quantity}
                 </Badge>
             </TableCell>
@@ -283,12 +283,17 @@ const ProductRow = memo(function ProductRow({
     )
 })
 
-function getStockStatus(current: number, min: number) {
+function getStockStatus(current: number, min: number): {
+    status: 'out' | 'low' | 'ok'
+    label: string
+    variant: 'destructive' | 'secondary' | 'outline'
+    className?: string
+} {
     if (current === 0) {
         return { status: 'out', label: 'Agotado', variant: 'destructive' }
     } else if (current <= min) {
-        return { status: 'low', label: 'Bajo', variant: 'warning' }
+        return { status: 'low', label: 'Bajo', variant: 'secondary', className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-200' }
     } else {
-        return { status: 'ok', label: 'Normal', variant: 'success' }
+        return { status: 'ok', label: 'Normal', variant: 'outline', className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300' }
     }
 }
