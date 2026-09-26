@@ -205,7 +205,7 @@ export function ReportsProductsTab({
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={formatPrice} />
                   <Tooltip
-                    formatter={(value: number, n: any) => [n === 'sales' ? formatFullPrice(Number(value)) : `${value} un.`, n === 'sales' ? 'Ventas' : 'Cantidad']}
+                    formatter={(value: number, n: string | number) => [n === 'sales' ? formatFullPrice(Number(value)) : `${value} un.`, n === 'sales' ? 'Ventas' : 'Cantidad']}
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderRadius: '12px', color: '#fff' }}
                   />
                   <Bar dataKey="sales" name="Ventas" fill={productSalesColor} radius={[6, 6, 0, 0]} />
@@ -241,7 +241,7 @@ export function ReportsProductsTab({
                   <YAxis yAxisId="left" tickFormatter={formatPrice} />
                   <YAxis yAxisId="right" orientation="right" />
                   <Tooltip
-                    formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : `${v} un.`, n === 'sales' ? 'Ventas' : 'Unidades']}
+                    formatter={(v: number, n: string | number) => [n === 'sales' ? formatFullPrice(Number(v)) : `${v} un.`, n === 'sales' ? 'Ventas' : 'Unidades']}
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderRadius: '12px', color: '#fff' }}
                   />
                   <Line type="monotone" dataKey="sales" yAxisId="left" stroke={selectedProductSalesColor} strokeWidth={2.5} dot={{ fill: selectedProductSalesColor }} />

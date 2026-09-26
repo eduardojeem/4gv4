@@ -8,7 +8,7 @@ import type { Product, ProductAlert, Category, Supplier, Brand } from '@/types/p
 import { useBranch } from '@/contexts/branch-context'
 import { toast } from 'sonner'
 import { branchHeaders } from '@/lib/branches/client'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 import { isLowStock, isOutOfStock } from '@/lib/products-dashboard-utils'
 
@@ -165,9 +165,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return items as Array<T & { branch_stock_quantity?: number }>
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
-      supabase,
+    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      supabase as unknown as BranchInventoryClient,
       selectedBranchId,
       items.map((item) => item.id)
     )
@@ -887,9 +886,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       })
 
       if (selectedBranchId && grouped.size > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
-          supabase,
+        const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+          supabase as unknown as BranchInventoryClient,
           selectedBranchId,
           Array.from(grouped.keys())
         )

@@ -19,7 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { z } from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, type UseFormRegister } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 // Validation schema
@@ -50,16 +50,14 @@ function FormField({
   error,
   required = false,
   ...props
-}: {
+}: React.ComponentProps<typeof Input> & {
   name: keyof ContactFormData
   label: string
-  type?: string
   placeholder: string
   icon: React.ReactNode
-  register: any
+  register: UseFormRegister<ContactFormData>
   error?: string
   required?: boolean
-  [key: string]: any
 }) {
   return (
     <motion.div

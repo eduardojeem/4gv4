@@ -96,8 +96,8 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       logger.session('Loading sessions for user', { userId: effectiveUserId })
 
-      let rows: Array<Record<string, any>> = []
-      let loadError: any = null
+      let rows: Array<Record<string, unknown>> = []
+      let loadError: unknown = null
 
       const authSessionResult = await supabase.auth.getSession()
       const currentSessionId = await getSessionIdFromAccessToken(authSessionResult.data.session?.access_token)
@@ -141,18 +141,18 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       }
 
       const mapped: SessionRecord[] = rows.map((row) => ({
-        id: row.id,
-        session_id: row.session_id,
-        user_agent: row.user_agent || (typeof navigator !== 'undefined' ? navigator.userAgent : ''),
-        ip_address: row.ip_address || 'IP no disponible',
-        device_type: row.device_type || 'desktop',
-        browser: row.browser || 'Navegador desconocido',
-        os: row.os || 'Sistema desconocido',
-        created_at: row.created_at,
-        last_activity: row.last_activity,
-        is_active: row.is_active,
-        country: row.country || undefined,
-        city: row.city || undefined,
+        id: String(row.id || ''),
+        session_id: String(row.session_id || ''),
+        user_agent: String(row.user_agent || (typeof navigator !== 'undefined' ? navigator.userAgent : '')),
+        ip_address: String(row.ip_address || 'IP no disponible'),
+        device_type: String(row.device_type || 'desktop'),
+        browser: String(row.browser || 'Navegador desconocido'),
+        os: String(row.os || 'Sistema desconocido'),
+        created_at: String(row.created_at || ''),
+        last_activity: String(row.last_activity || ''),
+        is_active: Boolean(row.is_active),
+        country: row.country ? String(row.country) : undefined,
+        city: row.city ? String(row.city) : undefined,
         is_current: Boolean(currentSessionId && row.session_id === currentSessionId),
       }))
 
@@ -160,7 +160,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       setLastSyncAt(new Date())
 
       if (rows.length === 0 && loadError) {
-        const errMsg = loadError?.message || 'Error de sincronización'
+        const errMsg = (loadError instanceof Error ? loadError.message : (loadError as { message?: string } | null)?.message) || 'Error de sincronización'
         console.warn('Aviso al sincronizar sesiones:', errMsg)
       }
     } catch (error) {
