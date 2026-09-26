@@ -68,7 +68,7 @@ describe('POS sin taller', () => {
       onToggleWholesale: vi.fn(),
       isWholesale: false,
       onClearCart: vi.fn(),
-      canCheckout: true,
+      checkoutEligibility: { canOpen: true, canConfirm: true },
       cartItemCount: 0,
     }
     const { unmount } = render(<POSShortcutsBar {...(props as never)} />)

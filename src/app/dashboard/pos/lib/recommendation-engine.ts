@@ -293,15 +293,15 @@ export class RecommendationEngine {
   ): ProductRecommendation[] {
     const recommendations: ProductRecommendation[] = []
 
+    // Ordered from most to least specific: deduplication keeps the first
+    // reason, and every upsell/favorite in the cart's category would otherwise
+    // be reported as a generic "similar category" product.
+
     // 1. Frequently bought together
     const frequentlyBought = this.getFrequentlyBoughtTogether(cartProductIds)
     recommendations.push(...frequentlyBought)
 
-    // 2. Similar category
-    const similarCategory = this.getSimilarCategoryProducts(cartProductIds)
-    recommendations.push(...similarCategory)
-
-    // 3. Customer history
+    // 2. Customer history
     if (customerId) {
       const customerBased = this.getCustomerBasedRecommendations(
         customerId,
@@ -310,9 +310,13 @@ export class RecommendationEngine {
       recommendations.push(...customerBased)
     }
 
-    // 4. Upsell (higher price in same category)
+    // 3. Upsell (higher price in same category)
     const upsell = this.getUpsellRecommendations(cartProductIds)
     recommendations.push(...upsell)
+
+    // 4. Similar category
+    const similarCategory = this.getSimilarCategoryProducts(cartProductIds)
+    recommendations.push(...similarCategory)
 
     // Remove duplicates and products already in cart
     const uniqueRecommendations = this.deduplicateRecommendations(

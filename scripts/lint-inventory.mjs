@@ -3,8 +3,14 @@ import { fileURLToPath } from 'node:url'
 
 import { ESLint } from 'eslint'
 
-const normalizePath = (filePath, rootDirectory) =>
-  path.relative(rootDirectory, filePath).split(path.sep).join('/')
+// Las rutas de Windows se resuelven con path.win32 aunque el script corra en Linux (CI).
+const pathFlavor = (rootDirectory) =>
+  /^[A-Za-z]:[\\/]/.test(rootDirectory) || rootDirectory.startsWith('\\\\') ? path.win32 : path.posix
+
+const normalizePath = (filePath, rootDirectory) => {
+  const flavor = pathFlavor(rootDirectory)
+  return flavor.relative(rootDirectory, filePath).split(flavor.sep).join('/')
+}
 
 export function summarizeLintResults(results, rootDirectory = process.cwd()) {
   const byRuleCounts = new Map()
