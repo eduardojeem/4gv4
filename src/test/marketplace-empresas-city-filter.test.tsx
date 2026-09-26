@@ -237,7 +237,7 @@ describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
             stock_quantity: 10,
             is_active: true,
             featured: true,
-          } as any,
+          } as unknown,
         ],
       },
     ]

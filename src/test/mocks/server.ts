@@ -158,7 +158,7 @@ export const mockApiError = (endpoint: string, status: number = 500) => {
   )
 }
 
-export const mockApiSuccess = (endpoint: string, data: any) => {
+export const mockApiSuccess = (endpoint: string, data: unknown) => {
   server.use(
     http.get(endpoint, () => {
       return HttpResponse.json(data)
