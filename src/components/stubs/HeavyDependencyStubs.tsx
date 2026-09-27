@@ -2,79 +2,68 @@
 // Esto permite que el build funcione sin las dependencias pesadas
 
 // Tipos para DND Kit
+type StubMetadata = Record<string, unknown>
+
 export interface DragStartEvent {
   active: {
     id: string | number;
-    data?: Record<string, unknown>;
+    data?: StubMetadata;
   };
 }
 
 export interface DragOverEvent {
   active: {
     id: string | number;
-    data?: Record<string, unknown>;
+    data?: StubMetadata;
   };
   over?: {
     id: string | number;
-    data?: Record<string, unknown>;
+    data?: StubMetadata;
   } | null;
 }
 
 export interface DragEndEvent {
   active: {
     id: string | number;
-    data?: Record<string, unknown>;
+    data?: StubMetadata;
   };
   over?: {
     id: string | number;
-    data?: Record<string, unknown>;
+    data?: StubMetadata;
   } | null;
 }
 
-// Tipos internos para el stub de XLSX
-interface XLSXWorksheet {
-  data: unknown;
-}
-interface XLSXWorkbook {
-  SheetNames: string[];
-  Sheets: Record<string, XLSXWorksheet>;
-  Props: Record<string, unknown>;
+// Stub para XLSX
+interface StubWorksheet {
+  data: unknown
 }
 
-// Stub para XLSX
+interface StubWorkbook {
+  SheetNames: string[]
+  Sheets: Record<string, StubWorksheet>
+  Props: StubMetadata
+}
+
 export const XLSX = {
   utils: {
-    json_to_sheet: (data: unknown[]): XLSXWorksheet => ({ data }),
-    aoa_to_sheet: (data: unknown[][]): XLSXWorksheet => ({ data }),
-    book_new: (): XLSXWorkbook => ({ SheetNames: [], Sheets: {}, Props: {} }),
-    book_append_sheet: (wb: XLSXWorkbook, ws: XLSXWorksheet, name: string) => {
+    json_to_sheet: (data: unknown[]): StubWorksheet => ({ data }),
+    aoa_to_sheet: (data: unknown[][]): StubWorksheet => ({ data }),
+    book_new: (): StubWorkbook => ({ SheetNames: [], Sheets: {}, Props: {} }),
+    book_append_sheet: (wb: StubWorkbook, ws: StubWorksheet, name: string) => {
       wb.SheetNames.push(name);
       wb.Sheets[name] = ws;
     }
   },
-  writeFile: (_wb: XLSXWorkbook, _filename: string) => {
+  writeFile: (_wb: StubWorkbook, _filename: string) => {
     console.warn('XLSX export deshabilitado temporalmente para optimización de bundle');
     alert('Función de exportación temporalmente deshabilitada');
   }
 };
 
-// Tipos internos para jsPDF stub
-interface JsPDFOptions {
-  orientation?: string;
-  unit?: string;
-  format?: string;
-  [key: string]: unknown;
-}
-interface AutoTableOptions {
-  head?: unknown[][];
-  body?: unknown[][];
-  [key: string]: unknown;
-}
-
 // Stub para jsPDF
 export class jsPDF {
   internal = { pageSize: { width: 792, height: 612 } }
-  constructor(_options?: JsPDFOptions) {
+  constructor(_options?: StubMetadata) {
     console.warn('PDF export deshabilitado temporalmente para optimización de bundle');
   }
   text(_text: string, _x: number, _y: number) { return this }
@@ -87,11 +76,11 @@ export class jsPDF {
   setDrawColor(_r: number, _g?: number, _b?: number) { return this }
   line(_x1: number, _y1: number, _x2: number, _y2: number) { return this }
   getNumberOfPages() { return 1 }
-  autoTable(_options: AutoTableOptions) { return this }
+  autoTable(_options: StubMetadata) { return this }
 }
 
 // Stub para html2canvas
-export const html2canvas = (_element: HTMLElement, _options?: Record<string, unknown>) => {
+export const html2canvas = (_element: HTMLElement, _options?: StubMetadata) => {
   console.warn('html2canvas deshabilitado temporalmente para optimización de bundle');
   return Promise.resolve({
     toDataURL: () => 'data:image/png;base64,',
@@ -99,12 +88,6 @@ export const html2canvas = (_element: HTMLElement, _options?: Record<string, unk
     height: 600
   });
 };
-
-// Tipos internos para DND
-interface DraggableOptions {
-  id: string | number;
-  [key: string]: unknown;
-}
 
 // Stub para DND Kit
 export const DndContext = ({
@@ -121,7 +104,7 @@ export const DndContext = ({
   return <div>{children}</div>;
 };
 
-export const useDraggable = (_options: DraggableOptions) => ({
+export const useDraggable = (_options: StubMetadata) => ({
   attributes: {},
   listeners: {},
   setNodeRef: () => {},
@@ -129,7 +112,7 @@ export const useDraggable = (_options: DraggableOptions) => ({
   isDragging: false
 });
 
-export const useDroppable = (_options: DraggableOptions) => ({
+export const useDroppable = (_options: StubMetadata) => ({
   setNodeRef: () => {},
   isOver: false
 });
@@ -142,7 +125,7 @@ export const SortableContext = ({ children }: { children: React.ReactNode }) => 
   return <div>{children}</div>;
 };
 
-export const useSortable = (_options: DraggableOptions) => ({
+export const useSortable = (_options: StubMetadata) => ({
   attributes: {},
   listeners: {},
   setNodeRef: () => {},
