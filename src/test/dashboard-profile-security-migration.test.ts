@@ -11,7 +11,7 @@ const compactMigration = migration.replace(/\s+/g, ' ')
 describe('dashboard profile security migration', () => {
   it('replaces broad profile grants with explicit column privileges', () => {
     expect(migration).toContain('revoke all on table public.profiles from anon, authenticated')
-    expect(compactMigration).toContain('grant select ( username, full_name, job_title, bio, location, avatar_url, website, social_links, updated_at ) on public.profiles to anon')
+    expect(compactMigration).toContain('grant select ( username, full_name, job_title, bio, location, avatar_url, website, social_links, updated_at, is_public ) on public.profiles to anon')
     expect(migration).toContain('grant update (')
 
     const updateGrant = migration.slice(

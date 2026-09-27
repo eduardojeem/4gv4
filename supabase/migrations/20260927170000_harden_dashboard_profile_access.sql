@@ -5,7 +5,7 @@ revoke all on table public.profiles from anon, authenticated;
 
 grant select (
   username, full_name, job_title, bio, location, avatar_url,
-  website, social_links, updated_at
+  website, social_links, updated_at, is_public
 ) on public.profiles to anon;
 
 grant select (
