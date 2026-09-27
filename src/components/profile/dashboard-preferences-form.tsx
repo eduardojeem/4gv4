@@ -31,22 +31,22 @@ import { useTheme } from '@/contexts/theme-context'
 
 export interface DashboardPreferencesFormProps {
   prefs: ProfilePreferences
-  setPrefs: React.Dispatch<React.SetStateAction<ProfilePreferences>>
   profile: UserProfile
   setProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   onSave?: () => void
   isSaving?: boolean
   isDirty?: boolean
+  isSynced?: boolean
 }
 
 export function DashboardPreferencesForm({
   prefs,
-  setPrefs,
   profile,
   setProfile,
   onSave,
   isSaving = false,
-  isDirty = false
+  isDirty = false,
+  isSynced = false
 }: DashboardPreferencesFormProps) {
   const { theme, colorScheme, setTheme, setColorScheme } = useTheme()
 
@@ -221,6 +221,7 @@ export function DashboardPreferencesForm({
                   <div>
                     <Label className="cursor-pointer text-sm font-medium" htmlFor="pref-compactMode">
                       Modo compacto
+                      <Badge variant="secondary" className="ml-2 text-[10px]">Próximamente</Badge>
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Reduce el espaciado en tablas para visualizar más datos.
@@ -230,7 +231,7 @@ export function DashboardPreferencesForm({
                 <Switch
                   id="pref-compactMode"
                   checked={prefs.compactMode}
-                  onCheckedChange={(c) => setPrefs((p) => ({ ...p, compactMode: c }))}
+                  disabled
                 />
               </div>
 
@@ -243,6 +244,7 @@ export function DashboardPreferencesForm({
                   <div>
                     <Label className="cursor-pointer text-sm font-medium" htmlFor="pref-autoSave">
                       Guardado automático
+                      <Badge variant="secondary" className="ml-2 text-[10px]">Próximamente</Badge>
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Guarda borradores y cambios sin requerir confirmación.
@@ -252,7 +254,7 @@ export function DashboardPreferencesForm({
                 <Switch
                   id="pref-autoSave"
                   checked={prefs.autoSave}
-                  onCheckedChange={(c) => setPrefs((p) => ({ ...p, autoSave: c }))}
+                  disabled
                 />
               </div>
             </div>
@@ -278,10 +280,12 @@ export function DashboardPreferencesForm({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-xl">Notificaciones y Alertas</CardTitle>
-                <Badge variant="outline" className="text-[10px] font-medium gap-1 border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30">
-                  <Check className="h-3 w-3" />
-                  Sincronizado en la nube
-                </Badge>
+                {isSynced && (
+                  <Badge variant="outline" className="text-[10px] font-medium gap-1 border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30">
+                    <Check className="h-3 w-3" />
+                    Sincronizado en la nube
+                  </Badge>
+                )}
               </div>
               <CardDescription>Configura los canales y la frecuencia de comunicaciones que deseas recibir.</CardDescription>
             </div>
@@ -301,6 +305,7 @@ export function DashboardPreferencesForm({
                   <div>
                     <Label className="cursor-pointer text-sm font-medium" htmlFor={item.key}>
                       {item.label}
+                      <Badge variant="secondary" className="ml-2 text-[10px]">Próximamente</Badge>
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {item.description}
@@ -310,7 +315,7 @@ export function DashboardPreferencesForm({
                 <Switch
                   id={item.key}
                   checked={prefs[item.key]}
-                  onCheckedChange={(c) => setPrefs((p) => ({ ...p, [item.key]: c }))}
+                  disabled
                 />
               </div>
               {item.disclaimer && (
@@ -347,7 +352,7 @@ export function DashboardPreferencesForm({
         <CardContent className="grid gap-6 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-sm font-semibold">Idioma de la interfaz</Label>
-            <Select value={prefs.language} onValueChange={(v) => setPrefs((p) => ({ ...p, language: v }))}>
+            <Select value={prefs.language} disabled>
               <SelectTrigger className="h-11 border-border/70">
                 <SelectValue />
               </SelectTrigger>
@@ -357,7 +362,7 @@ export function DashboardPreferencesForm({
                 <SelectItem value="pt">Português (Brasil)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-muted-foreground">Idioma utilizado para tablas, reportes y correos del sistema.</p>
+            <p className="text-[11px] text-muted-foreground">Próximamente: el cambio de idioma se habilitará cuando toda la interfaz esté internacionalizada.</p>
           </div>
 
           <div className="space-y-2">
