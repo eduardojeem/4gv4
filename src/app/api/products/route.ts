@@ -1266,9 +1266,14 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       { count: repairCostsCount },
     ] = await Promise.all([
       adminSupabase.from('sale_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
-      adminSupabase.from('order_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      // 'order_items' y 'repair_item_costs' no existen en la base -las tablas
+      // reales son estas dos-. Supabase-js no tira excepcion por una relacion
+      // inexistente, resuelve con count=null; el `?? 0` de mas abajo lo
+      // convertia en "sin transacciones" y dejaba borrar productos con
+      // pedidos o revisiones de costo activas.
+      adminSupabase.from('customer_order_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
       adminSupabase.from('repair_parts').select('id', { count: 'exact', head: true }).in('product_id', ids),
-      adminSupabase.from('repair_item_costs').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('repair_cost_revision_parts').select('id', { count: 'exact', head: true }).in('product_id', ids),
     ])
 
     const hasTransactions =
@@ -1290,7 +1295,10 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
 
     // Limpiar tablas auxiliares dependientes sin transacciones
     await Promise.allSettled([
-      adminSupabase.from('cart_items').delete().in('product_id', ids),
+      // 'cart_items' no existe: la tabla real es 'customer_cart_items'. Sin
+      // este cambio, un carrito con el producto borrado quedaba con un
+      // product_id huerfano en vez de limpiarse.
+      adminSupabase.from('customer_cart_items').delete().in('product_id', ids),
       adminSupabase.from('branch_variant_inventory').delete().in('product_id', ids),
       adminSupabase.from('branch_inventory').delete().in('product_id', ids),
       adminSupabase.from('variant_inventory_movements').delete().in('product_id', ids),
