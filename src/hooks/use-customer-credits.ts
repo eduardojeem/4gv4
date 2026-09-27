@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { Customer } from './use-customer-state'
@@ -378,7 +378,15 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
   const [loading, setLoading] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
+  // El efecto depende del contenido (id y límite de crédito, lo único que usa
+  // el cálculo) y no de la referencia del array: un array nuevo con los mismos
+  // clientes en cada render disparaba /api/credits/batch en bucle.
+  const customersKey = customers.map(c => `${c.id}:${c.credit_limit ?? ''}`).join('|')
+  const customersRef = useRef(customers)
+  customersRef.current = customers
+
   useEffect(() => {
+    const customers = customersRef.current
     if (!enabled || customers.length === 0) {
       setCreditSummaries({})
       setLoading(false)
@@ -534,7 +542,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
     loadCreditSummaries()
 
     return () => { cancelled = true }
-  }, [customers, enabled, supabase])
+  }, [customersKey, enabled, supabase])
 
   return {
     creditSummaries,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { toast } from 'sonner'
@@ -37,6 +37,8 @@ export interface CashRegister {
 
 export function useCashRegister() {
     const [currentSession, setCurrentSession] = useState<CashRegisterSession | null>(null)
+    const currentSessionRef = useRef<CashRegisterSession | null>(null)
+    currentSessionRef.current = currentSession
     const [loading, setLoading] = useState(false)
     const [registers, setRegisters] = useState<CashRegister[]>([])
 
@@ -331,11 +333,15 @@ export function useCashRegister() {
         }
     }, [selectedBranchId, supabase])
 
-    // Check for open session
+    // Check for open session.
+    // Lee la sesión vigente por ref: si dependiera de currentSession, la
+    // función cambiaría de identidad en cada chequeo (que actualiza la sesión)
+    // y los efectos que la usan (dashboard, CashRegisterContext) consultaban
+    // cash_closures/cash_movements en bucle.
     const checkOpenSession = useCallback(async (registerId?: string) => {
         try {
             if (!config.supabase.isConfigured || !supabase) {
-                if (currentSession) return currentSession
+                if (currentSessionRef.current) return currentSessionRef.current
 
                 // Try to load from local storage if not in memory
                 if (typeof window !== 'undefined') {
@@ -424,13 +430,13 @@ export function useCashRegister() {
             }
 
             // On error (e.g. network), if we have a valid local session, keep it alive
-            if (currentSession && (!registerId || currentSession.register_id === registerId || registerId === 'principal')) {
+            if (currentSessionRef.current && (!registerId || currentSessionRef.current.register_id === registerId || registerId === 'principal')) {
                 console.warn('Using local session as fallback due to check error')
-                return currentSession
+                return currentSessionRef.current
             }
             return null
         }
-    }, [selectedBranchId, supabase, currentSession])
+    }, [selectedBranchId, supabase])
 
     // Open cash register
     const openRegister = useCallback(async (registerId: string, openingBalance: number, userId?: string, note?: string) => {
