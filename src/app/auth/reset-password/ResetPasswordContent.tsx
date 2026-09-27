@@ -1,12 +1,14 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Eye, EyeOff, ArrowRight, Shield, CheckCircle2, Lock, Building2, Sparkles } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, Shield, CheckCircle2, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -23,7 +25,7 @@ export default function ResetPasswordContent() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [validatingToken, setValidatingToken] = useState(true)
-  
+
   const router = useRouter()
   const supabase = createClient()
   const { branding } = usePlatformBranding()
@@ -106,7 +108,7 @@ export default function ResetPasswordContent() {
         toast.success('Contraseña actualizada exitosamente')
         setTimeout(() => router.push('/dashboard'), 2000)
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Ocurrió un error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
@@ -143,20 +145,20 @@ export default function ResetPasswordContent() {
     <div className="min-h-screen w-full flex items-center justify-center bg-[#030712] relative overflow-hidden selection:bg-blue-500/30 font-sans">
       {/* Dynamic Ambient Background */}
       <div className="absolute inset-0 w-full h-full pointer-events-none">
-        <motion.div 
+        <motion.div
           animate={{ x: [0, 40, 0], y: [0, -40, 0], scale: [1, 1.1, 1] }}
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[140px] mix-blend-screen" 
+          className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[140px] mix-blend-screen"
         />
-        <motion.div 
+        <motion.div
           animate={{ x: [0, -30, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
           transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-          className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-violet-600/15 rounded-full blur-[120px] mix-blend-screen" 
+          className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-violet-600/15 rounded-full blur-[120px] mix-blend-screen"
         />
-        <motion.div 
+        <motion.div
           animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
           transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-indigo-600/15 rounded-full blur-[120px] mix-blend-screen" 
+          className="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-indigo-600/15 rounded-full blur-[120px] mix-blend-screen"
         />
         <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-[0.03]" />
       </div>
@@ -175,11 +177,11 @@ export default function ResetPasswordContent() {
             <div className="backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] shadow-2xl rounded-[32px] overflow-hidden relative group">
               {/* Card top highlight */}
               <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent opacity-50" />
-              
+
               <div className="p-8 sm:p-10 space-y-8">
                 {/* Header */}
                 <div className="space-y-4 text-center">
-                  <motion.div 
+                  <motion.div
                     initial={{ scale: 0, rotate: -15 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", damping: 12, delay: 0.2 }}
@@ -187,7 +189,7 @@ export default function ResetPasswordContent() {
                   >
                     {branding.logoUrl ? (
                       <div className="flex h-16 items-center">
-                        <img src={branding.logoUrl} alt={branding.platformName} className="h-16 w-auto max-w-[200px] object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
+                        <AppImage src={branding.logoUrl} alt={branding.platformName} className="h-16 w-auto max-w-[200px] object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
                       </div>
                     ) : (
                       <div className="w-16 h-16 bg-gradient-to-tr from-blue-600/20 to-violet-600/20 rounded-2xl flex items-center justify-center border border-white/10 shadow-[0_0_40px_rgba(37,99,235,0.15)] relative">
@@ -213,7 +215,7 @@ export default function ResetPasswordContent() {
 
                 <form onSubmit={handleResetPassword} className="space-y-6">
                   {/* Password Input */}
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.4 }}
@@ -242,14 +244,14 @@ export default function ResetPasswordContent() {
                     <div className="pt-3">
                       <div className="flex gap-1.5 h-1 w-full bg-black/40 rounded-full overflow-hidden p-0.5">
                         {[1, 2, 3, 4].map((level) => (
-                          <div 
-                            key={level} 
+                          <div
+                            key={level}
                             className={cn(
                               "h-full flex-1 rounded-full transition-all duration-500",
                               password.length === 0 ? "bg-transparent" :
-                              level <= strength ? 
-                                (strength <= 2 ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" : 
-                                strength === 3 ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]" : 
+                              level <= strength ?
+                                (strength <= 2 ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" :
+                                strength === 3 ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]" :
                                 "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]")
                               : "bg-transparent"
                             )}
@@ -274,7 +276,7 @@ export default function ResetPasswordContent() {
                   </motion.div>
 
                   {/* Confirm Password Input */}
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.5 }}
@@ -347,7 +349,7 @@ export default function ResetPasswordContent() {
 
               {/* Card Footer */}
               <div className="px-8 py-5 border-t border-white/[0.05] bg-black/20 text-center backdrop-blur-md">
-                <Link 
+                <Link
                   href="/login"
                   className="text-xs font-medium text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1.5 group"
                 >
@@ -358,7 +360,7 @@ export default function ResetPasswordContent() {
             </div>
 
             {/* Bottom badges */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
@@ -380,7 +382,7 @@ export default function ResetPasswordContent() {
             <div className="backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] shadow-2xl rounded-[32px] p-10 text-center relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent opacity-50" />
               <div className="absolute inset-0 bg-emerald-500/5 blur-3xl rounded-full pointer-events-none" />
-              
+
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -389,7 +391,7 @@ export default function ResetPasswordContent() {
               >
                 <CheckCircle2 className="h-10 w-10 text-emerald-400" />
               </motion.div>
-              
+
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}

@@ -1,6 +1,5 @@
 "use client"
 
-import React from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,16 +8,13 @@ import {
   TrendingUp,
   TrendingDown,
   ShoppingBag,
-  Star,
-  Calendar,
-  Target,
+  Star, Target,
   Activity,
   Heart,
   Award,
   Clock,
   BarChart3,
-  PieChart,
-  LineChart
+  PieChart
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
@@ -291,14 +287,14 @@ export function CustomerInsights({ customer }: CustomerInsightsProps) {
                 {/* Simple spending trend visualization */}
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tendencia de Compras
+                    Ilustración basada en el ticket promedio
                   </p>
                   <div className="flex items-end gap-1 h-20">
                     {Array.from({ length: 6 }, (_, index) => {
                       const baseAmount = customer.avg_order_value
-                      const variation = (Math.random() - 0.5) * 0.4
+                      const variation = (((index * 7) % 5) - 2) * 0.1
                       const amount = baseAmount * (1 + variation)
-                      const height = ((amount / baseAmount) * 50) + 25
+                      const height = baseAmount > 0 ? ((amount / baseAmount) * 50) + 25 : 25
                       return (
                         <div
                           key={index}

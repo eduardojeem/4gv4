@@ -3,7 +3,7 @@
  * Extiende el sistema base de error-handling.ts
  */
 
-import { NotificationError, ErrorType, createError } from './error-handling';
+import { NotificationError, ErrorType } from './error-handling';
 import { useCallback } from 'react';
 
 // Códigos de error específicos para productos
@@ -56,7 +56,7 @@ export class ProductError extends NotificationError {
     type: ErrorType = ErrorType.CLIENT,
     options?: {
       code?: string;
-      context?: Record<string, any>;
+      context?: Record<string, unknown>;
       retryable?: boolean;
       cause?: Error;
       affectedProducts?: string[];

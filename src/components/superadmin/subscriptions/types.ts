@@ -11,7 +11,12 @@ export type SuperAdminSubscription = {
   plan_details: {
     code: string
     name: string
-    price_monthly: number
+    /**
+     * `null` cuando el plan no tiene fila en `subscription_plans`: no es lo
+     * mismo que costar cero. Antes se colapsaban los dos en 0 y la tabla decia
+     * «Sin costo» para un plan PRO mal configurado.
+     */
+    price_monthly: number | null
     currency: string
     limits: Record<string, unknown>
     modules: string[]
@@ -30,6 +35,8 @@ export type SuperAdminSubscription = {
   members_count?: number
   products_count?: number
   sales_count?: number
+  storefront_public?: boolean | null
+  marketplace_public?: boolean | null
 }
 
 export type TabValue = 'all' | 'attention' | 'renewals' | 'trials' | 'canceling'
@@ -43,4 +50,6 @@ export type EditForm = {
   current_period_starts_at: string
   current_period_ends_at: string
   cancel_at_period_end: boolean
+  storefront_public: boolean
+  marketplace_public: boolean
 }

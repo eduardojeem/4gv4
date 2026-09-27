@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { renderBrandedEmail, sendEmail } from '@/lib/email/resend'
+import { getPlatformBranding } from '@/lib/platform/branding'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -17,15 +18,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Ingresa un email valido.' }, { status: 400 })
   }
 
+  const branding = await getPlatformBranding()
   const result = await sendEmail({
     to,
-    subject: 'Prueba de email - Servix 360',
+    subject: `Prueba de email - ${branding.platformName}`,
     html: renderBrandedEmail({
       title: 'Canal de email operativo',
-      preview: 'La integracion de email de Servix 360 funciona correctamente.',
+      preview: `La integracion de email de ${branding.platformName} funciona correctamente.`,
       intro: 'Este mensaje confirma que el proveedor Resend esta disponible.',
       bodyHtml: '<p>Los emails transaccionales de la plataforma ya pueden enviarse desde este entorno.</p>',
-      brand: { name: 'Servix 360', color: '#4f46e5' },
+      brand: { name: branding.platformName, color: '#0284c7', logoUrl: branding.logoUrl },
       footerNote: 'Prueba enviada desde Super Admin.',
     }),
     log: { customerName: `Prueba (${superAdmin.email})` },

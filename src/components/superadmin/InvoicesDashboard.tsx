@@ -31,6 +31,7 @@ import { useUrlListState } from '@/hooks/useUrlListState'
 import { cn } from '@/lib/utils'
 import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
 import { sumMoneyByCurrency, type CurrencyTotal } from '@/lib/superadmin/money-totals'
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -650,7 +651,7 @@ export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[];
                           {providerMeta.label}
                         </Badge>
                         {r.paymentMethod && r.paymentMethod !== providerMeta.label && (
-                          <p className="mt-1 text-[11px] text-slate-400">{r.paymentMethod}</p>
+                          <p className="mt-1 text-[11px] text-slate-400">{paymentMethodLabel(r.paymentMethod)}</p>
                         )}
                       </td>
 

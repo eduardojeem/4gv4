@@ -22,8 +22,7 @@ import { AreaChart } from 'recharts/es6/chart/AreaChart'
 import { Area } from 'recharts/es6/cartesian/Area'
 import {
   TrendingUp, Clock, CheckCircle2, CalendarRange,
-  Smartphone, Banknote, BarChart3, PieChart as PieChartIcon,
-  Activity
+  Smartphone, Banknote, BarChart3, Activity
 } from 'lucide-react'
 import { Repair } from '@/types/repairs'
 import { formatCurrency } from '@/lib/currency'
@@ -104,10 +103,11 @@ export default function TechnicianStatsPage() {
   const [period, setPeriod] = useState<Period>('30d')
 
   // Filter repairs for current technician
+  const userId = user?.id
   const myRepairs = useMemo(() => {
-    if (!user?.id) return []
-    return repairs.filter(r => r.technician?.id === user.id)
-  }, [repairs, user?.id])
+    if (!userId) return []
+    return repairs.filter(r => r.technician?.id === userId)
+  }, [repairs, userId])
 
   // Repairs filtered by selected period
   const periodRepairs = useMemo(() => filterByPeriod(myRepairs, period), [myRepairs, period])

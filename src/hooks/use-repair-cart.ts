@@ -5,12 +5,10 @@
 
 import { useState, useMemo } from 'react'
 import { Repair } from '@/types/repairs'
-import { 
-  CartRepairItem, 
-  createRepairCartItem, 
-  calculateMixedCartTotal,
-  formatRepairTaxBreakdown,
-  formatCurrency
+import {
+  CartRepairItem,
+  createRepairCartItem,
+  calculateMixedCartTotal, formatCurrency
 } from '@/lib/pos-calculator'
 
 export interface ProductCartItem {

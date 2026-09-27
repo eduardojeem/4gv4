@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence  } from '../../../../components/ui/motion'
+import { motion, AnimatePresence } from '../../../../components/ui/motion'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { getPublicUrl } from '@/lib/supabase-storage'
 import { logger } from '@/lib/logger'
 import type { Database } from '@/lib/supabase/types'
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { toast } from 'sonner'
 import { ProductDetailHeader } from '@/components/dashboard/products/ProductDetailHeader'
@@ -69,7 +68,7 @@ export default function ProductDetailPageModern() {
     return products.find(p => p.id === productId)
   }, [products, productId])
 
-  const supabaseClient = useMemo(() => createClient(), [])
+  void (useMemo(() => createClient(), []));
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return '/placeholder-product.jpg'
     if (url.startsWith('http')) return url
@@ -88,48 +87,6 @@ export default function ProductDetailPageModern() {
     const formatted = new Intl.NumberFormat('es-PY', { minimumFractionDigits: 0 }).format(amount)
     return `Gs. ${formatted}`
   }
-
-  const normalizedCategories = useMemo(() => {
-    return (categories || []).map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description || null,
-      parent_id: null,
-      is_active: c.is_active,
-      created_at: c.created_at,
-      updated_at: c.updated_at
-    }))
-  }, [categories])
-
-  const normalizedSuppliers = useMemo(() => {
-    return (suppliers || []).map(s => ({
-      id: s.id,
-      name: s.name,
-      contact_name: s.contact_name || null,
-      contact_email: s.email || null,
-      phone: s.phone || null,
-      address: s.address || null,
-      tax_id: s.tax_id || null,
-      is_active: s.is_active,
-      created_at: s.created_at,
-      updated_at: s.updated_at
-    }))
-  }, [suppliers])
-
-  const normalizedBrands = useMemo(() => {
-    return (brands || []).map(b => ({
-      id: b.id,
-      name: b.name,
-      description: b.description || '',
-      country: b.country || null,
-      founded_year: b.founded_year || 0,
-      logo_url: b.logo_url || null,
-      website: b.website || null,
-      is_active: b.is_active,
-      created_at: b.created_at,
-      updated_at: b.updated_at
-    }))
-  }, [brands])
 
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   type PriceHistoryEntry = {
@@ -627,9 +584,9 @@ export default function ProductDetailPageModern() {
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
             product={product ?? null}
-            categories={normalizedCategories as any[]}
-            brands={normalizedBrands as any[]}
-            suppliers={normalizedSuppliers as any[]}
+            categories={categories}
+            brands={brands}
+            suppliers={suppliers}
             onSave={async (data) => {
               try {
                 // Transform dimensions to ensure compatibility

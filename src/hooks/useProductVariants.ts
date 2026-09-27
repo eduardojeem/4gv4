@@ -10,6 +10,7 @@ import {
   ProductSearchResult,
   VariantAttributeValue,
 } from '@/types/product-variants'
+import { normalizeVariantAttributeValues } from '@/lib/products/variant-attributes'
 
 type AttributesApiResponse = {
   success?: boolean
@@ -82,14 +83,22 @@ async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promi
 }
 
 function enrichProduct(product: ProductWithVariants): ProductWithVariants {
+  // Defensa en el límite del cliente: registros antiguos y respuestas en caché
+  // pueden traer `attributes` como JSON object aunque el selector POS trabaja
+  // con una lista de valores normalizados.
+  const variants = product.variants.map((variant) => ({
+    ...variant,
+    attributes: normalizeVariantAttributeValues(variant.attributes),
+  }))
   const variantAttributes = Array.from(
-    new Set(product.variants.flatMap((variant) => variant.attributes.map((attribute) => attribute.attribute_id)))
+    new Set(variants.flatMap((variant) => variant.attributes.map((attribute) => attribute.attribute_id)))
   )
 
   return {
     ...product,
-    has_variants: product.variants.length > 0,
+    has_variants: variants.length > 0,
     variant_attributes: variantAttributes,
+    variants,
   }
 }
 
@@ -128,7 +137,7 @@ async function fetchAllVariants(): Promise<ProductVariant[]> {
   const allVariants: ProductVariant[] = []
 
   while (true) {
-    const response = await fetchJson<VariantsApiResponse>(`/api/variants?page=${page}&limit=${limit}`)
+    const response = await fetchJson<VariantsApiResponse>(`/api/variants?page=${page}&limit=${limit}&active=true`)
     const chunk = Array.isArray(response.data) ? response.data : []
     allVariants.push(...chunk)
 

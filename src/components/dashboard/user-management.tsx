@@ -2,31 +2,17 @@
 
 import React, { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  Users, 
-  Shield, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal,
+import {
+  Users,
+  Shield,
+  Edit, Plus,
+  Search, MoreHorizontal,
   UserCheck,
   UserX,
   Crown,
   Key,
-  Eye,
-  EyeOff,
-  Calendar,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Settings,
-  Mail,
-  Phone,
-  MapPin,
-  Activity
+  Eye, CheckCircle,
+  XCircle
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -54,8 +40,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -66,13 +51,13 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
-import { ROLE_PERMISSIONS } from '@/lib/auth/roles-permissions'
+import { ROLE_PERMISSIONS, type UserRole } from '@/lib/auth/roles-permissions'
 import { format } from 'date-fns'
+
+const isUserRole = (r: string): r is UserRole => r in ROLE_PERMISSIONS
 
 type DashboardUserRole =
   | 'super_admin'
@@ -102,7 +87,6 @@ export interface User {
 }
 
 // Datos de ejemplo eliminados
-const mockUsers: User[] = []
 
 // Componente para mostrar el rol con icono
 function RoleBadge({ role }: { role: DashboardUserRole }) {
@@ -134,7 +118,8 @@ function RoleBadge({ role }: { role: DashboardUserRole }) {
     }
   }
 
-  const config = (roleConfig as any)[role] || roleConfig.viewer
+  type RoleConfigEntry = { label: string; color: string; icon: React.ElementType }
+  const config = (roleConfig as Record<string, RoleConfigEntry>)[role] || roleConfig.viewer
   const Icon = config.icon
 
   return (
@@ -146,7 +131,12 @@ function RoleBadge({ role }: { role: DashboardUserRole }) {
 }
 
 // Componente para editar usuario
-function EditUserDialog({ 
+function EditUserDialog(props: React.ComponentProps<typeof EditUserDialogContent>) {
+  if (!props.open) return null
+  return <EditUserDialogContent key={props.user?.id ?? 'new'} {...props} />
+}
+
+function EditUserDialogContent({
   user, 
   open, 
   onOpenChange, 
@@ -157,19 +147,14 @@ function EditUserDialog({
   onOpenChange: (open: boolean) => void
   onSave: (user: User) => void 
 }) {
-  const [formData, setFormData] = useState<Partial<User>>({})
+  const [formData, setFormData] = useState<Partial<User>>(() => user ?? {})
   const { canManageUser } = useAuth()
 
-  useEffect(() => {
-    if (user) {
-      setFormData(user)
-    }
-  }, [user])
 
   const handleSave = () => {
     if (!user || !formData.role) return
 
-    if (!canManageUser(user.role as any)) {
+    if (isUserRole(user.role) && !canManageUser(user.role)) {
       toast.error('Sin permisos', {
         description: 'No tienes permisos para editar este usuario.'
       })
@@ -268,7 +253,7 @@ function EditUserDialog({
 
 // Componente para mostrar permisos de un rol
 function RolePermissions({ role }: { role: DashboardUserRole }) {
-  const roleData = (ROLE_PERMISSIONS as any)[role] || {
+  const roleData = (isUserRole(role) ? ROLE_PERMISSIONS[role] : undefined) || {
     description: role,
     permissions: []
   }
@@ -302,7 +287,7 @@ function RolePermissions({ role }: { role: DashboardUserRole }) {
 export default function UserManagement() {
   const supabase = createClient()
   const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const [_loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearch = useDeferredValue(searchTerm)
   const [roleFilter, setRoleFilter] = useState<DashboardUserRole | 'all'>('all')
@@ -323,7 +308,7 @@ export default function UserManagement() {
         if (error) throw error
 
         if (data) {
-          const mappedUsers: User[] = data.map((profile: any) => ({
+          const mappedUsers: User[] = data.map((profile) => ({
             id: profile.id,
             email: profile.email || '', 
             name: profile.full_name || 'Sin nombre',
@@ -351,7 +336,7 @@ export default function UserManagement() {
     }
 
     fetchUsers()
-  }, [])
+  }, [supabase])
 
   // Filtrar usuarios
   const filteredUsers = useMemo(() => {
@@ -384,7 +369,7 @@ export default function UserManagement() {
   }, [users])
 
   const handleEditUser = (user: User) => {
-    if (!canManageUser(user.role as any)) {
+    if (isUserRole(user.role) && !canManageUser(user.role)) {
       toast.error('Sin permisos', {
         description: 'No tienes permisos para editar este usuario.'
       })
@@ -400,7 +385,7 @@ export default function UserManagement() {
 
   const handleToggleUserStatus = (userId: string) => {
     const user = users.find(u => u.id === userId)
-    if (!user || !canManageUser(user.role as any)) {
+    if (!user || (isUserRole(user.role) && !canManageUser(user.role))) {
       toast.error('Sin permisos', {
         description: 'No tienes permisos para modificar este usuario.'
       })
@@ -542,7 +527,7 @@ export default function UserManagement() {
                     <SelectItem value="viewer">Visualizador</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
+                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'active' | 'inactive')}>
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>

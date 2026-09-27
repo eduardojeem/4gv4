@@ -38,6 +38,7 @@ export interface SystemSettingsRow {
   retention_days: number
   updated_at: string
   updated_by: string | null
+  default_installment_rates?: Record<string, number>
 }
 
 // Shared settings interface used in the application
@@ -53,6 +54,8 @@ export interface SharedSettings {
   city: string
   currency: string
   taxRate: number
+  repairMaxDiscountPercent: number
+  repairLaborTaxRate: 0 | 5 | 10
 
   // Appearance
   theme: string
@@ -81,9 +84,18 @@ export interface SharedSettings {
 
   // Admin
   maintenanceMode: boolean
+
+  // Defaults
+  defaultInstallmentRates: Record<string, number>
 }
 
 export type SharedSettingsSource = 'remote' | 'default'
+/**
+ * De donde salio lo cargado. `platform` solo le llega a un superadmin que no
+ * forma parte de ninguna organizacion: son los valores globales, y una pantalla
+ * de organizacion no debe mostrarlos como si fueran de una empresa.
+ */
+export type SharedSettingsScope = 'organization' | 'platform'
 
 export interface SaveSettingsOptions {
   confirmCurrencyChange?: boolean
@@ -99,6 +111,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   city: 'Asunción',
   currency: 'PYG',
   taxRate: 10,
+  repairMaxDiscountPercent: 20,
+  repairLaborTaxRate: 10,
   theme: 'system',
   primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
   sessionTimeout: 60,
@@ -116,7 +130,8 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   maxLoginAttempts: 3,
   passwordMinLength: 8,
   requireTwoFactor: false,
-  maintenanceMode: false
+  maintenanceMode: false,
+  defaultInstallmentRates: {}
 }
 
 // ============================================================================
@@ -134,6 +149,8 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     city: data.city ?? DEFAULT_SHARED_SETTINGS.city,
     currency: data.currency || DEFAULT_SHARED_SETTINGS.currency,
     taxRate: data.tax_rate === null || data.tax_rate === undefined ? DEFAULT_SHARED_SETTINGS.taxRate : Number(data.tax_rate),
+    repairMaxDiscountPercent: Number((data as { repair_max_discount_percent?: number }).repair_max_discount_percent ?? DEFAULT_SHARED_SETTINGS.repairMaxDiscountPercent),
+    repairLaborTaxRate: ((data as { repair_labor_tax_rate?: 0 | 5 | 10 }).repair_labor_tax_rate ?? DEFAULT_SHARED_SETTINGS.repairLaborTaxRate),
     theme: data.theme || DEFAULT_SHARED_SETTINGS.theme,
     primaryColor: data.primary_color || DEFAULT_SHARED_SETTINGS.primaryColor,
     sessionTimeout: data.session_timeout ?? DEFAULT_SHARED_SETTINGS.sessionTimeout,
@@ -151,7 +168,8 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     maxLoginAttempts: data.max_login_attempts ?? DEFAULT_SHARED_SETTINGS.maxLoginAttempts,
     passwordMinLength: data.password_min_length ?? DEFAULT_SHARED_SETTINGS.passwordMinLength,
     requireTwoFactor: data.require_two_factor ?? DEFAULT_SHARED_SETTINGS.requireTwoFactor,
-    maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode
+    maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode,
+    defaultInstallmentRates: data.default_installment_rates ?? DEFAULT_SHARED_SETTINGS.defaultInstallmentRates
   }
 }
 
@@ -172,6 +190,7 @@ export function useSharedSettings() {
   const [settingsSource, setSettingsSource] = useState<SharedSettingsSource>(
     'default'
   )
+  const [scope, setScope] = useState<SharedSettingsScope | null>(null)
 
   // Track original settings as JSON for efficient comparison
   const originalRef = useRef<string>(JSON.stringify(DEFAULT_SHARED_SETTINGS))
@@ -195,6 +214,7 @@ export function useSharedSettings() {
         setOriginalSettings(mapped)
         originalRef.current = JSON.stringify(mapped)
         setSettingsSource('remote')
+        setScope(result.scope === 'platform' ? 'platform' : 'organization')
         return
       }
 
@@ -215,6 +235,7 @@ export function useSharedSettings() {
       setOriginalSettings(DEFAULT_SHARED_SETTINGS)
       originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
       setSettingsSource('default')
+      setScope(null)
     } finally {
       setIsLoading(false)
     }
@@ -266,6 +287,9 @@ export function useSharedSettings() {
         body: JSON.stringify({
           settings: changedSettings,
           confirmCurrencyChange: options.confirmCurrencyChange === true,
+          // Todos los que usan este hook trabajan dentro de una organizacion.
+          // Sin esto, un superadmin guardaba en la configuracion global.
+          scope: 'organization',
         })
       })
 
@@ -314,6 +338,7 @@ export function useSharedSettings() {
     isSaving,
     error,
     settingsSource,
+    scope,
     updateSetting,
     updateSettings,
     saveSettings,

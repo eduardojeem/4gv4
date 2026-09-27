@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useEffect, useRef, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
@@ -7,31 +9,49 @@ import { SectionCard } from '@/components/admin/website/SectionCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload, Info, Globe } from 'lucide-react'
+import {
+  Loader2,
+  Save,
+  Phone,
+  Mail,
+  MapPin,
+  Clock,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clipboard, Sparkles,
+  MessageCircle,
+  Building2,
+  Upload,
+  Info,
+  Globe,
+  ExternalLink,
+  HelpCircle, Search,
+  Trash2,
+  Images
+} from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { STOREFRONT_STYLE_LABELS, STOREFRONT_STYLE_OPTIONS, resolveStorefrontStyle } from '@/lib/website/storefront-style'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
+import { BRAND_COLORS } from '@/lib/website/brand-colors'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
+import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
+import { cn } from '@/lib/utils'
+import { getPublicationIssues } from '@/lib/website/publication'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 // ── Brand-color catalog — single source of truth for swatches and live preview ──
-const BRAND_COLORS: Array<{ key: string; name: string; swatch: string }> = [
-  { key: 'blue', name: 'Azul', swatch: 'bg-blue-500' },
-  { key: 'green', name: 'Verde', swatch: 'bg-green-500' },
-  { key: 'purple', name: 'Morado', swatch: 'bg-purple-500' },
-  { key: 'orange', name: 'Naranja', swatch: 'bg-orange-500' },
-  { key: 'red', name: 'Rojo', swatch: 'bg-red-500' },
-  { key: 'indigo', name: 'Índigo', swatch: 'bg-indigo-500' },
-  { key: 'teal', name: 'Teal', swatch: 'bg-teal-500' },
-  { key: 'rose', name: 'Rosa', swatch: 'bg-rose-500' },
-  { key: 'amber', name: 'Ámbar', swatch: 'bg-amber-500' },
-  { key: 'emerald', name: 'Esmeralda', swatch: 'bg-emerald-500' },
-  { key: 'cyan', name: 'Cian', swatch: 'bg-cyan-500' },
-  { key: 'sky', name: 'Cielo', swatch: 'bg-sky-500' },
-]
 
 const BRAND_PREVIEW: Record<string, { header: string; cta: string; dot: string }> = {
   blue: { header: 'bg-blue-600 text-white border-blue-500', cta: 'bg-blue-600 hover:bg-blue-700 text-white', dot: 'bg-blue-500' },
@@ -111,14 +131,29 @@ export function CompanyInfoForm() {
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
+  const [logoMediaOpen, setLogoMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [confirmPublication, setConfirmPublication] = useState(false)
   const formData = draft ?? settings?.company_info ?? getWebsiteSettingsDefaults().company_info
   const hasChanges = draft !== null
+  const focusInvalidField = useRef(false)
+  useEffect(() => {
+    if (!focusInvalidField.current) return
+    focusInvalidField.current = false
+    const field = document.getElementById(Object.keys(errors)[0] ?? '')
+    const section = field?.closest('details')
+    if (section) section.open = true
+    field?.focus()
+  }, [errors])
 
   const preview = BRAND_PREVIEW[formData.brandColor || 'blue'] ?? BRAND_PREVIEW.blue
   const headerPreview = HEADER_PREVIEW_STYLES[formData.headerStyle || 'glass'] ?? HEADER_PREVIEW_STYLES.glass
   const brandTheme = getBrandTheme(formData.brandColor)
+  const { businessVertical } = useSubscriptionStatus()
+  const storefrontStylePreference = formData.storefrontStyle || 'auto'
+  const automaticStorefrontStyle = STOREFRONT_STYLE_LABELS[resolveStorefrontStyle('auto', businessVertical)]
   const hasValidCustomBrand = formData.brandColor === 'custom' && isValidBrandHexColor(formData.customBrandColor)
   const customBrandStyle = hasValidCustomBrand
     ? { '--brand-primary': formData.customBrandColor } as React.CSSProperties
@@ -134,6 +169,14 @@ export function CompanyInfoForm() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: máximo 20 imágenes. Eliminá imágenes desde el Historial para liberar espacio.')
+      setLogoMediaOpen(true)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
     setLogoUploading(true)
     try {
       const fd = new FormData()
@@ -146,13 +189,40 @@ export function CompanyInfoForm() {
       }
       handleChange('logoUrl', body.url)
       toast.success('Logo subido correctamente')
+    } catch {
+      toast.error('No se pudo subir el logo. Verificá tu conexión e intentá nuevamente.')
     } finally {
       setLogoUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const [showMapsGuide, setShowMapsGuide] = useState(false)
+
+  const handlePasteMapsUrl = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text && text.trim()) {
+        handleChange('mapsUrl', text.trim())
+        toast.success('Enlace de Google Maps pegado')
+      } else {
+        toast.error('El portapapeles está vacío')
+      }
+    } catch {
+      toast.error('No se pudo acceder al portapapeles. Pegá el enlace directamente con Ctrl+V.')
+    }
+  }
+
+  const searchAddressOnGoogle = () => {
+    if (!formData.address?.trim()) {
+      toast.error('Escribí primero tu dirección en el campo de arriba.')
+      return
+    }
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address.trim())}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleSubmit = async (e: React.FormEvent, publicationConfirmed = false) => {
     e.preventDefault()
 
     const nextErrors: Record<string, string> = {}
@@ -176,6 +246,10 @@ export function CompanyInfoForm() {
     // Dirección: validar solo si se proporcionó
     if (formData.address && formData.address.trim() && formData.address.trim().length < 4) {
       nextErrors.address = 'La dirección debe tener al menos 4 caracteres.'
+    }
+
+    if (formData.mapsUrl && !isValidGoogleMapsUrl(formData.mapsUrl)) {
+      nextErrors.mapsUrl = 'Ingresá un enlace HTTPS válido de Google Maps.'
     }
 
     // Slug: validar solo caracteres permitidos y longitud
@@ -203,28 +277,49 @@ export function CompanyInfoForm() {
     }
 
     if (Object.keys(nextErrors).length > 0) {
+      focusInvalidField.current = true
       setErrors(nextErrors)
       toast.error('Revisá los campos marcados')
       return
     }
     setErrors({})
 
+    const publishing = (formData.storefrontPublic === true && settings?.company_info.storefrontPublic !== true)
+      || (formData.marketplacePublic === true && settings?.company_info.marketplacePublic !== true)
+    if (publishing) {
+      const issues = getPublicationIssues(formData, settings?.checkout.commerceMode ?? 'cart')
+      if (issues.length) {
+        toast.error(issues.join(' '))
+        return
+      }
+      if (!publicationConfirmed) {
+        setConfirmPublication(true)
+        return
+      }
+    }
+
     const sanitizedData = {
       ...formData,
       hours: formData.hours || { weekdays: '', saturday: '', sunday: '' },
       logoUrl: formData.logoUrl || '',
+      mapsUrl: formData.mapsUrl?.trim() || '',
       brandColor: formData.brandColor || 'blue',
       customBrandColor: formData.customBrandColor || '',
       headerStyle: formData.headerStyle || 'glass',
       headerColor: formData.headerColor || '',
       showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true,
+      storefrontStyle: formData.storefrontStyle || 'auto',
       whatsapp: formData.whatsapp || '',
+      slogan: formData.slogan || '',
+      description: formData.description || '',
       ruc: formData.ruc || '',
       businessType: formData.businessType || '',
       instagram: formData.instagram || '',
       facebook: formData.facebook || '',
       tiktok: formData.tiktok || '',
-      marketplacePublic: formData.marketplacePublic !== false,
+      storefrontPublic: formData.storefrontPublic === true,
+      marketplacePublic: formData.storefrontPublic === true && formData.marketplacePublic === true,
+      publicationConfirmed,
       slug: formData.slug || '',
     }
 
@@ -247,9 +342,8 @@ export function CompanyInfoForm() {
         description: 'Los cambios se reflejarán en el portal público',
         icon: <Check className="h-4 w-4" />,
       })
-      // Wait a tick for SWR to revalidate before clearing draft
-      // This prevents the form from briefly showing stale data (e.g. logo disappearing)
-      setTimeout(() => setDraft(null), 300)
+      setDraft(null)
+      setConfirmPublication(false)
 
       if (sanitizedData.slug) {
         window.dispatchEvent(new CustomEvent('website-slug-updated', { detail: sanitizedData.slug }))
@@ -308,10 +402,13 @@ export function CompanyInfoForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 md:space-y-10 pb-24 md:pb-8">
+      {/* Aviso si la cuota de imágenes llega al límite */}
+      <WebsiteMediaQuotaBanner onOpenHistory={() => setLogoMediaOpen(true)} />
+
       {/* Identidad */}
       <SectionCard icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-1">
             <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
             <Input
               id="companyName"
@@ -323,6 +420,22 @@ export function CompanyInfoForm() {
               className="h-11"
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+          </div>
+
+          <div className="space-y-2 md:col-span-1">
+            <Label htmlFor="companySlogan" className="text-sm font-medium">
+              Subtítulo / Eslogan <span className="text-xs font-normal text-muted-foreground">— debajo del nombre</span>
+            </Label>
+            <Input
+              id="companySlogan"
+              value={formData.slogan || ''}
+              onChange={(e) => handleChange('slogan', e.target.value)}
+              placeholder="Reparación y Servicios"
+              maxLength={100}
+              aria-invalid={!!errors.slogan}
+              className="h-11"
+            />
+            {errors.slogan && <p className="text-xs text-destructive">{errors.slogan}</p>}
           </div>
 
           <div className="space-y-2">
@@ -357,18 +470,101 @@ export function CompanyInfoForm() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                  accept="image/jpeg,image/png,image/webp"
                   className="hidden"
                   onChange={handleLogoUpload}
                 />
               </div>
             </div>
-            {errors.logoUrl
-              ? <p className="text-xs text-destructive">{errors.logoUrl}</p>
-              : <p className="text-xs text-muted-foreground">JPG, PNG, WebP o SVG — máx. 2 MB</p>}
+            <div className="flex items-center justify-between text-[11px] pt-1">
+              {errors.logoUrl ? (
+                <p className="text-destructive font-medium">{errors.logoUrl}</p>
+              ) : (
+                <p className="text-muted-foreground">PNG/WebP/JPG hasta 2MB con fondo transparente.</p>
+              )}
+              <button
+                type="button"
+                onClick={() => setLogoMediaOpen(true)}
+                className="font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+              >
+                <Images className="h-3.5 w-3.5" />
+                <span>Elegir del historial</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Descripción de la Empresa */}
+          <div className="space-y-2 md:col-span-3">
+            <Label htmlFor="companyDescription" className="text-sm font-medium flex items-center gap-1.5">
+              <span>Descripción de la empresa</span>
+              <span className="text-xs font-normal text-muted-foreground">— Se muestra en el detalle de tu tienda y en el Marketplace</span>
+            </Label>
+            <Textarea
+              id="companyDescription"
+              value={formData.description || ''}
+              onChange={(e) => handleChange('description', e.target.value)}
+              placeholder="Contanos sobre tu negocio, los productos o servicios que ofrecés, tu trayectoria y por qué los clientes deberían elegirte..."
+              rows={3}
+              maxLength={1000}
+              className="resize-y"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Esta descripción se mostrará en el directorio de empresas y en el modal de detalles para que los clientes conozcan tu propuesta.
+            </p>
           </div>
         </div>
       </SectionCard>
+
+      {/* Historial de Logos e Imágenes — Sección Destacada debajo de Identidad */}
+      <div className="relative overflow-hidden rounded-2xl border-2 border-primary/50 bg-gradient-to-r from-primary/15 via-primary/5 to-card p-5 sm:p-6 shadow-md transition-all hover:border-primary hover:shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md ring-4 ring-primary/20">
+              <Images className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base sm:text-lg font-bold text-foreground">
+                  Historial de Logos e Imágenes
+                </h3>
+                <span className="rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-xs font-bold text-primary">
+                  Máx. 20 imágenes
+                </span>
+                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Espacio liberable
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                Visualizá, seleccioná y gestioná todas las imágenes subidas para tu sitio web (logos, banners del carrusel, carteles de aviso y marcas). Reutilizalas con un clic o eliminalas definitivamente para liberar espacio en tu cuenta.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-start sm:self-center">
+            <Button
+              type="button"
+              size="lg"
+              onClick={() => setLogoMediaOpen(true)}
+              className="gap-2.5 font-bold text-sm bg-primary hover:bg-primary/90 text-primary-foreground shadow-md px-5 h-11 rounded-xl cursor-pointer"
+            >
+              <Images className="h-4 w-4" />
+              <span>Abrir Historial de Imágenes</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <WebsiteMediaLibraryDialog
+        open={logoMediaOpen}
+        onOpenChange={setLogoMediaOpen}
+        filterSection="logo"
+        title="Historial de Logos e Imágenes"
+        description="Seleccioná un logo o imagen previamente subida o eliminá archivos definitivamente para liberar espacio (máx. 20)."
+        onSelect={(url) => {
+          handleChange('logoUrl', url)
+          toast.success('Logo seleccionado del historial')
+        }}
+      />
 
       <SectionCard icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
         <div className="space-y-6">
@@ -397,35 +593,27 @@ export function CompanyInfoForm() {
             )}
           </div>
 
-          <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="marketplacePublic" className="text-sm font-semibold">Visibilidad en Marketplace</Label>
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    formData.marketplacePublic !== false
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                  }`}
-                >
-                  {formData.marketplacePublic !== false ? 'Público' : 'Privado'}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Si está activo, tu empresa aparecerá listada en el marketplace general. (Tu sitio directo siempre funcionará).
-              </p>
-            </div>
-            <Switch
-              id="marketplacePublic"
-              checked={formData.marketplacePublic !== false}
-              onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
-            />
-          </div>
+          <PublicVisibilityCard
+            title="Publicar tienda"
+            compact
+            description="Activa el enlace público de tu tienda. Al desactivarlo también se oculta del Marketplace, sin borrar datos del sistema. Los cambios se aplican al guardar."
+            enabled={formData.storefrontPublic === true}
+            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), storefrontPublic: checked, marketplacePublic: checked ? formData.marketplacePublic : false }))}
+          />
+          <PublicVisibilityCard
+            title="Visibilidad en Marketplace General"
+            badgeLabel="Directorio Público"
+            compact
+            description="Permite descubrir tu empresa y sus productos en el Marketplace. Requiere la tienda publicada; podés publicar solo tu enlace y mantener esta opción desactivada."
+            disabled={formData.storefrontPublic !== true}
+            enabled={formData.storefrontPublic === true && formData.marketplacePublic === true}
+            onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
+          />
         </div>
       </SectionCard>
 
       {/* Personalización visual */}
-      <SectionCard icon={Sparkles} title="Personalización visual" description="Define la identidad del sitio y comprobá el resultado antes de guardar">
+      <SectionCard collapsible icon={Sparkles} title="Personalización visual" description="Colores, encabezado y apariencia. Desplegá para personalizar.">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Config */}
           <div className="space-y-6 lg:col-span-7">
@@ -434,7 +622,7 @@ export function CompanyInfoForm() {
               <div className="space-y-1">
                 <span className="font-semibold text-foreground">Qué cambia en tu sitio</span>
                 <p className="leading-relaxed">
-                  El color define los botones y el fondo del inicio. El estilo modifica el encabezado, y la barra superior muestra tus datos de contacto.
+                  El color define los botones y el fondo del inicio. El aspecto cambia cómo se ven el inicio y los productos. El estilo modifica el encabezado, y la barra superior muestra tus datos de contacto.
                 </p>
               </div>
             </div>
@@ -552,6 +740,47 @@ export function CompanyInfoForm() {
               )}
             </div>
 
+            <div className="space-y-3 pt-2">
+              <div>
+                <p id="storefrontStyleLabel" className="text-sm font-semibold">Aspecto de la tienda</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Cambia la portada del inicio, las categorías y las tarjetas de productos. No oculta ninguna sección.
+                </p>
+              </div>
+              <div role="group" aria-labelledby="storefrontStyleLabel" className="grid gap-2 sm:grid-cols-2">
+                {STOREFRONT_STYLE_OPTIONS.map((option) => {
+                  const isSelected = storefrontStylePreference === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleChange('storefrontStyle', option.value)}
+                      aria-pressed={isSelected}
+                      className={`relative flex flex-col items-start gap-1 rounded-md border p-3 pr-8 text-left transition-colors ${
+                        isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
+                      }`}
+                    >
+                      <span className={`text-sm ${isSelected ? 'font-bold text-primary' : 'font-semibold text-foreground'}`}>
+                        {option.label}
+                        {option.value === 'auto' && (
+                          <>
+                            {' '}
+                            <span className="font-normal text-muted-foreground">(por tu rubro: {automaticStorefrontStyle})</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">{option.description}</span>
+                      {isSelected && (
+                        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <Check aria-hidden="true" className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <div className="grid gap-4 pt-2 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="headerStyle" className="text-sm font-semibold">Estilo del header</Label>
@@ -571,28 +800,14 @@ export function CompanyInfoForm() {
                 </p>
               </div>
 
-              <div className="flex flex-col justify-between rounded-lg border bg-muted/30 p-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <Label htmlFor="showTopBar" className="text-sm font-semibold">Barra superior</Label>
-                    <p className="mt-0.5 pr-2 text-xs text-muted-foreground">Datos de contacto rápidos arriba del menú</p>
-                  </div>
-                  <Switch
-                    id="showTopBar"
-                    checked={formData.showTopBar !== false}
-                    onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), showTopBar: checked }))}
-                  />
-                </div>
-                <span
-                  className={`mt-3 inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                    formData.showTopBar !== false
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {formData.showTopBar !== false ? 'Activo' : 'Inactivo'}
-                </span>
-              </div>
+              <PublicVisibilityCard
+                title="Barra Superior de Contacto"
+                badgeLabel="Encabezado"
+                description="Muestra la barra superior con número de WhatsApp, teléfono comercial y horarios arriba del menú de navegación."
+                enabled={formData.showTopBar !== false}
+                onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), showTopBar: checked }))}
+                compact
+              />
             </div>
           </div>
 
@@ -638,7 +853,7 @@ export function CompanyInfoForm() {
                     )}
                     <div className="leading-tight">
                       <span className="block text-[10px] font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
-                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>Reparación y service</span>
+                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>{formData.slogan || 'Reparación y servicios'}</span>
                     </div>
                   </div>
 
@@ -726,11 +941,149 @@ export function CompanyInfoForm() {
             <Input id="address" value={formData.address} onChange={(e) => handleChange('address', e.target.value)} placeholder="Av. Principal 123, Ciudad" maxLength={300} aria-invalid={!!errors.address} className="h-11" />
             {errors.address && <p className="text-xs text-destructive">{errors.address}</p>}
           </div>
+
+          {/* ── Gestor Avanzado de Ubicación & Google Maps ── */}
+          <div className="col-span-full rounded-2xl border border-border/80 bg-muted/20 p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div>
+                  <Label htmlFor="mapsUrl" className="text-sm font-bold text-foreground">
+                    Enlace de Google Maps (Ubicación Exacta)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Vincula el pin oficial de tu local con GPS y botón &quot;Cómo llegar&quot;.
+                  </p>
+                </div>
+              </div>
+
+              {/* Badges de Estado */}
+              {formData.mapsUrl?.trim() ? (
+                isValidGoogleMapsUrl(formData.mapsUrl) ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/40 dark:text-emerald-300">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Enlace verificado
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/40 dark:text-amber-300">
+                    <Info className="h-3.5 w-3.5" />
+                    Enlace no reconocido
+                  </span>
+                )
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  Opcional (Usa dirección)
+                </span>
+              )}
+            </div>
+
+            {/* Input + Botones Rápidos */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="mapsUrl"
+                  type="url"
+                  inputMode="url"
+                  value={formData.mapsUrl || ''}
+                  onChange={(e) => handleChange('mapsUrl', e.target.value)}
+                  placeholder="https://maps.app.goo.gl/... o https://www.google.com/maps/place/..."
+                  maxLength={1000}
+                  aria-invalid={!!errors.mapsUrl}
+                  className={cn(
+                    'h-11 rounded-xl pl-3 pr-9',
+                    errors.mapsUrl && 'border-destructive'
+                  )}
+                />
+                {formData.mapsUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleChange('mapsUrl', '')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                    title="Limpiar enlace"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Botón Pegar Portapapeles */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePasteMapsUrl}
+                className="h-11 rounded-xl font-semibold gap-1.5 shrink-0"
+              >
+                <Clipboard className="h-4 w-4 text-primary" />
+                <span>Pegar enlace</span>
+              </Button>
+
+              {/* Botón Probar Enlace si existe */}
+              {formData.mapsUrl && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  asChild
+                  className="h-11 rounded-xl font-semibold gap-1.5 shrink-0"
+                >
+                  <a href={formData.mapsUrl} target="_blank" rel="noopener noreferrer">
+                    <span>Probar en Maps</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
+            </div>
+
+            {errors.mapsUrl && (
+              <p className="text-xs text-destructive font-medium">{errors.mapsUrl}</p>
+            )}
+
+            {/* Accesos Útiles y Guía */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowMapsGuide((prev) => !prev)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                <span>{showMapsGuide ? 'Ocultar guía' : '¿Cómo obtener el enlace de mi local en Google Maps?'}</span>
+                {showMapsGuide ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+
+              {formData.address && (
+                <button
+                  type="button"
+                  onClick={searchAddressOnGoogle}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                >
+                  <Search className="h-3.5 w-3.5 text-primary" />
+                  <span>Buscar &ldquo;{formData.address.slice(0, 28)}{formData.address.length > 28 ? '...' : ''}&rdquo; en Maps</span>
+                </button>
+              )}
+            </div>
+
+            {/* Guía Desplegable Paso a Paso */}
+            {showMapsGuide && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                <p className="font-bold text-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  3 Pasos para obtener tu enlace exacto:
+                </p>
+                <ol className="space-y-1.5 text-muted-foreground list-decimal list-inside leading-relaxed">
+                  <li>Abrí <strong className="text-foreground">Google Maps</strong> en tu celular o computadora.</li>
+                  <li>Buscá tu negocio o tocá el punto exacto de tu local en el mapa para que aparezca el pin rojo 📍.</li>
+                  <li>Tocá <strong className="text-foreground">&quot;Compartir&quot;</strong> y luego <strong className="text-foreground">&quot;Copiar enlace&quot;</strong>.</li>
+                  <li>Hacé clic arriba en <strong className="text-foreground">&quot;Pegar enlace&quot;</strong> y guardá los cambios.</li>
+                </ol>
+              </div>
+            )}
+          </div>
         </div>
       </SectionCard>
 
       {/* Horarios */}
-      <SectionCard icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
+      <SectionCard collapsible icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="weekdays" className="text-sm font-medium">Lunes - Viernes</Label>
@@ -748,7 +1101,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Legal */}
-      <SectionCard icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
+      <SectionCard collapsible icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ruc" className="text-sm font-medium">
@@ -756,26 +1109,24 @@ export function CompanyInfoForm() {
             </Label>
             <Input id="ruc" value={formData.ruc || ''} onChange={(e) => handleChange('ruc', e.target.value)} placeholder="12345678-9" maxLength={50} className="h-11" />
           </div>
+          {/* El tipo de negocio se movio a Configuracion > Empresa. Se sigue
+              guardando en company_info, asi que este formulario lo conserva al
+              enviar (ver sanitizedData): sacarlo del payload lo borraria. */}
           <div className="space-y-2">
-            <Label htmlFor="businessType" className="text-sm font-medium">Tipo de negocio</Label>
-            <Select value={formData.businessType || ''} onValueChange={(v) => handleChange('businessType', v)}>
-              <SelectTrigger id="businessType" className="h-11">
-                <SelectValue placeholder="Seleccionar..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="retail">Minorista (tienda física)</SelectItem>
-                <SelectItem value="repair">Reparaciones técnicas</SelectItem>
-                <SelectItem value="wholesale">Mayorista / distribución</SelectItem>
-                <SelectItem value="service">Servicios profesionales</SelectItem>
-                <SelectItem value="mixed">Mixto (venta + servicio)</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-sm font-medium text-muted-foreground">Tipo de negocio</Label>
+            <p className="text-sm text-muted-foreground">
+              Se configura en{' '}
+              <Link href="/admin/settings" className="font-medium text-primary hover:underline">
+                Configuración › Empresa
+              </Link>
+              .
+            </p>
           </div>
         </div>
       </SectionCard>
 
       {/* Redes sociales */}
-      <SectionCard icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
+      <SectionCard collapsible icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
         <div className="grid gap-8 md:grid-cols-3">
           {[
             { id: 'instagram', label: 'Instagram', prefix: 'instagram.com/', value: formData.instagram, placeholder: 'tu_usuario' },
@@ -801,35 +1152,67 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Save bar */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
-        {hasChanges && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setDraft(null)
-              setErrors({})
-            }}
-            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
-          >
-            Descartar
-          </Button>
-        )}
-        <Button type="submit" disabled={isSaving || isSyncing || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
-          {isSaving || isSyncing ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              <span className="hidden md:inline">Guardando...</span>
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-5 w-5" />
-              <span className="hidden md:inline">Guardar cambios</span>
-              <span className="md:hidden">Guardar</span>
-            </>
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios sin guardar' : 'Configuración de empresa al día'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDraft(null)
+                setErrors({})
+              }}
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
+            >
+              Descartar
+            </Button>
           )}
-        </Button>
+          <Button
+            type="submit"
+            disabled={isSaving || isSyncing || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving || isSyncing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Guardar cambios</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
+      <Dialog open={confirmPublication} onOpenChange={(open) => { if (!isSyncing) setConfirmPublication(open) }}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader><DialogTitle>Revisar y publicar tienda</DialogTitle><DialogDescription>Al confirmar, los visitantes podrán acceder al contenido guardado de tu tienda.</DialogDescription></DialogHeader>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
+            <dt className="text-muted-foreground">Empresa</dt><dd className="break-words font-medium">{formData.name}</dd>
+            <dt className="text-muted-foreground">Enlace</dt><dd className="break-all">/{formData.slug}/inicio</dd>
+            <dt className="text-muted-foreground">Modalidad</dt><dd>{settings?.checkout.commerceMode === 'whatsapp' ? 'Consulta por WhatsApp' : settings?.checkout.commerceMode === 'catalog' ? 'Solo catálogo' : 'Carrito de compras'}</dd>
+            <dt className="text-muted-foreground">Marketplace</dt><dd>{formData.marketplacePublic ? 'Aparecerá en el directorio y catálogo general' : 'No aparecerá; solo enlace directo'}</dd>
+            <dt className="text-muted-foreground">Contacto</dt><dd>{formData.whatsapp || formData.phone}</dd>
+          </dl>
+          <p className="rounded-lg bg-muted p-3 text-sm">Revisá los productos activos, precios y textos guardados. Podés volver a ocultar la tienda desde Empresa sin borrar información.</p>
+          <DialogFooter><Button type="button" variant="outline" disabled={isSyncing} onClick={() => setConfirmPublication(false)}>Volver a revisar</Button><Button type="button" disabled={isSyncing} onClick={(event) => { void handleSubmit(event, true) }}>{isSyncing ? 'Publicando…' : 'Confirmar publicación'}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   )
 }

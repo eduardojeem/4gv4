@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/hooks/use-customer-state'
+import type { CustomerSpendMetrics } from '@/lib/customers/customer-spend'
+import { fetchCustomerSpend } from '@/lib/customers/customer-spend-client'
+import { isCountableSale } from '@/lib/customers/customer-spend'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
-export type CustomerMetrics = {
-  count: number
-  total: number
-  lastAmount: number
-  lastDate: string | null
-}
+/** Se deriva del tipo de la agregacion para que no puedan divergir. */
+export type CustomerMetrics = CustomerSpendMetrics
 
 export type UseCustomerMetricsOptions = {
   timeRange?: '3months' | '6months' | '12months'
@@ -19,52 +19,46 @@ export type UseCustomerMetricsOptions = {
 }
 
 // Map de métricas por cliente (para listas)
+//
+// Lo calcula el servidor con la regla única (ver /api/customers/spend). Antes
+// eran tres consultas desde el navegador que Supabase cortaba en 1000 filas,
+// sin filtro de empresa y contando ventas anuladas.
 export function useCustomerSalesMetricsMap(customerIds: string[]) {
-  const [metrics, setMetrics] = useState<Record<string, CustomerMetrics>>({})
+  const [loaded, setLoaded] = useState<{ key: string; metrics: Record<string, CustomerMetrics> } | null>(null)
+  const key = JSON.stringify([...new Set(customerIds)].sort())
+
   useEffect(() => {
-    const fetchMetrics = async () => {
-      if (!customerIds || customerIds.length === 0) {
-        setMetrics({})
-        return
-      }
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('sales')
-        .select('customer_id, total_amount, created_at')
-        .in('customer_id', customerIds)
-        .order('created_at', { ascending: false })
-      if (error) {
-        setMetrics({})
-        return
-      }
-      const agg: Record<string, CustomerMetrics> = {}
-      for (const row of data || []) {
-        const cid = String((row as any).customer_id || '')
-        if (!cid) continue
-        const totalAmt = Number((row as any).total_amount) || 0
-        const created = (row as any).created_at as string | null
-        if (!agg[cid]) {
-          agg[cid] = { count: 1, total: totalAmt, lastAmount: totalAmt, lastDate: created || null }
-        } else {
-          agg[cid].count += 1
-          agg[cid].total += totalAmt
-        }
-      }
-      setMetrics(agg)
-    }
-    fetchMetrics()
-  }, [JSON.stringify(customerIds)])
-  return metrics
+    const ids = JSON.parse(key) as string[]
+    if (ids.length === 0) return
+    let cancelled = false
+
+    fetchCustomerSpend(ids)
+      .then((metrics) => { if (!cancelled) setLoaded({ key, metrics }) })
+      // Sin datos se deja el mapa vacío: la pantalla cae a los totales ya
+      // calculados de cada cliente en vez de mostrar un parcial como completo.
+      .catch(() => { if (!cancelled) setLoaded({ key, metrics: {} }) })
+
+    return () => { cancelled = true }
+  }, [key])
+
+  // Solo vale el resultado de la lista pedida ahora: si cambió, hasta que
+  // llegue la nueva no se muestran los totales de la anterior.
+  return loaded?.key === key ? loaded.metrics : EMPTY_METRICS
 }
+
+const EMPTY_METRICS: Record<string, CustomerMetrics> = {}
 
 // Métricas agregadas para AnalyticsDashboard (compatibles)
 export function useCustomerMetrics(customers: Customer[], options?: UseCustomerMetricsOptions) {
+  const activeOrganization = useOptionalActiveOrganization()
+  const organizationId = activeOrganization?.organization?.id ?? null
   const timeRange = options?.timeRange || '6months'
   const includeInactive = options?.includeInactive ?? true
   const segmentBy = options?.segmentBy || 'segment'
 
   const totalCustomers = customers.length
-  const totalRevenue = customers.reduce((sum, c) => sum + ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0), 0)
+  // Total histórico real: los clientes ya llegan con lo gastado calculado.
+  const totalRevenue = customers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0)
   const avgCustomerValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
   const activeCustomers = customers.filter(c => {
     const st = String(c.status || 'active').toLowerCase().trim()
@@ -91,6 +85,10 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   useEffect(() => {
     let cancelled = false
     const fetchSales = async () => {
+      if (!organizationId) {
+        setRealMonthly(null)
+        return
+      }
       try {
         const start = new Date()
         start.setMonth(start.getMonth() - (months - 1))
@@ -100,7 +98,8 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
         const supabase = createClient()
         const { data, error } = await supabase
           .from('sales')
-          .select('total_amount, created_at')
+          .select('total_amount, created_at, status')
+          .eq('organization_id', organizationId)
           .gte('created_at', start.toISOString())
 
         if (cancelled) return
@@ -111,12 +110,15 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
 
         const map = new Map<string, { revenue: number; count: number }>()
         for (const row of data) {
-          const created = (row as any).created_at as string | null
+          const rowObj = row as { created_at?: string | null; status?: string | null; total_amount?: number | string | null }
+          const created = rowObj.created_at
           if (!created) continue
+          // Una venta anulada no es ingreso del mes.
+          if (!isCountableSale(rowObj.status)) continue
           const d = new Date(created)
           const key = `${d.getFullYear()}-${d.getMonth()}`
           const cur = map.get(key) || { revenue: 0, count: 0 }
-          cur.revenue += Number((row as any).total_amount) || 0
+          cur.revenue += Number(rowObj.total_amount) || 0
           cur.count += 1
           map.set(key, cur)
         }
@@ -129,7 +131,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
     return () => {
       cancelled = true
     }
-  }, [months])
+  }, [months, organizationId])
 
   const monthlyData = useMemo(() => {
     const now = new Date()
@@ -166,7 +168,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   const segmentDistribution = useMemo(() => {
     const map: Record<string, number> = {}
     customers.forEach(c => {
-      const key = (c as any)[segmentBy] || 'desconocido'
+      const key = (c[segmentBy] as string | undefined) || 'desconocido'
       map[key] = (map[key] || 0) + 1
     })
     return Object.entries(map).map(([name, value]) => ({ name, value }))
@@ -174,21 +176,21 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
 
   const topCustomers = useMemo(() => {
     const ranked = customers
-      .map(c => ({ customer: c, value: ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0) as number }))
+      .map(c => ({ customer: c, value: c.lifetime_value || 0 }))
       .sort((a, b) => b.value - a.value)
     return ranked.map((item, idx) => ({ ...item, rank: idx + 1 }))
   }, [customers])
 
   const retentionRate = totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 1000) / 10 : 0
 
-  const creditSummaries = options?.creditSummaries || {}
+  const creditSummaries = useMemo(() => options?.creditSummaries || {}, [options?.creditSummaries])
 
-  const getCustomerDebt = (c: Customer) => {
+  const getCustomerDebt = useCallback((c: Customer) => {
     const summary = creditSummaries[c.id]
     const summaryPending = summary ? Number(summary.total_pending ?? summary.current_balance ?? 0) : 0
     const customerPending = Number(c.current_balance || c.pending_amount || 0)
     return Math.max(0, summaryPending || customerPending)
-  }
+  }, [creditSummaries])
 
   const totalDebt = customers.reduce((sum, c) => sum + getCustomerDebt(c), 0)
   const customersWithDebt = customers.filter(c => getCustomerDebt(c) > 0).length
@@ -213,7 +215,7 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
       { name: 'Deuda Media (500k - 2M)', value: deudaMedia, color: '#f59e0b' },
       { name: 'Deuda Alta (> 2M)', value: deudaAlta, color: '#ef4444' },
     ].filter(item => item.value > 0)
-  }, [customers, creditSummaries])
+  }, [customers, getCustomerDebt])
 
   return {
     totalCustomers,

@@ -10,7 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Eye, Pencil, Trash2, MoreVertical, PackageCheck } from 'lucide-react'
+import { Eye, Pencil, Trash2, MoreVertical, PackageCheck, DollarSign, Shield, ShieldCheck } from 'lucide-react'
+import { getRepairFinancialPresentation } from '@/lib/repairs/financial-closure'
+import { getWarrantyStatus } from '@/lib/warranty-utils'
 
 interface RepairCardsViewProps {
   repairs: Repair[]
@@ -18,20 +20,55 @@ interface RepairCardsViewProps {
   onEdit?: (repair: Repair) => void
   onDelete?: (repairId: string) => void
   onDeliver?: (repair: Repair) => void
+  onQualityCheck?: (repair: Repair) => void
+  onQuickPay?: (repair: Repair) => void
+  onClaimWarranty?: (repair: Repair) => void
 }
 
-export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }: RepairCardsViewProps) {
+export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver, onQualityCheck, onQuickPay, onClaimWarranty }: RepairCardsViewProps) {
   if (repairs.length === 0) return null
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      {repairs.map((repair) => (
-        <div key={repair.id} className="relative group">
+      {repairs.map((repair) => {
+        const financial = getRepairFinancialPresentation({
+          status: repair.status,
+          finalCost: repair.finalCost,
+          estimatedCost: repair.estimatedCost,
+          paidAmount: repair.paidAmount,
+          deliveryOutcome: repair.deliveryOutcome,
+          qualityCheck: repair.qualityCheck,
+          closeout: repair.closeout,
+        })
+        const isDelivered = repair.status === 'entregado'
+        const ws = getWarrantyStatus(repair.warrantyExpiresAt)
+        const hasActiveWarranty = isDelivered && (
+          ws === 'active' ||
+          ws === 'expiring' ||
+          (Boolean(repair.warrantyMonths && repair.warrantyMonths > 0) && ws !== 'expired')
+        )
+
+        return (
+        <div key={repair.id} className="relative group flex flex-col justify-between rounded-xl">
           <RepairCard
             repair={repair}
             onClick={onView ? () => onView(repair) : onEdit ? () => onEdit(repair) : undefined}
             className="h-full"
           />
+          {hasActiveWarranty && onClaimWarranty && (
+            <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full h-7 gap-1.5 text-xs font-bold border-amber-300 bg-amber-50/90 text-amber-800 hover:bg-amber-100 hover:text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 shadow-2xs cursor-pointer"
+                onClick={() => onClaimWarranty(repair)}
+                title="Procesar reingreso por garantía"
+              >
+                <Shield className="h-3.5 w-3.5 text-amber-600" />
+                Procesar Garantía
+              </Button>
+            </div>
+          )}
           {/* Action menu — visible on hover */}
           <div className="absolute right-2 top-2 z-10 opacity-100 transition-opacity sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100">
             <DropdownMenu>
@@ -39,24 +76,35 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="h-7 w-7 shadow-sm bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm"
+                  className="h-7 w-7 rounded-lg shadow-xs bg-background/90 hover:bg-background border border-border/60 backdrop-blur-sm transition-all cursor-pointer"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreVertical className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-48 rounded-xl p-1 shadow-lg border border-border/70">
                 <DropdownMenuItem onClick={() => onView?.(repair)}>
                   <Eye className="mr-2 h-3.5 w-3.5" />
                   Ver detalles
                 </DropdownMenuItem>
-                {onEdit && (
+                {onEdit && repair.status !== 'cancelado' && (
                   <DropdownMenuItem onClick={() => onEdit(repair)}>
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     Editar
                   </DropdownMenuItem>
                 )}
-                {onDeliver && repair.status !== 'entregado' && repair.status !== 'cancelado' && (
+                {onQuickPay && financial.canCollect && (
+                  <DropdownMenuItem
+                    className="text-emerald-600 dark:text-emerald-400"
+                    onClick={() => onQuickPay(repair)}
+                  >
+                    <DollarSign className="mr-2 h-3.5 w-3.5" />
+                    {!financial.priceDefined
+                      ? 'Registrar adelanto'
+                      : repair.status === 'entregado' ? 'Cobrar saldo' : 'Cobrar aquí'}
+                  </DropdownMenuItem>
+                )}
+                {onDeliver && repair.status === 'listo' && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -65,6 +113,24 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
                     >
                       <PackageCheck className="mr-2 h-3.5 w-3.5" />
                       Marcar Entregado
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {onQualityCheck && (repair.status === 'reparacion' || repair.status === 'listo') && (
+                  <DropdownMenuItem onClick={() => onQualityCheck(repair)} className="text-blue-700 dark:text-blue-300">
+                    <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                    {repair.qualityCheck ? 'Repetir prueba técnica' : 'Verificar funcionamiento'}
+                  </DropdownMenuItem>
+                )}
+                {(repair.status === 'entregado' || repair.warrantyExpiresAt || (repair.warrantyMonths && repair.warrantyMonths > 0)) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-amber-700 dark:text-amber-400 font-semibold cursor-pointer"
+                      onClick={() => onClaimWarranty ? onClaimWarranty(repair) : onView?.(repair)}
+                    >
+                      <Shield className="mr-2 h-3.5 w-3.5 text-amber-600" />
+                      Procesar Garantía
                     </DropdownMenuItem>
                   </>
                 )}
@@ -84,7 +150,8 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
             </DropdownMenu>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

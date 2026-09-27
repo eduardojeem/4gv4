@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 /**
  * POS Product Grid Component - Optimización Fase 4
  * Grid de productos separado con virtualización
@@ -43,7 +44,7 @@ const ProductCard = memo<{
               </span>
             )}
             {product.image ? (
-              <img
+              <AppImage
                 src={product.image}
                 alt={product.name}
                 className="w-full h-full object-cover rounded-lg"

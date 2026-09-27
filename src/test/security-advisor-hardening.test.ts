@@ -6,7 +6,7 @@ const workspace = process.cwd()
 const migration = readFileSync(
   resolve(
     workspace,
-    'supabase/migrations/20260728220234_reconcile_security_advisor_warnings.sql'
+    'supabase/migrations_legacy/20260728220234_reconcile_security_advisor_warnings.sql'
   ),
   'utf8'
 )
@@ -51,8 +51,8 @@ describe('Security Advisor hardening contracts', () => {
     expect(migration).toContain(
       'DROP POLICY IF EXISTS "Anyone can submit a review"'
     )
-    expect(publicReviewsRoute).toContain('is_approved: false')
-    expect(publicReviewsRoute).not.toContain('is_approved: true')
+    expect(publicReviewsRoute).toContain("moderation_status: 'pending'")
+    expect(publicReviewsRoute).not.toContain("moderation_status: 'published'")
   })
 
   it('removes broad avatar listing and scopes object operations', () => {

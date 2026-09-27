@@ -1,9 +1,8 @@
-﻿'use client'
+'use client'
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CartItem, Product } from '../types'
 import { toast } from 'sonner'
-import { formatCurrency } from '@/lib/currency'
 
 // Constantes copiadas de page.tsx
 const WHOLESALE_DISCOUNT_RATE = 10
@@ -12,33 +11,53 @@ interface CartConfig {
   taxRate?: number
   pricesIncludeTax?: boolean
   maxQuantityPerItem?: number
+  storageScope?: string
+}
+
+export interface CartVariantInput {
+  id?: string
+  product_id?: string
+  variant_id?: string
+  variant_name?: string
+  variant?: string
+  variant_attributes?: Array<{ name?: string; value?: string }> | null
+  sku?: string
+  name?: string
+  product_name?: string
+  price?: number | string | null
+  quantity?: number | string | null
+  stock?: number | string | null
+  image?: string | null
+  image_url?: string | null
+  wholesalePrice?: number
+  wholesale_price?: number
 }
 
 interface UseOptimizedCartReturn {
   cart: CartItem[]
-  
+
   // Estado
   isWholesale: boolean
   setIsWholesale: (value: boolean) => void
   discount: number
   setDiscount: (value: number) => void
-  
+
   // Totals
   cartTotal: number
   cartSubtotal: number
   cartTax: number
   cartItemCount: number
-  
+
   // Desgloses
   subtotalApplied: number
   subtotalNonWholesale: number
   generalDiscountAmount: number
   wholesaleDiscountAmount: number
   totalSavings: number
-  
+
   // Acciones
   addToCart: (product: Product, quantity?: number) => void
-  addVariantToCart: (variantItem: any) => void
+  addVariantToCart: (variantItem: CartVariantInput) => void
   removeFromCart: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   updateItemDiscount: (productId: string, discount: number) => void
@@ -46,24 +65,26 @@ interface UseOptimizedCartReturn {
   clearCart: (force?: boolean) => void
   replaceCart: (items: CartItem[]) => void
   getCartItemQuantity: (productId: string) => number
-  
+
   // Helpers
   checkAvailability: (productId: string, quantity: number) => boolean
 }
 
 /**
- * Hook optimizado para gestiÃ³n del carrito de compras POS
- * Incluye toda la lÃ³gica de negocio: mayorista, descuentos por volumen, impuestos.
+ * Hook optimizado para gestión del carrito de compras POS
+ * Incluye toda la lógica de negocio: mayorista, descuentos por volumen, impuestos.
  */
 export const useOptimizedCart = (
-  inventoryProducts: any[], 
+  inventoryProducts: Product[],
   config: CartConfig = {}
 ): UseOptimizedCartReturn => {
-  const { 
-    taxRate = 0.19, 
+  const {
+    taxRate = 0.19,
     pricesIncludeTax = true,
-    maxQuantityPerItem = 999 
+    maxQuantityPerItem: _maxQuantityPerItem = 999,
+    storageScope = 'anonymous:unselected',
   } = config
+  const storageKey = `pos.cart:${storageScope}`
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [isWholesale, setIsWholesale] = useState(false)
@@ -74,7 +95,7 @@ export const useOptimizedCart = (
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const savedCart = localStorage.getItem('pos.cart')
+      const savedCart = localStorage.getItem(storageKey)
       if (savedCart) {
         const parsed = JSON.parse(savedCart)
         if (Array.isArray(parsed)) {
@@ -86,25 +107,49 @@ export const useOptimizedCart = (
     } finally {
       setIsLoaded(true)
     }
-  }, [])
+  }, [storageKey])
 
   // Persistencia en localStorage: Guardar
   useEffect(() => {
     if (typeof window === 'undefined' || !isLoaded) return
     try {
-      localStorage.setItem('pos.cart', JSON.stringify(cart))
+      localStorage.setItem(storageKey, JSON.stringify(cart))
     } catch (e) {
       console.error('Error saving cart to localStorage:', e)
     }
-  }, [cart, isLoaded])
+  }, [cart, isLoaded, storageKey])
+
+  /**
+   * Helper para identificar ítems de servicio o reparaciones sin control de stock físico
+   */
+  const isServiceItem = useCallback((itemOrId: unknown) => {
+    if (!itemOrId) return false
+    if (typeof itemOrId === 'string') {
+      return itemOrId.startsWith('repair_') || itemOrId.startsWith('service_') || itemOrId.startsWith('quick_')
+    }
+    if (typeof itemOrId === 'object' && itemOrId !== null) {
+      const obj = itemOrId as Record<string, unknown>
+      return Boolean(
+        obj.isService ||
+        obj.is_service ||
+        obj.type === 'service' ||
+        (typeof obj.id === 'string' && (obj.id.startsWith('repair_') || obj.id.startsWith('service_'))) ||
+        obj.isServiceItem
+      )
+    }
+    return false
+  }, [])
 
   /**
    * Verificar disponibilidad de stock
    */
   const checkAvailability = useCallback((productId: string, quantity: number) => {
+    if (isServiceItem(productId)) return true
     const product = inventoryProducts.find(p => p.id === productId)
-    return product ? product.stock_quantity >= quantity : false
-  }, [inventoryProducts])
+    if (!product) return true
+    if (isServiceItem(product)) return true
+    return (product.stock_quantity ?? 0) >= quantity
+  }, [inventoryProducts, isServiceItem])
 
   /**
    * Helper para redondear a 2 decimales
@@ -115,8 +160,8 @@ export const useOptimizedCart = (
    * Agregar producto al carrito
    */
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
-    // Verificar disponibilidad
-    const currentProduct = inventoryProducts.find(p => p.id === product.id) || (product as any)
+    const isService = isServiceItem(product)
+    const currentProduct = inventoryProducts.find(p => p.id === product.id) || product
     if (!currentProduct) {
       toast.error('Producto no encontrado')
       return
@@ -127,16 +172,20 @@ export const useOptimizedCart = (
       const currentQty = existingItem ? existingItem.quantity : 0
       const requestedQuantity = currentQty + quantity
 
-      const hasInventoryEntry = inventoryProducts.some(p => p.id === product.id)
-      const availableStock = Number(currentProduct.stock_quantity || 0)
-      const canAdd = hasInventoryEntry
-        ? checkAvailability(product.id, requestedQuantity)
-        : requestedQuantity <= availableStock
+      if (!isService) {
+        const hasInventoryEntry = inventoryProducts.some(p => p.id === product.id)
+        const availableStock = Number(currentProduct.stock_quantity || 0)
+        const canAdd = hasInventoryEntry
+          ? checkAvailability(product.id, requestedQuantity)
+          : requestedQuantity <= availableStock
 
-      if (!canAdd) {
-        toast.error(`Stock insuficiente. Disponible: ${availableStock}`)
-        return prev
+        if (!canAdd) {
+          toast.error(`Stock insuficiente. Disponible: ${availableStock}`)
+          return prev
+        }
       }
+
+      const itemPrice = Number((product as { price?: number | null }).price ?? product.sale_price ?? 0)
 
       if (existingItem) {
         // Actualizar item existente
@@ -149,44 +198,48 @@ export const useOptimizedCart = (
       } else {
         // Agregar nuevo item
         const inferredWholesale = product.wholesale_price
-        
+
         const newItem: CartItem = {
           id: product.id,
           name: product.name,
           sku: product.sku,
-          price: product.sale_price, // Precio base de venta
+          price: itemPrice,
           quantity: quantity,
-          stock: currentProduct.stock_quantity,
-          subtotal: product.sale_price * quantity,
-          image: (product as any).image || (product as any).image_url || '',
+          stock: isService ? 999 : (currentProduct.stock_quantity ?? 0),
+          subtotal: itemPrice * quantity,
+          image: (product as { image?: string | null }).image || product.image_url || product.images?.[0] || '',
           wholesalePrice: inferredWholesale,
-          originalPrice: product.sale_price,
-          category: typeof product.category === 'object' ? product.category?.id : product.category
+          originalPrice: itemPrice,
+          category: typeof product.category === 'object' ? product.category?.id : product.category,
+          categoryName: product.category?.name,
+          brand: product.brand || undefined,
+          isService: isService || Boolean((product as { isService?: boolean }).isService)
         }
-        
-        // NotificaciÃ³n rica (copiada de page.tsx)
-        // Nota: JSX en toast requiere que este archivo sea .tsx o manejarlo en el componente
-        // Por ahora usamos texto simple o confiamos en que toast soporte JSX si cambiamos extensiÃ³n
-        // Para seguridad en .ts, usamos mensaje simple
+
         return [...prev, newItem]
       }
     })
-  }, [inventoryProducts, checkAvailability])
+  }, [inventoryProducts, checkAvailability, isServiceItem])
 
   /**
    * Agregar variante al carrito
    */
-  const addVariantToCart = useCallback((cartItem: any) => {
-    const productRef = inventoryProducts.find((p: any) => p.id === cartItem.product_id || p.id === cartItem.id)
+  const addVariantToCart = useCallback((cartItem: CartVariantInput) => {
+    const productRef = inventoryProducts.find(p => p.id === cartItem.product_id || p.id === cartItem.id)
     const variantLabel =
       cartItem.variant ||
       cartItem.variant_name ||
       (Array.isArray(cartItem.variant_attributes)
-        ? cartItem.variant_attributes.map((a: any) => a?.value).filter(Boolean).join(' / ')
+        ? cartItem.variant_attributes.map(a => a?.value).filter(Boolean).join(' / ')
         : undefined)
 
     const normalizedItem: CartItem = {
       id: cartItem.variant_id || cartItem.sku || cartItem.id,
+      productId: cartItem.product_id,
+      variantId: cartItem.variant_id,
+      variantName: cartItem.variant_name,
+      variantSku: cartItem.sku,
+      variantAttributes: cartItem.variant_attributes,
       name: cartItem.name || cartItem.product_name || productRef?.name || 'Producto',
       sku: cartItem.sku || productRef?.sku || '',
       price: Number(cartItem.price || productRef?.sale_price || 0),
@@ -196,7 +249,9 @@ export const useOptimizedCart = (
       image: cartItem.image || productRef?.image || productRef?.image_url || productRef?.images?.[0] || '',
       wholesalePrice: cartItem.wholesalePrice ?? cartItem.wholesale_price ?? productRef?.wholesale_price ?? undefined,
       originalPrice: Number(cartItem.price || productRef?.sale_price || 0),
-      category: typeof productRef?.category === 'object' ? productRef?.category?.id : productRef?.category
+      category: typeof productRef?.category === 'object' ? productRef?.category?.id : productRef?.category,
+      categoryName: productRef?.category?.name,
+      brand: productRef?.brand || undefined,
     }
 
     if (variantLabel) {
@@ -204,13 +259,13 @@ export const useOptimizedCart = (
     }
 
     setCart(prev => {
-      const existingItem = prev.find(item => 
+      const existingItem = prev.find(item =>
         item.id === normalizedItem.id || (item.sku === normalizedItem.sku)
       )
 
       if (existingItem) {
         const newQuantity = existingItem.quantity + normalizedItem.quantity
-        return prev.map(item => 
+        return prev.map(item =>
           (item.id === normalizedItem.id || item.sku === normalizedItem.sku)
             ? { ...item, quantity: newQuantity }
             : item
@@ -228,9 +283,7 @@ export const useOptimizedCart = (
     setCart(prev => prev.filter(item => item.id !== productId))
   }, [])
 
-  /**
-   * Actualizar cantidad con descuentos automÃ¡ticos
-   */
+  /** Actualizar cantidad. Los descuentos provienen del cliente o promociones configuradas. */
   const updateQuantity = useCallback((id: string, quantity: number) => {
     if (quantity <= 0) {
       setCart(prev => prev.filter(item => item.id !== id))
@@ -238,7 +291,14 @@ export const useOptimizedCart = (
       return
     }
 
-    if (!checkAvailability(id, quantity)) {
+    const isService = isServiceItem(id)
+    const currentCartItem = cart.find(item => item.id === id)
+    const availableStock = Number(currentCartItem?.stock ?? 0)
+    if (!isService && currentCartItem?.variantId && quantity > availableStock) {
+      toast.error(`Stock insuficiente para esta variante. Disponible: ${availableStock}`)
+      return
+    }
+    if (!isService && !currentCartItem?.variantId && !checkAvailability(id, quantity)) {
       const currentProduct = inventoryProducts.find(p => p.id === id)
       toast.error(`Stock insuficiente. Disponible: ${currentProduct?.stock_quantity || 0}`)
       return
@@ -246,29 +306,16 @@ export const useOptimizedCart = (
 
     setCart(prev => prev.map(item => {
       if (item.id === id) {
-        // LÃ³gica de descuento por volumen (bulk discount)
-        let autoDiscount = 0
-        if (quantity >= 50) autoDiscount = 15
-        else if (quantity >= 20) autoDiscount = 10
-        else if (quantity >= 10) autoDiscount = 5
-
-        // Mantener descuento manual si es mayor
-        const finalDiscount = Math.max(autoDiscount, item.discount || 0)
-
-        if (autoDiscount > (item.discount || 0)) {
-          // toast.success(`Â¡Descuento por cantidad aplicado: ${autoDiscount}%!`)
-        }
-
         return {
           ...item,
           quantity,
           subtotal: item.price * quantity,
-          discount: finalDiscount
+          discount: item.discount || 0,
         }
       }
       return item
     }))
-  }, [checkAvailability, inventoryProducts])
+  }, [cart, checkAvailability, inventoryProducts, isServiceItem])
 
   /**
    * Actualizar descuento de un item
@@ -280,9 +327,9 @@ export const useOptimizedCart = (
         return {
           ...item,
           discount: safeDiscount,
-          // Recalcular subtotal es opcional aquÃ­ porque se hace en el render/memo, 
+          // Recalcular subtotal es opcional aquÃ­ porque se hace en el render/memo,
           // pero mantenemos consistencia en el estado
-          // Nota: el subtotal almacenado en el item suele ser bruto * cantidad, 
+          // Nota: el subtotal almacenado en el item suele ser bruto * cantidad,
           // el descuento se aplica despuÃ©s en los cÃ¡lculos globales.
         }
       }
@@ -302,7 +349,7 @@ export const useOptimizedCart = (
   /**
    * Vaciar carrito
    */
-  const clearCart = useCallback((force: boolean = false) => {
+  const clearCart = useCallback((_force: boolean = false) => {
     // La confirmaciÃ³n debe ser manejada por la UI (Dialog)
     setCart([])
   }, [])
@@ -319,10 +366,10 @@ export const useOptimizedCart = (
     const itemsCalculation = cart.map(item => {
       const itemDiscountRate = item.discount || 0
       const unitNonWholesale = item.price
-      
+
       // Precio mayorista: explÃ­cito o calculado
       const unitWholesaleCandidate = item.wholesalePrice ?? roundToTwo(item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100)))
-      
+
       // Precio base a aplicar (segÃºn modo mayorista)
       const unitApplied = isWholesale ? unitWholesaleCandidate : unitNonWholesale
 
@@ -390,7 +437,7 @@ export const useOptimizedCart = (
 
   return {
     cart,
-    
+
     isWholesale,
     setIsWholesale,
     discount,
@@ -400,7 +447,7 @@ export const useOptimizedCart = (
     cartSubtotal: calculations.subtotalApplied,
     cartTax: calculations.tax,
     cartItemCount: cart.reduce((acc, item) => acc + item.quantity, 0),
-    
+
     subtotalApplied: calculations.subtotalApplied,
     subtotalNonWholesale: calculations.subtotalNonWholesale,
     generalDiscountAmount: calculations.generalDiscountAmount,

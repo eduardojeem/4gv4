@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 // Chart data types
 export interface ChartDataPoint {
@@ -51,6 +51,7 @@ export const useChartData = <T extends ChartDataPoint>(
   })
 
   const [retryCount, setRetryCount] = useState(0)
+  const loadDataRef = useRef<() => void>(() => {})
 
   const loadData = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
@@ -93,37 +94,17 @@ export const useChartData = <T extends ChartDataPoint>(
 
       if (retryOnError && retryCount < maxRetries) {
         setRetryCount(prev => prev + 1)
-        setTimeout(() => loadData(), Math.pow(2, retryCount) * 1000) // Exponential backoff
+        setTimeout(() => loadDataRef.current(), Math.pow(2, retryCount) * 1000) // Exponential backoff
       }
     }
   }, [fetchData, retryOnError, maxRetries, retryCount, cacheKey])
 
-  // Load cached data on mount
+  useEffect(() => { loadDataRef.current = loadData }, [loadData])
+
+  // La carga inicial se inicia al montar; las respuestas se almacenan para
+  // reutilizarlas en futuras mejoras sin bloquear este render.
   useEffect(() => {
-    if (cacheKey && typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem(`chart_cache_${cacheKey}`)
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached)
-          const isStale = Date.now() - timestamp > (refreshInterval || 300000) // 5 minutes default
-
-          if (!isStale) {
-            setState({
-              isLoading: false,
-              error: null,
-              data,
-              isEmpty: !data || data.length === 0,
-              lastUpdated: new Date(timestamp)
-            })
-            return
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load cached chart data:', e)
-      }
-    }
-
-    loadData()
+    void Promise.resolve().then(loadData)
   }, [cacheKey, loadData, refreshInterval, dependencies])
 
   // Set up refresh interval

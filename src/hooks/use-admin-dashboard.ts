@@ -12,7 +12,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+  role: 'super_admin' | 'owner' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
   status: 'active' | 'inactive' | 'suspended'
   lastLogin: string
   createdAt: string
@@ -50,106 +50,8 @@ export interface SecurityLog {
 }
 
 // Mock data
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'Carlos Mendoza',
-    email: 'carlos.mendoza@4gcelulares.com',
-    role: 'admin',
-    status: 'active',
-    lastLogin: '2024-01-15T10:30:00Z',
-    createdAt: '2024-01-01T00:00:00Z',
-    permissions: ['all'],
-    phone: '+595 21 123-4567',
-    department: 'Administración'
-  },
-  {
-    id: '2',
-    name: 'Ana Rodríguez',
-    email: 'ana.rodriguez@4gcelulares.com',
-    role: 'tecnico',
-    status: 'active',
-    lastLogin: '2024-01-14T16:45:00Z',
-    createdAt: '2024-01-02T00:00:00Z',
-    permissions: ['products', 'inventory'],
-    phone: '+595 21 123-4568',
-    department: 'Técnico'
-  },
-  {
-    id: '3',
-    name: 'Luis García',
-    email: 'luis.garcia@4gcelulares.com',
-    role: 'vendedor',
-    status: 'active',
-    lastLogin: '2024-01-13T09:15:00Z',
-    createdAt: '2024-01-03T00:00:00Z',
-    permissions: ['sales', 'customers'],
-    phone: '+595 21 123-4569',
-    department: 'Ventas'
-  },
-  {
-    id: '4',
-    name: 'María López',
-    email: 'maria.lopez@4gcelulares.com',
-    role: 'vendedor',
-    status: 'inactive',
-    lastLogin: '2024-01-10T14:20:00Z',
-    createdAt: '2024-01-04T00:00:00Z',
-    permissions: ['sales'],
-    phone: '+595 21 123-4570',
-    department: 'Ventas'
-  }
-]
 
-const mockMetrics: SystemMetrics = {
-  totalUsers: 4,
-  activeUsers: 3,
-  totalSales: 1250000,
-  totalProducts: 156,
-  systemHealth: 98,
-  databaseSize: '2.4 GB',
-  uptime: '15 días',
-  lastBackup: '2024-01-15T02:00:00Z',
-  errorRate: 0.02,
-  responseTime: 120
-}
 
-const mockSecurityLogs: SecurityLog[] = [
-  {
-    id: '1',
-    event: 'Inicio de sesión exitoso',
-    user: 'carlos.mendoza@4gcelulares.com',
-    timestamp: '2024-01-15T10:30:00Z',
-    ip: '192.168.1.100',
-    severity: 'low'
-  },
-  {
-    id: '2',
-    event: 'Intento de acceso fallido',
-    user: 'unknown@example.com',
-    timestamp: '2024-01-15T09:45:00Z',
-    ip: '192.168.1.200',
-    severity: 'medium',
-    details: '3 intentos fallidos consecutivos'
-  },
-  {
-    id: '3',
-    event: 'Cambio de contraseña',
-    user: 'ana.rodriguez@4gcelulares.com',
-    timestamp: '2024-01-14T16:20:00Z',
-    ip: '192.168.1.150',
-    severity: 'low'
-  },
-  {
-    id: '4',
-    event: 'Acceso desde IP desconocida',
-    user: 'luis.garcia@4gcelulares.com',
-    timestamp: '2024-01-14T14:10:00Z',
-    ip: '203.0.113.1',
-    severity: 'high',
-    details: 'Acceso desde ubicación no reconocida'
-  }
-]
 
 export function useAdminDashboard() {
   // Estado inicial vacío
@@ -166,7 +68,7 @@ export function useAdminDashboard() {
     errorRate: 0,
     responseTime: 0
   })
-  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
+  const [securityLogs, _setSecurityLogs] = useState<SecurityLog[]>([])
   const [settings, setSettings] = useState<SystemSettings>({
     companyName: process.env.NEXT_PUBLIC_COMPANY_NAME || '4G celulares',
     companyEmail: 'info@4gcelulares.com',
@@ -176,6 +78,9 @@ export function useAdminDashboard() {
     city: 'Asunción',
     currency: ((process.env.NEXT_PUBLIC_CURRENCY || 'PYG') as 'PYG' | 'USD' | 'EUR' | 'MXN'),
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
+    repairMaxDiscountPercent: 20,
+    repairLaborTaxRate: 10,
+    defaultInstallmentRates: {},
     theme: 'system',
     primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
     dateFormat: 'DD/MM/YYYY',
@@ -199,12 +104,16 @@ export function useAdminDashboard() {
   })
 
   const [isLoading, setIsLoading] = useState(false)
-  
+  // El hook no tenia donde reportar una falla: la carga se caia, las metricas
+  // quedaban en sus ceros iniciales y la pantalla se veia normal.
+  const [error, setError] = useState<string | null>(null)
+
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
+      setError(null)
       try {
         // Fetch Settings from database
         const { data: settingsData, error: settingsError } = await supabase
@@ -212,7 +121,7 @@ export function useAdminDashboard() {
           .select('*')
           .eq('id', 'system')
           .single()
-        
+
         if (!settingsError && settingsData) {
           const { mapDBToSettings } = await import('@/lib/validations/system-settings')
           const mappedSettings = mapDBToSettings(settingsData)
@@ -223,9 +132,22 @@ export function useAdminDashboard() {
         const { data: usersData, error: usersError } = await supabase
           .from('profiles')
           .select('*')
-        
+
+        interface ProfileRow {
+          id: string
+          full_name?: string | null
+          name?: string | null
+          email?: string | null
+          role?: User['role'] | null
+          status?: User['status'] | null
+          last_sign_in_at?: string | null
+          created_at?: string | null
+          phone?: string
+          department?: string
+        }
+
         if (!usersError && usersData) {
-            const mappedUsers: User[] = usersData.map((u: any) => ({
+            const mappedUsers: User[] = (usersData as unknown as ProfileRow[]).map((u) => ({
                 id: u.id,
                 name: u.full_name || u.name || 'Sin Nombre',
                 email: u.email || '',
@@ -243,13 +165,13 @@ export function useAdminDashboard() {
         // Fetch Metrics
         const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
         const { data: salesData } = await supabase.from('sales').select('total_amount')
-        
+
         const totalSales = salesData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0
 
         setMetrics(prev => ({
             ...prev,
             totalUsers: usersData?.length || 0,
-            activeUsers: usersData?.filter((u: any) => (u.status || 'active') === 'active').length || 0,
+            activeUsers: ((usersData as unknown as ProfileRow[]) || []).filter((u) => (u.status || 'active') === 'active').length,
             totalProducts: productsCount || 0,
             totalSales: totalSales,
             systemHealth: 100
@@ -257,6 +179,11 @@ export function useAdminDashboard() {
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar las métricas del panel.'
+        )
       } finally {
         setIsLoading(false)
       }
@@ -295,17 +222,17 @@ export function useAdminDashboard() {
     }, {}),
   }), [users])
 
-  const createUser = useCallback(async (userData: Partial<User>) => {
+  const createUser = useCallback(async (_userData: Partial<User>) => {
     // TODO: Implement real user creation logic (likely requires server-side admin API)
     return { success: false, error: 'User creation not implemented yet in this version' }
   }, [])
 
-  const updateUser = useCallback(async (userId: string, userData: Partial<User>) => {
+  const updateUser = useCallback(async (_userId: string, _userData: Partial<User>) => {
     // TODO: Implement real user update logic
     return { success: false, error: 'User update not implemented yet in this version' }
   }, [])
 
-  const deleteUser = useCallback(async (userId: string) => {
+  const deleteUser = useCallback(async (_userId: string) => {
     // TODO: Implement real user deletion logic
     return { success: false, error: 'User deletion not implemented yet in this version' }
   }, [])
@@ -313,21 +240,21 @@ export function useAdminDashboard() {
   const updateSettings = useCallback(async (newSettings: Partial<SystemSettings>) => {
     try {
       setIsLoading(true)
-      
+
       // 1. Validar con Zod
       const { SystemSettingsPartialSchema } = await import('@/lib/validations/system-settings')
       const validated = SystemSettingsPartialSchema.parse(newSettings)
-      
+
       // 2. Verificar rate limit
       const { checkRateLimit } = await import('@/lib/security/rate-limit')
       const rateLimitCheck = await checkRateLimit('settings_update')
       if (!rateLimitCheck.allowed) {
-        return { 
-          success: false, 
-          error: `Demasiadas solicitudes. Intente nuevamente en ${rateLimitCheck.resetAt.toLocaleTimeString()}.` 
+        return {
+          success: false,
+          error: `Demasiadas solicitudes. Intente nuevamente en ${rateLimitCheck.resetAt.toLocaleTimeString()}.`
         }
       }
-      
+
       // 3. Actualizar via endpoint protegido en servidor
       const response = await fetch('/api/admin/system/settings', {
         method: 'PUT',
@@ -344,11 +271,11 @@ export function useAdminDashboard() {
         console.error('Error updating settings via API:', errorMessage)
         return { success: false, error: errorMessage }
       }
-      
+
       // 4. Registrar en audit log
       const { logAuditEvent, getChangedFields, determineSeverity } = await import('@/lib/security/audit-log')
       const changes = getChangedFields(settings, validated as SystemSettings)
-      
+
       // Registrar cada cambio individualmente
       for (const change of changes) {
         await logAuditEvent({
@@ -357,32 +284,32 @@ export function useAdminDashboard() {
           oldValue: change.oldValue,
           newValue: change.newValue,
           severity: determineSeverity(change.field),
-          details: { 
+          details: {
             totalChanges: changes.length,
             timestamp: new Date().toISOString()
           }
         })
       }
-      
+
       // 5. Actualizar estado local
       const { mapDBToSettings } = await import('@/lib/validations/system-settings')
       const updatedSettings = mapDBToSettings(responseData.data)
       setSettings(updatedSettings)
-      
+
       return { success: true }
     } catch (error) {
       console.error('Update settings error:', error)
-      
+
       if (error instanceof Error) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: error.message
         }
       }
-      
-      return { 
-        success: false, 
-        error: 'Error al actualizar configuración' 
+
+      return {
+        success: false,
+        error: 'Error al actualizar configuración'
       }
     } finally {
       setIsLoading(false)
@@ -394,17 +321,17 @@ export function useAdminDashboard() {
       // Validar acción
       const { SystemActionSchema } = await import('@/lib/validations/system-settings')
       const validatedAction = SystemActionSchema.parse(action)
-      
+
       // Verificar rate limit
       const { checkRateLimit } = await import('@/lib/security/rate-limit')
       const rateLimitCheck = await checkRateLimit(`system_action_${validatedAction}`)
       if (!rateLimitCheck.allowed) {
-        return { 
-          success: false, 
-          error: 'Demasiadas solicitudes. Intente más tarde.' 
+        return {
+          success: false,
+          error: 'Demasiadas solicitudes. Intente más tarde.'
         }
       }
-      
+
       // Registrar en audit log
       const { logAuditEvent } = await import('@/lib/security/audit-log')
       await logAuditEvent({
@@ -412,7 +339,7 @@ export function useAdminDashboard() {
         severity: 'high',
         details: { action: validatedAction }
       })
-      
+
       // Ejecutar acción (aquí deberías implementar la lógica real)
       let message = ''
       switch (validatedAction) {
@@ -433,13 +360,13 @@ export function useAdminDashboard() {
           // TODO: Implementar envío de email
           break
       }
-      
+
       return { success: true, message }
     } catch (error) {
       console.error('System action error:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Error al realizar acción' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error al realizar acción'
       }
     }
   }, [])
@@ -450,6 +377,7 @@ export function useAdminDashboard() {
     securityLogs,
     settings,
     isLoading,
+    error,
     summary,
     createUser,
     updateUser,

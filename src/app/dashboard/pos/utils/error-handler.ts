@@ -26,7 +26,7 @@ export interface POSError {
   severity: ErrorSeverity
   message: string
   code?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
   timestamp: Date
   context?: string
   recoverable?: boolean
@@ -65,7 +65,7 @@ class POSErrorHandler {
     // Estrategia para errores de inventario
     this.recoveryStrategies.set(ErrorType.INVENTORY, {
       canRecover: (error) => error.code === 'INSUFFICIENT_STOCK',
-      recover: async (error) => {
+      recover: async (_error) => {
         // Intentar refrescar datos de inventario
         try {
           // Aquí iría la lógica para refrescar inventario
@@ -123,7 +123,7 @@ class POSErrorHandler {
    */
   private async attemptRecovery(error: POSError): Promise<boolean> {
     const strategy = this.recoveryStrategies.get(error.type)
-    
+
     if (!strategy || !strategy.canRecover(error)) {
       return false
     }
@@ -151,7 +151,7 @@ class POSErrorHandler {
    */
   private showUserNotification(error: POSError) {
     const userMessage = this.getUserFriendlyMessage(error)
-    
+
     switch (error.severity) {
       case ErrorSeverity.LOW:
         toast.info(userMessage, {
@@ -159,14 +159,14 @@ class POSErrorHandler {
           duration: 3000
         })
         break
-      
+
       case ErrorSeverity.MEDIUM:
         toast.warning(userMessage, {
           description: 'Algunas funciones pueden verse afectadas',
           duration: 5000
         })
         break
-      
+
       case ErrorSeverity.HIGH:
         toast.error(userMessage, {
           description: 'Se requiere atención inmediata',
@@ -177,7 +177,7 @@ class POSErrorHandler {
           }
         })
         break
-      
+
       case ErrorSeverity.CRITICAL:
         toast.error(userMessage, {
           description: 'Sistema comprometido - Contacte soporte técnico',
@@ -247,7 +247,7 @@ class POSErrorHandler {
    */
   private addToLog(error: POSError) {
     this.errorLog.unshift(error)
-    
+
     // Mantener tamaño del log
     if (this.errorLog.length > this.maxLogSize) {
       this.errorLog = this.errorLog.slice(0, this.maxLogSize)
@@ -260,7 +260,7 @@ class POSErrorHandler {
   private logError(error: POSError) {
     const logLevel = this.getLogLevel(error.severity)
     const logMessage = `[POS Error] ${error.type.toUpperCase()}: ${error.message}`
-    
+
     console[logLevel](logMessage, {
       code: error.code,
       context: error.context,
@@ -294,7 +294,7 @@ class POSErrorHandler {
     try {
       // Aquí iría la lógica para enviar el error a un servicio de monitoreo
       console.log('Reportando error crítico:', error)
-      
+
       toast.success('Error reportado exitosamente', {
         description: 'El equipo técnico ha sido notificado'
       })
@@ -312,9 +312,9 @@ class POSErrorHandler {
   getErrorStats() {
     const now = new Date()
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    
+
     const recent = this.errorLog.filter(error => error.timestamp > last24h)
-    
+
     const byType = recent.reduce((acc, error) => {
       acc[error.type] = (acc[error.type] || 0) + 1
       return acc
@@ -363,7 +363,7 @@ export const clearErrorLog = () => posErrorHandler.clearErrorLog()
 export const getRecentErrors = (limit?: number) => posErrorHandler.getRecentErrors(limit)
 
 // Wrapper para errores comunes
-export const handleNetworkError = (message: string, code?: string, details?: any) => {
+export const handleNetworkError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.NETWORK,
     severity: ErrorSeverity.MEDIUM,
@@ -374,7 +374,7 @@ export const handleNetworkError = (message: string, code?: string, details?: any
   })
 }
 
-export const handlePaymentError = (message: string, code?: string, details?: any) => {
+export const handlePaymentError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.PAYMENT,
     severity: ErrorSeverity.HIGH,
@@ -385,7 +385,7 @@ export const handlePaymentError = (message: string, code?: string, details?: any
   })
 }
 
-export const handleInventoryError = (message: string, code?: string, details?: any) => {
+export const handleInventoryError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.INVENTORY,
     severity: ErrorSeverity.MEDIUM,
@@ -396,7 +396,7 @@ export const handleInventoryError = (message: string, code?: string, details?: a
   })
 }
 
-export const handleValidationError = (message: string, code?: string, details?: any) => {
+export const handleValidationError = (message: string, code?: string, details?: Record<string, unknown>) => {
   return handlePOSError({
     type: ErrorType.VALIDATION,
     severity: ErrorSeverity.LOW,

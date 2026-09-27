@@ -1,3 +1,5 @@
+import { normalizeCashMovementType } from '../types'
+
 export type CashBalanceMovement = {
   type: string
   amount: number
@@ -5,21 +7,29 @@ export type CashBalanceMovement = {
 }
 
 export function isPhysicalCashSale(movement: CashBalanceMovement) {
-  return movement.type === 'sale'
+  return normalizeCashMovementType(movement.type) === 'sale'
     && (!movement.payment_method || movement.payment_method === 'cash' || movement.payment_method === 'efectivo')
 }
 
 export function isPhysicalManualMovement(movement: CashBalanceMovement) {
-  return (movement.type === 'cash_in' || movement.type === 'cash_out')
+  const canonical = normalizeCashMovementType(movement.type)
+  return (canonical === 'cash_in' || canonical === 'cash_out')
     && (!movement.payment_method || movement.payment_method === 'cash' || movement.payment_method === 'efectivo')
 }
 
 export function calculateExpectedCashBalance(movements: CashBalanceMovement[]) {
   return movements.reduce((total, movement) => {
-    if (movement.type === 'opening' || (movement.type === 'cash_in' && isPhysicalManualMovement(movement)) || isPhysicalCashSale(movement)) {
+    const canonical = normalizeCashMovementType(movement.type)
+    if (canonical === 'opening') {
       return total + Number(movement.amount || 0)
     }
-    if (movement.type === 'cash_out' && isPhysicalManualMovement(movement)) {
+    if (canonical === 'cash_in' && isPhysicalManualMovement(movement)) {
+      return total + Number(movement.amount || 0)
+    }
+    if (isPhysicalCashSale(movement)) {
+      return total + Number(movement.amount || 0)
+    }
+    if (canonical === 'cash_out' && isPhysicalManualMovement(movement)) {
       return total - Number(movement.amount || 0)
     }
     return total

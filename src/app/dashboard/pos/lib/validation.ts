@@ -89,7 +89,7 @@ export type ValidatedRegisterClosing = z.infer<typeof registerClosingSchema>
 
 // Esquema para cliente
 export const customerSchema = z.object({
-  firstName: z.string().min(1, 'Nombre requerido').max(50),
+  firstName: z.string().max(50).default(''),
   lastName: z.string().max(50).optional(),
   phone: z.string().regex(/^\+?[\d\s-()]+$/, 'Formato de teléfono inválido').optional().or(z.literal('')),
   email: z.string().email('Email inválido').optional().or(z.literal('')),

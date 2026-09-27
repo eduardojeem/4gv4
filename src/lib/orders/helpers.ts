@@ -1,4 +1,4 @@
-import type { CustomerOrder, CustomerOrderItem, OrderStatus } from './types'
+import type { CustomerOrder, CustomerOrderItem, OrderStatus, PaymentMethod } from './types'
 import { ORDER_FLOW, normalizeOrderStatus } from './flow'
 import { normalizePaymentStatus } from './payment-flow'
 
@@ -26,6 +26,8 @@ export function normalizeOrderItem(item: RawOrderItem): CustomerOrderItem {
   return {
     id: String(item.id ?? ''),
     product_id: item.product_id ? String(item.product_id) : null,
+    variant_id: item.variant_id ? String(item.variant_id) : null,
+    variant_name: item.variant_name ? String(item.variant_name) : null,
     product_name: String(item.product_name ?? 'Producto'),
     product_sku: item.product_sku ? String(item.product_sku) : null,
     quantity: toNumber(item.quantity),
@@ -36,6 +38,11 @@ export function normalizeOrderItem(item: RawOrderItem): CustomerOrderItem {
 
 export function normalizeOrder(order: RawOrder): CustomerOrder {
   const items = order.order_items ?? order.customer_order_items ?? []
+  const total = toNumber(order.total)
+  const storeCreditReserved = toNumber(order.store_credit_reserved)
+  const storeCreditApplied = toNumber(order.store_credit_applied)
+  const collectedAmount = toNumber(order.collected_amount)
+  const paymentStatus = normalizePaymentStatus(order.payment_status)
 
   return {
     id: String(order.id ?? ''),
@@ -43,9 +50,14 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     customer_id: order.customer_id ? String(order.customer_id) : null,
     order_number: String(order.order_number ?? ''),
     status: normalizeOrderStatus(order.status),
-    payment_status: normalizePaymentStatus(order.payment_status),
-    payment_method: String(order.payment_method ?? 'CASH').toUpperCase() as CustomerOrder['payment_method'],
-    fulfillment_type: String(order.fulfillment_type ?? 'PICKUP').toUpperCase() as CustomerOrder['fulfillment_type'],
+    payment_status: paymentStatus,
+    payment_method: (order.payment_method ? String(order.payment_method) : 'CASH') as PaymentMethod,
+    fulfillment_type: (() => {
+      const raw = String(order.fulfillment_type ?? '').trim().toUpperCase()
+      if (raw === 'DELIVERY') return 'DELIVERY'
+      if (raw === 'PICKUP') return toNumber(order.shipping_cost) > 0 ? 'DELIVERY' : 'PICKUP'
+      return (toNumber(order.shipping_cost) > 0 || Boolean(order.customer_address && String(order.customer_address).trim())) ? 'DELIVERY' : 'PICKUP'
+    })() as CustomerOrder['fulfillment_type'],
     customer_name: String(order.customer_name ?? ''),
     customer_email: order.customer_email ? String(order.customer_email) : null,
     customer_phone: order.customer_phone ? String(order.customer_phone) : null,
@@ -54,7 +66,13 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     tax_amount: toNumber(order.tax_amount),
     shipping_cost: toNumber(order.shipping_cost),
     discount_amount: toNumber(order.discount_amount),
-    total: toNumber(order.total),
+    total,
+    store_credit_reserved: storeCreditReserved,
+    store_credit_applied: storeCreditApplied,
+    collected_amount: collectedAmount,
+    amount_due: paymentStatus === 'PAID'
+      ? 0
+      : Math.max(0, total - storeCreditReserved - storeCreditApplied - collectedAmount),
     notes: order.notes ? String(order.notes) : null,
     created_at: String(order.created_at ?? ''),
     updated_at: String(order.updated_at ?? ''),

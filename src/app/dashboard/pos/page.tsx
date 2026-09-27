@@ -1,37 +1,30 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useEffect, memo, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, FileText,
-  Users, Package, Star, Filter, Grid, List,
-  Keyboard, Maximize, Minimize, BarChart3,
-  Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
+  Search, Plus, ShoppingCart, CreditCard, FileText, Package, Star, Filter, Grid, List,
+  Keyboard, Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
   Printer, Download, Share2, Settings, AlertTriangle,
-  Loader2, CheckCircle2, XCircle, Tag, Sparkles, Award, ArrowRight, Wrench,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info
+  Loader2, XCircle, Tag, Sparkles, Wrench, MoreHorizontal, UserPlus, DollarSign, RotateCcw, SlidersHorizontal, BookOpen
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
+  SheetContent, SheetHeader,
   SheetTitle,
-  SheetTrigger,
+  SheetTrigger
 } from "@/components/ui/sheet"
 import {
   DropdownMenu,
@@ -42,74 +35,68 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 import { toast } from 'sonner'
-import { redeemStoreCredit } from '@/lib/after-sales/redeem-store-credit'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
-import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
+import { printReceipt, downloadReceipt, shareReceipt, type ReceiptData } from '@/lib/receipt-utils'
 // Limpieza: se retiran componentes de debug/diagnóstico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
-import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { config, isDemoNoDb, getFeatureFlag } from '@/lib/config'
+import { config, getFeatureFlag } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { SupabaseStatus } from '@/components/supabase-status'
 import { formatCurrency as formatCurrencyBase } from '@/lib/currency'
-import { 
-  calculateRepairTotal, 
-  createRepairCartItem, 
-  calculateMixedCartTotal,
-  CartRepairItem 
-} from '@/lib/pos-calculator'
+import { cn } from '@/lib/utils'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { POSBarcodeScanner } from '@/components/barcode/BarcodeScanner'
 import { VariantSelector } from '@/components/pos/VariantSelector'
 import { useProductVariants } from '@/hooks/useProductVariants'
-import { useSmartSearch } from './hooks/useSmartSearch'
 import { usePromotionEngine } from '@/hooks/use-promotion-engine'
 import { usePromotions } from '@/hooks/use-promotions'
 import { ProductWithVariants, ProductVariant } from '@/types/product-variants'
 import { usePerformanceMonitor, useRenderTimeMonitor } from './hooks/usePerformanceMonitor'
-import { recordMetric } from './utils/performance-monitor'
 import { useErrorHandler } from './hooks/useErrorHandler'
-import { ErrorMonitor } from './components/ErrorMonitor'
-import { PerformanceDashboard } from './components/PerformanceDashboard'
 import { ProductCard } from './components/ProductCard'
 import { POSHeader } from './components/POSHeader'
 import { POSCart } from './components/POSCart'
 import { CheckoutModal } from './components/CheckoutModal'
+import { getCartProductCreditPlans } from './lib/cart-credit-plans'
+import { getCheckoutEligibility } from './lib/checkout-eligibility'
 import { OpenCashRegisterDialog } from './components/OpenCashRegisterDialog'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
+import { useCreditSystem } from '@/hooks/use-credit-system'
 import { useBranch } from '@/contexts/branch-context'
 import { useAuth } from '@/contexts/auth-context'
-import { CartItem, PaymentMethodOption } from './types'
+import { CartItem } from './types'
 import type { Product } from '@/types/product-unified'
 import { branchHeaders } from '@/lib/branches/client'
-import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
-import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
-import { getMixedPaymentValidation } from './lib/payment-validation'
+import { buildQuickItemPayload, getQuickItemApiError, getQuickItemMargin } from './lib/quick-item'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useHeldSales, HeldSale } from './hooks/useHeldSales'
+import { HeldSalesModal } from './components/HeldSalesModal'
+import { POSShortcutsBar } from './components/POSShortcutsBar'
+import { POSWorkspace } from './components/POSWorkspace'
+import { POSRepairChargeModal, type RepairItemData } from './components/POSRepairChargeModal'
+import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
+import { POSProductDetailDialog } from './components/POSProductDetailDialog'
+import { POSCashMovementDialog } from './components/POSCashMovementDialog'
+import { getRepairBalanceDue } from './lib/repair-charge'
+import {
+  type ProductCreditSort
+} from './lib/product-credit-filter'
+// Hooks extraídos por la refactorización de page.tsx
+import { usePOSRepairs, type PosCartRepair } from './hooks/usePOSRepairs'
+import { usePOSSearch } from './hooks/usePOSSearch'
+import { usePOSSaleProcessor } from './hooks/usePOSSaleProcessor'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
-const getErrorMessage = (e: unknown) => {
-  if (!e) return 'Unknown error'
-  if (typeof e === 'string') return e
-  if (e && typeof e === 'object' && 'message' in e) return String((e as any).message)
-  try { return JSON.stringify(e) } catch { return String(e) }
-}
+/** Lo minimo que necesita el carrito para armar la linea de una reparacion.
+ * @deprecated Usa PosCartRepair desde './hooks/usePOSRepairs'
+ */
+type _PosCartRepair = PosCartRepair
 
-type HeldSale = {
-  id: string
-  label: string
-  createdAt: string
-  cart: CartItem[]
-  itemCount: number
-  total: number
-  selectedCustomer: string
-  selectedRepairIds: string[]
-  isWholesale: boolean
-  discount: number
-}
+
 
 // Utilidades de código de barras (EAN-8/13)
 const normalizeBarcode = (raw: string) => raw.replace(/\D+/g, '').trim()
@@ -145,6 +132,9 @@ export default function POSPage() {
 
 function POSPageContent() {
   const { settings } = useSharedSettings()
+  const { selectedBranchId } = useBranch()
+  const { user } = useAuth()
+  const posStorageScope = `${user?.id || 'anonymous'}:${selectedBranchId || 'unselected'}`
   const taxPercentage = Number.isFinite(settings.taxRate) ? settings.taxRate : 10
   const taxRate = taxPercentage / 100
   const formatCurrency = useCallback(
@@ -167,28 +157,45 @@ function POSPageContent() {
   // Monitoreo de performance y errores
   const {
     measureCartOperation,
-    measureProductSearch,
+    measureProductSearch: _measureProductSearch,
     measureSaleProcessing,
-    performanceScore
+    performanceScore: _performanceScore
   } = usePerformanceMonitor()
 
-  const { withErrorHandling } = useErrorHandler()
+  const { withErrorHandling: _withErrorHandling } = useErrorHandler()
 
   // Monitoreo de tiempo de renderizado
   useRenderTimeMonitor('POSPage')
 
-  // Estados principales
-  const [searchTerm, setSearchTerm] = useState('')
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  // Estados principales — búsqueda gestionada por usePOSSearch (ver abajo)
   // Cart state managed by useOptimizedCart hook
 
   // Use centralized customer state
   const { 
     selectedCustomer, 
     setSelectedCustomer, 
+    activeCustomer,
     customers, 
-    setNewCustomerOpen
+    setNewCustomerOpen: _setNewCustomerOpen
   } = usePOSCustomer()
+
+  const { getCreditSummary } = useCreditSystem()
+
+  /**
+   * Cuánto puede financiar este cliente.
+   *
+   * Salía de `customers.current_balance`, una columna que no actualiza nadie:
+   * con dos clientes debiendo 76.800 y 60.000 mostraba el límite entero. El
+   * panel del checkout ya usaba la deuda real (las cuotas pendientes menos lo
+   * pagado) y el servidor decide con esa misma cuenta, así que el mostrador
+   * veía un número y la caja otro. Ahora es uno solo.
+   */
+  const creditoDisponible = useMemo(() => {
+    if (!activeCustomer?.id) return 0
+    const resumen = getCreditSummary(activeCustomer as unknown as Parameters<typeof getCreditSummary>[0])
+    return Math.max(0, resumen.availableCredit)
+  }, [activeCustomer, getCreditSummary])
+
 
   // Use centralized checkout state
   const {
@@ -196,39 +203,74 @@ function POSPageContent() {
     setIsCheckoutOpen,
     paymentStatus,
     setPaymentStatus,
-    paymentError,
+    paymentError: _paymentError,
     setPaymentError,
     paymentMethod,
     setPaymentMethod,
-    isMixedPayment,
-    setIsMixedPayment,
+    isMixedPayment: _isMixedPayment,
+    setIsMixedPayment: _setIsMixedPayment,
     cashReceived,
-    setCashReceived,
+    setCashReceived: _setCashReceived,
     cardNumber,
-    setCardNumber,
+    setCardNumber: _setCardNumber,
     transferReference,
-    setTransferReference,
+    setTransferReference: _setTransferReference,
     electronicProvider,
     electronicInstitution,
     electronicChannel,
     terminalId,
-    splitAmount,
-    setSplitAmount,
+    splitAmount: _splitAmount,
+    setSplitAmount: _setSplitAmount,
     notes,
-    setNotes,
+    setNotes: _setNotes,
     creditTerms,
+    applyProductCreditSuggestion,
     paymentSplit,
-    setPaymentSplit,
-    addPaymentSplit,
-    removePaymentSplit,
+    setPaymentSplit: _setPaymentSplit,
+    addPaymentSplit: _addPaymentSplit,
+    removePaymentSplit: _removePaymentSplit,
     resetCheckoutState,
     storeCreditApplied,
   } = useCheckout()
   
 
 
-  const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
-  const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
+  // ── Reparaciones (extraído a usePOSRepairs) ──────────────────────────────
+  // Taller: sin el modulo de reparaciones no se consultan ni se ofrece cobrar
+  // reparaciones. Es la misma regla que usa el menu lateral.
+  const { effectiveModules } = useSubscriptionStatus()
+  const repairsEnabled = effectiveModules.includes('repairs')
+
+  const {
+    setCustomerRepairs,
+    manualRepairs: _manualRepairs,
+    setManualRepairs: _setManualRepairs,
+    selectedRepairIds,
+    setSelectedRepairIds,
+    selectedRepairs,
+    markRepairDelivered,
+    setMarkRepairDelivered,
+    deliveryOutcome,
+    setDeliveryOutcome,
+    deliveryEligibility,
+    repairTotals,
+    addRepairToCart: handleAddRepairToCart,
+    removeRepair: removeRepairById,
+    clearRepairs,
+  } = usePOSRepairs({
+    selectedCustomer,
+    isCheckoutOpen,
+    taxPercentage,
+    enabled: repairsEnabled,
+  })
+
+  const { heldSales, heldSalesCount, parkSale, deleteSale, clearAllSales } = useHeldSales(posStorageScope)
+  const [isHeldSalesModalOpen, setIsHeldSalesModalOpen] = useState(false)
+  const [isRepairModalOpen, setIsRepairModalOpen] = useState(false)
+  const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false)
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+  const [detailDialogScrollToCredit, setDetailDialogScrollToCredit] = useState(false)
 
   // Pre-load customer and repair from URL params (e.g. coming from /dashboard/repairs)
   const searchParams = useSearchParams()
@@ -236,66 +278,29 @@ function POSPageContent() {
     const cid = searchParams.get('customerId')
     const rid = searchParams.get('repairId')
     if (cid) setSelectedCustomer(cid)
-    if (rid) setSelectedRepairIds([rid])
+    if (rid && repairsEnabled) setSelectedRepairIds([rid])
   // Only run once on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  
-  const [paymentAttempts, setPaymentAttempts] = useState<Array<{ time: string; status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }>>([])
-  const addPaymentAttempt = useCallback((attempt: { status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }) => {
-    setPaymentAttempts(prev => [{ ...attempt, time: new Date().toISOString() }, ...prev].slice(0, 50))
-  }, [])
-  const normalizePaymentError = useCallback((err: any): string => {
-    try {
-      if (!err) return 'Error desconocido'
-      const msg = typeof err === 'string' ? err : (err.message || err.error_description || err.details || err.hint || 'Error desconocido')
-      const lower = (msg || '').toLowerCase()
-      if (lower.includes('network') || lower.includes('fetch')) return 'Error de red: verifique la conexión.'
-      if (lower.includes('permission') || lower.includes('auth') || lower.includes('jwt')) return 'Permisos insuficientes o sesión inválida.'
-      if (lower.includes('duplicate key') || lower.includes('unique constraint')) return 'Registro duplicado.'
-      if (lower.includes('timeout')) return 'Tiempo de espera agotado.'
-      if (lower.includes('not null')) return 'Faltan datos requeridos.'
-      return msg
-    } catch {
-      return 'Error desconocido'
-    }
-  }, [])
-  // Reiniciar estado de pago al abrir/cerrar el modal
+
+  // ── Procesador de ventas (extraído a usePOSSaleProcessor) ─────────────────
+  const {
+    paymentAttempts: _paymentAttempts,
+    addPaymentAttempt: _addPaymentAttempt,
+    clearPaymentAttempts,
+    normalizePaymentError: _normalizePaymentError,
+    processSale: processSaleBase,
+    processMixedPayment: processMixedPaymentBase,
+  } = usePOSSaleProcessor()
+
+  // Reiniciar estado de pago al abrir el modal
   useEffect(() => {
     if (isCheckoutOpen) {
       setPaymentStatus('idle')
       setPaymentError('')
     }
   }, [isCheckoutOpen, setPaymentError, setPaymentStatus])
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  // Opciones de vinculación de reparación
-  const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
-  const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
-  const selectedRepairs = useMemo(
-    () => customerRepairs.filter(repair => selectedRepairIds.includes(repair.id)),
-    [customerRepairs, selectedRepairIds]
-  )
-  const supabaseStatusToLabel: Record<string, string> = {
-    recibido: 'Recibido',
-    'diagnostico': 'En diagnóstico',
-    'reparacion': 'En reparación',
-    listo: 'Listo para entrega',
-    entregado: 'Entregado',
-  }
-  useEffect(() => {
-    // Resetear toggles al cerrar checkout o al cambiar de reparación
-    if (!isCheckoutOpen) {
-      setMarkRepairDelivered(false)
-      setDeliveryOutcome('repaired')
-    }
-  }, [isCheckoutOpen, selectedRepairIds])
-
-  useEffect(() => {
-    if (!isCheckoutOpen) return
-    setMarkRepairDelivered(selectedRepairIds.length > 0)
-  }, [selectedRepairIds, isCheckoutOpen])
-  const [showFeatured, setShowFeatured] = useState(false)
-  const [showPosGuide, setShowPosGuide] = useState(true)
+  const [_showPosGuide, setShowPosGuide] = useState(true)
 
   useEffect(() => {
     try {
@@ -307,14 +312,6 @@ function POSPageContent() {
     }
   }, [])
 
-  const handleHidePosGuide = () => {
-    setShowPosGuide(false)
-    try {
-      localStorage.setItem('pos_guide_hidden', 'true')
-    } catch {
-      // ignore
-    }
-  }
 
   const handleShowPosGuide = () => {
     setShowPosGuide(true)
@@ -328,19 +325,38 @@ function POSPageContent() {
   const [barcodeInput, setBarcodeInput] = useState('')
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+
+  const supabaseStatusToLabel: Record<string, string> = {
+    recibido: 'Recibido',
+    diagnostico: 'En diagnóstico',
+    reparacion: 'En reparación',
+    listo: 'Listo para entrega',
+    entregado: 'Entregado',
+  }
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, _setSidebarCollapsed] = useState(false)
   const [showCartDialog, setShowCartDialog] = useState(false)
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
-  const [heldSales, setHeldSales] = useState<HeldSale[]>([])
   const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
+  // El costo se oculta a quien no tiene permiso, igual que en el resto del sistema.
+  const canViewCost = useCanViewCost()
   const [quickItemName, setQuickItemName] = useState('')
   const [quickItemPrice, setQuickItemPrice] = useState('')
   const [quickItemQty, setQuickItemQty] = useState('1')
+  const [quickItemPurchasePrice, setQuickItemPurchasePrice] = useState('')
+  const [quickItemWholesalePrice, setQuickItemWholesalePrice] = useState('')
   const [quickItemSku, setQuickItemSku] = useState('')
   const [quickItemPublishToCatalog, setQuickItemPublishToCatalog] = useState(false)
+  const quickItemMargin = getQuickItemMargin(
+    Number(quickItemPurchasePrice) || 0,
+    Number(quickItemPrice) || 0,
+  )
+  // El costo se captura al vender y queda inmutable: si se crea el item sin
+  // costo, esa venta queda para siempre sin ganancia calculable en Finanzas.
+  const quickItemMissingCost = canViewCost && !(Number(quickItemPurchasePrice) > 0)
   const [quickItemError, setQuickItemError] = useState('')
   const [quickItemSaving, setQuickItemSaving] = useState(false)
 
@@ -350,11 +366,10 @@ function POSPageContent() {
 
   // Hooks para variantes y promociones
   const { getProductWithVariants, convertVariantToCartItem } = useProductVariants()
-  const { applyPromotionByCode, calculateCartSummary } = usePromotionEngine()
+  const { applyPromotionByCode, calculateCartSummary: _calculateCartSummary } = usePromotionEngine()
   const { allPromotions } = usePromotions()
 
   // Descuento automático para clientes VIP
-  const VIP_DISCOUNT_RATE = 10
   const [vipAutoApplied, setVipAutoApplied] = useState(false)
 
 
@@ -372,8 +387,6 @@ function POSPageContent() {
     addMovement,
     openRegister
   } = useCashRegisterContext()
-  const { selectedBranchId } = useBranch()
-  const { user } = useAuth()
   const cashierName = user?.profile?.name || user?.email || 'Cajero'
   const canManageRegisters = user?.role === 'admin' || user?.role === 'super_admin'
 
@@ -467,17 +480,17 @@ function POSPageContent() {
   // Movement Dialog State
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
   const [movementType, setMovementType] = useState<'in' | 'out'>('out')
-  const [movementAmount, setMovementAmount] = useState('')
-  const [movementNote, setMovementNote] = useState('')
-  const [movementSaving, setMovementSaving] = useState(false)
+  const [_movementAmount, setMovementAmount] = useState('')
+  const [_movementNote, setMovementNote] = useState('')
+  const [_movementSaving, _setMovementSaving] = useState(false)
 
   // Estados para múltiples métodos de pago
   // Eliminados estados locales que ahora están en CheckoutContext
 
   // Estados para sistema de tickets
   const [showReceiptModal, setShowReceiptModal] = useState(false)
-  const [currentReceipt, setCurrentReceipt] = useState<any>(null)
-  const [lastSaleData, setLastSaleData] = useState<any>(null)
+  const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(null)
+  const [_lastSaleData, setLastSaleData] = useState<ReceiptData | null>(null)
 
   // Estados para sistema de inventario usando el hook de Supabase
   const {
@@ -497,7 +510,7 @@ function POSPageContent() {
     discount: generalDiscount,
     setDiscount: setGeneralDiscount,
     cartTotal,
-    cartSubtotal,
+    cartSubtotal: _cartSubtotal,
     cartTax,
     cartItemCount,
     subtotalApplied,
@@ -512,11 +525,12 @@ function POSPageContent() {
     updateItemDiscount,
     updateItemPromoCode,
     clearCart,
-    replaceCart,
-    checkAvailability: checkCartAvailability
+    replaceCart: _replaceCart,
+    checkAvailability: _checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
     taxRate,
-    pricesIncludeTax: config.pricesIncludeTax
+    pricesIncludeTax: config.pricesIncludeTax,
+    storageScope: posStorageScope,
   })
 
   const handleWholesaleToggle = useCallback((value: boolean) => {
@@ -529,403 +543,52 @@ function POSPageContent() {
   const WHOLESALE_DISCOUNT_RATE = 10
 
   // Función para verificar disponibilidad de stock
-  const checkAvailability = useCallback((productId: string, quantity: number) => {
+  void (useCallback((productId: string, quantity: number) => {
     const product = inventoryProducts.find(p => p.id === productId)
     return product ? product.stock_quantity >= quantity : false
-  }, [inventoryProducts])
+  }, [inventoryProducts]));
 
   // Smart search integration (after inventoryProducts is available)
-  const { 
-    query: smartSearchQuery, 
-    setQuery: setSmartSearchQuery,
-    searchResults: smartSearchResults,
-    suggestions: smartSearchSuggestions,
-    isSearching: isSmartSearching,
-    addToRecentSearches
-  } = useSmartSearch({
-    products: (inventoryProducts || []) as any[],
-    maxResults: 20,
-    enableFuzzySearch: true,
-    enableSemanticSearch: true
-  })
+  // NOTA: useSmartSearch y todo el estado de búsqueda/filtros/paginación
+  // están ahora encapsulados en usePOSSearch.
+  const posSearch = usePOSSearch({ products: inventoryProducts as Product[] })
+  const {
+    catalogView, setCatalogView, catalogCounts, otherViewMatches,
+    searchTerm, setSearchTerm: _setSearchTerm, handleSearchChange, handleSearchKeyDown,
+    debouncedSearchTerm: _debouncedSearchTerm,
+    showSuggestions, setShowSuggestions, searchSuggestions,
+    selectedSuggestionIndex, setSelectedSuggestionIndex, selectSuggestion, recentSearches: _recentSearches,
+    selectedCategory, setSelectedCategory,
+    showFeatured, setShowFeatured,
+    sortBy, setSortBy, sortOrder, setSortOrder,
+    priceRange, setPriceRange,
+    stockFilter, setStockFilter,
+    creditOnly, setCreditOnly,
+    minimumInstallments, setMinimumInstallments,
+    creditSort, setCreditSort,
+    activeFiltersCount, handleResetFilters,
+    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages,
+    categories, priceRangeLimits: _priceRangeLimits, financedProductsCount,
+    filteredProducts, paginatedProducts,
+    viewportWidth: _viewportWidth, viewportHeight, virtualizationThreshold,
+    smartSearchResults: _smartSearchResults, isSmartSearching: _isSmartSearching,
+  } = posSearch
 
   // Mantener compatibilidad con el inventoryManager existente
   const inventoryManager = useMemo(() => ({
     getProducts: () => inventoryProducts,
-    subscribe: (callback: (products: any[]) => void) => {
-      // Para compatibilidad, retornamos una función de desuscripción vacía
-      // ya que los productos se actualizan automáticamente con el hook
-      return () => { }
-    },
-    importData: (data: { products: any[] }) => {
-      // En modo demo, no necesitamos importar datos ya que usamos Supabase
+    subscribe: (_callback: (products: Product[]) => void) => () => {},
+    importData: (_data: { products: Product[] }) => {
       console.log('Modo Supabase: importData no necesario')
-    }
+    },
   }), [inventoryProducts])
-
-  // Cargar reparaciónes del cliente seleccionado y suscribirse a cambios
-  useEffect(() => {
-    // Cargar reparaciónes del cliente desde Supabase
-    if (!selectedCustomer) {
-      setCustomerRepairs([])
-      setSelectedRepairIds(prev => (prev.length ? [] : prev))
-      return
-    }
-
-    const supabase = createSupabaseClient()
-
-    let canSubscribe = true
-    const loadRepairs = async () => {
-      const { data, error }: any = await supabase
-        .from('repairs')
-        .select('id, device_brand, device_model, status, payment_status, paid_amount, created_at, final_cost, estimated_cost, notes:problem_description, customer_id')
-        .eq('customer_id', selectedCustomer)
-        .order('created_at', { ascending: false })
-      if (error) {
-        const msg = error.message || ''
-        const missingTable = msg.includes("Could not find the table 'public.repairs'") || msg.includes('relation "repairs" does not exist')
-        if (missingTable) {
-          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacía para el cliente.')
-          canSubscribe = false
-          setCustomerRepairs([])
-        } else {
-          console.error('Error cargando reparaciónes del cliente:', msg)
-        }
-        return
-      }
-      setCustomerRepairs(data || [])
-    }
-
-    loadRepairs()
-    let channel: RealtimeChannel | null = null
-    if (canSubscribe) {
-      channel = supabase
-        .channel('repairs-sync-pos')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, (payload: any) => {
-          const row = (payload.new || payload.old)
-          if (!row || row.customer_id !== selectedCustomer) return
-
-          if (payload.eventType === 'DELETE') {
-            setCustomerRepairs(prev => prev.filter(r => r.id !== row.id))
-            setSelectedRepairIds(prev => prev.filter(id => id !== row.id))
-            return
-          }
-
-          setCustomerRepairs(prev => {
-            const idx = prev.findIndex(r => r.id === row.id)
-            const mapped = { ...row, notes: row.problem_description }
-            if (idx === -1) return [mapped, ...prev]
-            const copy = [...prev]
-            copy[idx] = mapped
-            return copy
-          })
-        })
-        .subscribe()
-    }
-
-    return () => {
-      if (channel) channel.unsubscribe()
-    }
-  }, [selectedCustomer])
-
-  // Estados para búsqueda avanzada
-  const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  // Sin tope superior por defecto: un máximo fijo (p.ej. 1.000.000) ocultaba
-  // del POS cualquier producto más caro (celulares, etc.) sin que el usuario
-  // pudiera notarlo (no hay control de precio en esta vista).
-  const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: Number.POSITIVE_INFINITY })
-  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const activeFiltersCount = useMemo(() => {
-    let count = 0
-    if (selectedCategory !== 'all') count += 1
-    if (showFeatured) count += 1
-    if (viewMode !== 'grid') count += 1
-    if (showAdvancedFilters) count += 1
-    if (sortBy !== 'name') count += 1
-    if (sortOrder !== 'asc') count += 1
-    if (stockFilter !== 'all') count += 1
-    return count
-  }, [selectedCategory, showFeatured, viewMode, showAdvancedFilters, sortBy, sortOrder, stockFilter])
-
-  // Estados para paginación
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(24) // 24 items por página por defecto
-
-  // Resetear página al cambiar filtros
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
-
-
-  // Persistencia en localStorage: restaurar preferencias (el carrito se maneja en el hook)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const savedPrefs = localStorage.getItem('pos.prefs')
-      if (savedPrefs) {
-        const prefs = JSON.parse(savedPrefs)
-        if (prefs.selectedCategory) setSelectedCategory(prefs.selectedCategory)
-        if (typeof prefs.showFeatured === 'boolean') setShowFeatured(prefs.showFeatured)
-        if (prefs.viewMode) setViewMode(prefs.viewMode)
-        if (prefs.sortBy) setSortBy(prefs.sortBy)
-        if (prefs.sortOrder) setSortOrder(prefs.sortOrder)
-        // No restauramos un tope superior heredado: si el valor guardado tiene
-        // un máximo finito (cap viejo de 1.000.000), lo ignoramos para no
-        // volver a ocultar productos caros. Solo respetamos un mínimo > 0.
-        if (prefs.priceRange && typeof prefs.priceRange.min === 'number') {
-          const min = prefs.priceRange.min > 0 ? prefs.priceRange.min : 0
-          const max = typeof prefs.priceRange.max === 'number' && prefs.priceRange.max > 1000000
-            ? prefs.priceRange.max
-            : Number.POSITIVE_INFINITY
-          setPriceRange({ min, max })
-        }
-        if (prefs.stockFilter) setStockFilter(prefs.stockFilter)
-        if (prefs.recentSearches) setRecentSearches(prefs.recentSearches)
-        if (typeof prefs.sidebarCollapsed === 'boolean') setSidebarCollapsed(prefs.sidebarCollapsed)
-        if (prefs.itemsPerPage) setItemsPerPage(prefs.itemsPerPage)
-      }
-    } catch (e) {
-      console.warn('No se pudo restaurar localStorage POS', e)
-    }
-  }, [])
-
-  // Estados para autocompletado (using smart search suggestions)
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
-
-  // Use smart search suggestions instead of local ones
-  const searchSuggestions = smartSearchSuggestions.map(s => s.text)
-
-  // Guardar cambios de preferencias (después de declarar recentSearches)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const prefs = {
-        selectedCategory,
-        showFeatured,
-        viewMode,
-        sortBy,
-        sortOrder,
-        priceRange,
-        stockFilter,
-        recentSearches,
-        sidebarCollapsed,
-        itemsPerPage,
-      }
-      localStorage.setItem('pos.prefs', JSON.stringify(prefs))
-    } catch (e) {
-      console.error('Error saving preferences to localStorage:', e)
-    }
-  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, recentSearches, sidebarCollapsed, itemsPerPage])
-
-  // Medidas del viewport para virtualización dinámica
-  const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024)
-  const [viewportHeight, setViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 768)
-
-  useEffect(() => {
-    const updateViewport = () => {
-      setViewportWidth(window.innerWidth)
-      setViewportHeight(window.innerHeight)
-    }
-    updateViewport()
-    window.addEventListener('resize', updateViewport)
-    return () => window.removeEventListener('resize', updateViewport)
-  }, [])
-
-  const virtualizationThreshold = 100
-
-  // Efecto de debouncing para búsqueda optimizada
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm)
-    }, 300) // 300ms de delay para evitar búsquedas excesivas
-
-    return () => clearTimeout(timer)
-  }, [searchTerm])
-
-
-
-  // Helper para invocar handlers por ID de forma robusta
-  const triggerHandlerById = useCallback((id: string) => {
-    const el = document.getElementById(id) as HTMLElement | null
-    if (!el) return
-    // Intentar ejecutar handler directo si existiera como propiedad (poco común en React)
-    const anyEl = el as any
-    const handler = anyEl?.onclick
-    if (typeof handler === 'function') {
-      handler({})
-      return
-    }
-    // Fallback confiable: disparar evento click nativo (compatibile con React Synthetic Events)
-    el.click()
-  }, [])
-
-  // Categorías únicas (usar nombre de categoría)
-  const categories = useMemo(() => {
-    const names = inventoryProducts
-      .map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
-      .filter((name): name is string => !!name && typeof name === 'string')
-    const uniqueNames = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))
-    return ['all', ...uniqueNames]
-  }, [inventoryProducts])
-
-  // Rango de precios dinámico
-  const priceRangeLimits = useMemo(() => {
-    const prices = inventoryProducts.map(p => p.sale_price)
-    return {
-      min: Math.min(...prices),
-      max: Math.max(...prices)
-    }
-  }, [inventoryProducts])
-
-  // Generar sugerencias de búsqueda (now using smart search)
-  const generateSearchSuggestions = useCallback((term: string) => {
-    // Smart search handles suggestions automatically
-    // Just update the show state
-    setShowSuggestions(term.length > 0)
-  }, [])
-
-  // Manejar cambios en búsqueda
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchTerm(value)
-    setSmartSearchQuery(value) // Update smart search query
-    generateSearchSuggestions(value)
-    setShowSuggestions(value.length > 0)
-    setSelectedSuggestionIndex(-1)
-  }, [generateSearchSuggestions, setSmartSearchQuery])
-
-  // Seleccionar sugerencia
-  const selectSuggestion = useCallback((suggestion: string) => {
-    setSearchTerm(suggestion)
-    setSmartSearchQuery(suggestion) // Update smart search query
-    addToRecentSearches(suggestion) // Add to smart search recent searches
-    setShowSuggestions(false)
-    setSelectedSuggestionIndex(-1)
-
-    if (!recentSearches.includes(suggestion)) {
-      setRecentSearches(prev => [suggestion, ...prev.slice(0, 4)])
-    }
-  }, [recentSearches])
-
-  // Navegación por teclado en sugerencias
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!showSuggestions || searchSuggestions.length === 0) return
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setSelectedSuggestionIndex(prev =>
-          prev < searchSuggestions.length - 1 ? prev + 1 : 0
-        )
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSelectedSuggestionIndex(prev =>
-          prev > 0 ? prev - 1 : searchSuggestions.length - 1
-        )
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (selectedSuggestionIndex >= 0) {
-          selectSuggestion(searchSuggestions[selectedSuggestionIndex])
-        } else if (searchTerm.trim()) {
-          setShowSuggestions(false)
-          if (!recentSearches.includes(searchTerm)) {
-            setRecentSearches(prev => [searchTerm, ...prev.slice(0, 4)])
-          }
-        }
-        break
-      case 'Escape':
-        setShowSuggestions(false)
-        setSelectedSuggestionIndex(-1)
-        break
-    }
-  }, [showSuggestions, searchSuggestions, selectedSuggestionIndex, selectSuggestion, searchTerm, recentSearches])
-
-  // Productos filtrados (optimizado con debouncing)
-  const filteredList = useMemo(() => {
-    const startTime = performance.now()
-    const result = inventoryProducts.filter(product => {
-      const searchLower = debouncedSearchTerm.toLowerCase()
-      const categoryName = (typeof product.category === 'object' ? product.category?.name : product.category) || ''
-      const matchesSearch = !debouncedSearchTerm ||
-        product.name.toLowerCase().includes(searchLower) ||
-        categoryName.toLowerCase().includes(searchLower) ||
-        product.sku.toLowerCase().includes(searchLower) ||
-        (product.barcode && product.barcode.includes(debouncedSearchTerm)) ||
-        smartSearchResults.some(res => res.product.id === product.id)
-
-      const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
-      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificación explícita
-      const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
-
-      let matchesStock = true
-      switch (stockFilter) {
-        case 'in_stock':
-          matchesStock = product.stock_quantity > 0  // CORREGIDO: > 0 en lugar de > 5
-          break
-        case 'low_stock':
-          matchesStock = product.stock_quantity <= 5 && product.stock_quantity > 0
-          break
-        case 'out_of_stock':
-          matchesStock = product.stock_quantity === 0
-          break
-      }
-
-      return matchesSearch && matchesCategory && matchesFeatured && matchesPrice && matchesStock
-    })
-
-    // Registrar métrica de búsqueda
-    // const endTime = performance.now()
-    // const searchTime = endTime - startTime
-    // if (searchTime > 0) {
-    //   recordMetric('product-search', searchTime)
-    // }
-
-    return result
-  }, [inventoryProducts, debouncedSearchTerm, smartSearchResults, selectedCategory, showFeatured, priceRange, stockFilter])
-
-  // Ordenar productos por separado para evitar recalcular filtrado
-  const filteredProducts = useMemo(() => {
-    const filtered = [...filteredList]
-    filtered.sort((a, b) => {
-      let comparison = 0
-      switch (sortBy) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name)
-          break
-        case 'price':
-          comparison = a.sale_price - b.sale_price
-          break
-        case 'stock':
-          comparison = a.stock_quantity - b.stock_quantity
-          break
-        case 'category':
-          {
-            const aName = (typeof a.category === 'object' ? a.category?.name : a.category) || ''
-            const bName = (typeof b.category === 'object' ? b.category?.name : b.category) || ''
-            comparison = aName.localeCompare(bName)
-          }
-          break
-      }
-      return sortOrder === 'asc' ? comparison : -comparison
-    })
-    return filtered
-  }, [filteredList, sortBy, sortOrder])
-
-  // Productos paginados
-  const paginatedProducts = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage
-    return filteredProducts.slice(startIndex, startIndex + itemsPerPage)
-  }, [filteredProducts, currentPage, itemsPerPage])
-
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
 
   // Funciones del carrito
   const addToCart = useCallback((product: Product) => {
+    if (product.is_active === false) {
+      toast.error('El producto se encuentra inactivo')
+      return
+    }
     return measureCartOperation(() => {
       // Verificar si el producto tiene variantes
       const productWithVariants = getProductWithVariants(product.id)
@@ -966,74 +629,43 @@ function POSPageContent() {
   const roundToTwo = useCallback((num: number) => Math.round((num + Number.EPSILON) * 100) / 100, [])
 
   // Unified Cart + Repairs Calculations
+  // Los totales de reparaciones los provee usePOSRepairs; aquí solo combinamos.
   const unifiedCalculations = useMemo(() => {
-    // 1. Calculate Repair Costs
-    //
-    // OJO: esto tiene que coincidir con lo que cobra el RPC
-    // process_pos_sale_atomic_v2 en el servidor, que recalcula el total de
-    // reparaciones de forma independiente a partir de repairs.final_cost /
-    // estimated_cost (NO resta paid_amount) y rechaza el pago si el monto
-    // pagado no calza exacto con ese total (PAYMENT_TOTAL_MISMATCH). Restar
-    // acá lo ya cobrado (p.ej. un adelanto por "Cobrar Aquí") rompería el
-    // checkout con esa reparación en vez de cobrar de menos. Mientras el RPC
-    // no soporte saldo parcial, esto se queda igual que antes: costo bruto.
-    const repairDetails = selectedRepairs.map(repair => {
-      const laborCost = repair.final_cost || repair.estimated_cost || 0
-      // Repairs in POS don't have separate parts cost in this context
-      return calculateRepairTotal({
-        laborCost,
-        partsCost: 0,
-        taxRate: taxPercentage,
-        pricesIncludeTax: true
-      })
-    })
+    const { total: repairTotal, subtotal: repairSubtotal, tax: repairTax } = repairTotals
 
-    const repairTotal = repairDetails.reduce((sum, calc) => sum + calc.total, 0)
-    const repairSubtotal = repairDetails.reduce((sum, calc) => sum + calc.subtotal, 0)
-    const repairTax = repairDetails.reduce((sum, calc) => sum + calc.taxAmount, 0)
-
-    // 2. Combine with Product Cart (from hook)
+    // Combine with Product Cart (from useOptimizedCart hook)
     const finalTotal = roundToTwo(cartTotal + repairTotal)
     const finalTax = roundToTwo(cartTax + repairTax)
     const finalSubtotalApplied = roundToTwo(subtotalApplied + repairSubtotal)
-    const finalSubtotalNonWholesale = roundToTwo(subtotalNonWholesale + repairSubtotal) // Repairs don't have wholesale discount usually
+    const finalSubtotalNonWholesale = roundToTwo(subtotalNonWholesale + repairSubtotal)
 
     const totalItemCount = cartItemCount + selectedRepairIds.length
 
     return {
-      // Combined Values for UI/Checkout
       total: finalTotal,
       tax: finalTax,
-      subtotal: finalSubtotalApplied, // For compatibility
+      subtotal: finalSubtotalApplied,
       subtotalApplied: finalSubtotalApplied,
       subtotalNonWholesale: finalSubtotalNonWholesale,
-      
-      // Breakdown
       repairCost: repairTotal,
       repairSubtotal,
       repairTax,
-      
-      // Hook passthrough (renamed or raw)
       generalDiscountAmount,
       wholesaleDiscountAmount,
       totalSavings,
       totalItemCount,
-      
-      // Flags
       hasDiscount: totalSavings > 0,
       isValidPayment: paymentMethod === 'cash' ? cashReceived >= finalTotal : true,
-      
-      // Missing properties for backward compatibility
       totalDiscount: totalSavings,
       averageItemPrice: totalItemCount > 0 ? subtotalApplied / totalItemCount : 0
     }
   }, [
-    selectedRepairs, 
-    cartTotal, 
-    cartTax, 
-    subtotalApplied, 
-    subtotalNonWholesale, 
-    cartItemCount, 
+    repairTotals,
+    cartTotal,
+    cartTax,
+    subtotalApplied,
+    subtotalNonWholesale,
+    cartItemCount,
     selectedRepairIds.length,
     generalDiscountAmount,
     wholesaleDiscountAmount,
@@ -1041,7 +673,6 @@ function POSPageContent() {
     paymentMethod,
     cashReceived,
     roundToTwo,
-    taxPercentage
   ])
 
   const getTotalPaid = useCallback(() => {
@@ -1063,26 +694,30 @@ function POSPageContent() {
     totalDiscount: unifiedCalculations.totalSavings,
     hasDiscount: unifiedCalculations.totalSavings > 0,
     totalSavings: unifiedCalculations.totalSavings,
-    averageItemPrice: (unifiedCalculations as any).averageItemPrice,
+    averageItemPrice: unifiedCalculations.averageItemPrice,
     repairCost: unifiedCalculations.repairCost,
     repairSubtotal: unifiedCalculations.repairSubtotal,
     repairTax: unifiedCalculations.repairTax,
     totalItemCount: unifiedCalculations.totalItemCount
-  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid])
+  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid, roundToTwo])
 
   // Aplicación automática de descuento VIP después de cálculos del carrito
   useEffect(() => {
     try {
       const activeCustomer = customers.find(c => c.id === selectedCustomer)
+      const customerPriority = activeCustomer && 'priority' in activeCustomer ? String((activeCustomer as { priority?: unknown }).priority || '') : ''
+      const customerDiscount = activeCustomer && 'discount_percentage' in activeCustomer ? Number((activeCustomer as { discount_percentage?: unknown }).discount_percentage) : 0
       const isVip = activeCustomer && (
         String(activeCustomer.type || '').toLowerCase() === 'vip' ||
-        String((activeCustomer as any).priority || '').toLowerCase() === 'vip'
+        customerPriority.toLowerCase() === 'vip'
       )
 
-      if (isVip && generalDiscount === 0 && unifiedCalculations.subtotal > 0 && !vipAutoApplied) {
-        setGeneralDiscount(VIP_DISCOUNT_RATE)
+      const configuredDiscount = Math.min(100, Math.max(0, customerDiscount || 0))
+
+      if (isVip && configuredDiscount > 0 && generalDiscount === 0 && unifiedCalculations.subtotal > 0 && !vipAutoApplied) {
+        setGeneralDiscount(configuredDiscount)
         setVipAutoApplied(true)
-        toast.success(`Descuento VIP aplicado (${VIP_DISCOUNT_RATE}%)`)
+        toast.success(`Descuento del cliente aplicado (${configuredDiscount}%)`)
       }
 
       if (!isVip && vipAutoApplied) {
@@ -1091,7 +726,7 @@ function POSPageContent() {
         toast.info('Descuento VIP removido por cambio de cliente')
       }
     } catch {}
-  }, [customers, selectedCustomer, unifiedCalculations.subtotal, generalDiscount, vipAutoApplied])
+  }, [customers, selectedCustomer, unifiedCalculations.subtotal, generalDiscount, setGeneralDiscount, vipAutoApplied])
 
   // Adapter for POSCart items
   //
@@ -1100,40 +735,186 @@ function POSPageContent() {
   // ya pagado (ver nota en unifiedCalculations más abajo). Mostrar acá un
   // saldo menor generaría un monto que el checkout rechaza por no calzar.
   const combinedCartItems = useMemo(() => {
-    const repairItems: CartItem[] = selectedRepairs.map(repair => ({
-      id: repair.id,
-      name: `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
-      price: repair.final_cost || repair.estimated_cost || 0,
-      quantity: 1,
-      isService: true,
-      // Add required fields for CartItem type safety
-      stock: 0,
-      subtotal: repair.final_cost || repair.estimated_cost || 0,
-      category: 'service',
-      // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
-      wholesalePrice: repair.final_cost || repair.estimated_cost || 0,
-      sku: 'SERVICE'
-    }))
+    const repairItems: CartItem[] = selectedRepairs.map(repair => {
+      // Saldo pendiente: idem unifiedCalculations, para que el precio mostrado
+      // en el carrito coincida con lo que realmente se cobra.
+      const balanceDue = getRepairBalanceDue(repair)
+      const hasPriorPayment = (repair.paid_amount || 0) > 0
+      return {
+        id: repair.id,
+        name: hasPriorPayment
+          ? `Reparación (saldo): ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`
+          : `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
+        price: balanceDue,
+        quantity: 1,
+        isService: true,
+        // Add required fields for CartItem type safety
+        stock: 0,
+        subtotal: balanceDue,
+        category: 'service',
+        // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
+        wholesalePrice: balanceDue,
+        sku: 'SERVICE'
+      }
+    })
 
-    return [...cart, ...repairItems]
-  }, [cart, selectedRepairs])
-  const canCheckout = combinedCartItems.length > 0
-  const checkoutDisabledReason = canCheckout ? undefined : 'Agrega productos o vincula una reparacion para cobrar.'
+    const catalogById = new Map(inventoryProducts.map(product => [product.id, product]))
+    const enrichedCart = cart.map(item => {
+      const product = catalogById.get(item.id)
+      return { ...item, categoryName: product?.category?.name || item.categoryName, brand: product?.brand || item.brand, image: item.image || product?.image || product?.image_url || product?.images?.[0] || undefined }
+    })
+    return [...enrichedCart, ...repairItems]
+  }, [cart, selectedRepairs, inventoryProducts])
+  const checkoutEligibility = useMemo(() => getCheckoutEligibility({
+    itemCount: combinedCartItems.length,
+    hasOpenCashSession: getCurrentRegister.isOpen,
+    isProcessing: paymentStatus === 'processing',
+    customerRequired: selectedRepairIds.length > 0,
+    customerSelected: Boolean(selectedCustomer),
+  }), [combinedCartItems.length, getCurrentRegister.isOpen, paymentStatus, selectedCustomer, selectedRepairIds.length])
+  const canCheckout = checkoutEligibility.canConfirm
+  const handleOpenCheckout = useCallback(() => {
+    if (!checkoutEligibility.canConfirm) {
+      toast.error(checkoutEligibility.reason || 'No se puede cobrar esta venta todavía')
+      return
+    }
+    setIsCheckoutOpen(true)
+  }, [checkoutEligibility, setIsCheckoutOpen])
+  const checkoutProductCreditPlans = useMemo(() => getCartProductCreditPlans(
+    combinedCartItems.map(item => {
+      const retailUnitPrice = Number(item.price || 0)
+      const wholesaleUnitPrice = item.isService
+        ? retailUnitPrice
+        : Number(item.wholesalePrice ?? (retailUnitPrice * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
+      const unitPrice = isWholesale ? wholesaleUnitPrice : retailUnitPrice
+      const itemDiscountRate = Math.min(100, Math.max(0, Number(item.discount || 0)))
+      return {
+        ...item,
+        price: unitPrice * (1 - (itemDiscountRate / 100)),
+      }
+    }),
+    inventoryProducts.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.sale_price,
+      quantity: 1,
+      installmentsEnabled: Boolean(product.installments_enabled),
+      installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
+    })),
+  ), [combinedCartItems, inventoryProducts, isWholesale])
 
   // Unified Remove Handler
   const handleRemoveItem = useCallback((id: string) => {
-    // Check if it's a repair
-    if (selectedRepairIds.includes(id)) {
-      setSelectedRepairIds(prev => prev.filter(repairId => repairId !== id))
+    const rawRepairId = id.startsWith('repair_') ? id.replace('repair_', '') : id
+    if (selectedRepairIds.includes(rawRepairId) || selectedRepairIds.includes(id)) {
+      removeRepairById(id)
       toast.info('Reparación removida del cobro')
-    } else {
-      // It's a product
-      removeFromCart(id)
     }
-  }, [selectedRepairIds, removeFromCart])
+    removeFromCart(id)
+  }, [selectedRepairIds, removeFromCart, removeRepairById])
+
+  // Hold / Park sale handler
+  const handleParkCurrentSale = useCallback(() => {
+    if (combinedCartItems.length === 0) {
+      toast.error('El carrito está vacío')
+      return
+    }
+    const currentCustName = customers.find(c => c.id === selectedCustomer)?.name || null
+    const success = parkSale(
+      combinedCartItems,
+      isWholesale,
+      generalDiscount,
+      unifiedCalculations.total,
+      currentCustName,
+      selectedCustomer,
+      selectedRepairIds
+    )
+    if (success) {
+      clearCart(true)
+      clearRepairs()
+    }
+  }, [combinedCartItems, isWholesale, generalDiscount, unifiedCalculations.total, customers, selectedCustomer, selectedRepairIds, parkSale, clearCart, clearRepairs])
+
+  // Restore parked sale
+  const handleRestoreHeldSale = useCallback((sale: HeldSale) => {
+    clearCart(true)
+    const saleItems = sale.cart || sale.items || []
+    saleItems.forEach(item => {
+      addToCartHook(item as unknown as Product, item.quantity)
+    })
+    if (repairsEnabled && Array.isArray(sale.selectedRepairIds) && sale.selectedRepairIds.length > 0) {
+      setSelectedRepairIds(sale.selectedRepairIds)
+    }
+    setIsWholesale(Boolean(sale.isWholesale))
+    setGeneralDiscount(Number(sale.discount || 0))
+    const saleCustId = sale.selectedCustomer || sale.customerId
+    if (saleCustId) {
+      setSelectedCustomer(saleCustId)
+    }
+    toast.success('Venta recuperada al carrito', {
+      description: `${saleItems.length} producto${saleItems.length !== 1 ? 's' : ''} cargados.`
+    })
+  }, [clearCart, addToCartHook, repairsEnabled, setIsWholesale, setGeneralDiscount, setSelectedCustomer, setSelectedRepairIds])
+
+  // handleAddRepairToCart viene de usePOSRepairs (ver desestructuración arriba)
+  const handleAddSearchedRepair = useCallback((item: CartItem, repair: RepairItemData) => {
+    const repairCustomerId = repair.customer_id || ''
+    const conflictsWithCart = Boolean(
+      repairCustomerId
+      && selectedCustomer
+      && repairCustomerId !== selectedCustomer
+      && combinedCartItems.length > 0
+    )
+    if (conflictsWithCart) {
+      toast.error('La reparación pertenece a otro cliente', {
+        description: 'Finalizá o vaciá la venta actual antes de cambiar el cliente.',
+      })
+      return
+    }
+    if (repairCustomerId && repairCustomerId !== selectedCustomer) {
+      setSelectedCustomer(repairCustomerId)
+    }
+    handleAddRepairToCart(item, repair)
+  }, [combinedCartItems.length, handleAddRepairToCart, selectedCustomer, setSelectedCustomer])
+
+  // Global Keyboard Shortcuts (F2, F3, F4, F8, F9)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      void (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable);
+
+      if (e.key === 'F2') {
+        e.preventDefault()
+        const searchInput = document.getElementById('search-input') as HTMLInputElement | null
+        searchInput?.focus()
+        searchInput?.select()
+      } else if (e.key === 'F3') {
+        e.preventDefault()
+        setIsQuickCustomerOpen(true)
+      } else if (e.key === 'F4') {
+        e.preventDefault()
+        if (canCheckout) {
+          handleOpenCheckout()
+        }
+      } else if (e.key === 'F8') {
+        e.preventDefault()
+        if (combinedCartItems.length > 0) {
+          handleParkCurrentSale()
+        } else {
+          setIsHeldSalesModalOpen(true)
+        }
+      } else if (e.key === 'F9') {
+        e.preventDefault()
+        handleWholesaleToggle(!isWholesale)
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [canCheckout, combinedCartItems.length, handleOpenCheckout, handleParkCurrentSale, isWholesale, handleWholesaleToggle])
 
   const applyPromoCode = useCallback((code: string) => {
-    const cartItems = combinedCartItems
+    const cartItems: import('@/types/promotion').CartItem[] = combinedCartItems
       .map(item => ({
         id: item.id,
         product_id: item.id,
@@ -1142,7 +923,7 @@ function POSPageContent() {
         name: item.name,
         quantity: item.quantity,
         unit_price: item.price,
-        category_id: (item as any).category,
+        category_id: item.category,
         total_price: item.price * item.quantity
       }))
 
@@ -1152,7 +933,7 @@ function POSPageContent() {
     }
 
     // Use promotion engine to validate/apply code against DB promotions
-    const result = applyPromotionByCode(code, cartItems as any, allPromotions)
+    const result = applyPromotionByCode(code, cartItems, allPromotions)
 
     if (!result.applied) {
       toast.error(result.reason || 'Código promocional inválido')
@@ -1179,7 +960,7 @@ function POSPageContent() {
     }
 
     // Base de línea según modo mayorista
-    const lineBase = (item: any) => {
+    const lineBase = (item: import('@/types/promotion').CartItem) => {
       const unitNonWholesale = item.unit_price
       const existingItem = combinedCartItems.find(ci => ci.id === item.id)
       const isService = existingItem?.isService === true
@@ -1197,7 +978,7 @@ function POSPageContent() {
       // Aplicar porcentaje directo a items elegibles
       eligibleItems.forEach(it => {
         const existingItem = combinedCartItems.find(ci => ci.id === it.id)
-        const currentDiscount = (existingItem as any)?.discount || 0
+        const currentDiscount = existingItem?.discount || 0
         const newDiscount = Math.max(currentDiscount, promotion.value)
         updateItemDiscount(it.id, Math.min(100, Math.max(0, newDiscount)))
         updateItemPromoCode(it.id, code)
@@ -1214,7 +995,7 @@ function POSPageContent() {
         const share = (line / totalApplicable) * promotion.value
         const percentShare = line > 0 ? (share / line) * 100 : 0
         const existingItem = combinedCartItems.find(ci => ci.id === it.id)
-        const currentDiscount = (existingItem as any)?.discount || 0
+        const currentDiscount = existingItem?.discount || 0
         const newDiscount = Math.min(100, Math.max(0, currentDiscount + percentShare))
         updateItemDiscount(it.id, newDiscount)
         updateItemPromoCode(it.id, code)
@@ -1223,383 +1004,87 @@ function POSPageContent() {
     }
 
     return true
-  }, [combinedCartItems, allPromotions, isWholesale, updateItemDiscount])
+  }, [allPromotions, applyPromotionByCode, combinedCartItems, formatCurrency, isWholesale, updateItemDiscount, updateItemPromoCode])
 
-  const calculateLoyaltyPoints = useCallback((total: number) => {
-    // 1 punto por cada $10 gastados
-    const basePoints = Math.floor(total / 10)
+  // ── Wrappers de procesamiento de venta (delegan a usePOSSaleProcessor) ──────
+  //
+  // Construyen el objeto deps con el estado actual del componente y llaman al
+  // hook. Así page.tsx no contiene la lógica de pago, solo el ensamblado.
 
-    // Bonificación por monto alto
-    const bonusMultiplier = total >= 500 ? 2 : total >= 200 ? 1.5 : 1
-
-    return Math.floor(basePoints * bonusMultiplier)
-  }, [])
-
-  // Procesar venta
-  const processSale = useCallback(async () => {
-    return measureSaleProcessing(async () => {
-      if (!getCurrentRegister.isOpen) {
-        toast.error('La caja está cerrada. No se pueden procesar ventas.')
-        return
-      }
-      if (!currentSessionId) {
-        toast.error('No se pudo identificar la sesión de caja abierta.')
-        return
-      }
-
-      if (combinedCartItems.length === 0) {
-        const msg = 'El carrito está vacío'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-
-      // Evaluar promociones antes de procesar la venta
-      try {
-        const cartItems = combinedCartItems.filter(item => !item.isService).map(item => ({
-          id: item.id,
-          product_id: item.id,
-          variant_id: undefined,
-          sku: item.sku || item.id,
-          name: item.name,
-          quantity: item.quantity,
-          unit_price: item.price,
-          category_id: item.category,
-          total_price: item.price * item.quantity
-        }))
-        const result = calculateCartSummary(cartItems, [], [])
-        if (result.applied_promotions.length > 0) {
-          console.log('Promociones aplicadas:', result.applied_promotions)
-          console.log('Descuento total calculado:', result.discount_amount)
-        }
-      } catch (error) {
-        console.error('Error evaluando promociones:', error)
-      }
-
-      if (!paymentMethod) {
-        const msg = 'Seleccione un método de pago'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-
-      if (paymentMethod === 'cash' && cashReceived < cartCalculations.total) {
-        const msg = 'Efectivo insuficiente'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-
-      // Crear datos del ticket
-      const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
-      const creditSummaryForReceipt = paymentMethod === 'credit'
-        ? buildPosCreditSummary(cartCalculations.total, creditTerms)
-        : null
-      const receiptCalculations = {
-        subtotal: cartCalculations.subtotal,
-        totalDiscount: cartCalculations.totalDiscount,
-        tax: cartCalculations.tax,
-        repairCost: cartCalculations.repairCost,
-        total: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
-        change: cartCalculations.change,
-        creditInfo: creditSummaryForReceipt
-          ? {
-              ...creditSummaryForReceipt,
-              interestRate: creditTerms.interestRate,
-            }
-          : undefined,
-      }
-      const payments = [{
-        id: '1',
-        method: paymentMethod as any,
-        amount: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
-        reference: paymentMethod === 'transfer' ? transferReference : undefined,
-        cardLast4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
-      }]
-
-      const receiptData = createReceiptData(
-        combinedCartItems,
-        receiptCalculations,
-        payments,
-        customer,
-        cashierName
-      )
-
-      // Guardar datos de la última venta
-      // Procesar venta de inventario usando la API interna del POS.
-      setPaymentStatus('processing')
-      setPaymentError('')
-      addPaymentAttempt({ status: 'processing', method: 'single', amount: (cartCalculations as any).total, message: 'Procesando pago simple' })
-      let saleResult: any = null
-      try {
-        // Confirmar venta, pagos, stock, crédito, reparaciones y caja en una transacción.
-        const productItems = combinedCartItems.filter(item => !item.isService)
-        saleResult = await processInventorySale({
-          items: productItems.map(item => ({
-            id: item.id,
-            name: item.name,
-            sku: item.sku,
-            price: item.price,
-            quantity: item.quantity,
-            stock: item.stock,
-            discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
-            subtotal: item.price * item.quantity
-          })),
-          total: (cartCalculations as any).total,
-          payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-          payments: [{
-            payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-            amount: (cartCalculations as any).total,
-            reference: paymentMethod === 'transfer' ? transferReference : undefined,
-            card_last4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined,
-            provider: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicProvider || undefined : undefined,
-            institution: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicInstitution || undefined : undefined,
-            channel: paymentMethod === 'card' ? 'card_terminal' : paymentMethod === 'transfer' ? electronicChannel : undefined,
-            terminal_id: paymentMethod === 'card' ? terminalId || undefined : undefined,
-          }],
-          session_id: currentSessionId,
-          price_mode: isWholesale ? 'wholesale' : 'retail',
-          order_discount_rate: generalDiscount,
-          customer_id: selectedCustomer || undefined,
-          notes: notes || undefined,
-          credit: paymentMethod === 'credit' ? {
-            interest_rate: creditTerms.interestRate,
-            installment_count: creditTerms.count,
-            frequency: creditTerms.frequency,
-          } : undefined,
-          repair_ids: selectedRepairIds,
-          mark_repairs_delivered: markRepairDelivered,
-          delivery_outcome: deliveryOutcome,
-        })
-
-        if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
-          throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
-        }
-
-        // El saldo a favor se consume recien con la venta confirmada.
-        await redeemStoreCredit({
-          customerId: selectedCustomer,
-          saleId: saleResult?.saleId,
-          amount: storeCreditApplied,
-        })
-        const persistedReceipt = {
-          ...receiptData,
-          receiptNumber: saleResult?.saleId
-            ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
-            : receiptData.receiptNumber,
-          tax: Number.isFinite(Number(saleResult?.data?.tax))
-            ? Number(saleResult.data.tax)
-            : receiptData.tax,
-          totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
-            ? Number(saleResult.data.discount)
-            : receiptData.totalDiscount,
-        }
-        setLastSaleData(persistedReceipt)
-        setCurrentReceipt(persistedReceipt)
-        setPaymentStatus('success')
-        toast.success('Venta procesada exitosamente')
-        addPaymentAttempt({ status: 'success', method: 'single', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
-        if (markRepairDelivered && selectedRepairIds.length > 0) {
-          setCustomerRepairs(prev => prev.map(r => (
+  /** Deps comunes a ambos procesadores */
+  const buildSaleDeps = useCallback(() => ({
+    isRegisterOpen: getCurrentRegister.isOpen,
+    currentSessionId,
+    combinedCartItems,
+    cartCalculations,
+    isWholesale,
+    generalDiscount,
+    paymentMethod,
+    cashReceived,
+    cardNumber,
+    transferReference,
+    electronicProvider,
+    electronicInstitution,
+    electronicChannel,
+    terminalId,
+    notes,
+    creditTerms,
+    paymentSplit,
+    storeCreditApplied,
+    selectedRepairIds,
+    markRepairDelivered,
+    deliveryOutcome,
+    selectedCustomer,
+    customers,
+    cashierName,
+    setPaymentStatus,
+    setPaymentError,
+    processInventorySale,
+    onSuccess: (receipt: ReceiptData) => {
+      setLastSaleData(receipt)
+      setCurrentReceipt(receipt)
+      setShowReceiptModal(true)
+      if (markRepairDelivered && selectedRepairIds.length > 0) {
+        setCustomerRepairs(prev =>
+          prev.map(r =>
             selectedRepairIds.includes(r.id)
               ? { ...r, status: 'entregado', delivered_at: new Date().toISOString() }
               : r
-          )))
-        }
-      } catch (error) {
-        const msg = normalizePaymentError(error)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        toast.error('Error al procesar la venta: ' + msg)
-        addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
-        return
+          )
+        )
       }
-      // Mostrar modal de ticket
-      setShowReceiptModal(true)
-
-      // Limpiar formulario
+    },
+    onAfterSale: () => {
       clearCart(true)
       setSelectedCustomer('')
-      setSelectedRepairIds([])
+      clearRepairs()
+      setGeneralDiscount(0)
       resetCheckoutState()
-      
-      // Cerrar luego de una breve confirmación visual
-      setTimeout(() => {
-        setIsCheckoutOpen(false)
-        setPaymentStatus('idle')
-      }, 600)
-    })
-  }, [addPaymentAttempt, cardNumber, cartCalculations, cashReceived, calculateCartSummary, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, electronicChannel, electronicInstitution, electronicProvider, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, measureSaleProcessing, normalizePaymentError, notes, paymentMethod, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setPaymentError, setPaymentStatus, setSelectedCustomer, terminalId, transferReference])
-
-
-
-  const processMixedPayment = useCallback(async () => {
-    if (!getCurrentRegister.isOpen) {
-      toast.error('La caja está cerrada. No se pueden procesar ventas.')
-      return
-    }
-    if (!currentSessionId) {
-      toast.error('No se pudo identificar la sesión de caja abierta.')
-      return
-    }
-    const paymentValidation = getMixedPaymentValidation(cartCalculations.total, paymentSplit)
-    if (!paymentValidation.valid) {
-      const msg = paymentValidation.code === 'PAYMENT_INCOMPLETE'
-        ? `Faltan ${formatCurrency(paymentValidation.remaining)} para completar el pago`
-        : paymentValidation.code === 'PAYMENT_EXCESS'
-          ? `Exceso de pago: ${formatCurrency(Math.abs(paymentValidation.remaining))}`
-          : paymentValidation.code === 'CARD_REFERENCE_REQUIRED'
-            ? 'Ingrese los últimos 4 dígitos de cada tarjeta'
-            : paymentValidation.code === 'TRANSFER_REFERENCE_REQUIRED'
-              ? 'Ingrese la referencia de cada transferencia'
-              : paymentValidation.code === 'PAYMENT_LIMIT_EXCEEDED'
-                ? 'Solo se permiten hasta 10 formas de pago por venta'
-                : paymentValidation.code === 'PAYMENTS_REQUIRED'
-                  ? 'Agregue al menos una forma de pago'
-                  : 'Cada pago debe tener un monto positivo'
-      toast.error(msg)
-      setPaymentStatus('failed')
-      setPaymentError(msg)
-      addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-      return
-    }
-
-    // Crear datos del ticket para pago mixto
-    const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
-
-    const creditPrincipal = paymentSplit
-      .filter(split => split.method === 'credit')
-      .reduce((total, split) => total + split.amount, 0)
-    const mixedCreditSummary = creditPrincipal > 0
-      ? buildPosCreditSummary(creditPrincipal, creditTerms)
-      : null
-    const receiptData = createReceiptData(
-      combinedCartItems,
-      mixedCreditSummary
-        ? {
-            ...cartCalculations,
-            creditInfo: {
-              ...mixedCreditSummary,
-              interestRate: creditTerms.interestRate,
-            },
-          }
-        : cartCalculations,
-      paymentSplit,
-      customer,
-      cashierName
-    )
-
-    // Guardar datos de la última venta
-    // Procesar venta en el inventario usando el hook de Supabase
-    setPaymentStatus('processing')
-    setPaymentError('')
-    addPaymentAttempt({ status: 'processing', method: 'mixed', amount: (cartCalculations as any).total, message: 'Procesando pago mixto' })
-    let saleResult: any = null
-    try {
-      // La misma transacción conserva cada medio de pago y su monto.
-      const productItems = combinedCartItems.filter(item => !item.isService)
-      saleResult = await processInventorySale({
-        items: productItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          sku: item.sku,
-          price: item.price,
-          quantity: item.quantity,
-          stock: item.stock,
-          discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
-          subtotal: item.price * item.quantity
-        })),
-        total: (cartCalculations as any).total,
-        payment_method: (paymentSplit[0]?.method || 'cash') as 'cash' | 'card' | 'transfer' | 'credit',
-        payments: paymentSplit.map(split => ({
-          payment_method: split.method,
-          amount: split.amount,
-          reference: split.reference,
-          card_last4: split.cardLast4,
-          provider: split.provider,
-          institution: split.institution,
-          channel: split.channel,
-          terminal_id: split.terminalId,
-        })),
-        session_id: currentSessionId,
-        price_mode: isWholesale ? 'wholesale' : 'retail',
-        order_discount_rate: generalDiscount,
-        customer_id: selectedCustomer || undefined,
-        notes: notes || undefined,
-        credit: paymentSplit.some(split => split.method === 'credit') ? {
-          interest_rate: creditTerms.interestRate,
-          installment_count: creditTerms.count,
-          frequency: creditTerms.frequency,
-        } : undefined,
-        repair_ids: selectedRepairIds,
-        mark_repairs_delivered: markRepairDelivered,
-        delivery_outcome: deliveryOutcome,
-      })
-
-      if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
-        throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
-      }
-
-      // El saldo a favor se consume recien con la venta confirmada.
-      await redeemStoreCredit({
-        customerId: selectedCustomer,
-        saleId: saleResult?.saleId,
-        amount: storeCreditApplied,
-      })
-      const persistedReceipt = {
-        ...receiptData,
-        receiptNumber: saleResult?.saleId
-          ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
-          : receiptData.receiptNumber,
-        tax: Number.isFinite(Number(saleResult?.data?.tax))
-          ? Number(saleResult.data.tax)
-          : receiptData.tax,
-        totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
-          ? Number(saleResult.data.discount)
-          : receiptData.totalDiscount,
-      }
-      setLastSaleData(persistedReceipt)
-      setCurrentReceipt(persistedReceipt)
-      setPaymentStatus('success')
-      toast.success('Venta procesada con múltiples métodos de pago')
-      addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
-      if (markRepairDelivered && selectedRepairIds.length > 0) {
-        setCustomerRepairs(prev => prev.map(r => (
-          selectedRepairIds.includes(r.id)
-            ? { ...r, status: 'entregado', delivered_at: new Date().toISOString() }
-            : r
-        )))
-      }
-    } catch (error) {
-      const msg = normalizePaymentError(error)
-      setPaymentStatus('failed')
-      setPaymentError(msg)
-      toast.error('Error al procesar la venta: ' + msg)
-      addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-      return
-    }
-
-    // Mostrar modal de ticket
-    setShowReceiptModal(true)
-
-    // Limpiar todo
-    clearCart(true)
-    setSelectedCustomer('')
-    setSelectedRepairIds([])
-    setGeneralDiscount(0)
-    resetCheckoutState()
-    // Cerrar luego de una breve confirmación visual
-    setTimeout(() => {
       setIsCheckoutOpen(false)
-      setPaymentStatus('idle')
-    }, 600)
-  }, [addPaymentAttempt, cartCalculations, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, formatCurrency, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, normalizePaymentError, notes, paymentSplit, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setGeneralDiscount, setPaymentError, setPaymentStatus, setSelectedCustomer])
+    },
+    formatCurrency,
+    measureSaleProcessing,
+  }), [
+    getCurrentRegister.isOpen, currentSessionId, combinedCartItems, cartCalculations,
+    isWholesale, generalDiscount, paymentMethod, cashReceived, cardNumber, transferReference,
+    electronicProvider, electronicInstitution, electronicChannel, terminalId, notes,
+    creditTerms, paymentSplit, storeCreditApplied, selectedRepairIds, markRepairDelivered,
+    deliveryOutcome, selectedCustomer, customers, cashierName,
+    setPaymentStatus, setPaymentError, processInventorySale,
+    clearCart, setSelectedCustomer, clearRepairs, setGeneralDiscount, resetCheckoutState,
+    setIsCheckoutOpen, formatCurrency, measureSaleProcessing,
+    setCustomerRepairs,
+  ])
+
+  const processSale = useCallback(
+    () => processSaleBase(buildSaleDeps()),
+    [processSaleBase, buildSaleDeps]
+  )
+
+  const processMixedPayment = useCallback(
+    () => processMixedPaymentBase(buildSaleDeps()),
+    [processMixedPaymentBase, buildSaleDeps]
+  )
 
 
   // Cerrar sugerencias al hacer clic fuera
@@ -1614,7 +1099,7 @@ function POSPageContent() {
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [setSelectedSuggestionIndex, setShowSuggestions])
 
   // Atajos de teclado mejorados
   useEffect(() => {
@@ -1635,7 +1120,7 @@ function POSPageContent() {
           case 'Enter':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
-              setIsCheckoutOpen(true)
+              handleOpenCheckout()
             } else {
               toast.error('Carrito vacío y sin reparaciones')
             }
@@ -1656,7 +1141,7 @@ function POSPageContent() {
           case 'p':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
-              setIsCheckoutOpen(true)
+              handleOpenCheckout()
             }
             break
           case 'g':
@@ -1729,7 +1214,7 @@ function POSPageContent() {
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [cart.length, clearCart, viewMode, showAdvancedFilters, showFeatured, isFullscreen, isCheckoutOpen, showKeyboardShortcuts, showAccessibilitySettings, filteredProducts, addToCart])
+  }, [addToCart, cart.length, clearCart, combinedCartItems.length, filteredProducts, handleOpenCheckout, isCheckoutOpen, isFullscreen, setIsCheckoutOpen, setSelectedCustomer, setShowFeatured, showAccessibilitySettings, showAdvancedFilters, showFeatured, showKeyboardShortcuts, viewMode])
 
   // Búsqueda por código de barras
   useEffect(() => {
@@ -1743,7 +1228,7 @@ function POSPageContent() {
       }
 
       const product = inventoryProducts.find(
-        (p) => p.barcode === normalized || p.barcode === barcodeInput
+        (p) => (p.barcode === normalized || p.barcode === barcodeInput) && p.is_active !== false
       )
 
       if (product) {
@@ -1756,91 +1241,12 @@ function POSPageContent() {
     }
   }, [barcodeInput, addToCart, inventoryProducts])
 
-  // Persistencia de ventas en espera
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const raw = localStorage.getItem('pos.heldSales')
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) {
-        setHeldSales(parsed.slice(0, 20))
-      }
-    } catch (e) {
-      console.warn('No se pudo restaurar ventas en espera', e)
-    }
-  }, [])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem('pos.heldSales', JSON.stringify(heldSales.slice(0, 20)))
-    } catch (e) {
-      console.error('No se pudo guardar ventas en espera', e)
-    }
-  }, [heldSales])
-
-  const holdCurrentSale = useCallback(() => {
-    if (cart.length === 0 && selectedRepairIds.length === 0) {
-      toast.error('No hay productos o reparaciones para poner en espera')
-      return
-    }
-
-    const customerName = customers.find(c => c.id === selectedCustomer)?.name || 'Cliente'
-    const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const label = `${customerName} - ${timeLabel}`
-
-    const held: HeldSale = {
-      id: `held-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      label,
-      createdAt: new Date().toISOString(),
-      cart: cart.map(item => ({ ...item })),
-      itemCount: cart.reduce((sum, item) => sum + item.quantity, 0) + selectedRepairIds.length,
-      total: Number(unifiedCalculations.total || 0),
-      selectedCustomer,
-      selectedRepairIds: [...selectedRepairIds],
-      isWholesale,
-      discount: generalDiscount
-    }
-
-    setHeldSales(prev => [held, ...prev].slice(0, 20))
-
-    clearCart(true)
-    setSelectedRepairIds([])
-    setSelectedCustomer('')
-    setGeneralDiscount(0)
-    setIsWholesale(false)
-    resetCheckoutState()
-    setPaymentAttempts([])
-    toast.success('Venta puesta en espera')
-  }, [
-    cart,
-    selectedRepairIds,
-    customers,
-    selectedCustomer,
-    isWholesale,
-    generalDiscount,
-    clearCart,
-    setSelectedRepairIds,
-    setSelectedCustomer,
-    setGeneralDiscount,
-    setIsWholesale,
-    unifiedCalculations.total,
-    resetCheckoutState
-  ])
-
-  const resumeHeldSale = useCallback((heldId: string) => {
+  void (useCallback((heldId: string) => {
     const held = heldSales.find(h => h.id === heldId)
     if (!held) return
-
-    replaceCart(Array.isArray(held.cart) ? held.cart : [])
-    setSelectedRepairIds(Array.isArray(held.selectedRepairIds) ? held.selectedRepairIds : [])
-    setSelectedCustomer(held.selectedCustomer || '')
-    setIsWholesale(Boolean(held.isWholesale))
-    setGeneralDiscount(Number(held.discount || 0))
-    setHeldSales(prev => prev.filter(h => h.id !== heldId))
-    toast.success(`Venta recuperada: ${held.label}`)
-  }, [heldSales, replaceCart, setSelectedRepairIds, setSelectedCustomer, setIsWholesale, setGeneralDiscount])
+    handleRestoreHeldSale(held)
+  }, [heldSales, handleRestoreHeldSale]));
 
   const createQuickItem = useCallback(async () => {
     setQuickItemError('')
@@ -1852,6 +1258,10 @@ function POSPageContent() {
         quantity: quickItemQty,
         sku: quickItemSku,
         publishToCatalog: quickItemPublishToCatalog,
+        // Solo se manda el costo si el usuario puede verlo: para el resto el
+        // campo no existe y el item se crea sin costo, como antes.
+        purchasePrice: canViewCost ? quickItemPurchasePrice : '',
+        wholesalePrice: quickItemWholesalePrice,
       })
       const response = await fetch('/api/products', {
         method: 'POST',
@@ -1879,6 +1289,8 @@ function POSPageContent() {
 
       setQuickItemName('')
       setQuickItemPrice('')
+      setQuickItemPurchasePrice('')
+      setQuickItemWholesalePrice('')
       setQuickItemQty('1')
       setQuickItemSku('')
       setQuickItemPublishToCatalog(false)
@@ -1891,16 +1303,16 @@ function POSPageContent() {
     } finally {
       setQuickItemSaving(false)
     }
-  }, [quickItemName, quickItemPrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, selectedBranchId, syncProduct, addToCartHook])
+  }, [quickItemName, quickItemPrice, quickItemPurchasePrice, quickItemWholesalePrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, canViewCost, selectedBranchId, syncProduct, addToCartHook])
 
   return (
-    <div className={`pos-theme pos-shell min-h-dvh flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      <div className="flex flex-1 min-h-0">
+    <div className={`pos-theme pos-shell h-dvh max-h-dvh overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Contenido principal */}
-        <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
           {/* Header desktop optimizado */}
   <POSHeader
-    className="hidden lg:flex items-center justify-between bg-card/70 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20 shadow-sm"
+    className="hidden lg:flex items-center justify-between bg-card/70 backdrop-blur-md border-b border-border/60 px-4 py-1.5 sticky top-0 z-20 shadow-xs"
     registers={registers}
     activeRegisterId={activeRegisterId}
     onRegisterChange={handleRegisterChange}
@@ -1916,18 +1328,19 @@ function POSPageContent() {
     canManageRegisters={canManageRegisters}
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-    onOpenCart={() => setShowCartDialog(true)}
+    onOpenCart={() => document.getElementById('pos-cart-panel')?.focus()}
+    cartExpanded
     cartItemCount={cartItemCount}
   >
             {/* Branding */}
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-500/20">
-                <ShoppingCart className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm shadow-indigo-500/20">
+                <ShoppingCart className="h-4 w-4 text-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-base font-bold leading-none tracking-tight text-foreground">Punto de Venta</h1>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                <h1 className="text-sm font-bold leading-none tracking-tight text-foreground">Punto de Venta</h1>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[9px] font-semibold ${
                     registerState[activeRegisterId]?.isOpen
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                       : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
@@ -1935,7 +1348,7 @@ function POSPageContent() {
                     <span className={`h-1.5 w-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
                     {registerState[activeRegisterId]?.isOpen ? 'Caja abierta' : 'Caja cerrada'}
                   </span>
-                  <div className="h-3 w-px bg-border/40" />
+                  <div className="h-2.5 w-px bg-border/40" />
                   <SupabaseStatus mode="minimal" />
                 </div>
               </div>
@@ -1963,6 +1376,7 @@ function POSPageContent() {
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
     onOpenCart={() => setShowCartDialog(true)}
+    cartExpanded={showCartDialog}
     cartItemCount={cartItemCount}
     mobileCompact
   >
@@ -2044,7 +1458,7 @@ function POSPageContent() {
           </div>
           <div className="flex gap-2 sm:justify-end">
             <Button variant="outline" onClick={() => setShowCartDialog(false)}>Cerrar</Button>
-            <Button className="pos-button-primary pos-button-confirm-sale" onClick={() => { setShowCartDialog(false); setIsCheckoutOpen(true) }}>
+            <Button className="pos-button-primary pos-button-confirm-sale" disabled={!checkoutEligibility.canConfirm} title={checkoutEligibility.reason} onClick={() => { setShowCartDialog(false); handleOpenCheckout() }}>
               Cobrar
             </Button>
           </div>
@@ -2055,102 +1469,36 @@ function POSPageContent() {
 
 
 
-          {/* Alertas de inventario desktop */}
-          <div className="hidden lg:block px-6 pt-4">
-            
-          </div>
-
-          {/* Guía de funcionamiento del POS */}
-          {showPosGuide ? (
-            <div className="px-4 lg:px-6 pt-2">
-              <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-                <details className="group">
-                  <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4 pb-2.5">
-                    <div className="text-sm font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                      <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Punto de Venta (POS)?
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                        <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                        <span className="hidden group-open:flex items-center gap-1">Plegar guía ↑</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleHidePosGuide()
-                        }}
-                        className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors px-2 py-1 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200/60 dark:border-slate-800"
-                        title="Ocultar esta sección"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        <span>Ocultar guía</span>
-                      </button>
-                    </div>
-                  </summary>
-                  <CardContent className="pt-0 pb-4 text-xs">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                        <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                          Venta y Búsqueda
-                        </h4>
-                        <p className="text-muted-foreground leading-relaxed">
-                          Busca productos por nombre, SKU o escaneando el código de barras. Haz clic sobre el ítem para agregarlo al carrito. Puedes mezclar repuestos y servicios de mano de obra.
-                        </p>
-                      </div>
-                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                        <h4 className="font-semibold text-foreground flex items-center gap-2">
-                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                          Caja Abierta/Cerrada
-                        </h4>
-                        <p className="text-muted-foreground leading-relaxed">
-                          Para operar en el POS, la sucursal debe tener la caja abierta con saldo inicial. Todos los cobros se imputarán y sumarán directamente a la sesión activa del cajero.
-                        </p>
-                      </div>
-                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                        <h4 className="font-semibold text-foreground flex items-center gap-2">
-                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                          Proceso de Cobro
-                        </h4>
-                        <p className="text-muted-foreground leading-relaxed">
-                          Al presionar "Cobrar", selecciona cliente, el método de pago (efectivo, tarjeta, transferencia o mixto) y genera el comprobante digital o físico para impresión.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </details>
-              </Card>
-            </div>
-          ) : (
-            <div className="px-4 lg:px-6 pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={handleShowPosGuide}
-                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline px-2 py-1"
-              >
-                <Info className="h-3.5 w-3.5" />
-                <span>¿Cómo funciona el POS? (Mostrar guía)</span>
-              </button>
-            </div>
-          )}
-
           {/* Barra de búsqueda y filtros */}
-          <div className="border-b border-border bg-card/80 p-3 backdrop-blur lg:p-4">
-            <div className="pos-panel flex flex-col gap-3 rounded-xl p-3 lg:flex-row lg:items-center">
+          <div className="border-b border-border/70 bg-card/90 px-3 py-1.5 backdrop-blur-md lg:px-4">
+            <div className="pos-panel flex flex-col gap-1.5 rounded-lg p-1 lg:flex-row lg:items-center bg-muted/20 border border-border/50">
               {/* Búsqueda con autocompletado */}
               <div className="flex-1 relative" id="search-container">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <div className="relative flex items-center">
+                  <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-primary/70 h-3.5 w-3.5 pointer-events-none" />
                   <Input
                     id="search-input"
-                    placeholder="Buscar productos por nombre, SKU o código de barras..."
+                    placeholder="Buscar por nombre, código de barras, SKU o marca..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
-                    className="h-11 pl-10 pr-4 text-base lg:text-sm"
+                    className="h-8 pl-8 pr-12 text-xs rounded-md bg-background/80 border-border/70 focus-visible:ring-primary/40 focus-visible:border-primary shadow-xs transition-all placeholder:text-muted-foreground/60"
                   />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => handleSearchChange('')}
+                        className="p-0.5 text-muted-foreground hover:text-foreground rounded-full"
+                        title="Limpiar búsqueda"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                    <kbd className="hidden sm:inline-flex items-center text-[9px] font-mono font-medium text-muted-foreground bg-muted/80 px-1.5 py-0.2 rounded border border-border/50 select-none">
+                      F2
+                    </kbd>
+                  </div>
                 </div>
 
                 {/* Sugerencias de autocompletado */}
@@ -2158,7 +1506,7 @@ function POSPageContent() {
                   <div className="absolute top-full left-0 right-0 bg-popover border border-border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
                     {searchSuggestions.map((suggestion, index) => (
                       <div
-                        key={suggestion}
+                        key={`${suggestion}-${index}`}
                         className={`px-4 py-2 cursor-pointer hover:bg-muted ${index === selectedSuggestionIndex ? 'bg-accent text-accent-foreground' : ''
                           }`}
                         onClick={() => selectSuggestion(suggestion)}
@@ -2175,166 +1523,494 @@ function POSPageContent() {
 
               <div className="lg:hidden flex items-center justify-end gap-2">
                 <Button
+                  variant={creditOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCreditOnly(!creditOnly)}
+                  aria-pressed={creditOnly}
+                  className="h-7.5 px-2.5 text-xs"
+                >
+                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                  Con cuotas
+                  <span className="ml-1 text-[10px] opacity-75">({financedProductsCount})</span>
+                </Button>
+                <Button
                   variant={isMobileFiltersOpen ? "default" : "outline"}
                   size="sm"
                   onClick={() => setIsMobileFiltersOpen((v) => !v)}
-                  className="h-8"
+                  className="h-7.5 text-xs"
                 >
-                  <Filter className="h-4 w-4 mr-2" />
+                  <Filter className="h-3.5 w-3.5 mr-1.5" />
                   Filtros
                   {activeFiltersCount > 0 && (
-                    <span className="ml-2 rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-semibold">
+                    <span className="ml-1.5 rounded-full bg-background/30 px-1 py-0.2 text-[9px] font-semibold">
                       {activeFiltersCount}
                     </span>
                   )}
-                  {isMobileFiltersOpen ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                  {isMobileFiltersOpen ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
                 </Button>
               </div>
 
-              {/* Filtros rápidos */}
-              <div className={`flex flex-wrap gap-2 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
+              {/* Filtros rápidos y botón Más */}
+              <div className={`flex flex-wrap items-center gap-1.5 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
+                {/* Selector de Categoría */}
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="h-9 w-full sm:w-48 lg:w-44">
+                  <SelectTrigger className="h-8 w-full sm:w-40 lg:w-36 text-xs">
                     <SelectValue placeholder="Categoría" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map(category => (
-                      <SelectItem key={category} value={category}>
+                      <SelectItem key={category} value={category} className="text-xs">
                         {category === 'all' ? 'Todas las categorías' : category}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
+                {/* Botón Destacados */}
                 <Button
                   variant={showFeatured ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowFeatured(!showFeatured)}
-                  className="h-9"
+                  className={`h-8 text-xs transition-all px-2.5 ${showFeatured ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs' : ''}`}
                 >
-                  <Star className="h-4 w-4 mr-2" />
+                  <Star className={`h-3 w-3 mr-1 ${showFeatured ? 'fill-white' : 'text-amber-500'}`} />
                   Destacados
                 </Button>
 
                 <Button
-                  variant={showAdvancedFilters ? "default" : "outline"}
+                  variant={creditOnly ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className="h-9"
+                  onClick={() => setCreditOnly(!creditOnly)}
+                  aria-pressed={creditOnly}
+                  className="hidden h-8 px-2.5 text-xs lg:inline-flex"
                 >
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtros
-                  {showAdvancedFilters ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                  Con cuotas
+                  <span className="ml-1 text-[10px] opacity-75">({financedProductsCount})</span>
                 </Button>
 
+                {/* Botón Filtros Avanzados con Contador */}
+                <Button
+                  variant={showAdvancedFilters || activeFiltersCount > 0 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className="h-8 text-xs relative px-2.5"
+                >
+                  <SlidersHorizontal className="h-3 w-3 mr-1" />
+                  Filtros
+                  {activeFiltersCount > 0 && (
+                    <Badge className="ml-1 h-3.5 min-w-[14px] px-1 text-[9px] bg-white text-primary dark:bg-black dark:text-white font-bold rounded-full">
+                      {activeFiltersCount}
+                    </Badge>
+                  )}
+                  {showAdvancedFilters ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+                </Button>
+
+                {/* Menú "Más" Potenciado */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9">
-                      <MoreHorizontal className="h-4 w-4 mr-2" />
-                      Mas
+                    <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1 hover:bg-muted px-2.5">
+                      <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                      Más
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
-                    <DropdownMenuItem onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
-                      {viewMode === 'grid' ? <List className="h-4 w-4 mr-2" /> : <Grid className="h-4 w-4 mr-2" />}
-                      Cambiar a vista {viewMode === 'grid' ? 'lista' : 'grilla'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsQuickItemDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Item rapido
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={holdCurrentSale}
-                      disabled={cart.length === 0 && selectedRepairIds.length === 0}
+                  <DropdownMenuContent align="end" className="w-72 max-h-[75vh] sm:max-h-[80vh] overflow-y-auto p-2 shadow-xl border-border/80">
+                    {/* Sección Acciones Rápidas */}
+                    <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Acciones Rápidas
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={() => setIsQuickItemDialogOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
                     >
-                      <Clock className="h-4 w-4 mr-2" />
-                      Poner venta en espera
+                      <Plus className="h-4 w-4 text-emerald-500" />
+                      <div className="flex flex-col">
+                        <span className="font-medium">Crear Ítem Rápido</span>
+                        <span className="text-[10px] text-muted-foreground">Producto temporal al vuelo</span>
+                      </div>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {heldSales.length === 0 ? (
-                      <DropdownMenuItem disabled>No hay ventas en espera</DropdownMenuItem>
-                    ) : (
-                      heldSales.map((sale) => (
-                        <DropdownMenuItem key={sale.id} onClick={() => resumeHeldSale(sale.id)}>
-                          Recuperar {sale.label} - {formatCurrency(sale.total)}
-                        </DropdownMenuItem>
-                      ))
+                    <DropdownMenuItem 
+                      onClick={() => setIsQuickCustomerOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <UserPlus className="h-4 w-4 text-blue-500" />
+                      <div className="flex flex-col flex-1">
+                        <span className="font-medium">Nuevo Cliente Express</span>
+                        <span className="text-[10px] text-muted-foreground">Alta en 10s (Nombre y CI)</span>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">F3</kbd>
+                    </DropdownMenuItem>
+                    {repairsEnabled && (
+                    <DropdownMenuItem 
+                      onClick={() => setIsRepairModalOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <Wrench className="h-4 w-4 text-amber-500" />
+                      <div className="flex flex-col">
+                        <span className="font-medium">Cobrar Reparación / Taller</span>
+                        <span className="text-[10px] text-muted-foreground">Importar saldo de ticket técnico</span>
+                      </div>
+                    </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem 
+                      onClick={() => setIsMovementDialogOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <DollarSign className="h-4 w-4 text-purple-500" />
+                      <div className="flex flex-col">
+                        <span className="font-medium">Movimiento de Caja</span>
+                        <span className="text-[10px] text-muted-foreground">Registrar ingreso o egreso manual</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="gap-2.5 cursor-pointer py-2 text-xs">
+                      <Link href="/dashboard/pos/caja">
+                        <FileText className="h-4 w-4 text-blue-500" />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-blue-600 dark:text-blue-400">Detalles de Caja</span>
+                          <span className="text-[10px] text-muted-foreground">Arqueo, cortes y estado del turno</span>
+                        </div>
+                      </Link>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Sección Ventas en Espera */}
+                    <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Ventas en Espera
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={handleParkCurrentSale}
+                      disabled={combinedCartItems.length === 0}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      <div className="flex flex-col flex-1">
+                        <span className="font-medium">Pausar Venta Actual</span>
+                        <span className="text-[10px] text-muted-foreground">Guardar carrito y continuar</span>
+                      </div>
+                      <kbd className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">F8</kbd>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setIsHeldSalesModalOpen(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium flex items-center gap-2">
+                          <span>📂</span> Ver Ventas Pausadas
+                        </span>
+                        {heldSalesCount > 0 && (
+                          <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] h-4 px-1.5">
+                            {heldSalesCount}
+                          </Badge>
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Sección Vistas y Ayuda */}
+                    <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Herramientas & Vista
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      {viewMode === 'grid' ? <List className="h-4 w-4 text-muted-foreground" /> : <Grid className="h-4 w-4 text-muted-foreground" />}
+                      <span>Cambiar a vista <strong>{viewMode === 'grid' ? 'Lista' : 'Grilla'}</strong></span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setShowKeyboardShortcuts(true)}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <Keyboard className="h-4 w-4 text-muted-foreground" />
+                      <span>Atajos de Teclado (F2-F9)</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleShowPosGuide}
+                      className="gap-2.5 cursor-pointer py-2 text-xs"
+                    >
+                      <BookOpen className="h-4 w-4 text-muted-foreground" />
+                      <span>Guía de Uso del POS</span>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
 
-            {/* Filtros avanzados */}
-            {showAdvancedFilters && (
-              <Card className={`mt-4 ${isMobileFiltersOpen ? '' : 'hidden lg:block'}`}>
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Ordenar por</label>
-                      <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="name">Nombre</SelectItem>
-                          <SelectItem value="price">Precio</SelectItem>
-                          <SelectItem value="stock">Stock</SelectItem>
-                          <SelectItem value="category">Categoría</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+            {/* Chips de Filtros Activos */}
+            {activeFiltersCount > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-2 px-1 text-xs">
+                <span className="text-muted-foreground text-[11px] font-medium mr-1 flex items-center gap-1">
+                  <Filter className="h-3 w-3" /> Filtros activos:
+                </span>
+                {selectedCategory !== 'all' && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-primary/10 text-primary border-primary/20">
+                    Cat: {selectedCategory}
+                    <button 
+                      onClick={() => setSelectedCategory('all')} 
+                      className="hover:bg-primary/20 rounded-full p-0.5"
+                      title="Quitar categoría"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {showFeatured && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                    ★ Destacados
+                    <button 
+                      onClick={() => setShowFeatured(false)} 
+                      className="hover:bg-amber-500/20 rounded-full p-0.5"
+                      title="Quitar filtro destacados"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {creditOnly && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Con cuotas
+                    <button
+                      type="button"
+                      onClick={() => setCreditOnly(false)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar filtro de productos con cuotas"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {minimumInstallments > 1 && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Desde {minimumInstallments} cuotas
+                    <button
+                      type="button"
+                      onClick={() => setMinimumInstallments(1)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar mínimo de cuotas"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {creditSort && (
+                  <Badge variant="secondary" className="gap-1 border-sky-500/20 bg-sky-500/10 py-0.5 pl-2 pr-1 text-xs text-sky-700 dark:text-sky-300">
+                    Crédito: {creditSort === 'installment_low' ? 'menor cuota' : creditSort === 'rate_low' ? 'menor tasa' : creditSort === 'installments_high' ? 'más cuotas' : 'menor total'}
+                    <button
+                      type="button"
+                      onClick={() => setCreditSort(null)}
+                      className="rounded-full p-0.5 hover:bg-sky-500/20"
+                      aria-label="Quitar orden financiero"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {stockFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                    Stock: {stockFilter === 'in_stock' ? 'En stock' : stockFilter === 'low_stock' ? 'Stock bajo' : 'Sin stock'}
+                    <button 
+                      onClick={() => setStockFilter('all')} 
+                      className="hover:bg-blue-500/20 rounded-full p-0.5"
+                      title="Quitar filtro stock"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(sortBy !== 'name' || sortOrder !== 'asc') && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20">
+                    Orden: {sortBy === 'price' ? (sortOrder === 'asc' ? 'Menor Precio' : 'Mayor Precio') : sortBy === 'stock' ? 'Stock' : 'Z-A'}
+                    <button 
+                      onClick={() => { setSortBy('name'); setSortOrder('asc'); }} 
+                      className="hover:bg-purple-500/20 rounded-full p-0.5"
+                      title="Restablecer orden"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(priceRange.min > 0 || (priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0)) && (
+                  <Badge variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                    Precio: {priceRange.min > 0 ? `>${formatCurrency(priceRange.min)}` : ''} {priceRange.max < Number.POSITIVE_INFINITY ? `<${formatCurrency(priceRange.max)}` : ''}
+                    <button 
+                      onClick={() => setPriceRange({ min: 0, max: Number.POSITIVE_INFINITY })} 
+                      className="hover:bg-emerald-500/20 rounded-full p-0.5"
+                      title="Quitar rango de precio"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetFilters}
+                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive gap-1"
+                >
+                  <RotateCcw className="h-3 w-3" /> Limpiar todo
+                </Button>
+              </div>
+            )}
 
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Orden</label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant={sortOrder === 'asc' ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSortOrder('asc')}
+            {/* Panel de Filtros Avanzados */}
+            {showAdvancedFilters && (
+              <Card className="mt-2.5 border-border/70 shadow-sm bg-card/95 backdrop-blur animate-in slide-in-from-top-2 duration-200">
+                <CardContent className="p-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3.5">
+                    {/* Disponibilidad de Stock */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Package className="h-3.5 w-3.5 text-primary" /> Disponibilidad de Stock
+                      </label>
+                      <div className="grid grid-cols-2 gap-1 bg-muted/40 p-1 rounded-lg border border-border/40">
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('all')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'all' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                          A-Z
-                        </Button>
-                        <Button
-                          variant={sortOrder === 'desc' ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSortOrder('desc')}
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('in_stock')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'in_stock' ? 'bg-background shadow-xs text-emerald-600 font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                          Z-A
-                        </Button>
+                          En Stock
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('low_stock')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'low_stock' ? 'bg-background shadow-xs text-amber-600 font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Stock Bajo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStockFilter('out_of_stock')}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${stockFilter === 'out_of_stock' ? 'bg-background shadow-xs text-rose-600 font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Agotados
+                        </button>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Stock</label>
-                      <Select value={stockFilter} onValueChange={(value: any) => setStockFilter(value)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="in_stock">En stock</SelectItem>
-                          <SelectItem value="low_stock">Stock bajo</SelectItem>
-                          <SelectItem value="out_of_stock">Sin stock</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    {/* Ordenar Productos */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Ordenar Por
+                      </label>
+                      <div className="grid grid-cols-2 gap-1 bg-muted/40 p-1 rounded-lg border border-border/40">
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('name'); setSortOrder('asc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'name' && sortOrder === 'asc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Nombre A-Z
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('name'); setSortOrder('desc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'name' && sortOrder === 'desc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Nombre Z-A
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('price'); setSortOrder('asc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'price' && sortOrder === 'asc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Menor Precio
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('price'); setSortOrder('desc'); }}
+                          className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${sortBy === 'price' && sortOrder === 'desc' ? 'bg-background shadow-xs text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Mayor Precio
+                        </button>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Acciones</label>
+                    {/* Rango de Precio */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-primary" /> Rango de Precio
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Mín"
+                          value={priceRange.min > 0 ? priceRange.min : ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0
+                            setPriceRange({ ...priceRange, min: val })
+                          }}
+                          className="h-8 text-xs"
+                        />
+                        <span className="text-xs text-muted-foreground">-</span>
+                        <Input
+                          type="number"
+                          placeholder="Máx"
+                          value={priceRange.max < Number.POSITIVE_INFINITY && priceRange.max > 0 ? priceRange.max : ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || Number.POSITIVE_INFINITY
+                            setPriceRange({ ...priceRange, max: val })
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Condiciones de financiación */}
+                    <div className="space-y-1.5">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                        <CreditCard className="h-3.5 w-3.5 text-primary" /> Financiación
+                      </label>
+                      <div className="grid gap-2">
+                        <Select
+                          value={String(minimumInstallments)}
+                          onValueChange={(value) => setMinimumInstallments(Number(value))}
+                        >
+                          <SelectTrigger className="h-8 text-xs" aria-label="Cantidad mínima de cuotas">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">Cualquier cantidad</SelectItem>
+                            {[3, 6, 12, 18, 24, 36, 48, 60].map(count => (
+                              <SelectItem key={count} value={String(count)}>Desde {count} cuotas</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={creditSort ?? 'none'}
+                          onValueChange={(value) => setCreditSort(value === 'none' ? null : value as ProductCreditSort)}
+                        >
+                          <SelectTrigger className="h-8 text-xs" aria-label="Ordenar por condiciones de financiación">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Sin orden financiero</SelectItem>
+                            <SelectItem value="installment_low">Menor cuota</SelectItem>
+                            <SelectItem value="rate_low">Menor tasa</SelectItem>
+                            <SelectItem value="installments_high">Más cuotas</SelectItem>
+                            <SelectItem value="financed_total_low">Menor total financiado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Acciones de Filtro */}
+                    <div className="space-y-1.5 flex flex-col justify-end">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setSearchTerm('')
-                          setSelectedCategory('all')
-                          setShowFeatured(false)
-                          setSortBy('name')
-                          setSortOrder('asc')
-                          setStockFilter('all')
-                        }}
+                        onClick={handleResetFilters}
+                        className="h-8 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
                       >
-                        Limpiar filtros
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restablecer Filtros
                       </Button>
                     </div>
                   </div>
@@ -2344,19 +2020,50 @@ function POSPageContent() {
           </div>
 
           {/* Contenido principal con productos y carrito */}
-          <div className="flex-1 min-h-0 flex overflow-hidden bg-muted/5">
+          <POSWorkspace
+            statusMessage={checkoutEligibility.reason}
+            catalog={<>
             {/* Lista de productos */}
-            <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-5 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
-              <div className="mb-4 space-y-4">
-                <div className="pos-panel flex items-center justify-between p-3 rounded-xl">
-                  <h2 className="pos-heading text-lg md:text-xl font-semibold text-foreground flex items-center gap-2" id="products-heading">
-                    <Package className="h-5 w-5 text-primary" />
-                    Productos <span className="text-muted-foreground font-normal text-sm">({filteredProducts.length})</span>
-                  </h2>
+            <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
+              <div className="mb-2.5 space-y-2.5">
+                <div className="pos-panel flex items-center justify-between px-3 py-1.5 rounded-lg">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h2 className="pos-heading text-base md:text-lg font-semibold text-foreground flex items-center gap-2" id="products-heading">
+                      {catalogView === 'services' ? <Wrench className="h-4 w-4 text-primary" /> : <Package className="h-4 w-4 text-primary" />}
+                      {catalogView === 'services' ? 'Servicios' : 'Productos'} <span className="text-muted-foreground font-normal text-xs">({filteredProducts.length})</span>
+                    </h2>
+                    {/* Productos y servicios por separado; sin servicios cargados no hace falta elegir. */}
+                    {(catalogCounts.services > 0 || catalogView === 'services') && (
+                      <div role="tablist" aria-label="Mostrar productos o servicios" className="inline-flex items-center rounded-lg border border-border/60 bg-muted/50 p-0.5">
+                        {([
+                          { value: 'products', label: 'Productos', count: catalogCounts.products, Icon: Package },
+                          { value: 'services', label: 'Servicios', count: catalogCounts.services, Icon: Wrench },
+                        ] as const).map(({ value, label, count, Icon }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            role="tab"
+                            aria-selected={catalogView === value}
+                            onClick={() => setCatalogView(value)}
+                            className={cn(
+                              'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                              catalogView === value
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {label}
+                            <span className="tabular-nums opacity-70">{count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full border border-border/50">
-                      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">Mayorista</span>
+                    <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-full border border-border/50">
+                      <Tag className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">Mayorista (F9)</span>
                       <Switch
                         checked={isWholesale}
                         onCheckedChange={handleWholesaleToggle}
@@ -2449,12 +2156,17 @@ function POSPageContent() {
                     wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
                     showStock={true}
                     showBarcode={true}
+                    onViewDetail={(p, tab) => {
+                      setDetailProduct(p)
+                      setDetailDialogScrollToCredit(tab === 'precios')
+                      setIsDetailDialogOpen(true)
+                    }}
                   />
                 </div>
               ) : !productsLoading && !productsError && inventoryProducts.length > 0 ? (
                 <div
-                  className={`grid gap-3 ${viewMode === 'grid'
-                      ? 'product-grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+                  className={`grid gap-2 sm:gap-2.5 ${viewMode === 'grid'
+                      ? 'product-grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
                       : 'grid-cols-1 max-w-4xl mx-auto'
                     }`}
                   role="grid"
@@ -2472,6 +2184,11 @@ function POSPageContent() {
                       inventoryManager={inventoryManager}
                       isWholesale={isWholesale}
                       wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
+                      onViewDetail={(p, tab) => {
+                        setDetailProduct(p)
+                        setDetailDialogScrollToCredit(tab === 'precios')
+                        setIsDetailDialogOpen(true)
+                      }}
                     />
                   ))}
                 </div>
@@ -2482,16 +2199,30 @@ function POSPageContent() {
                   <div className="pos-state-icon p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
                     <Package className="h-10 w-10 text-muted-foreground/50" />
                   </div>
-                  <h3 className="text-lg font-medium text-foreground mb-1">No se encontraron productos</h3>
+                  <h3 className="text-lg font-medium text-foreground mb-1">
+                    {catalogView === 'services' ? 'No se encontraron servicios' : 'No se encontraron productos'}
+                  </h3>
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">Intenta ajustar los términos de búsqueda o los filtros seleccionados</p>
+                  {otherViewMatches > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => setCatalogView(catalogView === 'services' ? 'products' : 'services')}
+                    >
+                      {catalogView === 'services'
+                        ? `Ver ${otherViewMatches} producto${otherViewMatches === 1 ? '' : 's'} que coinciden`
+                        : `Ver ${otherViewMatches} servicio${otherViewMatches === 1 ? '' : 's'} que coinciden`}
+                    </Button>
+                  )}
                 </div>
               )}
 
               {/* Controles de paginación */}
               {!productsLoading && !productsError && filteredProducts.length > 0 && filteredProducts.length <= virtualizationThreshold && (
-                <div className="pos-panel flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 py-4 px-3 rounded-xl">
+                <div className="pos-panel flex flex-col sm:flex-row items-center justify-between gap-3 mt-3 py-2 px-3 rounded-lg">
                   <div className="flex items-center gap-2 order-2 sm:order-1">
-                    <span className="text-sm text-muted-foreground">Mostrar:</span>
+                    <span className="text-xs text-muted-foreground">Mostrar:</span>
                     <Select
                       value={String(itemsPerPage)}
                       onValueChange={(value) => {
@@ -2499,7 +2230,7 @@ function POSPageContent() {
                         setCurrentPage(1)
                       }}
                     >
-                      <SelectTrigger className="h-8 w-[80px] text-xs">
+                      <SelectTrigger className="h-7 w-[72px] text-xs">
                         <SelectValue placeholder="12" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2516,44 +2247,45 @@ function POSPageContent() {
                   </div>
 
                   {totalPages > 1 && (
-                    <div className="flex items-center gap-2 order-1 sm:order-2">
+                    <div className="flex items-center gap-1.5 order-1 sm:order-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
-                        className="h-8 px-2 shadow-sm"
+                        className="h-7 px-2 text-xs shadow-xs"
                       >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        <ChevronLeft className="h-3.5 w-3.5 mr-0.5" />
                         Anterior
                       </Button>
-                      <span className="text-sm font-medium bg-muted/30 px-3 py-1 rounded-md border shadow-sm min-w-[80px] text-center">
+                      <span className="text-xs font-medium bg-muted/30 px-2 py-0.5 rounded border shadow-xs min-w-[60px] text-center">
                         {currentPage} / {totalPages}
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
-                        className="h-8 px-2 shadow-sm"
+                        className="h-7 px-2 text-xs shadow-xs"
                       >
                         Siguiente
-                        <ChevronRight className="h-4 w-4 ml-1" />
+                        <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
                       </Button>
                     </div>
                   )}
                 </div>
               )}
             </div>
-
+            </>}
+            cart={<>
             {/* Carrito lateral mejorado - responsive */}
-            <div className="hidden md:flex min-h-0 flex-col w-[22rem] lg:w-96 xl:w-[26rem] h-full transition-all duration-300 z-20 p-2">
+            <div id="pos-cart-panel" tabIndex={-1} className="hidden md:flex min-h-0 flex-col w-72 lg:w-80 xl:w-[22rem] h-full transition-all duration-300 z-20 p-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40">
               <POSCart
                 items={combinedCartItems}
                 onUpdateQuantity={updateQuantity}
                 onRemoveItem={handleRemoveItem}
                 onApplyDiscount={updateItemDiscount}
-                onCheckout={() => setIsCheckoutOpen(true)}
+                onCheckout={handleOpenCheckout}
                 onClearCart={() => clearCart()}
                 onApplyPromoCode={applyPromoCode}
                 isWholesale={isWholesale}
@@ -2569,34 +2301,49 @@ function POSPageContent() {
                 cartTotal={unifiedCalculations.total}
                 cartItemCount={unifiedCalculations.totalItemCount}
                 taxRate={taxRate}
-                canCheckout={canCheckout}
-                checkoutDisabledReason={checkoutDisabledReason}
+                checkoutEligibility={checkoutEligibility}
+                onHoldSale={handleParkCurrentSale}
+                onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
+                heldSalesCount={heldSalesCount}
+                onOpenRepairModal={repairsEnabled ? () => setIsRepairModalOpen(true) : undefined}
               />
             </div>
-          </div>
+            </>}
+          />
         </div>
       </div>
 
-      {/* Desktop floating checkout button — always visible when cart has items */}
-      {canCheckout && (
-        <div className="hidden md:block fixed bottom-6 right-6 z-50">
-          <Button
-            onClick={() => setIsCheckoutOpen(true)}
-            size="lg"
-            className="h-14 px-6 text-base font-bold rounded-2xl shadow-2xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all hover:scale-105 hover:shadow-[0_8px_30px_rgba(16,185,129,0.4)] active:scale-95 animate-in slide-in-from-bottom-4 duration-300"
-          >
-            <CreditCard className="mr-2 h-5 w-5" />
-            Cobrar {formatCurrency(unifiedCalculations.total)}
-          </Button>
-        </div>
-      )}
+      {/* Desktop shortcuts sticky footer */}
+      <POSShortcutsBar
+        onFocusSearch={() => {
+          const el = document.getElementById('search-input') as HTMLInputElement | null
+          el?.focus()
+          el?.select()
+        }}
+        onOpenCustomer={() => setIsQuickCustomerOpen(true)}
+        onCheckout={handleOpenCheckout}
+        onHoldSale={handleParkCurrentSale}
+        onOpenHeldSales={() => setIsHeldSalesModalOpen(true)}
+        heldSalesCount={heldSalesCount}
+        onToggleWholesale={() => handleWholesaleToggle(!isWholesale)}
+        isWholesale={isWholesale}
+        onClearCart={() => clearCart()}
+        onOpenRepairModal={repairsEnabled ? () => setIsRepairModalOpen(true) : undefined}
+        checkoutEligibility={checkoutEligibility}
+        cartItemCount={unifiedCalculations.totalItemCount}
+      />
 
       {/* Mobile Cart Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t-2 border-primary/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-50">
         <div className="grid grid-cols-[1fr_auto] gap-2 items-stretch">
           <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
             <SheetTrigger asChild>
-              <div className="flex flex-col justify-center cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors border border-border/60 relative">
+              <button
+                type="button"
+                aria-label="Abrir carrito"
+                aria-expanded={isMobileCartOpen}
+                className="flex flex-col justify-center text-left cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors border border-border/60 relative"
+              >
                  <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount} items en carrito</span>
                  <span className="font-bold text-base">{formatCurrency(unifiedCalculations.total)}</span>
                  {unifiedCalculations.totalItemCount > 0 && (
@@ -2604,7 +2351,7 @@ function POSPageContent() {
                      {unifiedCalculations.totalItemCount}
                    </span>
                  )}
-              </div>
+              </button>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col overflow-hidden">
               <SheetHeader className="p-4 border-b">
@@ -2618,7 +2365,7 @@ function POSPageContent() {
                   onApplyDiscount={updateItemDiscount}
                   onCheckout={() => {
                     setIsMobileCartOpen(false)
-                    setIsCheckoutOpen(true)
+                    handleOpenCheckout()
                   }}
                   onClearCart={() => clearCart()}
                   onApplyPromoCode={applyPromoCode}
@@ -2635,8 +2382,17 @@ function POSPageContent() {
                   cartTotal={unifiedCalculations.total}
                   cartItemCount={unifiedCalculations.totalItemCount}
                   taxRate={taxRate}
-                  canCheckout={canCheckout}
-                  checkoutDisabledReason={checkoutDisabledReason}
+                  checkoutEligibility={checkoutEligibility}
+                  onHoldSale={handleParkCurrentSale}
+                  onOpenHeldSales={() => {
+                    setIsMobileCartOpen(false)
+                    setIsHeldSalesModalOpen(true)
+                  }}
+                  heldSalesCount={heldSalesCount}
+                  onOpenRepairModal={repairsEnabled ? () => {
+                    setIsMobileCartOpen(false)
+                    setIsRepairModalOpen(true)
+                  } : undefined}
                 />
               </div>
             </SheetContent>
@@ -2644,9 +2400,9 @@ function POSPageContent() {
 
           <Button
             className="h-full min-h-[52px] px-5 text-sm font-bold rounded-xl shadow-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all active:scale-[0.97]"
-            onClick={() => setIsCheckoutOpen(true)}
+            onClick={handleOpenCheckout}
             disabled={!canCheckout}
-            title={checkoutDisabledReason}
+            title={checkoutEligibility.reason}
           >
             <CreditCard className="mr-2 h-5 w-5" />
             Cobrar
@@ -2729,6 +2485,59 @@ function POSPageContent() {
                   </div>
                 </div>
 
+                {/* Precio de compra y mayorista: opcionales, para no frenar la
+                    carga rapida, pero disponibles cuando hacen falta. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {canViewCost && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="quick-item-purchase-price">
+                        Precio de compra <span className="text-muted-foreground font-normal">(opcional)</span>
+                      </Label>
+                      <Input
+                        id="quick-item-purchase-price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={quickItemPurchasePrice}
+                        onChange={(e) => setQuickItemPurchasePrice(e.target.value)}
+                        placeholder="0"
+                        disabled={quickItemSaving}
+                      />
+                      {quickItemMargin ? (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Margen: {formatCurrency(quickItemMargin.profit)} ({quickItemMargin.percent}%)
+                        </p>
+                      ) : (
+                        // El costo se "fotografia" al vender y despues no se puede
+                        // corregir desde la app: si queda vacio, esta venta nunca
+                        // suma a la ganancia. Se avisa aca, no despues en Finanzas.
+                        <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span>Sin costo, esta venta no suma a la ganancia y no se puede corregir despues.</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label htmlFor="quick-item-wholesale-price">
+                      Precio mayorista <span className="text-muted-foreground font-normal">(opcional)</span>
+                    </Label>
+                    <Input
+                      id="quick-item-wholesale-price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={quickItemWholesalePrice}
+                      onChange={(e) => setQuickItemWholesalePrice(e.target.value)}
+                      placeholder="0"
+                      disabled={quickItemSaving}
+                    />
+                    <p className="text-xs text-muted-foreground">Debe quedar entre el costo y el precio de venta.</p>
+                  </div>
+                </div>
+
                 <div className="grid gap-2">
                   <Label htmlFor="quick-item-sku">SKU opcional</Label>
                   <Input
@@ -2773,6 +2582,15 @@ function POSPageContent() {
                       </p>
                     </div>
                   </div>
+                  {quickItemMissingCost && (
+                    <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        Vas a crear este item <strong>sin precio de compra</strong>. La ganancia de esta venta va a
+                        quedar como &quot;pendiente de costo&quot; en Finanzas y no se puede corregir desde la app.
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {quickItemError && (
@@ -2799,13 +2617,16 @@ function POSPageContent() {
 
       {/* Modal de checkout */}
       <CheckoutModal
+        onUpdateQuantity={updateQuantity}
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
-        customerRepairs={customerRepairs}
+        customerRepairs={selectedRepairs}
+        repairsEnabled={repairsEnabled}
         markRepairDelivered={markRepairDelivered}
         setMarkRepairDelivered={setMarkRepairDelivered}
         deliveryOutcome={deliveryOutcome}
         setDeliveryOutcome={setDeliveryOutcome}
+        deliveryEligibility={deliveryEligibility}
         supabaseStatusToLabel={supabaseStatusToLabel}
         cart={combinedCartItems}
         cartCalculations={cartCalculations}
@@ -2814,6 +2635,7 @@ function POSPageContent() {
         discount={generalDiscount}
         onDiscountChange={setGeneralDiscount}
         currency={settings.currency || 'PYG'}
+        productCreditPlans={checkoutProductCreditPlans}
         processSale={processSale}
         processMixedPayment={processMixedPayment}
         formatCurrency={formatCurrency}
@@ -2824,7 +2646,7 @@ function POSPageContent() {
         onCancel={() => {
           setIsCheckoutOpen(false)
           resetCheckoutState()
-          setPaymentAttempts([])
+          clearPaymentAttempts()
         }}
       />
 
@@ -3220,100 +3042,90 @@ function POSPageContent() {
             setSelectedProductForVariants(null)
           }}
           onAddToCart={addVariantToCart}
+          formatCurrency={formatCurrency}
         />
       )}
 
-      {/* Diálogo de Registro de Movimiento */}
-      <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Registrar Movimiento</DialogTitle>
-            <DialogDescription>
-              Seleccione el tipo de movimiento e ingrese los detalles.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="flex justify-center gap-4 mb-2">
-              <Button
-                type="button"
-                variant={movementType === 'in' ? 'default' : 'outline'}
-                className={movementType === 'in' ? 'bg-green-600 hover:bg-green-700' : 'text-green-600 border-green-200'}
-                onClick={() => setMovementType('in')}
-              >
-                <ArrowUpCircle className="mr-2 h-4 w-4" />
-                Ingreso
-              </Button>
-              <Button
-                type="button"
-                variant={movementType === 'out' ? 'default' : 'outline'}
-                className={movementType === 'out' ? 'bg-red-600 hover:bg-red-700' : 'text-red-600 border-red-200'}
-                onClick={() => setMovementType('out')}
-              >
-                <ArrowDownCircle className="mr-2 h-4 w-4" />
-                Egreso
-              </Button>
-            </div>
-            
-            <div className="grid gap-2">
-              <Label htmlFor="mov-amount">Monto</Label>
-              <Input
-                id="mov-amount"
-                type="number"
-                value={movementAmount}
-                onChange={(e) => setMovementAmount(e.target.value)}
-                placeholder="0.00"
-                autoFocus
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="mov-note">Motivo / Nota</Label>
-              <Input
-                id="mov-note"
-                value={movementNote}
-                onChange={(e) => setMovementNote(e.target.value)}
-                placeholder={movementType === 'in' ? "Ej. Cambio inicial" : "Ej. Pago a proveedor"}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
-            <Button 
-              variant={movementType === 'out' ? "destructive" : "default"}
-              className={movementType === 'in' ? "bg-green-600 hover:bg-green-700" : ""}
-              disabled={movementSaving}
-              onClick={async () => {
-                const amount = parseFloat(movementAmount)
-                if (!amount || amount <= 0) {
-                  toast.error('Ingrese un monto válido')
-                  return
-                }
-                setMovementSaving(true)
-                try {
-                  const saved = await addMovement(
-                    movementType === 'in' ? 'cash_in' : 'cash_out',
-                    amount,
-                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
-                  )
-                  if (saved) {
-                    setIsMovementDialogOpen(false)
-                    setMovementAmount('')
-                    setMovementNote('')
-                  }
-                } finally {
-                  setMovementSaving(false)
-                }
-              }}
-            >
-              {movementSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {movementSaving
-                ? 'Guardando...'
-                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Diálogo de Registro de Movimiento Potenciado */}
+      <POSCashMovementDialog
+        open={isMovementDialogOpen}
+        onOpenChange={setIsMovementDialogOpen}
+        onAddMovement={addMovement}
+        initialType={movementType}
+        currentBalance={registerState?.[activeRegisterId]?.balance || 0}
+      />
 
-      
+      {/* Modal de Ventas en Espera (Parked Sales) */}
+      <HeldSalesModal
+        open={isHeldSalesModalOpen}
+        onOpenChange={setIsHeldSalesModalOpen}
+        heldSales={heldSales}
+        onRestoreSale={handleRestoreHeldSale}
+        onDeleteSale={deleteSale}
+        onClearAll={clearAllSales}
+        currentCartHasItems={combinedCartItems.length > 0}
+      />
+
+      {/* Modal de Cobro de Reparación / Taller */}
+      <POSRepairChargeModal
+        open={repairsEnabled && isRepairModalOpen}
+        onOpenChange={setIsRepairModalOpen}
+        onAddRepairToCart={handleAddSearchedRepair}
+      />
+
+      {/* Alta rapida de cliente: el mismo dialogo que el checkout y que
+          reparaciones. El que habia aca insertaba contra Supabase desde el
+          navegador, sin `organization_id`, con una columna `document_id` que no
+          existe y con el email en null sobre una columna NOT NULL. */}
+      <CustomerQuickCreateDialog
+        open={isQuickCustomerOpen}
+        onClose={() => setIsQuickCustomerOpen(false)}
+        onCreated={(customerId) => {
+          setSelectedCustomer(customerId)
+          setIsQuickCustomerOpen(false)
+        }}
+      />
+
+      {/* Modal de Detalle de Producto */}
+      <POSProductDetailDialog
+        product={detailProduct}
+        open={isDetailDialogOpen}
+        onOpenChange={setIsDetailDialogOpen}
+        autoScrollToCredit={detailDialogScrollToCredit}
+        onAddToCart={(product, qty) => {
+          addToCartHook(product, qty)
+        }}
+        getProductWithVariants={getProductWithVariants}
+        onAddVariantToCart={addVariantToCart}
+        onOpenVariantSelector={(prodWithVariants) => {
+          setIsDetailDialogOpen(false)
+          setSelectedProductForVariants(prodWithVariants)
+          setVariantSelectorOpen(true)
+        }}
+        formatCurrency={formatCurrency}
+        creditContext={{
+          hasCustomer: Boolean(activeCustomer),
+          hasCreditLine: Number(activeCustomer?.credit_limit || 0) > 0,
+          availableCredit: creditoDisponible,
+          isRegisterOpen: getCurrentRegister.isOpen,
+        }}
+        onUseCreditPlan={(product, qty, plan) => {
+          addToCartHook(product, qty)
+          setPaymentMethod('credit')
+          applyProductCreditSuggestion({
+            productId: product.id,
+            productName: product.name,
+            count: plan.count,
+            interestRate: plan.rate,
+            frequency: plan.frequency,
+          })
+          toast.success(`Plan de ${plan.count} cuotas preparado`, {
+            description: 'Revisá las condiciones sobre el total del ticket antes de confirmar.',
+          })
+        }}
+        isWholesale={isWholesale}
+        wholesaleDiscountRate={WHOLESALE_DISCOUNT_RATE}
+      />
     </div>
   )
 }

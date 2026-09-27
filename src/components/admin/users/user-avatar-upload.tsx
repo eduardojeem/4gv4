@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Upload, X, Loader2, Camera } from 'lucide-react'
+import { Upload, Loader2, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UserAvatarUploadProps {

@@ -41,7 +41,7 @@ export interface APIMetrics {
   ip?: string
 }
 
-export interface CacheEntry<T = any> {
+export interface CacheEntry<T = unknown> {
   key: string
   value: T
   timestamp: Date
@@ -92,7 +92,7 @@ export class CacheManager {
 
   get<T>(key: string): T | null {
     const entry = this.cache.get(key) as CacheEntry<T> | undefined
-    
+
     if (!entry) return null
 
     // Verificar TTL
@@ -156,13 +156,13 @@ export class CacheManager {
     }
   }
 
-  private calculateSize(value: any): number {
+  private calculateSize(value: unknown): number {
     return JSON.stringify(value).length * 2 // Aproximación en bytes
   }
 
   private calculateHitRate(): number {
     const hits = Array.from(this.cache.values()).reduce((sum, entry) => sum + entry.accessCount, 0);
-    const misses = 0; // En esta implementación básica no estamos contando misses reales
+ // En esta implementación básica no estamos contando misses reales
     // Para un cálculo real, necesitaríamos un contador separado de requests totales
     // Retornamos un valor basado en los accesos actuales como proxy
     return hits > 0 ? 0.85 + (Math.min(hits, 100) / 1000) : 0.85
@@ -170,7 +170,7 @@ export class CacheManager {
 
   private evict(neededSize: number): void {
     const entries = Array.from(this.cache.entries())
-    
+
     switch (this.config.strategy) {
       case 'lru':
         entries.sort(([, a], [, b]) => a.lastAccessed.getTime() - b.lastAccessed.getTime())
@@ -204,9 +204,9 @@ export class RateLimiter {
   async checkLimit(req: NextRequest): Promise<{ allowed: boolean; remaining: number; resetTime: Date }> {
     const key = this.config.keyGenerator ? this.config.keyGenerator(req) : this.getDefaultKey(req)
     const now = new Date()
-    
+
     let entry = this.limits.get(key)
-    
+
     if (!entry || now >= entry.resetTime) {
       // Nueva ventana o entrada
       entry = {
@@ -219,7 +219,7 @@ export class RateLimiter {
     }
 
     entry.count++
-    
+
     const allowed = entry.count <= this.config.maxRequests
     const remaining = Math.max(0, this.config.maxRequests - entry.count)
 
@@ -242,33 +242,44 @@ export class RateLimiter {
   getStats() {
     const now = new Date()
     const activeEntries = Array.from(this.limits.values()).filter(entry => now < entry.resetTime)
-    
+
     return {
       activeConnections: activeEntries.length,
       blockedRequests: activeEntries.filter(entry => entry.blocked).length,
       totalRequests: activeEntries.reduce((sum, entry) => sum + entry.count, 0),
-      averageRequestsPerKey: activeEntries.length > 0 ? 
+      averageRequestsPerKey: activeEntries.length > 0 ?
         activeEntries.reduce((sum, entry) => sum + entry.count, 0) / activeEntries.length : 0
     }
   }
 }
 
+type GenericSupabaseQueryClient = {
+  from: (table: string) => {
+    insert: (data: unknown) => PromiseLike<unknown>
+  }
+}
+
+type OptimizableQuery<T = unknown> = PromiseLike<{ data: T | null; error: unknown }> & {
+  range?: (from: number, to: number) => OptimizableQuery<T>
+}
+
 // Query Optimizer
 export class QueryOptimizer {
   private config: QueryOptimization
-  private supabase: any
+  private supabase: GenericSupabaseQueryClient | null
 
-  constructor(config: QueryOptimization, supabaseClient: any) {
+  constructor(config: QueryOptimization, supabaseClient?: unknown) {
     this.config = config
-    this.supabase = supabaseClient
+    this.supabase = (supabaseClient as GenericSupabaseQueryClient) || null
   }
 
-  optimizeQuery(query: any): any {
+  optimizeQuery<Q extends Record<string, unknown>>(query: Q): Q {
     let optimizedQuery = { ...query }
 
     // Aplicar paginación automática
-    if (this.config.enablePagination && !query.range) {
-      optimizedQuery = optimizedQuery.range(0, this.config.batchSize - 1)
+    const qWithRange = optimizedQuery as { range?: (from: number, to: number) => unknown }
+    if (this.config.enablePagination && typeof qWithRange.range === 'function') {
+      optimizedQuery = qWithRange.range(0, this.config.batchSize - 1) as unknown as Q
     }
 
     // Limitar profundidad de joins
@@ -285,12 +296,12 @@ export class QueryOptimizer {
   }
 
   async executeWithOptimization<T>(
-    queryBuilder: any,
+    queryBuilder: OptimizableQuery<T>,
     cacheKey?: string,
     cacheTtl?: number
-  ): Promise<{ data: T | null; error: any; fromCache: boolean; queryTime: number }> {
+  ): Promise<{ data: T | null; error: unknown; fromCache: boolean; queryTime: number }> {
     const startTime = Date.now()
-    
+
     // Verificar cache si está habilitado
     if (this.config.cacheQueries && cacheKey) {
       const cached = cacheManager.get<T>(cacheKey)
@@ -305,7 +316,7 @@ export class QueryOptimizer {
     }
 
     // Optimizar query
-    const optimizedQuery = this.optimizeQuery(queryBuilder)
+    const optimizedQuery = this.optimizeQuery(queryBuilder as unknown as Record<string, unknown>) as unknown as OptimizableQuery<T>
 
     // Ejecutar query
     const { data, error } = await optimizedQuery
@@ -325,12 +336,12 @@ export class QueryOptimizer {
     }
   }
 
-  private limitJoinDepth(query: any, maxDepth: number): any {
+  private limitJoinDepth<Q>(query: Q, _maxDepth: number): Q {
     // Implementación simplificada para limitar joins
     return query
   }
 
-  private addIndexHints(query: any): any {
+  private addIndexHints<Q>(query: Q): Q {
     // Implementación simplificada para hints de índices
     return query
   }
@@ -348,15 +359,15 @@ export class QueryOptimizer {
 // Metrics Collector
 export class MetricsCollector {
   private metrics: APIMetrics[] = []
-  private supabase: any
+  private supabase: GenericSupabaseQueryClient | null
 
-  constructor(supabaseClient: any) {
-    this.supabase = supabaseClient
+  constructor(supabaseClient?: unknown) {
+    this.supabase = (supabaseClient as GenericSupabaseQueryClient) || null
   }
 
   recordMetric(metric: APIMetrics): void {
     this.metrics.push(metric)
-    
+
     // Mantener solo las últimas 1000 métricas en memoria
     if (this.metrics.length > 1000) {
       this.metrics = this.metrics.slice(-1000)
@@ -413,7 +424,7 @@ export class MetricsCollector {
 
   private getSlowestEndpoints(metrics: APIMetrics[]) {
     const endpointTimes = new Map<string, number[]>()
-    
+
     metrics.forEach(metric => {
       const key = `${metric.method} ${metric.endpoint}`
       if (!endpointTimes.has(key)) {
@@ -435,7 +446,7 @@ export class MetricsCollector {
 
   private getStatusCodeDistribution(metrics: APIMetrics[]) {
     const distribution = new Map<number, number>()
-    
+
     metrics.forEach(metric => {
       distribution.set(metric.statusCode, (distribution.get(metric.statusCode) || 0) + 1)
     })
@@ -454,12 +465,12 @@ export class MetricsCollector {
     metrics.forEach(metric => {
       const key = `${metric.method} ${metric.endpoint}`
       const existing = endpointMetrics.get(key) || { count: 0, totalTime: 0, errors: 0, cacheHits: 0 }
-      
+
       existing.count++
       existing.totalTime += metric.responseTime
       if (metric.statusCode >= 400) existing.errors++
       if (metric.cacheHit) existing.cacheHits++
-      
+
       endpointMetrics.set(key, existing)
     })
 
@@ -505,7 +516,7 @@ export const metricsCollector = new MetricsCollector(
 export function withOptimization(handler: (req: NextRequest) => Promise<NextResponse>) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const startTime = Date.now()
-    
+
     // Rate limiting
     const rateLimitResult = await rateLimiter.checkLimit(req)
     if (!rateLimitResult.allowed) {
@@ -521,7 +532,7 @@ export function withOptimization(handler: (req: NextRequest) => Promise<NextResp
 
     // Ejecutar handler
     const response = await handler(req)
-    
+
     // Registrar métricas
     const responseTime = Date.now() - startTime
     metricsCollector.recordMetric({
@@ -539,7 +550,7 @@ export function withOptimization(handler: (req: NextRequest) => Promise<NextResp
     // Agregar headers de optimización
     response.headers.set('X-Response-Time', `${responseTime}ms`)
     response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString())
-    
+
     return response
   }
 }

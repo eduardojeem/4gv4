@@ -1,23 +1,34 @@
 import {
+    Banknote,
+    BookOpen,
     LayoutDashboard,
     Users,
+    Store,
     Settings,
-    Shield,
+    ShieldCheck,
     Package,
-    FileText,
+    FileChartColumn,
     BarChart3,
     Globe,
-    Monitor,
     Building2,
     CreditCard,
-    Star,
-    type LucideIcon
+    MessageSquareText,
+    Landmark,
+    MousePointerClick,
+    type LucideIcon,
 } from 'lucide-react'
+import type { OrganizationModule } from '@/lib/organization/business-profile'
 
 /**
  * Configuración de navegación del panel de administración
  * Centraliza todos los items de navegación con sus permisos y categorías
  */
+
+/**
+ * Contadores que puede mostrar el menu. El numero no vive aca —cambia solo—:
+ * la clave dice de donde sacarlo y `useAdminNavBadges` lo resuelve.
+ */
+export type NavBadgeKey = 'cash-alerts'
 
 export interface NavItem {
     key: string
@@ -28,6 +39,13 @@ export interface NavItem {
     description?: string
     /** If true, only super_admin users can see and access this item */
     superAdminOnly?: boolean
+    /** Módulo del plan requerido para ver este item. Si el plan activo (efectivo) no lo incluye, se oculta. */
+    module?: OrganizationModule
+    /**
+     * Contador a mostrar al lado del nombre. El monitor de cajas era la unica
+     * seccion que generaba alertas y no habia forma de saberlo sin entrar.
+     */
+    badge?: NavBadgeKey
 }
 
 export interface NavCategory {
@@ -52,7 +70,7 @@ export const adminNavCategories: NavCategory[] = [
                 icon: LayoutDashboard,
                 href: '/admin',
                 description: 'Vista general del sistema',
-                permissions: [] // Accesible para todos los admins
+                permissions: [], // Accesible para todos los admins
             },
             {
                 key: 'analytics',
@@ -60,9 +78,28 @@ export const adminNavCategories: NavCategory[] = [
                 icon: BarChart3,
                 href: '/admin/analytics',
                 description: 'Análisis avanzado de datos',
-                permissions: ['analytics.read']
-            }
-        ]
+                permissions: ['analytics.read'],
+                module: 'analytics',
+            },
+            {
+                key: 'reports',
+                label: 'Reportes',
+                icon: FileChartColumn,
+                href: '/admin/reports',
+                description: 'Informes operativos y resultados del negocio',
+                permissions: ['reports.read'],
+            },
+            {
+                key: 'website-visits',
+                label: 'Visitas web',
+                icon: MousePointerClick,
+                href: '/admin/visitas',
+                description: 'Visitas e interacciones de tu tienda online',
+                permissions: ['analytics.read'],
+                // Mismo módulo que Analytics: disponible desde el plan Pro.
+                module: 'analytics',
+            },
+        ],
     },
     {
         id: 'operations',
@@ -71,10 +108,11 @@ export const adminNavCategories: NavCategory[] = [
             {
                 key: 'cash-monitor',
                 label: 'Monitor de Cajas',
-                icon: Monitor,
+                icon: Banknote,
                 href: '/admin/cash-monitor',
                 description: 'Control y monitoreo de cajas en tiempo real',
-                permissions: [] // Visible para todos los admins
+                permissions: [], // Visible para todos los admins
+                badge: 'cash-alerts',
             },
             {
                 key: 'inventory',
@@ -82,21 +120,26 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Package,
                 href: '/admin/inventory',
                 description: 'Gestión de productos y stock',
-                permissions: ['inventory.read']
+                // `inventory.read` se satisface con `products.read` O con
+                // `inventory.stock.manage`, pero /api/products exige
+                // `products.read` a secas: quien tenia solo el permiso de stock
+                // veia la seccion en el menu y encontraba el catalogo vacio.
+                permissions: ['products.read'],
+                module: 'inventory_admin',
             },
             {
-                key: 'reports',
-                label: 'Reportes',
-                icon: FileText,
-                href: '/admin/reports',
-                description: 'Sistema de reportes',
-                permissions: ['reports.read']
-            }
-        ]
+                key: 'finances',
+                label: 'Finanzas',
+                icon: Landmark,
+                href: '/admin/finances',
+                description: 'Gestión de gastos, nómina y rentabilidad',
+                permissions: ['finances.read'],
+            },
+        ],
     },
     {
-        id: 'administration',
-        label: 'Administración',
+        id: 'team',
+        label: 'Equipo',
         items: [
             {
                 key: 'users',
@@ -104,7 +147,7 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Users,
                 href: '/admin/users',
                 description: 'Gestión de usuarios y roles',
-                permissions: ['users.read']
+                permissions: ['users.read'],
             },
             {
                 key: 'branches',
@@ -112,39 +155,52 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Building2,
                 href: '/admin/branches',
                 description: 'Gestión multi sucursal y cobertura operativa',
-                permissions: ['settings.read']
+                permissions: ['settings.read'],
             },
-            {
-                key: 'subscriptions',
-                label: 'Suscripcion',
-                icon: CreditCard,
-                href: '/admin/subscriptions',
-                description: 'Plan, pagos, limites y facturacion',
-                permissions: ['billing.manage']
-            },
+        ],
+    },
+    {
+        id: 'digital',
+        label: 'Canal digital',
+        items: [
             {
                 key: 'website',
                 label: 'Sitio Web',
                 icon: Globe,
                 href: '/admin/website',
                 description: 'Configuración del sitio web público',
-                permissions: ['settings.read']
+                permissions: ['settings.read'],
             },
             {
                 key: 'reviews',
                 label: 'Reseñas',
-                icon: Star,
+                icon: MessageSquareText,
                 href: '/admin/reviews',
                 description: 'Moderación de reseñas y calificaciones',
-                permissions: ['settings.read']
+                permissions: ['settings.read'],
+            },
+        ],
+    },
+    {
+        id: 'system',
+        label: 'Sistema',
+        items: [
+            {
+                key: 'subscriptions',
+                label: 'Suscripción',
+                icon: CreditCard,
+                href: '/admin/subscriptions',
+                description: 'Plan, pagos, límites y facturación',
+                permissions: ['billing.manage'],
             },
             {
                 key: 'security',
                 label: 'Seguridad',
-                icon: Shield,
+                icon: ShieldCheck,
                 href: '/admin/security',
                 description: 'Logs de seguridad y auditoría',
-                permissions: ['settings.read']
+                permissions: ['settings.read'],
+                module: 'security',
             },
             {
                 key: 'settings',
@@ -152,47 +208,97 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Settings,
                 href: '/admin/settings',
                 description: 'Configuración del sistema',
-                permissions: ['settings.read']
-            }
-        ]
-    }
+                permissions: ['settings.read'],
+            },
+            {
+                // Vive aca, y no en el menu del dia a dia, una vez que la
+                // configuracion inicial esta completa: deja de ser una tarea y
+                // pasa a ser algo que se busca junto al resto de los ajustes.
+                key: 'business-profile',
+                label: 'Datos del negocio',
+                icon: Store,
+                href: '/admin/onboarding',
+                description: 'Datos, rubro, moneda y visibilidad de la tienda',
+                permissions: ['settings.read'],
+            },
+        ],
+    },
+    {
+        // La ayuda estaba repartida en quince modales, cada uno visible solo si
+        // ya estabas parado en la pantalla correcta: el panel no tenia ninguna
+        // puerta de entrada a una guia completa.
+        id: 'help',
+        label: 'Ayuda',
+        items: [
+            {
+                key: 'guide',
+                label: 'Guía del sistema',
+                icon: BookOpen,
+                href: '/admin/guia',
+                description: 'Cómo funciona cada sección, con ejemplos, y los primeros pasos',
+                permissions: [], // Para cualquiera que pueda entrar al panel
+            },
+        ],
+    },
 ]
 
 /**
  * Lista plana de todos los items de navegación (para compatibilidad)
  */
-export const adminNavItems: NavItem[] = adminNavCategories.flatMap(
-    category => category.items
-)
+export const adminNavItems: NavItem[] = adminNavCategories.flatMap((category) => category.items)
 
 /**
  * Obtiene un item de navegación por su key
  */
 export function getNavItemByKey(key: string): NavItem | undefined {
-    return adminNavItems.find(item => item.key === key)
+    return adminNavItems.find((item) => item.key === key)
+}
+
+/**
+ * Resuelve la sección activa usando la URL real. Ordenar por longitud evita
+ * que una ruta padre gane cuando una pantalla más específica también coincide.
+ */
+export function getNavItemByPath(pathname: string): NavItem | undefined {
+    const path = pathname.split(/[?#]/)[0].replace(/\/+$/, '') || '/'
+
+    return adminNavItems
+        .filter((item): item is NavItem & { href: string } => Boolean(item.href))
+        .sort((a, b) => b.href.length - a.href.length)
+        .find((item) => {
+            const href = item.href.replace(/\/+$/, '') || '/'
+            if (href === '/admin') return path === href
+            return path === href || path.startsWith(`${href}/`)
+        })
 }
 
 /**
  * Obtiene la categoría de un item por su key
  */
 export function getCategoryByItemKey(key: string): NavCategory | undefined {
-    return adminNavCategories.find(category =>
-        category.items.some(item => item.key === key)
-    )
+    return adminNavCategories.find((category) => category.items.some((item) => item.key === key))
 }
 
 /**
  * Filtra items de navegación por permisos del usuario
+ * @param effectiveModules Módulos que el plan activo (ya descontada la selección de la
+ *   organización) habilita realmente. Si se omite, no se aplica filtro por plan.
  */
 export function filterNavItemsByPermissions(
     items: NavItem[],
     hasPermission: (permission: string) => boolean,
     isAdmin: boolean,
-    isSuperAdmin: boolean = false
+    isSuperAdmin: boolean = false,
+    effectiveModules?: readonly string[],
 ): NavItem[] {
-    return items.filter(item => {
+    return items.filter((item) => {
         // Super-admin-only items: only visible to super_admin
         if (item.superAdminOnly && !isSuperAdmin) {
+            return false
+        }
+
+        // Items atados a un módulo del plan: ocultar si el plan activo no lo incluye,
+        // sin importar el rol (un admin tampoco debería ver secciones fuera de su plan).
+        if (item.module && effectiveModules && !effectiveModules.includes(item.module)) {
             return false
         }
 
@@ -207,7 +313,7 @@ export function filterNavItemsByPermissions(
         }
 
         // Si hay permisos específicos, verificar que el usuario los tenga
-        return item.permissions.some(permission => hasPermission(permission))
+        return item.permissions.some((permission) => hasPermission(permission))
     })
 }
 
@@ -219,12 +325,13 @@ export function filterCategoriesByPermissions(
     categories: NavCategory[],
     hasPermission: (permission: string) => boolean,
     isAdmin: boolean,
-    isSuperAdmin: boolean = false
+    isSuperAdmin: boolean = false,
+    effectiveModules?: readonly string[],
 ): NavCategory[] {
     return categories
-        .map(category => ({
+        .map((category) => ({
             ...category,
-            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin)
+            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin, effectiveModules),
         }))
-        .filter(category => category.items.length > 0)
+        .filter((category) => category.items.length > 0)
 }

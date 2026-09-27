@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import React from 'react'
 
 // Interfaces para proveedores de inventario
@@ -16,7 +16,7 @@ export interface SupplierProduct {
   leadTimeDays: number
   availability: 'in_stock' | 'low_stock' | 'out_of_stock' | 'discontinued'
   lastUpdated: Date
-  specifications?: Record<string, any>
+  specifications?: Record<string, unknown>
   images?: string[]
   certifications?: string[]
   externalId?: string
@@ -182,11 +182,82 @@ export interface SyncResult {
   timestamp: Date
 }
 
+type TableRow<T> = { [K in keyof T]: T[K] }
+
+export type InventoryDatabase = {
+  public: {
+    Tables: {
+      supplier_configs: {
+        Row: TableRow<SupplierConfig> & { supplier: TableRow<Supplier> }
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      suppliers: {
+        Row: TableRow<Supplier>
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      supplier_products: {
+        Row: TableRow<SupplierProduct> & { supplier?: TableRow<Supplier> }
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      purchase_orders: {
+        Row: TableRow<PurchaseOrder>
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      products: {
+        Row: {
+          id: string
+          organization_id?: string | null
+          name: string
+          sku: string
+          stock_quantity: number
+          reorder_point: number
+          reorder_quantity?: number
+          supplier_products?: Array<TableRow<SupplierProduct> & { supplier?: TableRow<Supplier> }>
+        }
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      inventory_reorders: {
+        Row: TableRow<InventoryReorder> & {
+          organization_id?: string | null
+          product: { name: string; sku: string }
+          supplier_product: TableRow<SupplierProduct> & { supplier?: TableRow<Supplier> }
+          processedAt?: Date
+        }
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
 // Clase base para integraciones de proveedores
 export abstract class SupplierIntegration {
   protected config: SupplierConfig
   protected supplier: Supplier
-  protected supabase = createClient(
+  protected supabase: SupabaseClient<InventoryDatabase> = createClient<InventoryDatabase>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
@@ -251,8 +322,7 @@ export abstract class SupplierIntegration {
   }
 
   async updateSyncStatus(recordType: string, recordId: string, status: 'pending' | 'synced' | 'error', error?: string): Promise<void> {
-    const table = recordType === 'product' ? 'supplier_products' : 'purchase_orders'
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       syncStatus: status,
       updatedAt: new Date()
     }
@@ -261,38 +331,45 @@ export abstract class SupplierIntegration {
       updates.syncError = error
     }
 
-    await this.supabase
-      .from(table)
-      .update(updates)
-      .eq('id', recordId)
+    if (recordType === 'product') {
+      await this.supabase
+        .from('supplier_products')
+        .update(updates)
+        .eq('id', recordId)
+    } else {
+      await this.supabase
+        .from('purchase_orders')
+        .update(updates)
+        .eq('id', recordId)
+    }
   }
 
-  protected mapProductData(rawData: any): SupplierProduct {
+  protected mapProductData(rawData: Record<string, unknown>): SupplierProduct {
     const mapping = this.config.mapping
-    
+
     return {
-      id: `${this.supplier.id}_${rawData[mapping.skuField]}`,
+      id: `${this.supplier.id}_${String(rawData[mapping.skuField] ?? '')}`,
       supplierId: this.supplier.id,
-      supplierSKU: rawData[mapping.skuField],
-      internalSKU: rawData[mapping.skuField], // Mapear según necesidades
-      name: rawData[mapping.nameField],
-      description: rawData.description || '',
-      category: rawData[mapping.categoryField] || 'General',
-      unitPrice: parseFloat(rawData[mapping.priceField]) || 0,
+      supplierSKU: String(rawData[mapping.skuField] ?? ''),
+      internalSKU: String(rawData[mapping.skuField] ?? ''), // Mapear según necesidades
+      name: String(rawData[mapping.nameField] ?? ''),
+      description: typeof rawData.description === 'string' ? rawData.description : '',
+      category: String(rawData[mapping.categoryField] ?? 'General'),
+      unitPrice: parseFloat(String(rawData[mapping.priceField] ?? 0)) || 0,
       currency: this.config.settings.preferredCurrency,
-      minimumOrderQuantity: rawData.moq || 1,
-      leadTimeDays: rawData.leadTime || this.supplier.shippingInfo.averageDeliveryDays,
+      minimumOrderQuantity: typeof rawData.moq === 'number' ? rawData.moq : Number(rawData.moq) || 1,
+      leadTimeDays: typeof rawData.leadTime === 'number' ? rawData.leadTime : this.supplier.shippingInfo.averageDeliveryDays,
       availability: this.mapAvailability(rawData[mapping.stockField]),
       lastUpdated: new Date(),
-      specifications: rawData.specifications || {},
-      images: rawData.images || [],
+      specifications: (rawData.specifications as Record<string, unknown>) || {},
+      images: Array.isArray(rawData.images) ? (rawData.images as string[]) : [],
       syncStatus: 'synced'
     }
   }
 
-  private mapAvailability(stock: any): SupplierProduct['availability'] {
-    const stockLevel = parseInt(stock) || 0
-    
+  private mapAvailability(stock: unknown): SupplierProduct['availability'] {
+    const stockLevel = typeof stock === 'number' ? stock : parseInt(String(stock ?? 0), 10) || 0
+
     if (stockLevel === 0) return 'out_of_stock'
     if (stockLevel < 10) return 'low_stock'
     return 'in_stock'
@@ -311,7 +388,7 @@ export class APISupplierIntegration extends SupplierIntegration {
   async authenticate(): Promise<boolean> {
     try {
       // Simular autenticación con API
-      const response = await fetch(`${this.baseUrl}/auth`, {
+      await fetch(`${this.baseUrl}/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -320,7 +397,7 @@ export class APISupplierIntegration extends SupplierIntegration {
           apiKey: this.config.credentials.apiKey,
           username: this.config.credentials.username
         })
-      })
+      });
 
       // Simular respuesta exitosa
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -410,12 +487,12 @@ export class APISupplierIntegration extends SupplierIntegration {
     try {
       // Simular actualización de inventario
       const products = await this.getProducts()
-      
+
       for (const product of products) {
         try {
           // Simular obtención de stock actualizado
           const updatedStock = Math.floor(Math.random() * 200)
-          const availability = updatedStock === 0 ? 'out_of_stock' : 
+          const availability = updatedStock === 0 ? 'out_of_stock' :
                              updatedStock < 10 ? 'low_stock' : 'in_stock'
 
           await this.supabase
@@ -567,7 +644,7 @@ export class APISupplierIntegration extends SupplierIntegration {
         price: data.unitPrice
       }
 
-    } catch (error) {
+    } catch (_error) {
       return { available: false, quantity: 0, price: 0 }
     }
   }
@@ -620,7 +697,7 @@ export class EDISupplierIntegration extends SupplierIntegration {
 
   async createPurchaseOrder(order: Omit<PurchaseOrder, 'id' | 'externalOrderId' | 'syncStatus' | 'createdAt' | 'updatedAt'>): Promise<PurchaseOrder> {
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     return {
       ...order,
       id: `edi_po_${Date.now()}`,
@@ -631,16 +708,16 @@ export class EDISupplierIntegration extends SupplierIntegration {
     }
   }
 
-  async updateOrderStatus(orderId: string): Promise<PurchaseOrder> {
+  async updateOrderStatus(_orderId: string): Promise<PurchaseOrder> {
     await new Promise(resolve => setTimeout(resolve, 1000))
-    
+
     // Simular actualización
     return {} as PurchaseOrder
   }
 
   async getQuote(productId: string, quantity: number): Promise<SupplierQuote> {
     await new Promise(resolve => setTimeout(resolve, 1500))
-    
+
     return {
       id: `edi_quote_${Date.now()}`,
       supplierId: this.supplier.id,
@@ -655,9 +732,9 @@ export class EDISupplierIntegration extends SupplierIntegration {
     }
   }
 
-  async checkProductAvailability(sku: string): Promise<{ available: boolean; quantity: number; price: number }> {
+  async checkProductAvailability(_sku: string): Promise<{ available: boolean; quantity: number; price: number }> {
     await new Promise(resolve => setTimeout(resolve, 500))
-    
+
     return {
       available: true,
       quantity: Math.floor(Math.random() * 100),
@@ -683,13 +760,10 @@ export class SupplierIntegrationFactory {
 // Manager principal de proveedores
 export class SupplierManager {
   private integrations: Map<string, SupplierIntegration> = new Map()
-  // Lazy-initialize the client only when needed to avoid multiple GoTrueClient instances
-  // Typed as any: queries use tables/relations not in the generated schema types
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private _supabase: any = null
+  private _supabase: SupabaseClient<InventoryDatabase> | null = null
   private get supabase() {
     if (!this._supabase) {
-      this._supabase = createClient(
+      this._supabase = createClient<InventoryDatabase>(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
@@ -713,7 +787,7 @@ export class SupplierManager {
         try {
           const integration = SupplierIntegrationFactory.create(config, config.supplier)
           const authenticated = await integration.authenticate()
-          
+
           if (authenticated) {
             this.integrations.set(config.supplierId, integration)
           }
@@ -772,7 +846,7 @@ export class SupplierManager {
           reorderPoint: product.reorder_point,
           reorderQuantity: product.reorder_quantity || supplierProduct.minimumOrderQuantity,
           preferredSupplierId: supplierProduct.supplierId,
-          urgency: product.stock_quantity === 0 ? 'critical' : 
+          urgency: product.stock_quantity === 0 ? 'critical' :
                    product.stock_quantity < product.reorder_point * 0.5 ? 'high' : 'medium',
           estimatedCost: supplierProduct.unitPrice * (product.reorder_quantity || supplierProduct.minimumOrderQuantity),
           status: 'pending',
@@ -873,12 +947,12 @@ export class SupplierManager {
     const totalOrders = orders.length
     const totalValue = orders.reduce((sum, order) => sum + order.totalAmount, 0)
     const deliveredOrders = orders.filter(order => order.status === 'delivered')
-    const onTimeDeliveries = deliveredOrders.filter(order => 
+    const onTimeDeliveries = deliveredOrders.filter(order =>
       order.actualDeliveryDate && order.expectedDeliveryDate &&
       new Date(order.actualDeliveryDate) <= new Date(order.expectedDeliveryDate)
     )
 
-    const onTimeDeliveryRate = deliveredOrders.length > 0 ? 
+    const onTimeDeliveryRate = deliveredOrders.length > 0 ?
       (onTimeDeliveries.length / deliveredOrders.length) * 100 : 0
 
     const averageDeliveryTime = deliveredOrders.length > 0 ?

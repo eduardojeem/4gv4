@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Menu } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { TechnicianSidebar } from './TechnicianSidebar'
 import { TechnicianHeader } from './TechnicianHeader'
 

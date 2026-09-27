@@ -8,7 +8,7 @@ import {
   Coffee, Cpu, Dumbbell, FileText, Gamepad2, GraduationCap, Grid3X3, HardHat,
   Heart, Home, Laptop, Leaf, Map, Monitor, Mountain, Music, Package,
   PawPrint, Plane, Scissors, Shirt, ShoppingBasket, ShoppingCart,
-  Smartphone, Sparkles, Tag, Trophy, Tv, Utensils, Wrench, Zap,
+  Smartphone, Sparkles, Trophy, Tv, Utensils, Wrench, Zap
 } from 'lucide-react'
 import { motion, AnimatePresence } from '@/components/ui/motion'
 import { useReducedMotion } from 'framer-motion'

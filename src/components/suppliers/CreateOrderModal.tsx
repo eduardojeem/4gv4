@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatMoney, ProductThumb, QuantityStepper } from './order-ui'
 
-interface SupplierProduct {
+export interface SupplierProduct {
     id: string
     name: string
     suppliersku: string

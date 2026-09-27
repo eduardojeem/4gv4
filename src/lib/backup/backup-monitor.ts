@@ -1,14 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { backupManager } from './backup-manager'
-import type { 
-  BackupConfiguration, 
-  BackupJob, 
-  BackupHealth, 
-  HealthIssue,
-  BackupMetrics 
-} from './backup-manager'
+import { backupManager, type BackupConfiguration } from './backup-manager'
 
 // Interfaces para monitoreo
 export interface MonitoringRule {
@@ -48,7 +41,7 @@ export interface MonitoringAction {
     slackChannel?: string
     retryAttempts?: number
     failoverTarget?: string
-    scaleConfig?: any
+    scaleConfig?: Record<string, unknown>
     ticketSystem?: string
   }
   delay?: number // en segundos
@@ -63,7 +56,7 @@ export interface MonitoringAlert {
   severity: 'low' | 'medium' | 'high' | 'critical'
   title: string
   message: string
-  details: any
+  details: Record<string, unknown>
   status: 'active' | 'acknowledged' | 'resolved' | 'suppressed'
   triggeredAt: Date
   acknowledgedAt?: Date
@@ -81,7 +74,7 @@ export interface AlertAction {
   type: string
   status: 'pending' | 'executing' | 'completed' | 'failed'
   executedAt?: Date
-  result?: any
+  result?: unknown
   error?: string
 }
 
@@ -112,7 +105,7 @@ export interface DashboardWidget {
     refreshInterval?: number
     thresholds?: { value: number; color: string }[]
     columns?: string[]
-    filters?: { [key: string]: any }
+    filters?: Record<string, unknown>
   }
   position: { x: number; y: number; width: number; height: number }
 }
@@ -152,12 +145,12 @@ export interface RecoveryStrategy {
 export interface RecoveryCondition {
   type: 'error_type' | 'failure_count' | 'time_since_last_success' | 'resource_availability'
   operator: 'eq' | 'gt' | 'lt' | 'contains'
-  value: any
+  value: unknown
 }
 
 export interface RecoveryAction {
   type: 'restart_backup' | 'switch_destination' | 'increase_resources' | 'notify_admin' | 'run_script'
-  config: any
+  config: Record<string, unknown>
   timeout: number
 }
 
@@ -176,7 +169,7 @@ export interface RecoveryExecution {
 export interface RecoveryActionResult {
   actionType: string
   status: 'completed' | 'failed' | 'timeout'
-  result?: any
+  result?: unknown
   error?: string
   duration: number
 }
@@ -225,11 +218,11 @@ class BackupMonitor {
     await this.loadMonitoringRules()
     await this.loadActiveAlerts()
     await this.loadRecoveryConfigs()
-    
+
     this.startMonitoring()
     this.startAlertProcessing()
     this.startRecoveryEngine()
-    
+
     this.isMonitoring = true
   }
 
@@ -308,11 +301,11 @@ class BackupMonitor {
   // Realizar verificaciones de monitoreo
   private async performMonitoringChecks(): Promise<void> {
     try {
-      for (const [ruleId, rule] of this.monitoringRules) {
+      for (const [_ruleId, rule] of this.monitoringRules) {
         if (!rule.enabled) continue
 
         const shouldTrigger = await this.evaluateRule(rule)
-        
+
         if (shouldTrigger) {
           await this.triggerAlert(rule)
         }
@@ -417,10 +410,10 @@ class BackupMonitor {
   private async evaluateStorageUsage(rule: MonitoringRule): Promise<boolean> {
     // Implementar evaluación de uso de almacenamiento
     const threshold = rule.condition.value as number
-    
+
     // Obtener métricas de almacenamiento
     const storageUsage = await this.getStorageUsage()
-    
+
     switch (rule.condition.operator) {
       case 'gt':
         return storageUsage.percentage > threshold
@@ -468,7 +461,7 @@ class BackupMonitor {
 
       if (config.nextBackupAt && config.nextBackupAt < now) {
         const delayHours = (now.getTime() - config.nextBackupAt.getTime()) / (1000 * 60 * 60)
-        
+
         if (delayHours > threshold) {
           return true
         }
@@ -541,8 +534,9 @@ class BackupMonitor {
   }
 
   // Recopilar detalles de alerta
-  private async gatherAlertDetails(rule: MonitoringRule): Promise<any> {
-    const details: any = {
+  private async gatherAlertDetails(rule: MonitoringRule): Promise<Record<string, unknown>> {
+    const context: Record<string, unknown> = {}
+    const details: Record<string, unknown> = {
       rule: {
         id: rule.id,
         name: rule.name,
@@ -550,7 +544,7 @@ class BackupMonitor {
         condition: rule.condition
       },
       timestamp: new Date(),
-      context: {}
+      context
     }
 
     try {
@@ -558,19 +552,19 @@ class BackupMonitor {
         case 'backup_success_rate':
         case 'error_rate':
           const recentJobs = await this.getRecentJobs(rule.condition.timeWindow || 60)
-          details.context.recentJobs = recentJobs
+          context.recentJobs = recentJobs
           break
         case 'storage_usage':
           const storageInfo = await this.getStorageUsage()
-          details.context.storage = storageInfo
+          context.storage = storageInfo
           break
         case 'schedule_compliance':
           const delayedConfigs = await this.getDelayedConfigurations()
-          details.context.delayedConfigurations = delayedConfigs
+          context.delayedConfigurations = delayedConfigs
           break
       }
     } catch (error) {
-      details.context.error = error instanceof Error ? error.message : 'Unknown error'
+      context.error = error instanceof Error ? error.message : 'Unknown error'
     }
 
     return details
@@ -602,7 +596,7 @@ class BackupMonitor {
       // Ejecutar acciones de la regla
       for (const action of rule.actions) {
         const actionResult = await this.executeAction(action, alert)
-        
+
         const alertAction: AlertAction = {
           id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           alertId: alert.id,
@@ -628,7 +622,7 @@ class BackupMonitor {
   }
 
   // Ejecutar acción
-  private async executeAction(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async executeAction(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: unknown; error?: string }> {
     try {
       switch (action.type) {
         case 'email':
@@ -647,9 +641,9 @@ class BackupMonitor {
           return { success: false, error: 'Unknown action type' }
       }
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
   }
@@ -731,7 +725,7 @@ class BackupMonitor {
   // Monitorear ejecuciones de recuperación
   private async monitorRecoveryExecutions(): Promise<void> {
     const now = Date.now()
-    
+
     for (const [executionId, execution] of this.recoveryExecutions) {
       if (execution.status === 'executing') {
         const elapsed = now - execution.startedAt.getTime()
@@ -742,7 +736,7 @@ class BackupMonitor {
           execution.result = 'failure'
           execution.completedAt = new Date()
           execution.logs.push('Recovery execution timed out')
-          
+
           await this.saveRecoveryExecution(execution)
           this.recoveryExecutions.delete(executionId)
         }
@@ -811,7 +805,7 @@ class BackupMonitor {
       const resolutionTimes = alerts
         ?.filter(a => a.resolved_at)
         .map(a => new Date(a.resolved_at).getTime() - new Date(a.triggered_at).getTime()) || []
-      
+
       const averageResolutionTime = resolutionTimes.length > 0
         ? resolutionTimes.reduce((sum, time) => sum + time, 0) / resolutionTimes.length
         : 0
@@ -849,25 +843,25 @@ class BackupMonitor {
     return { used: 0, available: 100, percentage: 0 }
   }
 
-  private async getRecentJobs(timeWindowMinutes: number): Promise<any[]> {
+  private async getRecentJobs(timeWindowMinutes: number): Promise<Array<Record<string, unknown>>> {
     const startTime = new Date(Date.now() - timeWindowMinutes * 60 * 1000)
-    
+
     const { data: jobs } = await this.supabase
       .from('backup_jobs')
       .select('*')
       .gte('started_at', startTime.toISOString())
 
-    return jobs || []
+    return (jobs || []) as Array<Record<string, unknown>>
   }
 
-  private async getDelayedConfigurations(): Promise<any[]> {
+  private async getDelayedConfigurations(): Promise<BackupConfiguration[]> {
     const configurations = await backupManager.getConfigurations()
     const now = new Date()
-    
-    return configurations.filter(config => 
-      config.active && 
-      config.schedule.enabled && 
-      config.nextBackupAt && 
+
+    return configurations.filter(config =>
+      config.active &&
+      config.schedule.enabled &&
+      config.nextBackupAt &&
       config.nextBackupAt < now
     )
   }
@@ -879,7 +873,7 @@ class BackupMonitor {
 
   private async executeRecoveryAction(action: RecoveryAction, alert: MonitoringAlert): Promise<RecoveryActionResult> {
     const startTime = Date.now()
-    
+
     try {
       switch (action.type) {
         case 'restart_backup':
@@ -916,16 +910,17 @@ class BackupMonitor {
     }
   }
 
-  private async verifyRecoverySuccess(strategy: RecoveryStrategy, alert: MonitoringAlert): Promise<boolean> {
+  private async verifyRecoverySuccess(_strategy: RecoveryStrategy, _alert: MonitoringAlert): Promise<boolean> {
     // Implementar verificación de éxito de recuperación
     return true
   }
 
-  private calculateTopIssues(alerts: any[]): { type: string; count: number }[] {
+  private calculateTopIssues(alerts: MonitoringAlert[]): { type: string; count: number }[] {
     const issueCount: { [type: string]: number } = {}
-    
+
     for (const alert of alerts) {
-      const type = alert.details?.rule?.target || 'unknown'
+      const rule = alert.details?.rule as { target?: string } | undefined
+      const type = rule?.target || 'unknown'
       issueCount[type] = (issueCount[type] || 0) + 1
     }
 
@@ -937,10 +932,10 @@ class BackupMonitor {
 
   private async calculateSystemHealth(): Promise<{ overall: 'healthy' | 'warning' | 'critical'; components: { [component: string]: 'healthy' | 'warning' | 'critical' } }> {
     const healthResults = await backupManager.checkBackupHealth()
-    
+
     const criticalCount = healthResults.filter(h => h.overallHealth === 'critical').length
     const warningCount = healthResults.filter(h => h.overallHealth === 'warning').length
-    
+
     let overall: 'healthy' | 'warning' | 'critical' = 'healthy'
     if (criticalCount > 0) {
       overall = 'critical'
@@ -957,7 +952,7 @@ class BackupMonitor {
     return { overall, components }
   }
 
-  private async calculateTrends(startDate: Date, endDate: Date): Promise<{ alertVolume: number[]; resolutionTime: number[]; recoveryRate: number[] }> {
+  private async calculateTrends(_startDate: Date, _endDate: Date): Promise<{ alertVolume: number[]; resolutionTime: number[]; recoveryRate: number[] }> {
     // Implementar cálculo de tendencias
     return {
       alertVolume: [],
@@ -967,25 +962,25 @@ class BackupMonitor {
   }
 
   // Métodos de notificación
-  private async sendEmailNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async sendEmailNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar envío de email
     console.log('Sending email notification:', { action, alert })
     return { success: true, result: 'Email sent' }
   }
 
-  private async sendSlackNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async sendSlackNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar envío a Slack
     console.log('Sending Slack notification:', { action, alert })
     return { success: true, result: 'Slack message sent' }
   }
 
-  private async sendWebhookNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async sendWebhookNotification(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar webhook
     console.log('Sending webhook notification:', { action, alert })
     return { success: true, result: 'Webhook sent' }
   }
 
-  private async executeAutoRetry(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async executeAutoRetry(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar reintento automático
     if (alert.configurationId) {
       try {
@@ -998,13 +993,13 @@ class BackupMonitor {
     return { success: false, error: 'No configuration ID' }
   }
 
-  private async executeAutoFailover(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async executeAutoFailover(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar failover automático
     console.log('Executing auto failover:', { action, alert })
     return { success: true, result: 'Failover executed' }
   }
 
-  private async createSupportTicket(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: any; error?: string }> {
+  private async createSupportTicket(action: MonitoringAction, alert: MonitoringAlert): Promise<{ success: boolean; result?: string; error?: string }> {
     // Implementar creación de ticket
     console.log('Creating support ticket:', { action, alert })
     return { success: true, result: 'Ticket created' }
@@ -1013,7 +1008,7 @@ class BackupMonitor {
   private async escalateAlert(alert: MonitoringAlert): Promise<void> {
     alert.escalationLevel++
     await this.updateAlert(alert)
-    
+
     // Implementar lógica de escalación
     console.log(`Alert escalated to level ${alert.escalationLevel}:`, alert.id)
   }
@@ -1156,7 +1151,7 @@ class BackupMonitor {
       clearInterval(this.monitoringInterval)
       this.monitoringInterval = undefined
     }
-    
+
     this.isMonitoring = false
     this.monitoringRules.clear()
     this.activeAlerts.clear()

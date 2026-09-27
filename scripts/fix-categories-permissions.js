@@ -111,7 +111,7 @@ async function main() {
       }
     } else {
       console.log('🔧 MODO FIX: Aplicando permisos correctos')
-      const fixPath = path.join(__dirname, '..', 'supabase', 'migrations', '20250107_fix_categories_permissions.sql')
+      const fixPath = path.join(__dirname, '..', 'supabase', 'migrations_legacy', '20250107_fix_categories_permissions.sql')
       const success = await executeSqlFile(fixPath, 'Corrección de permisos de categorías')
       
       if (!success) {
@@ -184,7 +184,7 @@ VARIABLES DE ENTORNO REQUERIDAS:
   SUPABASE_SERVICE_ROLE_KEY     - Service role key de Supabase
 
 ARCHIVOS RELACIONADOS:
-  supabase/migrations/20250107_fix_categories_permissions.sql
+  supabase/migrations_legacy/20250107_fix_categories_permissions.sql
   scripts/verify-categories-permissions.sql
   scripts/reset-categories-permissions.sql
 `)

@@ -1,4 +1,4 @@
-﻿import { NextRequest } from 'next/server'
+import { NextRequest } from 'next/server'
 import { generateReorderAlerts, ProductStock } from '@/services/inventory-repair-sync'
 import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
@@ -20,8 +20,9 @@ export async function POST(req: NextRequest) {
     }
     const alerts = generateReorderAlerts(products, threshold ?? 3)
     return new Response(JSON.stringify({ alerts }), { status: 200, headers: { 'content-type': 'application/json' } })
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message ?? 'Unknown error' }), { status: 500 })
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return new Response(JSON.stringify({ error: message }), { status: 500 })
   }
 }
 

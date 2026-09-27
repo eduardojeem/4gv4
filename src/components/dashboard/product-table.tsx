@@ -126,6 +126,11 @@ function highlightText(text?: string, term?: string) {
   )
 }
 
+const SortIcon = ({ field, sortField, sortDirection }: { field: SortField; sortField: SortField; sortDirection: SortDirection }) => {
+  if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />
+  return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+}
+
 export function ProductTable({ 
   products,
   loading = false,
@@ -188,10 +193,6 @@ export function ProductTable({
     return bNum - aNum
   })
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />
-    return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-  }
 
   return (
     <div className={cn("rounded-md border overflow-auto max-h-[calc(100vh-320px)]", className)}>
@@ -206,7 +207,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Producto
-                <SortIcon field="name" />
+                <SortIcon field="name" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead aria-sort={sortField === 'category' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="sticky top-0 bg-background z-10">
@@ -216,7 +217,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Categoría
-                <SortIcon field="category" />
+                <SortIcon field="category" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead aria-sort={sortField === 'stock_quantity' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="sticky top-0 bg-background z-10">
@@ -226,7 +227,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Stock
-                <SortIcon field="stock_quantity" />
+                <SortIcon field="stock_quantity" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead aria-sort={sortField === 'purchase_price' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="sticky top-0 bg-background z-10">
@@ -236,7 +237,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Precio Compra
-                <SortIcon field="purchase_price" />
+                <SortIcon field="purchase_price" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead aria-sort={sortField === 'sale_price' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="sticky top-0 bg-background z-10">
@@ -246,7 +247,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Precio Venta
-                <SortIcon field="sale_price" />
+                <SortIcon field="sale_price" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead aria-sort={sortField === 'margin' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="sticky top-0 bg-background z-10">
@@ -256,7 +257,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Margen
-                <SortIcon field="margin" />
+                <SortIcon field="margin" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead aria-sort={sortField === 'supplier' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="sticky top-0 bg-background z-10">
@@ -266,7 +267,7 @@ export function ProductTable({
                 className="h-auto p-0 font-medium hover:bg-transparent"
               >
                 Proveedor
-                <SortIcon field="supplier" />
+                <SortIcon field="supplier" sortField={sortField} sortDirection={sortDirection} />
               </Button>
             </TableHead>
             <TableHead className="text-right sticky top-0 bg-background z-10">Acciones</TableHead>

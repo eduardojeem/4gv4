@@ -40,7 +40,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CustomerPreview } from './CustomerPreview'
 import { cn } from '@/lib/utils'
-import { Customer } from '@/hooks/use-customer-state'
+import { Customer, mapRawToCustomer } from '@/hooks/use-customer-state'
 
 interface SearchSuggestion {
   value: string
@@ -84,10 +84,37 @@ export function ImprovedSearchBar({
   const [isFocused, setIsFocused] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = localStorage.getItem('customer-search-history')
+      return saved ? JSON.parse(saved) as string[] : []
+    } catch {
+      return []
+    }
+  })
   const [showQuickFilters, setShowQuickFilters] = useState(false)
+  const [serverResult, setServerResult] = useState<{ query: string; customers: Customer[] } | null>(null)
+  const serverCustomers = useMemo(
+    () => serverResult?.query === value.trim() ? serverResult.customers : [],
+    [serverResult, value],
+  )
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const term = value.trim()
+    if (term.length < 2) return
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({ search: term, page: '1', limit: '8', summary: '0' })
+      void fetch(`/api/customers?${params.toString()}`, { signal: controller.signal })
+        .then((response) => response.json())
+        .then((result) => { if (!controller.signal.aborted && result.success) setServerResult({ query: term, customers: (result.data || []).map(mapRawToCustomer) }) })
+        .catch(() => { if (!controller.signal.aborted) setServerResult({ query: term, customers: [] }) })
+    }, 250)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [value])
 
   // Quick filters for common searches
   const quickFilters: QuickFilter[] = [
@@ -154,7 +181,7 @@ export function ImprovedSearchBar({
     const isRUC = /^\d{12}$/.test(searchTerm.replace(/\D/g, ''))
     const isCode = /^CLI-/.test(searchTerm.toUpperCase())
     
-    customers.forEach(customer => {
+    ;(value.trim().length >= 2 ? serverCustomers : customers).forEach(customer => {
       // Name search with fuzzy matching
       const nameScore = fuzzyMatch(customer.name || '', searchTerm)
       if (nameScore > 30) {
@@ -254,19 +281,7 @@ export function ImprovedSearchBar({
       .slice(0, 8) // Limit to 8 suggestions
     
     return uniqueResults
-  }, [value, customers])
-
-  // Load recent searches from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('customer-search-history')
-    if (saved) {
-      try {
-        setRecentSearches(JSON.parse(saved))
-      } catch (e) {
-        console.error('Error loading search history:', e)
-      }
-    }
-  }, [])
+  }, [value, customers, serverCustomers])
 
   // Save search to history
   const saveToHistory = (searchTerm: string) => {
@@ -324,7 +339,7 @@ export function ImprovedSearchBar({
             setSelectedIndex(-1)
             onSearch?.(recentSearch)
           }
-        } else if (value.trim()) {
+        } else {
           handleSearch()
         }
         break
@@ -380,12 +395,17 @@ export function ImprovedSearchBar({
     if (value.trim()) {
       saveToHistory(value)
       onSearch?.(value)
+    } else {
+      onSearch?.('')
     }
     setShowSuggestions(false)
   }
 
   const handleClear = () => {
     onChange('')
+    // Sin esto quedaban los resultados de la busqueda anterior con el campo ya
+    // vacio: la lista mostraba un recorte y nada explicaba por que.
+    onSearch?.('')
     setShowSuggestions(false)
     setSelectedIndex(-1)
     inputRef.current?.focus()

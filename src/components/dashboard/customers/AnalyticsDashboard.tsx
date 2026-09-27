@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -9,36 +9,19 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import {
-  TrendingUp,
-  TrendingDown,
-  Users,
-  DollarSign,
-  ShoppingCart,
-  Calendar,
+  TrendingUp, Users,
+  DollarSign, Calendar,
   Download,
-  Settings,
-  Filter,
-  BarChart3,
-  PieChart as PieChartIcon,
-  LineChart as LineChartIcon,
-  Activity,
-  Target,
-  Zap,
-  Eye,
-  RefreshCw,
-  ArrowUpRight,
+  Settings, BarChart3,
+  PieChart as PieChartIcon, Activity,
+  Target, ArrowUpRight,
   ArrowDownRight,
-  Minus,
-  Star,
-  Award,
-  CreditCard
+  Minus, CreditCard
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerMetrics, UseCustomerMetricsOptions } from '@/hooks/use-customer-metrics'
@@ -46,9 +29,19 @@ import { formatters, formatValue } from '@/lib/formatters'
 import { ChartWrapper, RevenueChart, CustomerGrowthChart, SegmentDistributionChart, DebtDistributionChart } from '@/components/charts/ChartWrapper'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 
+export interface MainMetricItem {
+  id: string
+  title: string
+  value: number
+  format: 'number' | 'currency' | 'percentage'
+  icon: React.ReactNode
+  change: number
+  color: string
+}
+
 interface AnalyticsDashboardProps {
   customers: Customer[]
-  creditSummaries?: Record<string, any>
+  creditSummaries?: Record<string, { total_pending?: number; current_balance?: number }>
   mode?: 'interactive' | 'simple' | 'realtime'
   showPredictions?: boolean
   showComparisons?: boolean
@@ -62,7 +55,7 @@ export function AnalyticsDashboard({
   mode = 'interactive',
   showPredictions = true,
   showComparisons = true,
-  compact = false,
+  compact: _compact = false,
   onExport
 }: AnalyticsDashboardProps) {
   const [activeTab, setActiveTab] = useState('overview')
@@ -136,8 +129,8 @@ export function AnalyticsDashboard({
   }
 
   const toggleMetric = (metricId: string) => {
-    setSelectedMetrics(prev => 
-      prev.includes(metricId) 
+    setSelectedMetrics(prev =>
+      prev.includes(metricId)
         ? prev.filter(id => id !== metricId)
         : [...prev, metricId]
     )
@@ -167,7 +160,7 @@ export function AnalyticsDashboard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
+          <Select value={timeRange} onValueChange={(value) => setTimeRange(value as '3months' | '6months' | '12months')}>
             <SelectTrigger className="w-44 h-9 text-xs bg-white dark:bg-[#0d1117] border-slate-200 dark:border-white/10">
               <Calendar className="h-3.5 w-3.5 mr-2 text-slate-400" />
               <SelectValue />
@@ -482,7 +475,7 @@ export function AnalyticsDashboard({
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {metrics.segmentDistribution.map((segment, index) => {
+                  {metrics.segmentDistribution.map((segment, _index) => {
                     const count = segment.value
                     const percentage = metrics.totalCustomers > 0 ? (count / metrics.totalCustomers) * 100 : 0
                     const revenue = metrics.totalRevenue * (percentage / 100)
@@ -548,12 +541,12 @@ export function AnalyticsDashboard({
 }
 
 // Componente para modo simple
-function SimpleAnalyticsView({ 
-  metrics, 
-  mainMetrics 
-}: { 
-  metrics: any, 
-  mainMetrics: any[] 
+function SimpleAnalyticsView({
+  metrics,
+  mainMetrics
+}: {
+  metrics: ReturnType<typeof useCustomerMetrics>
+  mainMetrics: MainMetricItem[]
 }) {
   return (
     <div className="space-y-4">
@@ -583,12 +576,12 @@ function SimpleAnalyticsView({
 }
 
 // Componente para modo tiempo real
-function RealtimeAnalyticsView({ 
-  metrics, 
-  mainMetrics 
-}: { 
-  metrics: any, 
-  mainMetrics: any[] 
+function RealtimeAnalyticsView({
+  metrics: _metrics,
+  mainMetrics
+}: {
+  metrics: ReturnType<typeof useCustomerMetrics>
+  mainMetrics: MainMetricItem[]
 }) {
   return (
     <div className="space-y-4">

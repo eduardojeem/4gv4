@@ -48,7 +48,7 @@ export function WhatsAppRepairActions({ repair }: WhatsAppRepairActionsProps) {
         message
       })
       toast.success(`${actionName} enviado correctamente`)
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al abrir WhatsApp')
     } finally {
       setIsSending(false)
@@ -73,7 +73,7 @@ export function WhatsAppRepairActions({ repair }: WhatsAppRepairActionsProps) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Acciones de WhatsApp</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        
+
         <DropdownMenuItem
           onClick={() => handleSendMessage(
             WhatsAppTemplates.repairStatus(

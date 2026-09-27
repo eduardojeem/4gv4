@@ -1,25 +1,44 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { toast } from 'sonner'
+import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
+import { buildCustomerStatement, toStatementPdfInput, toStatementTicketInput } from '@/lib/credits/customer-statement'
+import { createCreditHistoryPdf } from '@/lib/credits/credit-history-pdf'
+import { createCreditHistoryTicket } from '@/lib/credits/credit-history-ticket'
+import { useCreditPrinting } from '@/hooks/use-credit-printing'
+import { CreditPaperPicker } from './CreditPaperPicker'
+import { isRollFormat } from '@/lib/credits/paper'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
+import type { Database } from '@/lib/supabase/types'
 import { createClient } from '@/lib/supabase/client'
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
-import { getCreditDisplayInfo } from '@/lib/credits/display'
+import { getCreditDisplayInfo, resolveInstallmentStatus, type SaleLike, type SaleItemLike } from '@/lib/credits/display'
 import {
-    Calendar, DollarSign, Percent, TrendingUp,
-    Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
-    AlertCircle, CalendarClock, ChevronDown, ChevronUp, ShoppingBag, History,
-    Package2, Wallet, BadgeDollarSign, Hash, Phone, Mail, IdCard, MapPin, Building2, User
+  Calendar, DollarSign, Percent, TrendingUp,
+  Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
+  AlertCircle, CalendarClock, ChevronDown, ChevronUp, ShoppingBag, History,
+  Package2, Wallet, BadgeDollarSign, Hash, Phone, Mail, IdCard, MapPin
 } from 'lucide-react'
+import { customerTypeLabel } from '@/lib/i18n/labels'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface InstallmentItem {
@@ -65,9 +84,16 @@ interface CreditDetailDialogProps {
     payments: PaymentItem[]
     remainingBalance: number
     paidAmount: number
-    sales?: any[]
-    saleItems?: any[]
+    sales?: SaleLike[]
+    saleItems?: SaleItemLike[]
     onPayInstallment?: (installmentId: string) => void
+    /**
+     * Todos los creditos y cuotas de la tienda. El estado de cuenta abarca al
+     * cliente entero, no a un credito suelto, y la pagina ya los tiene cargados:
+     * se filtran aca en vez de pedirlos otra vez al servidor.
+     */
+    allCredits?: CreditRow[]
+    allInstallments?: InstallmentRow[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -89,12 +115,9 @@ const METHOD_STYLE: Record<string, string> = {
     transfer: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
 }
 
-function getInstallmentStatus(inst: InstallmentItem): 'paid' | 'late' | 'overdue' | 'pending' {
-    if (inst.status === 'paid') return 'paid'
-    if (inst.status === 'late') return 'late'
-    if (new Date(inst.due_date) < new Date()) return 'overdue'
-    return 'pending'
-}
+// La regla vive en @/lib/credits/display para que la pantalla y los documentos
+// impresos no puedan mostrar estados distintos de la misma cuota.
+const getInstallmentStatus = (inst: InstallmentItem) => resolveInstallmentStatus(inst)
 
 const INST_STATUS_CONFIG = {
     paid:    { label: 'Pagada',    Icon: CheckCircle,   color: 'text-green-600 dark:text-green-400',  rowBg: '' },
@@ -121,10 +144,13 @@ export function CreditDetailDialog({
     paidAmount,
     sales = [],
     saleItems = [],
-    onPayInstallment
+    onPayInstallment,
+    allCredits = [],
+    allInstallments = []
 }: CreditDetailDialogProps) {
+    const { format, changeFormat, issuer } = useCreditPrinting()
     const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>({})
-    const [customerDetails, setCustomerDetails] = useState<any>(null)
+    const [customerDetails, setCustomerDetails] = useState<Database['public']['Tables']['customers']['Row'] | null>(null)
 
     useEffect(() => {
         if (open && credit?.customer_id) {
@@ -202,6 +228,23 @@ export function CreditDetailDialog({
         return result
     }, [installments, sales, saleItems])
 
+    // ─── Estado de cuenta del cliente ─────────────────────────────────────────
+    // Abarca todos los creditos del cliente, no solo el que esta abierto: es el
+    // documento que se le entrega para que vea cuanto debe en total.
+    const customerStatement = useMemo(() => {
+        if (!credit) return null
+        const own = allCredits.filter(c => c.customer_id === credit.customer_id)
+        // Si la pagina todavia no paso los datos completos, al menos el credito
+        // abierto entra: es preferible un estado de cuenta de un solo credito a
+        // un boton que no hace nada.
+        const source = own.length > 0 ? own : [credit as unknown as CreditRow]
+        const ids = new Set(source.map(c => c.id))
+        const rows = allInstallments.length > 0
+            ? allInstallments.filter(i => ids.has(i.credit_id))
+            : (installments as unknown as InstallmentRow[])
+        return buildCustomerStatement(source, rows)
+    }, [credit, allCredits, allInstallments, installments])
+
     const toggleGroup = (id: string) => {
         setExpandedSales(prev => ({ ...prev, [id]: !prev[id] }))
     }
@@ -244,13 +287,13 @@ export function CreditDetailDialog({
         tsv += row('Principal', credit.principal)
         tsv += row('Tasa', `${credit.interest_rate}%`)
         tsv += row('Plazo', `${credit.term_months} meses`)
-        tsv += row('Inicio', new Date(credit.start_date).toLocaleDateString('es-AR'))
-        tsv += row('Fin estimado', endDate.toLocaleDateString('es-AR'))
+        tsv += row('Inicio', new Date(credit.start_date).toLocaleDateString(getDisplayLocale()))
+        tsv += row('Fin estimado', endDate.toLocaleDateString(getDisplayLocale()))
         tsv += row('Pagado', paidAmount)
         tsv += row('Pendiente', remainingBalance)
         tsv += row('Progreso', `${progressPct}%`)
         tsv += '\nCUOTAS\n' + row('N°','Vencimiento','Monto','Pagado','Estado')
-        installments.forEach(i => tsv += row(i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'), i.amount, i.amount_paid ?? 0, INST_STATUS_CONFIG[getInstallmentStatus(i)].label))
+        installments.forEach(i => tsv += row(i.installment_number, new Date(i.due_date).toLocaleDateString(getDisplayLocale()), i.amount, i.amount_paid ?? 0, INST_STATUS_CONFIG[getInstallmentStatus(i)].label))
         tsv += '\nPAGOS\n' + row('Fecha','Destino / Compra','Método','Monto')
         if (payments.length === 0) tsv += row('Sin pagos','','','')
         else {
@@ -262,7 +305,7 @@ export function CreditDetailDialog({
                     targetLabel = linkedSale ? `Cuota #${linkedInst.installment_number} - ${linkedSale.code}` : `Cuota #${linkedInst.installment_number} - Saldo Anterior`
                 }
                 tsv += row(
-                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                    p.created_at ? new Date(p.created_at).toLocaleString(getDisplayLocale()) : '-',
                     targetLabel,
                     METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '-',
                     p.amount
@@ -283,15 +326,15 @@ export function CreditDetailDialog({
         doc.setFontSize(18); doc.setFont('helvetica','bold')
         doc.text('Detalle del Crédito', pageW / 2, 18, { align: 'center' })
         doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100)
-        doc.text(`Generado el ${new Date().toLocaleString('es-AR')}`, pageW / 2, 24, { align: 'center' })
+        doc.text(`Generado el ${new Date().toLocaleString(getDisplayLocale())}`, pageW / 2, 24, { align: 'center' })
         doc.setTextColor(0)
         autoTable(doc, { startY: 30, head:[['Campo','Valor']], body:[
             ['ID', formatCreditId(credit.id)],['Cliente', credit.customer_name],
             ['Estado', STATUS_LABEL[credit.status] ?? credit.status],
             ['Principal', formatCurrency(credit.principal)],['Tasa', `${credit.interest_rate}%`],
             ['Plazo', `${credit.term_months} meses`],
-            ['Inicio', new Date(credit.start_date).toLocaleDateString('es-AR')],
-            ['Fin estimado', endDate.toLocaleDateString('es-AR')],
+            ['Inicio', new Date(credit.start_date).toLocaleDateString(getDisplayLocale())],
+            ['Fin estimado', endDate.toLocaleDateString(getDisplayLocale())],
             ['Pagado', formatCurrency(paidAmount)],['Pendiente', formatCurrency(remainingBalance)],
             ['Progreso', `${progressPct}%`],
         ], theme:'grid', headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
@@ -299,7 +342,7 @@ export function CreditDetailDialog({
         const y1 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
         doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text('Cuotas', 14, y1)
         autoTable(doc, { startY: y1+4, head:[['N°','Vencimiento','Monto','Pagado','Estado']],
-            body: installments.map(i => [i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'),
+            body: installments.map(i => [i.installment_number, new Date(i.due_date).toLocaleDateString(getDisplayLocale()),
                 formatCurrency(i.amount), formatCurrency(i.amount_paid ?? 0), INST_STATUS_CONFIG[getInstallmentStatus(i)].label]),
             theme:'striped', headStyles:{fillColor:[234,88,12],textColor:255,fontStyle:'bold'}, margin:{left:14,right:14} })
         const y2 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
@@ -313,7 +356,7 @@ export function CreditDetailDialog({
                     targetLabel = linkedSale ? `Cuota #${linkedInst.installment_number} - ${linkedSale.code}` : `Cuota #${linkedInst.installment_number} - Saldo Anterior`
                 }
                 return [
-                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                    p.created_at ? new Date(p.created_at).toLocaleString(getDisplayLocale()) : '-',
                     targetLabel,
                     METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '-',
                     formatCurrency(p.amount)
@@ -323,8 +366,89 @@ export function CreditDetailDialog({
         return doc
     }
 
-    const exportDetailPdf = async () => { const doc = await generateDetailDoc(); doc.save(`credito_${credit.id}_detalle.pdf`) }
-    const printDetailPdf = async () => { const doc = await generateDetailDoc(); doc.autoPrint(); doc.output('dataurlnewwindow') }
+    const notifyPdfFailure = (error: unknown, action: 'imprimir' | 'descargar') => {
+        toast.error(`No se pudo ${action} el detalle del crédito`, {
+            description: error instanceof Error ? error.message : 'Volvé a intentar en unos segundos.',
+        })
+    }
+
+    /**
+     * El detalle de un credito salia siempre en A4, sin importar el papel
+     * elegido: alguien con impresora de 58 mm apretaba "Imprimir" y recibia una
+     * hoja de oficina en un rollo de ticket. En rollo se reusa el generador de
+     * tira, que es el mismo documento acotado a este credito.
+     */
+    const buildDetailDoc = async () => {
+        if (!isRollFormat(format) || !customerStatement) return generateDetailDoc()
+        const soloEste = customerStatement.credits.filter(c => c.id === credit.id)
+        return createCreditHistoryTicket(
+            toStatementTicketInput(statementParty(), { ...customerStatement, credits: soloEste }),
+            { format }
+        )
+    }
+
+    const exportDetailPdf = async () => {
+        try {
+            downloadPdfDocument(await buildDetailDoc(), `credito_${credit.id}_detalle`)
+        } catch (error) {
+            notifyPdfFailure(error, 'descargar')
+        }
+    }
+
+    const printDetailPdf = async () => {
+        try {
+            await printPdfDocument(await buildDetailDoc())
+        } catch (error) {
+            notifyPdfFailure(error, 'imprimir')
+        }
+    }
+
+    const statementCreditCount = customerStatement?.credits.length ?? 0
+
+    const statementParty = () => ({
+        customerName: credit?.customer_name ?? 'Cliente',
+        customerCode: credit?.customer_code || undefined,
+        customerPhone: customerDetails?.phone || undefined,
+        companyName: issuer.businessName,
+        companyRuc: issuer.businessRuc,
+        companyPhone: issuer.businessPhone,
+        companyAddress: issuer.businessAddress,
+    })
+
+    const notifyStatementFailure = (error: unknown, action: string) => {
+        toast.error(`No se pudo ${action} el estado de cuenta`, {
+            description: error instanceof Error ? error.message : 'Volvé a intentar en unos segundos.',
+        })
+    }
+
+    const runStatement = async (
+        action: 'imprimir' | 'descargar' | 'imprimir el ticket de',
+        run: (statement: NonNullable<typeof customerStatement>) => Promise<void>
+    ) => {
+        if (!customerStatement) return
+        try {
+            await run(customerStatement)
+        } catch (error) {
+            notifyStatementFailure(error, action)
+        }
+    }
+
+    // Rollo y hoja son dos diseños distintos, no el mismo estirado: el rollo va
+    // en una tira continua sin paginar y la hoja lleva cabecera y numeracion en
+    // cada pagina. El formato elegido decide cual se genera.
+    const buildStatementDoc = async (statement: NonNullable<typeof customerStatement>) =>
+        isRollFormat(format)
+            ? createCreditHistoryTicket(toStatementTicketInput(statementParty(), statement), { format })
+            : createCreditHistoryPdf(toStatementPdfInput(statementParty(), statement))
+
+    const printStatement = () => runStatement('imprimir', async (statement) =>
+        printPdfDocument(await buildStatementDoc(statement)))
+
+    const exportStatementPdf = () => runStatement('descargar', async (statement) =>
+        downloadPdfDocument(
+            await buildStatementDoc(statement),
+            `estado_cuenta_${credit?.customer_code || credit?.customer_id}`
+        ))
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
@@ -347,7 +471,7 @@ export function CreditDetailDialog({
                                             <DialogTitle className="text-xl sm:text-2xl font-bold leading-tight truncate">{credit.customer_name}</DialogTitle>
                                             {customerDetails?.customer_type ? (
                                                 <span className="hidden sm:inline-flex rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] uppercase font-bold text-muted-foreground">
-                                                    {customerDetails.customer_type}
+                                                    {customerTypeLabel(customerDetails.customer_type)}
                                                 </span>
                                             ) : null}
                                         </div>
@@ -477,7 +601,7 @@ export function CreditDetailDialog({
                                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Próxima cuota</p>
                                         <p className="mt-1 font-semibold">
                                             {nextPendingInstallment
-                                                ? `#${nextPendingInstallment.installment_number} · ${new Date(nextPendingInstallment.due_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                                                ? `#${nextPendingInstallment.installment_number} · ${new Date(nextPendingInstallment.due_date).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}`
                                                 : 'Sin cuotas pendientes'}
                                         </p>
                                     </div>
@@ -505,14 +629,14 @@ export function CreditDetailDialog({
                             <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
                             <div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Inicio</p>
-                                <p className="text-sm font-semibold">{new Date(credit.start_date).toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' })}</p>
+                                <p className="text-sm font-semibold">{new Date(credit.start_date).toLocaleDateString(getDisplayLocale(), { day:'2-digit', month:'long', year:'numeric' })}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
                             <Clock className="h-4 w-4 text-orange-600 shrink-0" />
                             <div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Fin estimado</p>
-                                <p className="text-sm font-semibold">{endDate.toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' })}</p>
+                                <p className="text-sm font-semibold">{endDate.toLocaleDateString(getDisplayLocale(), { day:'2-digit', month:'long', year:'numeric' })}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
@@ -558,7 +682,7 @@ export function CreditDetailDialog({
                                     groupedPurchases.map((group, groupIdx) => {
                                         const isExpanded = expandedSales[group.id] ?? (groupIdx === 0)
                                         const productsSummary = group.items && group.items.length > 0
-                                            ? group.items.map((item: any) => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ')
+                                            ? group.items.map((item: { quantity?: number; product?: { name?: string } }) => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ')
                                             : group.isLegacy ? 'Cuotas consolidadas del saldo anterior' : 'Sin productos registrados'
 
                                         const hasLate = group.installments.some(inst => {
@@ -592,7 +716,7 @@ export function CreditDetailDialog({
                                                                 </span>
                                                             </div>
                                                             <p className="text-[10px] text-muted-foreground mt-0.5">
-                                                                {group.created_at ? new Date(group.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                                {group.created_at ? new Date(group.created_at).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                                                                 {group.isLegacy ? '' : ` · ${group.installments.length} cuotas`}
                                                             </p>
                                                             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -647,7 +771,7 @@ export function CreditDetailDialog({
                                                                     return (
                                                                         <div key={inst.id} className="grid grid-cols-[60px_1fr_90px_90px_110px_90px] gap-2 items-center px-4 py-2.5 text-xs hover:bg-slate-50/30 dark:hover:bg-white/[0.01] transition-colors">
                                                                             <span className="text-center font-mono font-bold text-muted-foreground">#{inst.installment_number}</span>
-                                                                            <span className="font-medium text-left">{new Date(inst.due_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                                            <span className="font-medium text-left">{new Date(inst.due_date).toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                                                             <span className="text-right font-semibold tabular-nums">{formatCurrency(inst.amount)}</span>
                                                                             <span className={`text-right tabular-nums ${paid > 0 ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}`}>
                                                                                 {formatCurrency(paid)}
@@ -718,7 +842,7 @@ export function CreditDetailDialog({
                                         return (
                                             <div key={p.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-green-50/20 dark:hover:bg-green-900/10 transition-colors ${rowBg}`}>
                                                 <div className="flex-1 min-w-0 text-left">
-                                                    <p className="text-sm font-medium">{p.created_at ? new Date(p.created_at).toLocaleString('es-AR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}</p>
+                                                    <p className="text-sm font-medium">{p.created_at ? new Date(p.created_at).toLocaleString(getDisplayLocale(), { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}</p>
                                                     <p className="text-xs text-muted-foreground mt-0.5 font-medium">{targetLabel}</p>
                                                 </div>
                                                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${mStyle}`}>{mLabel}</span>
@@ -740,6 +864,10 @@ export function CreditDetailDialog({
 
                     {/* ── Actions ── */}
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+                        {/* El papel se elige en la barra, no dentro del menu: asi se ve
+                            cual esta activo sin abrir nada, y vale por igual para el
+                            credito abierto y para el estado de cuenta completo. */}
+                        <CreditPaperPicker value={format} onChange={changeFormat} className="mr-1" />
                         <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportDetailCsv}>
                             <FileText className="h-3.5 w-3.5" /> Excel
                         </Button>
@@ -749,6 +877,32 @@ export function CreditDetailDialog({
                         <Button variant="outline" size="sm" className="h-8 gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400" onClick={printDetailPdf}>
                             <Printer className="h-3.5 w-3.5" /> Imprimir
                         </Button>
+                        {/* Estado de cuenta: agrupa las tres salidas en un menu para no
+                            sumar tres botones mas a una barra que ya esta llena. */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400">
+                                    <History className="h-3.5 w-3.5" /> Estado de cuenta
+                                    <ChevronDown className="h-3 w-3 opacity-60" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64">
+                                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground">
+                                    Todos los créditos de {credit.customer_name}
+                                    {statementCreditCount > 0 && ` (${statementCreditCount})`}
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={printStatement} className="gap-2">
+                                    {isRollFormat(format)
+                                        ? <Receipt className="h-3.5 w-3.5" />
+                                        : <Printer className="h-3.5 w-3.5" />}
+                                    Imprimir en {format}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={exportStatementPdf} className="gap-2">
+                                    <FileDown className="h-3.5 w-3.5" /> Descargar PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <Button size="sm" className="h-8 ml-auto" onClick={() => onOpenChange(false)}>
                             Cerrar
                         </Button>

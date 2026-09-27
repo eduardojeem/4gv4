@@ -8,7 +8,7 @@ import { useCallback, useRef, useEffect } from 'react'
  * Hook para debounce de funciones
  */
  
-export function useDebounce<T extends (...args: any[]) => any>(
+export function useDebounce<T extends (...args: never[]) => unknown>(
   callback: T,
   delay: number
 ): T {
@@ -42,7 +42,7 @@ export function useDebounce<T extends (...args: any[]) => any>(
  * Hook para throttle de funciones
  */
  
-export function useThrottle<T extends (...args: any[]) => any>(
+export function useThrottle<T extends (...args: never[]) => unknown>(
   callback: T,
   delay: number
 ): T {

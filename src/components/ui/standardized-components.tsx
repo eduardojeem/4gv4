@@ -8,7 +8,6 @@
 import * as React from "react"
 import { memo } from "react"
 import { cn } from "@/lib/utils"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
 // ============================================================================
 // GRID COMPONENTS

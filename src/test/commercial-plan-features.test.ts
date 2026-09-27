@@ -17,4 +17,10 @@ describe('getCommercialFeatureValue', () => {
     expect(getCommercialFeatureValue([{ label: 'Créditos y cuotas', value: true }], 'credits')).toBe(true)
     expect(getCommercialFeatureValue([{ label: 'Creditos y cuotas', value: true }], 'credits')).toBe(true)
   })
+
+  it('resolves operational module aliases', () => {
+    expect(getCommercialFeatureValue([{ label: 'Módulo de Servicios', value: true }], 'services')).toBe(true)
+    expect(getCommercialFeatureValue([{ label: 'Gestión de pedidos', value: true }], 'orders')).toBe(true)
+    expect(getCommercialFeatureValue([{ label: 'Delivery', value: true }], 'delivery')).toBe(true)
+  })
 })

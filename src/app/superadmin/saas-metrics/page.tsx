@@ -22,7 +22,7 @@ export default function SuperAdminSaaSMetricsPage() {
           Métricas SaaS
         </h1>
         <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-          Detectá qué organizaciones están cerca de sus límites y qué recurso requiere atención.
+          Empezá por las empresas que necesitan intervención y revisá después las que se acercan a sus límites.
         </p>
       </header>
 
@@ -30,7 +30,7 @@ export default function SuperAdminSaaSMetricsPage() {
         <div className="flex items-center justify-center py-24">
           <div className="flex items-center gap-3 text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Cargando métricas de todos los tenants...</span>
+            <span className="text-sm">Cargando métricas de las empresas...</span>
           </div>
         </div>
       }>

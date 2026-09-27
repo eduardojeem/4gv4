@@ -7,6 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { findHeavyRoutes, findOversizedAssets, firstLoadChunks, normalizeChunkPath } from './bundle-budgets.mjs';
 
 // Configuración de verificaciones
 const CHECKS = {
@@ -22,8 +23,20 @@ const CHECKS = {
     'framework',
     'vendor',
   ],
-  maxFileSize: 600 * 1024, // 600KB (CSS bundleado puede superar 500KB por diseño)
-  maxTotalSize: 30 * 1024 * 1024, // Presupuesto holgado de 30MB para 213 rutas
+  // Los presupuestos se miden en gzip, que es lo que baja el navegador
+  // (next.config.ts tiene `compress: true`). Antes era un tope de 600 KB sobre
+  // bytes en disco: el CSS de Tailwind pasaba el MB y comprimia a ~108 KB, asi
+  // que la advertencia no se iba nunca aunque no hubiera nada que arreglar, y
+  // el umbral se venia subiendo para acomodarlo.
+  maxGzipBytes: {
+    js: 250 * 1024,
+    css: 150 * 1024,
+  },
+  // La carga inicial de JS de cada ruta, sumando sus chunks. Un chequeo por
+  // archivo no ve 3 MB repartidos en veinte chunks chicos.
+  maxRouteFirstLoadGzipBytes: 900 * 1024,
+  routeStatsFile: '.next/diagnostics/route-bundle-stats.json',
+  maxTotalSize: 30 * 1024 * 1024, // Presupuesto holgado de 30MB en disco para todo .next/static
   performanceChecks: true
 };
 
@@ -46,6 +59,9 @@ async function runPostBuildChecks() {
     
     // Verificar tamaños de archivos
     await checkFileSizes(results);
+
+    // Verificar la carga inicial de cada ruta
+    await checkRouteFirstLoad(results);
     
     // Verificar que el directorio de chunks exista y tenga contenido
     await checkChunksExist(results);
@@ -129,47 +145,42 @@ async function checkFileSizes(results) {
     return;
   }
   
-  let totalSize = 0;
-  const largeFiles = [];
-  
-  function checkDirectory(dir) {
-    const items = fs.readdirSync(dir);
-    
-    for (const item of items) {
-      const itemPath = path.join(dir, item);
-      const stats = fs.statSync(itemPath);
-      
-      if (stats.isDirectory()) {
-        checkDirectory(itemPath);
-      } else {
-        totalSize += stats.size;
-        
-        if (stats.size > CHECKS.maxFileSize) {
-          largeFiles.push({
-            file: itemPath,
-            size: stats.size
-          });
-        }
-      }
-    }
-  }
-  
-  checkDirectory(staticDir);
-  
-  // Verificar archivos grandes
-  if (largeFiles.length > 0) {
+  const files = getAllFiles(staticDir);
+  const totalSize = files.reduce((sum, file) => sum + fs.statSync(file).size, 0);
+
+  // Con las diagnostics se separa lo que se carga de entrada de lo que se baja
+  // bajo demanda. Sin ellas (builds viejos o webpack) se mide todo, como antes.
+  const initial = fs.existsSync(CHECKS.routeStatsFile)
+    ? firstLoadChunks(Object.values(JSON.parse(fs.readFileSync(CHECKS.routeStatsFile, 'utf8'))))
+    : null;
+  const isLazyJs = (file) => initial !== null && file.endsWith('.js') && !initial.has(normalizeChunkPath(file));
+
+  const oversized = findOversizedAssets(files.filter((file) => !isLazyJs(file)), CHECKS.maxGzipBytes);
+  const heavyLazy = findOversizedAssets(files.filter(isLazyJs), CHECKS.maxGzipBytes);
+
+  if (heavyLazy.length > 0) {
     results.checks.push({
-      name: 'Archivos grandes detectados',
+      name: 'Chunks bajo demanda (gzip)',
+      status: 'passed',
+      message: `${heavyLazy.length} chunks pasan ${CHECKS.maxGzipBytes.js / 1024}KB pero ninguna ruta los carga de entrada: se bajan al usarse`,
+      details: heavyLazy.map(f => `${f.file}: ${(f.gzip / 1024).toFixed(1)}KB gzip`)
+    });
+    results.passed++;
+  }
+
+  if (oversized.length > 0) {
+    results.checks.push({
+      name: 'Archivos grandes (gzip)',
       status: 'warning',
-      message: `${largeFiles.length} archivos exceden ${CHECKS.maxFileSize / 1024}KB`,
-      details: largeFiles.map(f => `${f.file}: ${(f.size / 1024).toFixed(1)}KB`)
+      message: `${oversized.length} archivos pasan su presupuesto comprimido (JS ${CHECKS.maxGzipBytes.js / 1024}KB, CSS ${CHECKS.maxGzipBytes.css / 1024}KB)`,
+      details: oversized.map(f => `${f.file}: ${(f.gzip / 1024).toFixed(1)}KB gzip (${f.kind})`)
     });
     results.warnings++;
   } else {
     results.checks.push({
-      name: 'Tamaños de archivos individuales',
+      name: 'Tamaños de archivos individuales (gzip)',
       status: 'passed',
-      message: 'Todos los archivos están dentro del límite'
+      message: `Todos dentro del presupuesto comprimido (JS ${CHECKS.maxGzipBytes.js / 1024}KB, CSS ${CHECKS.maxGzipBytes.css / 1024}KB)`
     });
     results.passed++;
   }
@@ -187,6 +198,45 @@ async function checkFileSizes(results) {
       name: 'Tamaño total del build',
       status: 'passed',
       message: `Tamaño total: ${(totalSize / 1024 / 1024).toFixed(2)}MB`
+    });
+    results.passed++;
+  }
+}
+
+/**
+ * Verifica la carga inicial de JS de cada ruta, en gzip.
+ * Sin el archivo de diagnostics (builds viejos o webpack) no hay nada que medir.
+ */
+async function checkRouteFirstLoad(results) {
+  console.log('🛣️  Verificando carga inicial por ruta...');
+
+  if (!fs.existsSync(CHECKS.routeStatsFile)) {
+    results.checks.push({
+      name: 'Carga inicial por ruta',
+      status: 'warning',
+      message: `No se encontró ${CHECKS.routeStatsFile}; no se pudo medir`
+    });
+    results.warnings++;
+    return;
+  }
+
+  const stats = Object.values(JSON.parse(fs.readFileSync(CHECKS.routeStatsFile, 'utf8')));
+  const heavy = findHeavyRoutes(stats, CHECKS.maxRouteFirstLoadGzipBytes);
+  const budgetKb = CHECKS.maxRouteFirstLoadGzipBytes / 1024;
+
+  if (heavy.length > 0) {
+    results.checks.push({
+      name: 'Carga inicial por ruta (gzip)',
+      status: 'warning',
+      message: `${heavy.length} de ${stats.length} rutas pasan ${budgetKb}KB de JS inicial`,
+      details: heavy.map(r => `${r.route}: ${(r.gzip / 1024).toFixed(1)}KB gzip`)
+    });
+    results.warnings++;
+  } else {
+    results.checks.push({
+      name: 'Carga inicial por ruta (gzip)',
+      status: 'passed',
+      message: `Las ${stats.length} rutas están bajo ${budgetKb}KB de JS inicial`
     });
     results.passed++;
   }
@@ -448,6 +498,9 @@ function displayResults(results) {
     console.log('✅ VERIFICACIONES EXITOSAS:');
     categories.passed.forEach(check => {
       console.log(`   • ${check.name}: ${check.message}`);
+      if (check.details) {
+        check.details.forEach(detail => console.log(`     - ${detail}`));
+      }
     });
   }
 }
@@ -464,3 +517,5 @@ export {
   runPostBuildChecks,
   CHECKS
 };
+
+export { findHeavyRoutes, findOversizedAssets, gzipSizeOf } from './bundle-budgets.mjs';

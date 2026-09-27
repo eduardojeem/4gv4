@@ -35,6 +35,7 @@ const DASHBOARD_PERMISSION_MAP: Record<string, Permission[]> = {
   'orders.read': ['ecommerce.orders.manage'],
   'orders.manage': ['ecommerce.orders.manage'],
   'repairs.read': ['repairs.orders.read'],
+  'repairs.deliver': ['repairs.orders.deliver'],
   'repairs.manage': [
     'repairs.orders.create',
     'repairs.orders.update',

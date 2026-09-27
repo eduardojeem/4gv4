@@ -19,9 +19,12 @@ import {
   MinusCircle,
   ShoppingCart,
   Search,
-  Filter
+  Filter,
+  HelpCircle
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
+import { CashRegisterGuideDialog } from './CashRegisterGuideDialog'
+import { formatUserLabel } from '@/app/dashboard/pos/lib/formatters'
 
 interface CashRegisterAuditProps {
   onOpenFullAudit: () => void
@@ -78,6 +81,7 @@ function getActionMeta(action: string) {
 }
 
 export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
+  const [showGuide, setShowGuide] = useState(false)
   const { auditLog } = useCashRegisterContext()
   const [searchTerm, setSearchTerm] = useState('')
   const [actionFilter, setActionFilter] = useState<'all' | 'session_open' | 'session_close' | 'cash_in' | 'cash_out' | 'sale' | 'other'>('all')
@@ -121,10 +125,7 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
   const hasMore = visibleCount < entries.length
 
   const getUserDisplay = (name?: string, email?: string, id?: string) => {
-    const n = (name || '').trim()
-    const e = (email || '').trim()
-    if (n && e && n !== e) return `${n} (${e})`
-    return n || e || id || 'Sistema'
+    return formatUserLabel(name, email, id)
   }
 
   const summary = useMemo(() => {
@@ -158,15 +159,26 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
           <p className="text-sm text-muted-foreground">Eventos recientes de caja con filtros rápidos</p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onOpenFullAudit}
-          className="shadow-sm hover:shadow-md transition-all bg-white dark:bg-gray-950"
-        >
-          Ver auditoría completa
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOpenFullAudit}
+            className="shadow-sm hover:shadow-md transition-all bg-white dark:bg-gray-950"
+          >
+            Ver auditoría completa
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowGuide(true)}
+            className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 text-xs font-semibold rounded-xl"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span>¿Cómo funciona?</span>
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-sm border-border/60 overflow-hidden bg-card">
@@ -321,6 +333,12 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
           )}
         </CardContent>
       </Card>
+
+      <CashRegisterGuideDialog
+        open={showGuide}
+        onOpenChange={setShowGuide}
+        initialSection="audit"
+      />
     </div>
   )
 }

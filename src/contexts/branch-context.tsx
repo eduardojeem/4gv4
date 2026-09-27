@@ -59,6 +59,16 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       const payload = await response.json().catch(() => null) as { branches?: BranchRecord[]; error?: string } | null
 
       if (!response.ok) {
+        // Sesion vencida, o cerrada en otra pestaña. No es una falla: el
+        // guardia de arriba mira el usuario del cliente, que sigue en memoria
+        // despues de que el servidor ya descarto la cookie. Se limpia y se
+        // sale, como hace ActiveOrganizationContext, sin ensuciar la consola
+        // con un error rojo que parece un bug.
+        if (response.status === 401 || response.status === 403) {
+          setBranches([])
+          setSelectedBranchIdState(null)
+          return
+        }
         throw new Error(payload?.error || 'No se pudieron cargar las sucursales')
       }
 
@@ -139,6 +149,15 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       {children}
     </BranchContext.Provider>
   )
+}
+
+/**
+ * La sucursal activa, o null si el componente se usa fuera del provider (por
+ * ejemplo en una prueba o en una pantalla sin sucursales). Para lo que puede
+ * funcionar sin sucursal elegida, en vez de romper la pantalla.
+ */
+export function useOptionalBranch() {
+  return useContext(BranchContext)
 }
 
 export function useBranch() {

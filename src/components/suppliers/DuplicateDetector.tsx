@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
+import { useMemo } from 'react'
+import { motion, AnimatePresence } from '../ui/motion'
 import { AlertTriangle, X, Check } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,12 +29,10 @@ export function DuplicateDetector({
     onMerge,
     className
 }: DuplicateDetectorProps) {
-    const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([])
-
-    useEffect(() => {
-        const matches = findDuplicates(newSupplier, existingSuppliers)
-        setDuplicates(matches)
-    }, [newSupplier, existingSuppliers])
+    const duplicates = useMemo(
+        () => findDuplicates(newSupplier, existingSuppliers),
+        [newSupplier, existingSuppliers]
+    )
 
     if (duplicates.length === 0) return null
 
@@ -64,7 +62,7 @@ export function DuplicateDetector({
                                 </div>
 
                                 <div className="space-y-2">
-                                    {duplicates.map((match, index) => (
+                                    {duplicates.map((match, _index) => (
                                         <div
                                             key={match.supplier.id}
                                             className="rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-amber-950/50 p-3"

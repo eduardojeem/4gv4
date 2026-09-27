@@ -11,7 +11,7 @@
  * Sirve tanto en server como en client (las vars NEXT_PUBLIC_ están disponibles
  * en ambos). Devuelve la URL sin barra final.
  */
-const FALLBACK_SITE_URL = 'https://servix360.org'
+const FALLBACK_SITE_URL = 'https://www.mitiendapy.com'
 
 function isLocalhost(url: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(url)
@@ -20,8 +20,7 @@ function isLocalhost(url: string): boolean {
 export function getSiteUrl(): string {
   const fromEnv =
     process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : '')
+    process.env.NEXT_PUBLIC_APP_URL
 
   let base = fromEnv || FALLBACK_SITE_URL
 

@@ -122,7 +122,7 @@ export function isWarrantyValid(repair: Repair): boolean {
   if (!repair.warranty) return false
   
   // If repair has warranty_expires_at field (from DB)
-  const expiresAt = (repair as any).warranty_expires_at
+  const expiresAt = (repair as { warranty_expires_at?: string | null }).warranty_expires_at
   if (expiresAt) {
     return new Date(expiresAt) > new Date()
   }
@@ -253,7 +253,7 @@ export function formatWarrantyExpiration(expiresAt: Date | string | null): strin
  * @returns True if warranty is expiring soon
  */
 export function shouldShowWarrantyWarning(repair: Repair): boolean {
-  const expiresAt = (repair as any).warranty_expires_at
+  const expiresAt = (repair as { warranty_expires_at?: string | null }).warranty_expires_at
   if (!expiresAt) return false
   
   const status = getWarrantyStatus(expiresAt)

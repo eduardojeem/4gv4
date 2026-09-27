@@ -2,6 +2,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
 import { redirect } from 'next/navigation'
 import { SuperAdminsManager, type SuperAdminRow } from '@/components/superadmin/SuperAdminsManager'
+import { getLastSignIns } from '@/lib/superadmin/find-auth-user'
 
 async function getSuperAdmins() {
   const admin = createAdminSupabase()
@@ -25,22 +26,14 @@ async function getSuperAdmins() {
     (profiles ?? []).map((p) => [p.id, p as { id: string; email: string | null; full_name: string | null; status: string | null; created_at: string | null }])
   )
 
-  // 3. Get auth.users data for last_sign_in_at (paginated)
-  type AuthUser = { id: string; last_sign_in_at?: string | null }
-  const lastSignInById = new Map<string, string | null>()
-  try {
-    for (let page = 1; page <= 5; page++) {
-      const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 })
-      if (error || !data) break
-      const users = (data.users ?? []) as AuthUser[]
-      users.forEach((u) => {
-        if (userIds.includes(u.id)) lastSignInById.set(u.id, u.last_sign_in_at ?? null)
-      })
-      if (users.length < 200) break
-    }
-  } catch {
-    // best-effort
-  }
+  // 3. Ultimo acceso, preguntando por cada superadmin.
+  //
+  // Antes se recorrian cinco paginas de 200 usuarios y se cruzaba: pasados los
+  // mil usuarios, el ultimo acceso quedaba en `null` para los que caian fuera,
+  // y la pantalla pinta ese `null` como «Nunca». Un superadmin que entro hoy
+  // figuraba como que nunca entro. Son un puñado: preguntar por cada uno es
+  // exacto y no depende del tamaño de la plataforma.
+  const lastSignInById = await getLastSignIns(admin, userIds)
 
   const rows: SuperAdminRow[] = (roleRows ?? []).map((r) => {
     const profile = profilesById.get(r.user_id)
@@ -52,6 +45,10 @@ async function getSuperAdmins() {
       roleActive: r.is_active !== false,
       roleSince: r.created_at ?? null,
       lastSignIn: lastSignInById.get(r.user_id) ?? null,
+      // Un rol de superadmin sin fila en `profiles` es una anomalia: la
+      // pantalla lo mostraba como «Usuario» sin correo, indistinguible de un
+      // perfil incompleto.
+      missingProfile: !profile,
     }
   })
 

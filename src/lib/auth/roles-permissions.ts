@@ -615,7 +615,7 @@ CREATE TRIGGER audit_products_trigger
 -- ON CONFLICT (user_id) DO NOTHING;
 `;
 
-export default {
+const rolesPermissions = {
   PERMISSIONS,
   ROLE_PERMISSIONS,
   hasPermission,
@@ -625,3 +625,5 @@ export default {
   canManageUser,
   SUPABASE_RLS_SETUP
 }
+
+export default rolesPermissions

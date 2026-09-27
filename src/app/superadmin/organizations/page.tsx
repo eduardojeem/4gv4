@@ -12,12 +12,57 @@ type OrganizationRow = {
   owner_id: string | null
   created_at: string | null
   updated_at: string | null
+  business_vertical: string | null
+  operating_model: string | null
+  enabled_modules: string[] | null
 }
 
 type MemberRow = {
   organization_id: string
+  user_id: string | null
   role: string
   status: string
+}
+
+/** Tope de paginas de `auth.users` que se leen (de a 1000). */
+const AUTH_PAGES_CAP = 20
+/** Organizaciones consultadas a la vez para ultima venta y productos. */
+const ACTIVITY_BATCH = 10
+
+/**
+ * Ultimo acceso de cada usuario, de `auth.users`. `null` si no se pudo leer:
+ * la tarjeta no afirma «nunca entro» sin el dato.
+ */
+async function loadLastSignIns(admin: ReturnType<typeof createAdminSupabase>) {
+  const byUser = new Map<string, string | null>()
+  for (let page = 1; page <= AUTH_PAGES_CAP; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) return null
+    for (const user of data.users) byUser.set(user.id, user.last_sign_in_at ?? null)
+    if (data.users.length < 1000) break
+  }
+  return byUser
+}
+
+/** Ultima venta y productos cargados: si la organizacion opera, no solo como esta configurada. */
+async function loadActivity(admin: ReturnType<typeof createAdminSupabase>, organizationIds: string[]) {
+  const result = new Map<string, { lastSaleAt: string | null; products: number | null }>()
+  for (let index = 0; index < organizationIds.length; index += ACTIVITY_BATCH) {
+    const batch = organizationIds.slice(index, index + ACTIVITY_BATCH)
+    const rows = await Promise.all(batch.map(async (organizationId) => {
+      const [{ data: sale, error: saleError }, { count, error: productsError }] = await Promise.all([
+        admin.from('sales').select('created_at').eq('organization_id', organizationId)
+          .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        admin.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
+      ])
+      return [organizationId, {
+        lastSaleAt: saleError ? null : ((sale as { created_at: string | null } | null)?.created_at ?? null),
+        products: productsError ? null : count ?? 0,
+      }] as const
+    }))
+    rows.forEach(([organizationId, activity]) => result.set(organizationId, activity))
+  }
+  return result
 }
 
 type SubscriptionRow = {
@@ -43,7 +88,7 @@ export default async function SuperAdminOrganizationsPage() {
   const organizations = await fetchAllRows<OrganizationRow>((from, to) =>
     admin
       .from('organizations')
-      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at')
+      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at, business_vertical, operating_model, enabled_modules')
       .order('created_at', { ascending: false })
       .range(from, to)
   )
@@ -51,13 +96,13 @@ export default async function SuperAdminOrganizationsPage() {
   const ownerIds = organizations.map((organization) => organization.owner_id).filter(Boolean) as string[]
 
   const organizationIdChunks = chunkValues(organizationIds)
-  const [members, subscriptions, profiles] = await Promise.all([
+  const [members, subscriptions, profiles, lastSignIns, activityByOrganization] = await Promise.all([
     organizationIds.length
       ? Promise.all(organizationIdChunks.map((ids) =>
           fetchAllRows<MemberRow>((from, to) =>
             admin
               .from('organization_members')
-              .select('organization_id, role, status')
+              .select('organization_id, user_id, role, status')
               .in('organization_id', ids)
               .range(from, to)
           )
@@ -81,6 +126,8 @@ export default async function SuperAdminOrganizationsPage() {
           return (data ?? []) as ProfileRow[]
         })).then((chunks) => chunks.flat())
       : Promise.resolve([]),
+    loadLastSignIns(admin).catch(() => null),
+    loadActivity(admin, organizationIds),
   ])
 
   const membersByOrganization = new Map<string, MemberRow[]>()
@@ -98,6 +145,16 @@ export default async function SuperAdminOrganizationsPage() {
     const subscription = subscriptionsByOrganization.get(organization.id)
     const ownerProfile = organization.owner_id ? profilesById.get(organization.owner_id) : null
     const memberSummary = summarizeOrganizationMembers(orgMembers)
+    const activity = activityByOrganization.get(organization.id)
+
+    // El acceso mas reciente del equipo (y del dueño): los clientes de la
+    // tienda web no dicen si la empresa usa el sistema.
+    const teamUserIds = new Set([
+      ...(organization.owner_id ? [organization.owner_id] : []),
+      ...orgMembers.filter((member) => member.role !== 'customer').map((member) => member.user_id).filter(Boolean) as string[],
+    ])
+    const teamAccesses = lastSignIns ? [...teamUserIds].map((userId) => lastSignIns.get(userId) ?? null) : []
+    const lastAccessAt = teamAccesses.filter(Boolean).sort().at(-1) ?? null
 
     return {
       id: organization.id,
@@ -125,6 +182,13 @@ export default async function SuperAdminOrganizationsPage() {
       staff_invited: memberSummary.staffInvited,
       staff_suspended: memberSummary.staffSuspended,
       customers_total: memberSummary.customersTotal,
+      business_vertical: organization.business_vertical || 'general',
+      operating_model: organization.operating_model || 'retail',
+      enabled_modules: organization.enabled_modules || [],
+      last_access_known: Boolean(lastSignIns) && teamUserIds.size > 0,
+      last_access_at: lastAccessAt,
+      last_sale_at: activity?.lastSaleAt ?? null,
+      products_total: activity ? activity.products : null,
     }
   })
 

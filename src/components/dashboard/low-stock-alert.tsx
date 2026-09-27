@@ -43,7 +43,15 @@ export function LowStockAlert() {
 
         if (error) throw error
 
-        const items: LowStockItem[] = (data || []).map((item: any) => ({
+        type RawStockProduct = {
+          id: string
+          name: string
+          sku?: string | null
+          stock?: number | null
+          min_stock?: number | null
+          category?: string | null
+        }
+        const items: LowStockItem[] = ((data as unknown as RawStockProduct[]) || []).map((item) => ({
           id: item.id,
           name: item.name,
           sku: item.sku || 'N/A',
@@ -61,7 +69,7 @@ export function LowStockAlert() {
     }
 
     fetchLowStockItems()
-  }, [])
+  }, [supabase])
 
   if (loading) {
     return (

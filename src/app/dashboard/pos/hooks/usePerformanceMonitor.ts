@@ -3,8 +3,8 @@
  * Proporciona una interfaz React-friendly para el sistema de performance monitoring
  */
 
-import { useCallback, useState, useEffect, useRef } from 'react'
-import { 
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react'
+import {
   posPerformanceMonitor,
   measurePerformance,
   recordMetric,
@@ -13,7 +13,8 @@ import {
   measureCartOperation,
   measureProductSearch,
   measureSaleProcessing,
-  measureDatabaseQuery
+  measureDatabaseQuery,
+  type PerformanceThresholds
 } from '../utils/performance-monitor'
 
 interface UsePerformanceMonitorReturn {
@@ -24,11 +25,11 @@ interface UsePerformanceMonitorReturn {
   webVitals: Record<string, number>
   
   // Funciones de medición
-  measureOperation: (name: string, operation: () => void | Promise<void>, context?: Record<string, any>) => Promise<any>
-  measureCartOperation: (operation: () => void | Promise<void>) => Promise<any>
-  measureProductSearch: (searchFn: () => Promise<any>) => Promise<any>
-  measureSaleProcessing: (saleFn: () => Promise<any>) => Promise<any>
-  measureDatabaseQuery: (queryFn: () => Promise<any>) => Promise<any>
+  measureOperation: <T>(name: string, operation: () => T | Promise<T>, context?: Record<string, unknown>) => Promise<T>
+  measureCartOperation: <T = void>(operation: () => T | Promise<T>) => Promise<T>
+  measureProductSearch: <T>(searchFn: () => Promise<T>) => Promise<T>
+  measureSaleProcessing: <T>(saleFn: () => Promise<T>) => Promise<T>
+  measureDatabaseQuery: <T>(queryFn: () => Promise<T>) => Promise<T>
   measureRenderTime: (componentName: string) => () => void
   
   // Funciones de reporte
@@ -37,25 +38,25 @@ interface UsePerformanceMonitorReturn {
   
   // Configuración
   setMonitoring: (enabled: boolean) => void
-  setThresholds: (thresholds: any) => void
+  setThresholds: (thresholds: Partial<PerformanceThresholds>) => void
   
   // Estado del monitor
   getStatus: () => ReturnType<typeof posPerformanceMonitor.getStatus>
 }
 
 export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
-  const [performanceScore, setPerformanceScore] = useState(100)
   const [isMonitoring, setIsMonitoring] = useState(true)
-  const [lastReport, setLastReport] = useState<ReturnType<typeof getPerformanceReport> | null>(null)
+  const [lastReport, setLastReport] = useState<ReturnType<typeof getPerformanceReport> | null>(() => getPerformanceReport())
+  const performanceScore = lastReport?.summary.performanceScore ?? 100
   const [webVitals, setWebVitals] = useState<Record<string, number>>({})
   const reportIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Función para medir operaciones genéricas
-  const measureOperation = useCallback(async (
+  const measureOperation = useCallback(async <T>(
     name: string, 
-    operation: () => void | Promise<void>,
-    context?: Record<string, any>
-  ) => {
+    operation: () => T | Promise<T>,
+    context?: Record<string, unknown>
+  ): Promise<T> => {
     if (!isMonitoring) {
       return await operation()
     }
@@ -77,7 +78,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para operaciones de carrito
-  const measureCartOperationWrapper = useCallback(async (operation: () => void | Promise<void>) => {
+  const measureCartOperationWrapper = useCallback(async <T = void>(operation: () => T | Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await operation()
     }
@@ -85,7 +86,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para búsqueda de productos
-  const measureProductSearchWrapper = useCallback(async (searchFn: () => Promise<any>) => {
+  const measureProductSearchWrapper = useCallback(async <T>(searchFn: () => Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await searchFn()
     }
@@ -93,7 +94,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para procesamiento de ventas
-  const measureSaleProcessingWrapper = useCallback(async (saleFn: () => Promise<any>) => {
+  const measureSaleProcessingWrapper = useCallback(async <T>(saleFn: () => Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await saleFn()
     }
@@ -101,7 +102,7 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   }, [isMonitoring])
 
   // Wrapper para consultas de base de datos
-  const measureDatabaseQueryWrapper = useCallback(async (queryFn: () => Promise<any>) => {
+  const measureDatabaseQueryWrapper = useCallback(async <T>(queryFn: () => Promise<T>): Promise<T> => {
     if (!isMonitoring) {
       return await queryFn()
     }
@@ -127,7 +128,6 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   const generateReport = useCallback((timeRange?: { start: Date; end: Date }) => {
     const report = getPerformanceReport(timeRange)
     setLastReport(report)
-    setPerformanceScore(report.summary.performanceScore)
     return report
   }, [])
 
@@ -140,10 +140,11 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   const setMonitoring = useCallback((enabled: boolean) => {
     setIsMonitoring(enabled)
     posPerformanceMonitor.setEnabled(enabled)
-  }, [])
+    if (enabled) generateReport()
+  }, [generateReport])
 
   // Configurar thresholds
-  const setThresholds = useCallback((thresholds: any) => {
+  const setThresholds = useCallback((thresholds: Partial<PerformanceThresholds>) => {
     posPerformanceMonitor.setThresholds(thresholds)
   }, [])
 
@@ -162,9 +163,6 @@ export const usePerformanceMonitor = (): UsePerformanceMonitorReturn => {
   // Configurar reporte automático cada 30 segundos
   useEffect(() => {
     if (isMonitoring) {
-      // Generar reporte inicial
-      generateReport()
-      
       // Configurar intervalo para reportes automáticos
       reportIntervalRef.current = setInterval(() => {
         generateReport()
@@ -228,12 +226,12 @@ export const useRenderTimeMonitor = (componentName: string) => {
 
 // Hook para medir performance de operaciones específicas
 export const useOperationPerformance = () => {
-  const { measureOperation, isMonitoring } = usePerformanceMonitor()
+  const { measureOperation: _measureOperation, isMonitoring } = usePerformanceMonitor()
 
   const measureAsync = useCallback(async <T>(
     operationName: string,
     operation: () => Promise<T>,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): Promise<T> => {
     if (!isMonitoring) {
       return await operation()
@@ -254,7 +252,7 @@ export const useOperationPerformance = () => {
   const measureSync = useCallback(<T>(
     operationName: string,
     operation: () => T,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): T => {
     if (!isMonitoring) {
       return operation()
@@ -281,19 +279,16 @@ export const useOperationPerformance = () => {
 
 // Hook para alertas de performance
 export const usePerformanceAlerts = () => {
-  const { lastReport, refreshReport } = usePerformanceMonitor()
-  const [alerts, setAlerts] = useState<any[]>([])
-
-  useEffect(() => {
-    if (lastReport?.alerts) {
-      setAlerts(lastReport.alerts)
-    }
-  }, [lastReport])
+  const { lastReport } = usePerformanceMonitor()
+  const [dismissedReport, setDismissedReport] = useState<typeof lastReport>(null)
+  const alerts = useMemo(
+    () => (lastReport === dismissedReport ? [] : lastReport?.alerts ?? []),
+    [dismissedReport, lastReport],
+  )
 
   const clearAlerts = useCallback(() => {
-    setAlerts([])
-    refreshReport()
-  }, [refreshReport])
+    setDismissedReport(lastReport)
+  }, [lastReport])
 
   const getCriticalAlerts = useCallback(() => {
     return alerts.filter(alert => alert.type === 'critical')

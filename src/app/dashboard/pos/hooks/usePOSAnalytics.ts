@@ -42,18 +42,18 @@ export interface UsePOSAnalyticsReturn {
 
 export function usePOSAnalytics(): UsePOSAnalyticsReturn {
   // Metrics state
-  const [todayMetrics, setTodayMetrics] = useState<SalesMetrics | null>(null)
-  const [weekMetrics, setWeekMetrics] = useState<SalesMetrics | null>(null)
-  const [monthMetrics, setMonthMetrics] = useState<SalesMetrics | null>(null)
+  const [todayMetrics, setTodayMetrics] = useState<SalesMetrics | null>(() => analyticsEngine.getTodayMetrics())
+  const [weekMetrics, setWeekMetrics] = useState<SalesMetrics | null>(() => analyticsEngine.getWeekMetrics())
+  const [monthMetrics, setMonthMetrics] = useState<SalesMetrics | null>(() => analyticsEngine.getMonthMetrics())
 
   // Products state
-  const [topProducts, setTopProducts] = useState<ProductMetrics[]>([])
-  const [categories, setCategories] = useState<CategoryMetrics[]>([])
-  const [hourlyMetrics, setHourlyMetrics] = useState<HourlyMetrics[]>([])
+  const [topProducts, setTopProducts] = useState<ProductMetrics[]>(() => analyticsEngine.getTopProducts(10))
+  const [categories, setCategories] = useState<CategoryMetrics[]>(() => analyticsEngine.getCategoryMetrics())
+  const [hourlyMetrics, setHourlyMetrics] = useState<HourlyMetrics[]>(() => analyticsEngine.getHourlyMetrics())
 
   // Alerts state
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [unacknowledgedAlerts, setUnacknowledgedAlerts] = useState<Alert[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>(() => analyticsEngine.getAlerts())
+  const [unacknowledgedAlerts, setUnacknowledgedAlerts] = useState<Alert[]>(() => analyticsEngine.getAlerts(true))
 
   /**
    * Refresh all metrics
@@ -110,9 +110,6 @@ export function usePOSAnalytics(): UsePOSAnalyticsReturn {
    * Setup listeners
    */
   useEffect(() => {
-    // Initial load
-    refreshMetrics()
-
     // Listen for changes
     const unsubscribe = analyticsEngine.addListener(() => {
       refreshMetrics()

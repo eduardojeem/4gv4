@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
-import { ArrowUpRight, CreditCard, ShoppingCart, TrendingUp, DollarSign } from 'lucide-react'
+import { CreditCard, ShoppingCart, TrendingUp, DollarSign } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import type { PosStats } from '../hooks/usePosStats'

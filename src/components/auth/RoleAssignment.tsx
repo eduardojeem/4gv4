@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import { Shield, User, Crown, Briefcase, Settings, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -65,7 +65,7 @@ const ROLE_OPTIONS: RoleOption[] = [
 ]
 
 export function RoleAssignment() {
-  const { user, updateUserRole } = useAuth()
+  const { user, updateUserRole: _updateUserRole } = useAuth()
   const [loading, setLoading] = useState<UserRole | null>(null)
   const [assigned, setAssigned] = useState(false)
 

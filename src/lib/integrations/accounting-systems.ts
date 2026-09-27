@@ -29,7 +29,7 @@ export interface AccountingTransaction {
   currency: string
   entries: AccountingEntry[]
   attachments?: string[]
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   externalId?: string
   syncStatus: 'pending' | 'synced' | 'error'
   lastSyncAt?: Date
@@ -244,7 +244,7 @@ export abstract class AccountingSystem {
 
   async updateSyncStatus(recordType: string, recordId: string, status: 'pending' | 'synced' | 'error', error?: string): Promise<void> {
     const table = `accounting_${recordType}`
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       syncStatus: status,
       lastSyncAt: new Date(),
       updatedAt: new Date()
@@ -269,7 +269,7 @@ export class QuickBooksIntegration extends AccountingSystem {
     try {
       // Implementar autenticación OAuth2 con QuickBooks
       // En un entorno real, usar el SDK oficial de QuickBooks
-      
+
       // Simular autenticación exitosa
       await new Promise(resolve => setTimeout(resolve, 1000))
       return true
@@ -407,7 +407,7 @@ export class QuickBooksIntegration extends AccountingSystem {
     return result
   }
 
-  async syncTransactions(startDate?: Date, endDate?: Date): Promise<SyncResult> {
+  async syncTransactions(_startDate?: Date, _endDate?: Date): Promise<SyncResult> {
     const startTime = Date.now()
     const result: SyncResult = {
       success: true,
@@ -646,7 +646,7 @@ export class XeroIntegration extends AccountingSystem {
     return result
   }
 
-  async syncTransactions(startDate?: Date, endDate?: Date): Promise<SyncResult> {
+  async syncTransactions(_startDate?: Date, _endDate?: Date): Promise<SyncResult> {
     const startTime = Date.now()
     const result: SyncResult = {
       success: true,
@@ -666,7 +666,7 @@ export class XeroIntegration extends AccountingSystem {
 
   async createInvoice(invoice: Omit<Invoice, 'id' | 'externalId' | 'syncStatus' | 'createdAt' | 'updatedAt'>): Promise<Invoice> {
     await new Promise(resolve => setTimeout(resolve, 400))
-    
+
     const newInvoice: Invoice = {
       ...invoice,
       id: `xero_inv_${Date.now()}`,
@@ -681,7 +681,7 @@ export class XeroIntegration extends AccountingSystem {
 
   async updateInvoice(id: string, updates: Partial<Invoice>): Promise<Invoice> {
     await new Promise(resolve => setTimeout(resolve, 300))
-    
+
     // Simular actualización
     return {
       id,
@@ -693,7 +693,7 @@ export class XeroIntegration extends AccountingSystem {
 
   async createCustomer(customer: Omit<Customer, 'id' | 'externalId' | 'syncStatus' | 'createdAt' | 'updatedAt'>): Promise<Customer> {
     await new Promise(resolve => setTimeout(resolve, 350))
-    
+
     const newCustomer: Customer = {
       ...customer,
       id: `xero_cust_${Date.now()}`,
@@ -708,7 +708,7 @@ export class XeroIntegration extends AccountingSystem {
 
   async createTransaction(transaction: Omit<AccountingTransaction, 'id' | 'externalId' | 'syncStatus' | 'createdAt' | 'updatedAt'>): Promise<AccountingTransaction> {
     await new Promise(resolve => setTimeout(resolve, 500))
-    
+
     const newTransaction: AccountingTransaction = {
       ...transaction,
       id: `xero_trans_${Date.now()}`,
@@ -755,7 +755,7 @@ export class AccountingManager {
         try {
           const system = AccountingSystemFactory.create(config)
           const authenticated = await system.authenticate()
-          
+
           if (authenticated) {
             this.systems.set(config.provider, system)
           }
@@ -874,7 +874,7 @@ export class AccountingManager {
 
   private generateCashFlow(transactions: AccountingTransaction[]) {
     // Simplificado - en un entorno real sería más complejo
-    const cashTransactions = transactions.filter(t => 
+    const cashTransactions = transactions.filter(t =>
       t.entries.some(e => e.accountCode.startsWith('1000')) // Cuentas de efectivo
     )
 
@@ -886,7 +886,7 @@ export class AccountingManager {
       const cashEntry = transaction.entries.find(e => e.accountCode.startsWith('1000'))
       if (cashEntry) {
         const netCashChange = cashEntry.debitAmount - cashEntry.creditAmount
-        
+
         // Clasificación simplificada
         if (transaction.type === 'invoice' || transaction.type === 'payment') {
           operatingCashFlow += netCashChange

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, MessageSquare, Phone, Mail, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -12,13 +12,11 @@ import { useRepairs } from "@/contexts/RepairsContext"
 import { useRepairCommunications } from "@/hooks/use-repair-communications"
 import { CommunicationChannel } from "@/types/repairs"
 import { DEFAULT_TEMPLATES } from "@/data/communication-templates"
-import { cn } from "@/lib/utils"
 
 export default function RepairsCommunicationsPage() {
   const router = useRouter()
   const { repairs, isLoading: repairsLoading } = useRepairs()
   const [selectedRepairId, setSelectedRepairId] = useState<string | null>(null)
-  const [whatsappCloudConfigured, setWhatsappCloudConfigured] = useState<boolean | null>(null)
 
   const selectedRepair = useMemo(
     () => repairs.find((r) => r.id === selectedRepairId) || null,
@@ -51,21 +49,6 @@ export default function RepairsCommunicationsPage() {
     )
   }
 
-  useEffect(() => {
-    let mounted = true
-    fetch("/api/repairs/communications/whatsapp", { method: "GET" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (mounted) setWhatsappCloudConfigured(data?.configured === true)
-      })
-      .catch(() => {
-        if (mounted) setWhatsappCloudConfigured(false)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
   return (
     <div className="mx-auto w-full max-w-6xl p-4 md:p-6 space-y-5">
       {/* Header */}
@@ -92,28 +75,10 @@ export default function RepairsCommunicationsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
-                whatsappCloudConfigured === null
-                  ? "border-border text-muted-foreground"
-                  : whatsappCloudConfigured
-                    ? "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400"
-                    : "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400"
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  whatsappCloudConfigured === null
-                    ? "bg-muted-foreground"
-                    : whatsappCloudConfigured
-                      ? "bg-emerald-500"
-                      : "bg-amber-500"
-                )}
-              />
-              WhatsApp Cloud {whatsappCloudConfigured === null ? "…" : whatsappCloudConfigured ? "activo" : "manual"}
-            </span>
+            <Badge variant="outline" className="gap-1 font-normal text-emerald-700 dark:text-emerald-400">
+              <MessageSquare className="h-3 w-3" />
+              WhatsApp manual
+            </Badge>
             <Badge variant="outline" className="gap-1 font-normal">
               <Users className="h-3 w-3" />
               {repairsLoading ? "…" : repairs.length} reparaciones

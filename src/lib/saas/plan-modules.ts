@@ -6,13 +6,16 @@ const featureModuleByLabel: Record<string, string> = {
   'seguridad y auditoria': 'security',
   'inventario avanzado': 'inventory_admin',
   'inventario avanzado (/admin/inventory)': 'inventory_admin',
+  'servicios': 'services',
+  'pedidos': 'orders',
+  'entregas': 'delivery',
 }
 
 const defaultsByTier: Record<string, string[]> = {
-  FREE: ['inventory', 'pos', 'crm', 'repairs'],
-  BASIC: ['inventory', 'inventory_admin', 'pos', 'crm', 'ecommerce', 'repairs'],
-  PRO: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'analytics', 'promotions', 'security'],
-  ENTERPRISE: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions', 'security'],
+  FREE: ['inventory', 'pos', 'crm', 'repairs', 'services'],
+  BASIC: ['inventory', 'inventory_admin', 'pos', 'crm', 'ecommerce', 'repairs', 'services', 'orders', 'delivery'],
+  PRO: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
+  ENTERPRISE: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
 }
 
 function normalizeLabel(value: string) {

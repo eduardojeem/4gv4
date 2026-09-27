@@ -28,10 +28,26 @@ type InstallmentProgress = {
   progreso: number
 }
 
+export type AuthorizedPerson = {
+  id: string
+  profile_id: string
+  full_name: string
+  document_number: string
+  relationship?: string | null
+  phone?: string | null
+  is_active: boolean
+  created_at: string
+}
+
 type CustomerWithCredit = Customer & {
+  /**
+   * Saldo pendiente real del cliente, sumando todos sus creditos. Se calcula
+   * aparte porque `customers.current_balance` no la actualiza nadie.
+   */
+  credit_outstanding?: number
   credit_summary?: CreditSummary
   credit_installments_progress?: InstallmentProgress[]
-  authorized_persons?: any[]
+  authorized_persons?: AuthorizedPerson[]
 }
 
 export function useCustomerData(customerId: number | string | null) {
@@ -45,10 +61,14 @@ export function useCustomerData(customerId: number | string | null) {
       }
       const result: CustomerWithCredit = { ...(resp.data as Customer) }
       try {
-        const [creditSummary, installments] = await Promise.all([
+        const [creditSummary, installments, outstanding] = await Promise.all([
           customerService.getCustomerCreditSummary(id as string),
           customerService.getCustomerInstallmentsProgress(id as string),
+          customerService.getCustomerCreditOutstanding(id as string),
         ])
+        if (outstanding.success) {
+          result.credit_outstanding = outstanding.outstanding
+        }
         if (creditSummary.success) {
           result.credit_summary = (creditSummary.data as CreditSummary) || null
         }

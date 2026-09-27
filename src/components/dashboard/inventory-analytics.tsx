@@ -1,14 +1,10 @@
 'use client'
 
 import { useMemo } from 'react'
-import { 
-  Package, 
-  AlertTriangle, 
-  TrendingUp, 
-  TrendingDown, 
-  ShoppingCart,
-  BarChart3,
-  PieChart,
+import {
+  Package,
+  AlertTriangle,
+  TrendingUp, PieChart,
   Activity,
   Target
 } from 'lucide-react'

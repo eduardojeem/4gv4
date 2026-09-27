@@ -1,5 +1,7 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -9,14 +11,14 @@ import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Package, Tag, DollarSign, Users, CalendarDays, Copy, Edit, X, 
+import {
+  Package, Tag, DollarSign, Users, Copy, Edit, X,
   Printer, TrendingUp, Barcode, MapPin, Star, CheckCircle2, AlertCircle,
   ChevronLeft, ChevronRight, Minus, Plus
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
-import { Product } from '@/types/products'
+import { Product, ProductMovement } from '@/types/products'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -239,7 +241,7 @@ export function ProductDetailsDialogV2({
                   <Card className="shadow-sm">
                     <CardContent className="p-6">
                       <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                        <img
+                        <AppImage
                           src={resolveProductImageUrl(images[currentImageIndex])}
                           alt={`${product.name} - imagen ${currentImageIndex + 1}`}
                           className="w-full h-full object-contain"
@@ -283,7 +285,7 @@ export function ProductDetailsDialogV2({
                                   : "border-transparent hover:border-muted-foreground/30"
                               )}
                             >
-                              <img
+                              <AppImage
                                 src={resolveProductImageUrl(img)}
                                 alt={`Thumbnail ${idx + 1}`}
                                 className="w-full h-full object-cover"
@@ -564,7 +566,7 @@ export function ProductDetailsDialogV2({
                     </Card>
                   )}
 
-                  {(product as any).offer_price && (product as any).offer_price > 0 && (
+                  {product.offer_price && product.offer_price > 0 && (
                     <Card className="shadow-md border-2 border-orange-200 dark:border-orange-900/30 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-background">
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between mb-4">
@@ -580,7 +582,7 @@ export function ProductDetailsDialogV2({
                             🔥 Precio de Oferta
                           </div>
                           <div className="text-4xl font-bold text-orange-600 dark:text-orange-400">
-                            {formatCurrency((product as any).offer_price)}
+                            {formatCurrency(product.offer_price)}
                           </div>
                           <div className="text-sm text-muted-foreground pt-1">
                             Precio promocional especial
@@ -665,6 +667,46 @@ export function ProductDetailsDialogV2({
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Planes de Financiación */}
+                {product.installments_enabled && product.installments_plans && product.installments_plans.length > 0 && (
+                  <Card className="shadow-md border-2">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-2 mb-6">
+                        <div className="h-1 w-1 rounded-full bg-primary"></div>
+                        <h3 className="text-lg font-semibold">💳 Planes de Financiación</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {product.installments_plans.map((plan, index) => {
+                          const total = product.sale_price * (1 + plan.rate / 100)
+                          const cuotaAmount = total / plan.count
+
+                          return (
+                            <div key={index} className="flex flex-col rounded-lg border border-indigo-100 bg-indigo-50/30 p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-bold text-lg text-indigo-700">{plan.count} cuotas</span>
+                                <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
+                                  {plan.rate > 0 ? `${plan.rate}% recargo` : 'Sin recargo'}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 space-y-1 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Monto de cuota:</span>
+                                  <span className="font-bold">{formatCurrency(cuotaAmount)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Total a pagar:</span>
+                                  <span className="font-medium">{formatCurrency(total)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {onViewPriceHistory && (
                   <Button 
@@ -831,7 +873,7 @@ export function ProductDetailsDialogV2({
                     <CardContent className="p-4">
                       <div className="text-sm font-medium mb-3">Movimientos Recientes</div>
                       <div className="space-y-3">
-                        {product.recent_movements.map((movement: any) => (
+                        {product.recent_movements.map((movement: ProductMovement) => (
                           <div 
                             key={movement.id} 
                             className="flex items-center justify-between p-3 bg-muted rounded-lg"

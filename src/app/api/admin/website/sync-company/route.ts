@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
-import { validateSetting } from '@/lib/validation/website-settings'
+import { CompanyInfoSchema, validateSetting } from '@/lib/validation/website-settings'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 import { z } from 'zod'
+import { getPublicationIssues, resolvePublicationUpdate } from '@/lib/website/publication'
+import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
 
 const slugSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -23,7 +26,13 @@ const syncSchema = z.object({
   address: z.string().trim().max(300).optional().or(z.literal('')),
   email: z.string().trim().max(254).optional().or(z.literal('')),
   marketplacePublic: z.boolean().optional(),
+  storefrontPublic: z.boolean().optional(),
+  publicationConfirmed: z.boolean().optional(),
   slug: slugSchema,
+  // El logo llegaba por el passthrough y se guardaba solo en website_settings.
+  // Se declara para poder escribirlo tambien en la organizacion; el limite es el
+  // mismo que usa el esquema de company_info.
+  logoUrl: z.string().trim().max(500).optional().or(z.literal('')),
 }).passthrough()
 
 async function handler(request: NextRequest, context: AdminAuthContext) {
@@ -33,7 +42,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'Datos invalidos' }, { status: 400 })
   }
 
-  const { name, phone, address, email, marketplacePublic, slug } = parsed.data
+  const { name, phone, address, email, slug, logoUrl } = parsed.data
   const admin = createAdminSupabase()
 
   const orgId = await resolveWebsiteAdminOrganizationId(context)
@@ -42,7 +51,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const [
-    { data: defaultBranch },
+    { data: defaultBranch, error: defaultBranchError },
     { data: currentOrganization, error: currentOrganizationError },
   ] = await Promise.all([
     admin
@@ -53,19 +62,36 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       .maybeSingle(),
     admin
       .from('organizations')
-      .select('slug')
+      .select('slug, marketplace_public, storefront_public')
       .eq('id', orgId)
       .maybeSingle(),
   ])
 
-  if (currentOrganizationError) {
+  if (currentOrganizationError || defaultBranchError || !currentOrganization) {
     return NextResponse.json({ error: 'Error al cargar la organizacion actual' }, { status: 500 })
   }
 
   const currentSlug = currentOrganization?.slug || ''
+  const publication = resolvePublicationUpdate(currentOrganization, parsed.data)
+  const activating = (publication.storefrontPublic && !currentOrganization.storefront_public)
+    || (publication.marketplacePublic && !currentOrganization.marketplace_public)
+  if (activating && parsed.data.publicationConfirmed !== true) {
+    return NextResponse.json({ error: 'Revisá y confirmá la publicación de la tienda.' }, { status: 422 })
+  }
   const canonicalSlug = slug || currentSlug
   if (!canonicalSlug) {
     return NextResponse.json({ error: 'La ruta publica es obligatoria' }, { status: 400 })
+  }
+
+  // Las mismas reglas que al registrarse: sin esto una tienda podía cambiar su
+  // dirección a `dashboard`, `api` o `marketplace`, chocar con esas rutas y
+  // quedar inaccesible. Una dirección que ya tenía se respeta aunque hoy no
+  // cumpla, para no trabar el resto del formulario.
+  if (canonicalSlug !== currentSlug) {
+    const slugCheck = validateTenantSlug(canonicalSlug)
+    if (!slugCheck.ok) {
+      return NextResponse.json({ error: 'message' in slugCheck ? slugCheck.message : 'Dirección inválida' }, { status: 400 })
+    }
   }
 
   const { data: existingOrg } = await admin
@@ -79,22 +105,41 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'La ruta publica ya esta en uso por otra organizacion' }, { status: 409 })
   }
 
+  const { publicationConfirmed: confirmed, ...companyData } = parsed.data
   const sanitizedCompanyInfo = sanitizeWebsiteSettings({
-    ...parsed.data,
+    ...companyData,
     slug: canonicalSlug,
-    marketplacePublic: marketplacePublic !== false,
+    ...publication,
   })
   const validation = validateSetting('company_info', sanitizedCompanyInfo)
   if (!validation.success) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
 
+  if (activating && confirmed) {
+    const { data: checkoutRow, error: checkoutError } = await admin.from('website_settings')
+      .select('value').eq('organization_id', orgId).eq('key', 'checkout').maybeSingle()
+    if (checkoutError) return NextResponse.json({ error: 'No se pudo verificar la modalidad comercial.' }, { status: 500 })
+    const mode = checkoutRow?.value?.commerceMode ?? 'cart'
+    const issues = getPublicationIssues(CompanyInfoSchema.parse(validation.data), mode)
+    if (issues.length) return NextResponse.json({ error: issues.join(' ') }, { status: 422 })
+  }
+
+  // `organizations.logo_url` es el logo canonico de la tienda: de ahi lo toman el
+  // directorio del marketplace, el contexto de la organizacion y los recibos de
+  // reparaciones. Hasta ahora solo lo escribia el onboarding, asi que cambiarlo
+  // despues desde esta pantalla no llegaba a ninguno de los tres: se guardaba en
+  // website_settings, que solo alimenta el encabezado de la tienda publica.
   const { error: orgUpdateError } = await admin
     .from('organizations')
     .update({
       name,
-      marketplace_public: marketplacePublic !== false,
+      // Disable immediately, but only publish after all related writes succeed.
+      marketplace_public: publication.marketplacePublic && currentOrganization.marketplace_public === true,
+      storefront_public: publication.storefrontPublic && currentOrganization.storefront_public === true,
       slug: canonicalSlug,
+      // Vacio se guarda como null para que "sin logo" sea un solo valor y no dos.
+      logo_url: logoUrl?.trim() ? logoUrl.trim() : null,
     })
     .eq('id', orgId)
 
@@ -105,7 +150,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ error: 'Error al actualizar la organizacion' }, { status: 500 })
   }
 
-  const [{ error: settingError }] = await Promise.all([
+  const [settingResult, organizationSettingsResult, branchResult] = await Promise.all([
     admin
       .from('website_settings')
       .upsert(
@@ -120,8 +165,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       ),
     admin
       .from('organization_settings')
-      .update({ display_name: name })
-      .eq('organization_id', orgId),
+      .upsert({ organization_id: orgId, display_name: name }, { onConflict: 'organization_id' }),
     defaultBranch?.id
       ? admin
           .from('branches')
@@ -131,11 +175,17 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
             email: email || null,
           })
           .eq('id', defaultBranch.id)
-      : Promise.resolve(),
+      : Promise.resolve({ error: null }),
   ])
 
-  if (settingError) {
-    return NextResponse.json({ error: 'Error al guardar la configuracion del sitio' }, { status: 500 })
+  const relatedWriteError = settingResult.error || organizationSettingsResult.error || branchResult?.error
+  if (relatedWriteError) {
+    console.error('Could not synchronize all company records', {
+      organizationId: orgId,
+      code: relatedWriteError.code,
+      message: relatedWriteError.message,
+    })
+    return NextResponse.json({ error: 'No se pudieron sincronizar todos los datos de la empresa' }, { status: 500 })
   }
 
   if (currentSlug && currentSlug !== canonicalSlug) {
@@ -165,6 +215,23 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     })
   }
 
+  if (activating) {
+    const { error: publishError } = await admin.from('organizations').update({
+      storefront_public: publication.storefrontPublic,
+      marketplace_public: publication.marketplacePublic,
+    }).eq('id', orgId)
+    if (publishError) return NextResponse.json({ error: 'Datos guardados, pero no se pudo publicar. Intentá nuevamente.' }, { status: 500 })
+  }
+
+  revalidatePath(`/${canonicalSlug}`, 'layout')
+  if (currentSlug && currentSlug !== canonicalSlug) revalidatePath(`/${currentSlug}`, 'layout')
+  revalidatePath('/marketplace', 'layout')
+  revalidatePath('/marketplace/empresas')
+  try {
+    revalidateTag('marketplace:organizations', 'max')
+  } catch (cacheError) {
+    console.warn('Could not revalidate marketplace:organizations tag:', cacheError)
+  }
   return NextResponse.json({ success: true, data: validation.data })
 }
 

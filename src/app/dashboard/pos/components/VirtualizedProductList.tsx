@@ -1,6 +1,6 @@
-﻿'use client'
+'use client'
 
-import React, { useMemo, useCallback, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { useVirtualList } from '@/hooks/use-virtual-list'
 
@@ -17,9 +17,10 @@ interface VirtualizedProductListProps {
   itemHeight?: number
   showStock?: boolean
   showBarcode?: boolean
-  inventoryManager?: any
+  inventoryManager?: unknown
   isWholesale?: boolean
   wholesaleDiscountRate?: number
+  onViewDetail?: (product: Product, tab?: string) => void
 }
 
 interface ItemData {
@@ -30,9 +31,10 @@ interface ItemData {
   viewMode: 'grid' | 'list'
   showStock: boolean
   showBarcode: boolean
-  inventoryManager?: any
+  inventoryManager?: unknown
   isWholesale?: boolean
   wholesaleDiscountRate?: number
+  onViewDetail?: (product: Product, tab?: string) => void
 }
 
 const ProductRow = ({ index, style, ...props }: {
@@ -49,7 +51,8 @@ const ProductRow = ({ index, style, ...props }: {
     showBarcode,
     inventoryManager,
     isWholesale,
-    wholesaleDiscountRate
+    wholesaleDiscountRate,
+    onViewDetail
   } = props
   
   const product = products[index]
@@ -74,6 +77,7 @@ const ProductRow = ({ index, style, ...props }: {
           inventoryManager={inventoryManager}
           isWholesale={isWholesale}
           wholesaleDiscountRate={wholesaleDiscountRate}
+          onViewDetail={onViewDetail}
         />
       </div>
     </div>
@@ -150,7 +154,8 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
   showBarcode = false,
   inventoryManager,
   isWholesale,
-  wholesaleDiscountRate
+  wholesaleDiscountRate,
+  onViewDetail
 }) => {
   const [containerWidth, setContainerWidth] = useState(1000)
   const containerRef = React.useRef<HTMLDivElement>(null)
@@ -246,6 +251,7 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
                     inventoryManager={inventoryManager}
                     isWholesale={isWholesale}
                     wholesaleDiscountRate={wholesaleDiscountRate}
+                    onViewDetail={onViewDetail}
                   />
                 ))}
               </div>

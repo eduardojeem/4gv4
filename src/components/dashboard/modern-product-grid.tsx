@@ -1,15 +1,13 @@
 "use client"
 
 import { memo } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  Eye, 
-  Edit, 
-  Trash2, 
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  Eye,
+  Edit,
+  Trash2,
   MoreVertical,
-  Package,
-  TrendingUp,
-  TrendingDown,
+  Package, TrendingDown,
   AlertTriangle,
   CheckCircle
 } from 'lucide-react'

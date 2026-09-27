@@ -1,14 +1,16 @@
 'use client'
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  X, 
-  ZoomIn, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ZoomIn,
   Download,
   Upload,
   Trash2,
@@ -30,7 +32,7 @@ export function ProductImageGallery({
   productName,
   onImageAdd,
   onImageDelete,
-  onImageReorder,
+  onImageReorder: _onImageReorder,
   editable = false
 }: ProductImageGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -50,7 +52,7 @@ export function ProductImageGallery({
 
   const handleDownload = async () => {
     if (!currentImage) return
-    
+
     try {
       const response = await fetch(currentImage)
       const blob = await response.blob()
@@ -72,7 +74,7 @@ export function ProductImageGallery({
       <Card className="border-0 shadow-lg overflow-hidden">
         <CardContent className="p-0">
           {/* Main Image */}
-          <div 
+          <div
             className="relative aspect-square bg-gradient-to-br from-gray-100 to-gray-200 group"
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
@@ -185,7 +187,7 @@ export function ProductImageGallery({
                         : "border-gray-200 hover:border-gray-300"
                     )}
                   >
-                    <img
+                    <AppImage
                       src={image}
                       alt={`Miniatura ${index + 1}`}
                       className="w-full h-full object-cover"

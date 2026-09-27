@@ -4,11 +4,20 @@ import { SettingsDashboard, type SettingsData } from '@/components/superadmin/Se
 async function getSettingsData(): Promise<SettingsData> {
   const admin = createAdminSupabase()
 
-  const [{ data: systemData }, { data: orgsSettings }, { count: orgCount }] = await Promise.all([
+  const [systemResult, orgSettingsResult, orgCountResult] = await Promise.all([
     admin.from('system_settings').select('*').eq('id', 'system').maybeSingle(),
     admin.from('organization_settings').select('currency, timezone'),
     admin.from('organizations').select('id', { count: 'exact', head: true }),
   ])
+
+  const { data: systemData } = systemResult
+  const { data: orgsSettings } = orgSettingsResult
+  const { count: orgCount } = orgCountResult
+  const loadIssues = [
+    systemResult.error && 'No se pudo leer la configuración global.',
+    orgSettingsResult.error && 'No se pudo calcular la distribución regional de las organizaciones.',
+    orgCountResult.error && 'No se pudo obtener el total de organizaciones.',
+  ].filter((message): message is string => Boolean(message))
 
   const s = (systemData ?? {}) as Record<string, unknown>
 
@@ -22,13 +31,13 @@ async function getSettingsData(): Promise<SettingsData> {
 
   // Env vars check
   const envChecks = [
-    { key: 'NEXT_PUBLIC_SUPABASE_URL', configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) },
-    { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) },
-    { key: 'SUPABASE_SERVICE_ROLE_KEY', configured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) },
-    { key: 'NEXT_PUBLIC_SITE_URL', configured: Boolean(process.env.NEXT_PUBLIC_SITE_URL) },
-    { key: 'NEXT_PUBLIC_BASE_DOMAIN', configured: Boolean(process.env.NEXT_PUBLIC_BASE_DOMAIN) },
-    { key: 'PAGOPAR_PUBLIC_KEY', configured: Boolean(process.env.PAGOPAR_PUBLIC_KEY) },
-    { key: 'PAGOPAR_PRIVATE_KEY', configured: Boolean(process.env.PAGOPAR_PRIVATE_KEY) },
+    { key: 'NEXT_PUBLIC_SUPABASE_URL', configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL), required: true },
+    { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY), required: true },
+    { key: 'SUPABASE_SERVICE_ROLE_KEY', configured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY), required: true },
+    { key: 'NEXT_PUBLIC_SITE_URL', configured: Boolean(process.env.NEXT_PUBLIC_SITE_URL), required: true },
+    { key: 'NEXT_PUBLIC_BASE_DOMAIN', configured: Boolean(process.env.NEXT_PUBLIC_BASE_DOMAIN), required: true },
+    { key: 'PAGOPAR_PUBLIC_KEY', configured: Boolean(process.env.PAGOPAR_PUBLIC_KEY), required: false },
+    { key: 'PAGOPAR_PRIVATE_KEY', configured: Boolean(process.env.PAGOPAR_PRIVATE_KEY), required: false },
   ]
 
   return {
@@ -56,9 +65,12 @@ async function getSettingsData(): Promise<SettingsData> {
       totalOrgs: orgCount ?? 0,
       topCurrency: [...currencyMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
       topTimezone: [...tzMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
-      currencyDistribution: Array.from(currencyMap.entries()).map(([k, v]) => ({ value: k, count: v })),
+      currencyDistribution: Array.from(currencyMap.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
     },
     envChecks,
+    loadIssues,
   }
 }
 

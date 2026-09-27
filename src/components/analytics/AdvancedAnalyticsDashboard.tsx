@@ -1,34 +1,25 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
+import React, { useCallback, useEffect, useState } from 'react'
+import { motion } from '../ui/motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
-import { Separator } from '@/components/ui/separator'
-import { BarChart } from 'recharts/es6/chart/BarChart';
-import { Bar } from 'recharts/es6/cartesian/Bar';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
-import { PieChart } from 'recharts/es6/chart/PieChart';
-import { Pie } from 'recharts/es6/polar/Pie';
-import { Cell } from 'recharts/es6/component/Cell';
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Area } from 'recharts/es6/cartesian/Area';
-import { ComposedChart } from 'recharts';
-import { Legend } from 'recharts/es6/component/Legend';
-import { RadialBarChart } from 'recharts';
-import { RadialBar } from 'recharts';
-import { ScatterChart } from 'recharts';
-import { Scatter } from 'recharts';
+import { BarChart } from 'recharts/es6/chart/BarChart'
+import { Bar } from 'recharts/es6/cartesian/Bar'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
+import { PieChart } from 'recharts/es6/chart/PieChart'
+import { Pie } from 'recharts/es6/polar/Pie'
+import { Cell } from 'recharts/es6/component/Cell'
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
+import { Area } from 'recharts/es6/cartesian/Area'
 import {
   TrendingUp,
   TrendingDown,
@@ -38,23 +29,14 @@ import {
   AlertTriangle,
   Target,
   Activity,
-  BarChart3,
-  PieChart as PieChartIcon,
-  LineChart as LineChartIcon,
-  Download,
-  RefreshCw,
-  Filter,
-  Calendar,
-  Eye,
-  Settings,
-  Zap,
-  Brain,
-  Shield,
+  BarChart3, Download,
+  RefreshCw, Eye, Shield,
   Clock,
   Gauge
 } from 'lucide-react'
 import { analyticsEngine, type AdvancedAnalyticsData } from '@/lib/analytics/advanced-analytics-engine'
 import { formatCurrency } from '@/lib/currency'
+import { GSIcon } from '@/components/ui/standardized-components'
 
 interface AdvancedAnalyticsDashboardProps {
   className?: string
@@ -65,6 +47,30 @@ const CHART_COLORS = [
   '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6b7280'
 ]
 
+function getDateRange(range: string) {
+  const end = new Date()
+  const start = new Date()
+
+  switch (range) {
+    case '7d':
+      start.setDate(end.getDate() - 7)
+      break
+    case '30d':
+      start.setDate(end.getDate() - 30)
+      break
+    case '90d':
+      start.setDate(end.getDate() - 90)
+      break
+    case '1y':
+      start.setFullYear(end.getFullYear() - 1)
+      break
+    default:
+      start.setDate(end.getDate() - 30)
+  }
+
+  return { start, end }
+}
+
 export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyticsDashboardProps) {
   const [analyticsData, setAnalyticsData] = useState<AdvancedAnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -74,7 +80,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   const [refreshing, setRefreshing] = useState(false)
 
   // Cargar datos de analytics
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -88,7 +94,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
     } finally {
       setLoading(false)
     }
-  }
+  }, [timeRange])
 
   // Refrescar datos
   const refreshAnalytics = async () => {
@@ -101,32 +107,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   // Cargar datos al montar el componente
   useEffect(() => {
     loadAnalytics()
-  }, [timeRange])
-
-  // Función para obtener rango de fechas
-  const getDateRange = (range: string) => {
-    const end = new Date()
-    const start = new Date()
-    
-    switch (range) {
-      case '7d':
-        start.setDate(end.getDate() - 7)
-        break
-      case '30d':
-        start.setDate(end.getDate() - 30)
-        break
-      case '90d':
-        start.setDate(end.getDate() - 90)
-        break
-      case '1y':
-        start.setFullYear(end.getFullYear() - 1)
-        break
-      default:
-        start.setDate(end.getDate() - 30)
-    }
-    
-    return { start, end }
-  }
+  }, [loadAnalytics])
 
   // Componente de KPI Card
   const KPICard = ({ 
@@ -206,7 +187,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
 
   // Componente de gráfico de área
   const AreaChartComponent = ({ data, title, dataKey, color = '#3b82f6' }: {
-    data: any[]
+    data: Array<Record<string, unknown>>
     title: string
     dataKey: string
     color?: string
@@ -237,7 +218,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
 
   // Componente de gráfico de barras
   const BarChartComponent = ({ data, title, dataKey, color = '#3b82f6' }: {
-    data: any[]
+    data: Array<Record<string, unknown>>
     title: string
     dataKey: string
     color?: string
@@ -262,7 +243,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
 
   // Componente de gráfico circular
   const PieChartComponent = ({ data, title }: {
-    data: any[]
+    data: Array<Record<string, unknown>>
     title: string
   }) => (
     <Card>
@@ -294,7 +275,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   )
 
   // Componente de tabla de top productos
-  const TopProductsTable = ({ products }: { products: any[] }) => (
+  const TopProductsTable = ({ products }: { products: Array<Record<string, unknown>> }) => (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Top Productos</CardTitle>
@@ -302,20 +283,20 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
       <CardContent>
         <div className="space-y-4">
           {products.slice(0, 5).map((product, index) => (
-            <div key={product.productId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div key={String(product.productId || index)} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-sm font-semibold text-blue-600">{index + 1}</span>
                 </div>
                 <div>
-                  <p className="font-medium">{product.productName}</p>
-                  <p className="text-sm text-gray-600">{product.quantity} unidades</p>
+                  <p className="font-medium">{String(product.productName || 'Producto')}</p>
+                  <p className="text-sm text-gray-600">{Number(product.quantity) || 0} unidades</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-semibold">{formatCurrency(product.revenue)}</p>
-                <p className={`text-sm ${product.growth > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {product.growth > 0 ? '+' : ''}{product.growth.toFixed(1)}%
+                <p className="font-semibold">{formatCurrency(Number(product.revenue) || 0)}</p>
+                <p className={`text-sm ${Number(product.growth || 0) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {Number(product.growth || 0) > 0 ? '+' : ''}{(Number(product.growth) || 0).toFixed(1)}%
                 </p>
               </div>
             </div>
@@ -326,7 +307,7 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
   )
 
   // Componente de alertas
-  const AlertsComponent = ({ alerts }: { alerts: any[] }) => (
+  const AlertsComponent = ({ alerts }: { alerts: Array<Record<string, unknown>> }) => (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center">
@@ -344,8 +325,8 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
                   alert.severity === 'low' ? 'bg-yellow-500' : 'bg-gray-500'
                 }`} />
                 <div>
-                  <p className="font-medium">{alert.productName}</p>
-                  <p className="text-sm text-gray-600">Stock: {alert.currentStock}</p>
+                  <p className="font-medium">{String(alert.productName || 'Producto')}</p>
+                  <p className="text-sm text-gray-600">Stock: {Number(alert.currentStock) || 0}</p>
                 </div>
               </div>
               <Badge variant={alert.severity === 'critical' ? 'destructive' : 'secondary'}>
@@ -873,4 +854,3 @@ export default function AdvancedAnalyticsDashboard({ className }: AdvancedAnalyt
     </div>
   )
 }
-import { GSIcon } from '@/components/ui/standardized-components'

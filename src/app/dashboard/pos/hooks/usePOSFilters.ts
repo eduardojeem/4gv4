@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import type { Product } from '@/types/product-unified'
 
 export interface POSFiltersState {
@@ -94,13 +95,18 @@ export function usePOSFilters(products: Product[]): POSFiltersResult {
   }, [searchTerm])
 
   // Resetear página al cambiar filtros
-  useEffect(() => {
+  const filterKey = JSON.stringify([debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
+  const [previousFilterKey, setPreviousFilterKey] = useState(filterKey)
+  if (previousFilterKey !== filterKey) {
+    setPreviousFilterKey(filterKey)
     setCurrentPage(1)
-  }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
+  }
 
   // Cargar preferencias guardadas
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  const hydrated = useHydrated()
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  if (hydrated && !preferencesLoaded) {
+    setPreferencesLoaded(true)
     try {
       const savedPrefs = localStorage.getItem('pos.filters')
       if (savedPrefs) {
@@ -117,11 +123,11 @@ export function usePOSFilters(products: Product[]): POSFiltersResult {
     } catch (e) {
       console.warn('Error loading filter preferences:', e)
     }
-  }, [])
+  }
 
   // Guardar preferencias
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!preferencesLoaded) return
     try {
       const prefs = {
         selectedCategory,
@@ -137,7 +143,7 @@ export function usePOSFilters(products: Product[]): POSFiltersResult {
     } catch (e) {
       console.error('Error saving filter preferences:', e)
     }
-  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, itemsPerPage])
+  }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, itemsPerPage, preferencesLoaded])
 
   // Categorías únicas
   const categories = useMemo(() => {
@@ -175,7 +181,7 @@ export function usePOSFilters(products: Product[]): POSFiltersResult {
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
       
       // Destacados
-      const matchesFeatured = !showFeatured || (product as any).featured === true
+      const matchesFeatured = !showFeatured || (product as { featured?: boolean }).featured === true
       
       // Precio
       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max

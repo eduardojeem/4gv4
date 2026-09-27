@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { AuditLogsDashboard, type AuditLogRow } from '@/components/superadmin/AuditLogsDashboard'
+import { isOrganizationId, organizationAuditFilter } from '@/lib/superadmin/organization-audit'
 
 export const revalidate = 60
 
@@ -33,7 +34,7 @@ function sinceForPeriod(period: string): string {
 
 const PAGE_SIZE = 20
 
-async function getAuditLogsData(period: string, severity: string, page: number) {
+async function getAuditLogsData(period: string, severity: string, page: number, organizationId: string | null) {
   const admin = createAdminSupabase()
   const since = sinceForPeriod(period)
   const from = page * PAGE_SIZE
@@ -48,6 +49,10 @@ async function getAuditLogsData(period: string, severity: string, page: number) 
 
   if (severity && ALLOWED_SEVERITY.has(severity)) {
     query = query.eq('severity', severity)
+  }
+
+  if (organizationId) {
+    query = query.or(organizationAuditFilter(organizationId))
   }
 
   const { data: logsData, count: logsCount } = await query
@@ -117,7 +122,15 @@ export default async function SuperAdminAuditLogsPage({
   const period = ['1h', '24h', '7d', '30d'].includes(params.period ?? '') ? (params.period as string) : '7d'
   const severity = ALLOWED_SEVERITY.has(params.severity ?? '') ? (params.severity as string) : ''
   const page = Math.max(0, Number(params.page ?? 0))
-  const { rows, total } = await getAuditLogsData(period, severity, page)
+  // Solo un id: el valor termina dentro del filtro de PostgREST.
+  const organizationId = isOrganizationId(params.org) ? params.org : null
+  const [{ rows, total }, organization] = await Promise.all([
+    getAuditLogsData(period, severity, page, organizationId),
+    organizationId
+      ? createAdminSupabase().from('organizations').select('id, name, slug').eq('id', organizationId).maybeSingle()
+          .then(({ data }) => (data as { id: string; name: string; slug: string } | null) ?? null)
+      : Promise.resolve(null),
+  ])
   return (
     <AuditLogsDashboard
       rows={rows}
@@ -126,6 +139,7 @@ export default async function SuperAdminAuditLogsPage({
       page={page}
       pageSize={PAGE_SIZE}
       total={total}
+      organization={organizationId ? organization ?? { id: organizationId, name: 'Organización', slug: '' } : null}
     />
   )
 }

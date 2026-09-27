@@ -7,6 +7,9 @@ import {
   getCreditPaymentReceiptHeight,
   getCreditPaymentReceiptLayout,
   getCreditPaymentMethodLabel,
+  buildPaymentDetailRows,
+  buildAccountStatusRows,
+  buildInstallmentPlanRows,
 } from './payment-receipt'
 
 describe('credit payment receipt helpers', () => {
@@ -70,5 +73,62 @@ describe('credit payment receipt helpers', () => {
     ]
 
     expect(getCreditCurrentBalance(installments, 'credit-a')).toBe(450)
+  })
+
+  it('includes installment number and remaining debt in receipt rows', () => {
+    const paymentRows = buildPaymentDetailRows({
+      paymentId: 'pay-1',
+      paymentAmount: 250000,
+      paymentMethod: 'cash',
+      installmentNumber: 2,
+      totalInstallments: 6,
+      installmentDueDate: '2026-09-01',
+      installmentAmount: 250000,
+    })
+
+    // La posicion de la cuota y las que faltan se mudaron a la seccion "PLAN DE
+    // CUOTAS": antes estaban repartidas entre el detalle del pago y el estado de
+    // cuenta, y el comprobante decia lo mismo dos veces. Aca queda lo que es
+    // estrictamente del pago.
+    expect(paymentRows).toEqual(
+      expect.arrayContaining([
+        ['Valor Cuota', expect.stringContaining('250.000')],
+        ['MONTO ABONADO', expect.stringContaining('250.000')],
+        ['Método de Pago', 'Efectivo'],
+      ])
+    )
+    expect(paymentRows.some(([etiqueta]) => etiqueta === 'Cuota Pagada')).toBe(false)
+
+    const planRows = buildInstallmentPlanRows({
+      paymentId: 'pay-1',
+      paymentAmount: 250000,
+      customerName: 'Cliente',
+      creditId: 'cred-1',
+      installmentNumber: 2,
+      totalInstallments: 6,
+      paidInstallmentsCount: 2,
+    })
+
+    expect(planRows).toEqual(
+      expect.arrayContaining([
+        ['CUOTA ABONADA', '2 de 6'],
+        ['Cuotas que faltan', '4 cuotas'],
+      ])
+    )
+
+    const statusRows = buildAccountStatusRows({
+      paymentId: 'pay-1',
+      paymentAmount: 250000,
+      currentCreditBalance: 1000000,
+      pendingInstallmentsCount: 4,
+      nextDueDate: '2026-10-01',
+      nextDueAmount: 250000,
+    })
+
+    expect(statusRows).toEqual(
+      expect.arrayContaining([
+        ['SALDO PENDIENTE (FALTA)', expect.stringContaining('1.000.000')],
+      ])
+    )
   })
 })

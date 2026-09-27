@@ -13,11 +13,11 @@ describe('repairs mapping utilities', () => {
   })
 
   it('maps UI status to stage', () => {
-    expect(statusToStage('pending')).toBe('received')
-    expect(statusToStage('in_progress')).toBe('in_repair')
-    expect(statusToStage('waiting_parts')).toBe('awaiting_parts')
-    expect(statusToStage('on_hold')).toBe('quality_check')
-    expect(statusToStage('completed')).toBe('ready')
-    expect(statusToStage('cancelled')).toBe('delivered')
+    expect(statusToStage('pending')).toBe('recibido')
+    expect(statusToStage('in_progress')).toBe('diagnostico')
+    expect(statusToStage('waiting_parts')).toBe('esperando_repuestos')
+    expect(statusToStage('on_hold')).toBe('pausado')
+    expect(statusToStage('completed')).toBe('listo')
+    expect(statusToStage('cancelled')).toBe('cancelado')
   })
 })

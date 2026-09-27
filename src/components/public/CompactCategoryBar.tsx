@@ -94,7 +94,7 @@ export function CompactCategoryBar({
                 className={[
                   'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-1',
                   !activeId
-                    ? 'border-cyan-500 bg-cyan-600 text-white shadow-sm'
+                    ? 'border-cyan-700 bg-cyan-700 text-white shadow-sm'
                     : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800',
                 ].join(' ')}
               >
@@ -114,7 +114,7 @@ export function CompactCategoryBar({
                     className={[
                       'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-1',
                       isActive
-                        ? 'border-cyan-500 bg-cyan-600 text-white shadow-sm'
+                        ? 'border-cyan-700 bg-cyan-700 text-white shadow-sm'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800',
                     ].join(' ')}
                   >
@@ -136,7 +136,7 @@ export function CompactCategoryBar({
                           'rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums leading-none',
                           isActive
                             ? 'bg-white/25 text-white'
-                            : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500',
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
                         ].join(' ')}
                       >
                         {cat.product_count}
@@ -152,7 +152,7 @@ export function CompactCategoryBar({
               <div role="listitem" style={{ scrollSnapAlign: 'start' }}>
                 <Link
                   href="/marketplace/categorias"
-                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-slate-300 bg-transparent px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:border-cyan-400 hover:text-cyan-700 dark:border-slate-600 dark:text-slate-500 dark:hover:border-cyan-600 dark:hover:text-cyan-400"
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-slate-300 bg-transparent px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-cyan-400 hover:text-cyan-800 dark:border-slate-600 dark:text-slate-300 dark:hover:border-cyan-600 dark:hover:text-cyan-400"
                 >
                   Ver todas
                   <ArrowRight className="h-3 w-3" />

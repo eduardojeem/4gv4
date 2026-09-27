@@ -180,7 +180,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
           
           {filters.search && (
             <Badge variant="secondary" className="gap-1">
-              Búsqueda: "{filters.search}"
+              Búsqueda: &quot;{filters.search}&quot;
               <button
                 onClick={() => removeFilter('search')}
                 className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"

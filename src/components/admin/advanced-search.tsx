@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,43 +10,33 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
+import { formatCurrency } from '@/lib/currency'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { 
-  Search, 
-  Filter, 
-  X, 
-  ChevronDown, 
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
+import {
+  Search,
+  Filter,
+  X,
+  ChevronDown,
   ChevronUp,
   Save,
   Bookmark,
   History,
-  SlidersHorizontal,
-  Tag,
-  Calendar,
-  Package,
-  Building,
-  Users,
-  Star,
-  Clock,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  RotateCcw,
-  Download,
-  Share2
+  SlidersHorizontal, Star, RotateCcw
 } from 'lucide-react'
 
 // Interfaces
-interface SearchFilter {
+export type SearchFilterValue = string | number | boolean | string[] | number[] | [number, number]
+
+export interface SearchFilter {
   id: string
   name: string
   type: 'text' | 'select' | 'range' | 'date' | 'checkbox' | 'multiselect'
-  value: any
+  value: SearchFilterValue
   options?: { label: string; value: string }[]
   min?: number
   max?: number
+  step?: number
   placeholder?: string
 }
 
@@ -58,71 +49,94 @@ interface SavedSearch {
   category: string
 }
 
-interface SearchResult {
-  id: string
-  name: string
-  sku: string
-  category: string
-  supplier: string
-  price: number
-  stock: number
-  status: string
-  lastMovement: Date
-  image?: string
-}
-
 interface AdvancedSearchProps {
   onSearch: (filters: SearchFilter[]) => void
   onClearFilters: () => void
-  results?: SearchResult[]
   isLoading?: boolean
   categoryOptions?: { label: string; value: string }[]
   supplierOptions?: { label: string; value: string }[]
+  /** Techos reales del catalogo. Sin ellos los rangos inventan uno. */
+  priceCeiling?: number
+  stockCeiling?: number
 }
 
-const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
+const SAVED_SEARCHES_KEY = 'mipos:inventory:saved-searches'
+
+/**
+ * Se guardan en el navegador de quien las creo. No es sincronizacion entre
+ * usuarios, pero es la diferencia entre que sobrevivan a cambiar de pestaña y
+ * que no.
+ */
+function readSavedSearches(): SavedSearch[] {
+  try {
+    const raw = window.localStorage.getItem(SAVED_SEARCHES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((item) => ({ ...item, createdAt: new Date(item.createdAt) }))
+  } catch {
+    return []
+  }
+}
+
+function writeSavedSearches(searches: SavedSearch[]) {
+  try {
+    window.localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(searches))
+  } catch {
+    // Ventana privada o almacenamiento bloqueado: se pierden al recargar, que
+    // es exactamente como estaba antes. No hay nada que avisar.
+  }
+}
+
+/** El rango de precio se lee en guaranies; el de stock, en unidades. */
+function formatRangeBound(filter: SearchFilter, value: number | undefined) {
+  const numero = Number(value ?? 0)
+  return filter.id === 'priceRange' ? formatCurrency(numero) : numero.toLocaleString('es-PY')
+}
+
+const AdvancedSearch: React.FC<AdvancedSearchProps> = (props) => {
+  const hydrated = useHydrated()
+  return hydrated ? <AdvancedSearchContent {...props} /> : null
+}
+
+const AdvancedSearchContent: React.FC<AdvancedSearchProps> = ({
   onSearch,
   onClearFilters,
-  results = [],
   isLoading = false,
   categoryOptions = [],
-  supplierOptions = []
+  supplierOptions = [],
+  priceCeiling,
+  stockCeiling
 }) => {
   // Estados
-  const [filters, setFilters] = useState<SearchFilter[]>([])
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
+  const [filterValues, setFilters] = useState<SearchFilter[]>([])
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(readSavedSearches)
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
   const [saveSearchName, setSaveSearchName] = useState('')
   const [saveSearchCategory, setSaveSearchCategory] = useState('')
   const [searchHistory, setSearchHistory] = useState<string[]>([])
-  const [quickFilters, setQuickFilters] = useState<string[]>([])
+  const [_quickFilters, _setQuickFilters] = useState<string[]>([])
 
-  const effectiveCategoryOptions = useMemo(() => (
-    categoryOptions.length > 0
-      ? categoryOptions
-      : [
-          { label: 'Smartphones', value: 'smartphones' },
-          { label: 'Laptops', value: 'laptops' },
-          { label: 'Tablets', value: 'tablets' },
-          { label: 'Accesorios', value: 'accesorios' },
-          { label: 'Audio', value: 'audio' },
-          { label: 'Gaming', value: 'gaming' }
-        ]
-  ), [categoryOptions])
+  // Sin listas de respaldo. Cuando no llegaban categorias o proveedores —porque
+  // la empresa no cargo ninguno, o porque la peticion fallo en silencio— este
+  // componente ofrecia «Apple Inc.», «Samsung», «Smartphones». Elegir uno
+  // filtraba por un identificador que no existe: cero resultados sin
+  // explicacion, y el usuario concluia que no tenia stock de Samsung.
+  const effectiveCategoryOptions = categoryOptions
+  const effectiveSupplierOptions = supplierOptions
 
-  const effectiveSupplierOptions = useMemo(() => (
-    supplierOptions.length > 0
-      ? supplierOptions
-      : [
-          { label: 'Apple Inc.', value: 'apple' },
-          { label: 'Samsung', value: 'samsung' },
-          { label: 'Lenovo', value: 'lenovo' },
-          { label: 'HP', value: 'hp' },
-          { label: 'Dell', value: 'dell' },
-          { label: 'Sony', value: 'sony' }
-        ]
-  ), [supplierOptions])
+  // El tope sale del producto mas caro del catalogo, redondeado hacia arriba.
+  // Estaba fijo en 5.000, heredado de un catalogo en dolares: en guaranies
+  // cualquier producto real queda por encima y el filtro no filtra nada.
+  const priceMax = useMemo(() => {
+    const techo = Number(priceCeiling) || 0
+    if (techo <= 0) return 10_000_000
+    const escala = Math.pow(10, Math.max(0, String(Math.round(techo)).length - 2))
+    return Math.ceil(techo / escala) * escala
+  }, [priceCeiling])
+  const priceStep = useMemo(() => Math.max(1, Math.round(priceMax / 200)), [priceMax])
+  const stockMax = useMemo(() => Math.max(10, Number(stockCeiling) || 0), [stockCeiling])
 
   // Filtros disponibles
   const availableFilters: SearchFilter[] = useMemo(() => [
@@ -149,19 +163,21 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     },
     {
       id: 'priceRange',
-      name: 'Rango de Precio',
+      name: 'Rango de precio',
       type: 'range',
-      value: [0, 5000],
+      value: [0, priceMax],
       min: 0,
-      max: 5000
+      max: priceMax,
+      step: priceStep
     },
     {
       id: 'stockRange',
-      name: 'Rango de Stock',
+      name: 'Rango de stock',
       type: 'range',
-      value: [0, 1000],
+      value: [0, stockMax],
       min: 0,
-      max: 1000
+      max: stockMax,
+      step: 1
     },
     {
       id: 'status',
@@ -194,59 +210,16 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
       type: 'checkbox',
       value: false
     }
-  ], [effectiveCategoryOptions, effectiveSupplierOptions])
+  ], [effectiveCategoryOptions, effectiveSupplierOptions, priceMax, priceStep, stockMax])
 
-  // Búsquedas guardadas mock
-  const mockSavedSearches: SavedSearch[] = useMemo(() => [
-    {
-      id: '1',
-      name: 'Productos con Stock Bajo',
-      filters: [
-        { ...availableFilters.find(f => f.id === 'stockRange')!, value: [0, 10] },
-        { ...availableFilters.find(f => f.id === 'status')!, value: ['low_stock'] }
-      ],
-      createdAt: new Date('2024-01-15'),
-      isDefault: true,
-      category: 'Alertas'
-    },
-    {
-      id: '2',
-      name: 'Smartphones Apple',
-      filters: [
-        { ...availableFilters.find(f => f.id === 'category')!, value: ['smartphones'] },
-        { ...availableFilters.find(f => f.id === 'supplier')!, value: ['apple'] }
-      ],
-      createdAt: new Date('2024-01-10'),
-      category: 'Productos'
-    },
-    {
-      id: '3',
-      name: 'Productos Caros Sin Movimiento',
-      filters: [
-        { ...availableFilters.find(f => f.id === 'priceRange')!, value: [2000, 5000] },
-        { ...availableFilters.find(f => f.id === 'lastMovement')!, value: '2024-01-01' }
-      ],
-      createdAt: new Date('2024-01-05'),
-      category: 'Análisis'
-    }
-  ], [availableFilters])
-
-  // Efectos
-  useEffect(() => {
-    setFilters(prev => {
-      if (prev.length === 0) return availableFilters.map(f => ({ ...f }))
-
-      return availableFilters.map(filter => {
-        const current = prev.find(f => f.id === filter.id)
-        return current ? { ...filter, value: current.value } : { ...filter }
-      })
-    })
-    setSavedSearches(mockSavedSearches)
-  }, [availableFilters, mockSavedSearches])
+  const filters = availableFilters.map(filter => {
+    const current = filterValues.find(value => value.id === filter.id)
+    return current ? { ...filter, value: current.value } : filter
+  })
 
   // Funciones
-  const updateFilter = (filterId: string, value: any) => {
-    setFilters(prev => prev.map(filter => 
+  const updateFilter = (filterId: string, value: SearchFilterValue) => {
+    setFilters(filters.map(filter =>
       filter.id === filterId ? { ...filter, value } : filter
     ))
   }
@@ -255,15 +228,15 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     return filters.filter(filter => {
       switch (filter.type) {
         case 'text':
-          return filter.value && filter.value.trim() !== ''
+          return typeof filter.value === 'string' && filter.value.trim() !== ''
         case 'select':
-          return filter.value && filter.value !== ''
+          return typeof filter.value === 'string' && filter.value !== ''
         case 'multiselect':
           return Array.isArray(filter.value) && filter.value.length > 0
         case 'range':
           return Array.isArray(filter.value) && (filter.value[0] !== filter.min || filter.value[1] !== filter.max)
         case 'date':
-          return filter.value && filter.value !== ''
+          return typeof filter.value === 'string' && filter.value !== ''
         case 'checkbox':
           return filter.value === true
         default:
@@ -277,8 +250,9 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     onSearch(activeFilters)
     
     // Agregar a historial
-    const searchTerm = filters.find(f => f.id === 'search')?.value
-    if (searchTerm && searchTerm.trim() !== '') {
+    const searchFilter = filters.find(f => f.id === 'search')
+    const searchTerm = typeof searchFilter?.value === 'string' ? searchFilter.value : ''
+    if (searchTerm.trim() !== '') {
       setSearchHistory(prev => {
         const newHistory = [searchTerm, ...prev.filter(term => term !== searchTerm)]
         return newHistory.slice(0, 10) // Mantener solo los últimos 10
@@ -295,14 +269,18 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
     if (!saveSearchName.trim()) return
 
     const newSearch: SavedSearch = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: saveSearchName,
       filters: getActiveFilters(),
       createdAt: new Date(),
       category: saveSearchCategory || 'Personalizado'
     }
 
-    setSavedSearches(prev => [newSearch, ...prev])
+    setSavedSearches(prev => {
+      const next = [newSearch, ...prev]
+      writeSavedSearches(next)
+      return next
+    })
     setSaveSearchName('')
     setSaveSearchCategory('')
     setIsSaveDialogOpen(false)
@@ -318,7 +296,11 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
   }
 
   const deleteSavedSearch = (searchId: string) => {
-    setSavedSearches(prev => prev.filter(s => s.id !== searchId))
+    setSavedSearches(prev => {
+      const next = prev.filter(s => s.id !== searchId)
+      writeSavedSearches(next)
+      return next
+    })
   }
 
   const getFilterValueDisplay = (filter: SearchFilter) => {
@@ -330,12 +312,12 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
         return option?.label || 'Sin selección'
       case 'multiselect':
         if (!Array.isArray(filter.value) || filter.value.length === 0) return 'Sin selección'
-        const selectedOptions = filter.options?.filter(o => filter.value.includes(o.value))
+        const selectedOptions = filter.options?.filter(o => (filter.value as string[]).includes(o.value))
         return selectedOptions?.map(o => o.label).join(', ') || 'Sin selección'
       case 'range':
         return Array.isArray(filter.value) ? `${filter.value[0]} - ${filter.value[1]}` : 'Sin rango'
       case 'date':
-        return filter.value || 'Sin fecha'
+        return (typeof filter.value === 'string' && filter.value) || 'Sin fecha'
       case 'checkbox':
         return filter.value ? 'Sí' : 'No'
       default:
@@ -349,7 +331,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
         return (
           <Input
             placeholder={filter.placeholder}
-            value={filter.value}
+            value={typeof filter.value === 'string' ? filter.value : ''}
             onChange={(e) => updateFilter(filter.id, e.target.value)}
             className="w-full"
           />
@@ -357,7 +339,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
 
       case 'select':
         return (
-          <Select value={filter.value} onValueChange={(value) => updateFilter(filter.id, value)}>
+          <Select value={typeof filter.value === 'string' ? filter.value : ''} onValueChange={(value) => updateFilter(filter.id, value)}>
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar..." />
             </SelectTrigger>
@@ -378,9 +360,9 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
               <div key={option.value} className="flex items-center space-x-2">
                 <Checkbox
                   id={`${filter.id}-${option.value}`}
-                  checked={Array.isArray(filter.value) && filter.value.includes(option.value)}
+                  checked={Array.isArray(filter.value) && (filter.value as string[]).includes(option.value)}
                   onCheckedChange={(checked) => {
-                    const currentValue = Array.isArray(filter.value) ? filter.value : []
+                    const currentValue = Array.isArray(filter.value) ? (filter.value as string[]) : []
                     if (checked) {
                       updateFilter(filter.id, [...currentValue, option.value])
                     } else {
@@ -400,16 +382,16 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
         return (
           <div className="space-y-4">
             <Slider
-              value={Array.isArray(filter.value) ? filter.value : [filter.min || 0, filter.max || 100]}
+              value={Array.isArray(filter.value) ? (filter.value as number[]) : [filter.min || 0, filter.max || 100]}
               onValueChange={(value) => updateFilter(filter.id, value)}
               min={filter.min || 0}
               max={filter.max || 100}
-              step={1}
+              step={filter.step || 1}
               className="w-full"
             />
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>{Array.isArray(filter.value) ? filter.value[0] : filter.min}</span>
-              <span>{Array.isArray(filter.value) ? filter.value[1] : filter.max}</span>
+            <div className="flex justify-between text-sm tabular-nums text-gray-600 dark:text-gray-400">
+              <span>{formatRangeBound(filter, Array.isArray(filter.value) ? Number(filter.value[0]) : filter.min)}</span>
+              <span>{formatRangeBound(filter, Array.isArray(filter.value) ? Number(filter.value[1]) : filter.max)}</span>
             </div>
           </div>
         )
@@ -418,7 +400,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
         return (
           <Input
             type="date"
-            value={filter.value}
+            value={typeof filter.value === 'string' ? filter.value : ''}
             onChange={(e) => updateFilter(filter.id, e.target.value)}
             className="w-full"
           />
@@ -429,8 +411,8 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
           <div className="flex items-center space-x-2">
             <Checkbox
               id={filter.id}
-              checked={filter.value}
-              onCheckedChange={(checked) => updateFilter(filter.id, checked)}
+              checked={filter.value === true}
+              onCheckedChange={(checked) => updateFilter(filter.id, Boolean(checked))}
             />
             <Label htmlFor={filter.id}>Sí</Label>
           </div>
@@ -453,7 +435,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 placeholder="Buscar productos por nombre, SKU, descripción..."
-                value={filters.find(f => f.id === 'search')?.value || ''}
+                value={(filters.find(f => f.id === 'search')?.value as string) || ''}
                 onChange={(e) => updateFilter('search', e.target.value)}
                 className="pl-10"
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -657,59 +639,13 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Resultados */}
-      {results.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Resultados de Búsqueda</CardTitle>
-                <CardDescription>
-                  {results.length} productos encontrados
-                </CardDescription>
-              </div>
-              <div className="flex space-x-2">
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Compartir
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {results.slice(0, 6).map(result => (
-                <div key={result.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-medium">{result.name}</h4>
-                    <Badge variant={result.status === 'active' ? 'default' : 'secondary'}>
-                      {result.status}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">SKU: {result.sku}</p>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-semibold">${result.price.toLocaleString()}</span>
-                    <span className={`${result.stock < 10 ? 'text-red-600' : 'text-green-600'}`}>
-                      Stock: {result.stock}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {results.length > 6 && (
-              <div className="text-center mt-4">
-                <Button variant="outline">
-                  Ver todos los resultados ({results.length})
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Los resultados se ven en «Catálogo»: este panel existia pero nunca se
+          renderizaba —`results` siempre llegaba vacio—, asi que buscar te
+          teletransportaba a otra pestaña sin decir nada. */}
+      <p className="text-xs text-muted-foreground">
+        Los filtros se aplican al catálogo: al buscar te llevamos a la pestaña
+        <span className="font-medium text-foreground"> Catálogo</span> con los resultados.
+      </p>
     </div>
   )
 }

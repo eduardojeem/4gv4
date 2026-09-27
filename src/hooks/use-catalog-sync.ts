@@ -195,7 +195,7 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
   // Función para buscar elementos
   const searchItems = useCallback((query: string, type: 'categories' | 'brands' | 'suppliers') => {
     const searchTerm = query.toLowerCase()
-    
+
     switch (type) {
       case 'categories':
         return catalogData.categories.filter(cat =>
@@ -248,11 +248,11 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
       exportedAt: new Date().toISOString(),
       version: '1.0'
     }
-    
+
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
       type: 'application/json'
     })
-    
+
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -267,28 +267,28 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
   const importData = useCallback((file: File) => {
     return new Promise<void>((resolve, reject) => {
       const reader = new FileReader()
-      
+
       reader.onload = (e) => {
         try {
           const importedData = JSON.parse(e.target?.result as string)
-          
+
           // Validar estructura de datos
           if (!importedData.categories || !importedData.brands || !importedData.suppliers) {
             throw new Error('Formato de archivo inválido')
           }
-          
+
           setCatalogData({
             categories: importedData.categories,
             brands: importedData.brands,
             suppliers: importedData.suppliers
           })
-          
+
           resolve()
-        } catch (err) {
+        } catch (_err) {
           reject(new Error('Error al procesar el archivo'))
         }
       }
-      
+
       reader.onerror = () => reject(new Error('Error al leer el archivo'))
       reader.readAsText(file)
     })
@@ -309,11 +309,11 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
     categories: catalogData.categories,
     brands: catalogData.brands,
     suppliers: catalogData.suppliers,
-    
+
     // Estado
     isLoading,
     error,
-    
+
     // Funciones CRUD
     addCategory,
     updateCategory,
@@ -324,19 +324,19 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
     addSupplier,
     updateSupplier,
     deleteSupplier,
-    
+
     // Funciones de utilidad
     getCategoryOptions,
     getBrandOptions,
     getSupplierOptions,
     searchItems,
     getStats,
-    
+
     // Funciones de importación/exportación
     exportData,
     importData,
     resetData,
-    
+
     // Función para limpiar errores
     clearError: () => setError(null)
   }

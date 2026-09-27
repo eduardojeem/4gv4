@@ -23,7 +23,7 @@ export interface POSError {
   originalError?: unknown
   timestamp: Date
   userId?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export class POSErrorHandler {
@@ -33,7 +33,7 @@ export class POSErrorHandler {
   /**
    * Maneja un error y muestra un mensaje apropiado al usuario
    */
-  static handle(error: unknown, context: ErrorContext, metadata?: Record<string, any>): void {
+  static handle(error: unknown, context: ErrorContext, metadata?: Record<string, unknown>): void {
     const posError = this.createPOSError(error, context, metadata)
     this.logError(posError)
     this.showUserMessage(posError)
@@ -42,7 +42,7 @@ export class POSErrorHandler {
   /**
    * Crea un objeto POSError estructurado
    */
-  private static createPOSError(error: unknown, context: ErrorContext, metadata?: Record<string, any>): POSError {
+  private static createPOSError(error: unknown, context: ErrorContext, metadata?: Record<string, unknown>): POSError {
     return {
       context,
       message: this.extractMessage(error),
@@ -223,7 +223,7 @@ export class POSErrorHandler {
  * Hook para usar el error handler en componentes
  */
 export function usePOSErrorHandler() {
-  const handleError = (error: unknown, context: ErrorContext, metadata?: Record<string, any>) => {
+  const handleError = (error: unknown, context: ErrorContext, metadata?: Record<string, unknown>) => {
     POSErrorHandler.handle(error, context, metadata)
   }
 
@@ -244,10 +244,10 @@ export function usePOSErrorHandler() {
 /**
  * Wrapper para funciones async con manejo de errores automático
  */
-export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
+export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   context: ErrorContext,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): T {
   return (async (...args: Parameters<T>) => {
     try {
@@ -264,13 +264,13 @@ export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
  */
 export function HandleErrors(context: ErrorContext) {
   return function (
-    target: any,
+    _target: unknown,
     propertyKey: string,
     descriptor: PropertyDescriptor
   ) {
     const originalMethod = descriptor.value
 
-    descriptor.value = async function (...args: any[]) {
+    descriptor.value = async function (this: unknown, ...args: unknown[]) {
       try {
         return await originalMethod.apply(this, args)
       } catch (error) {

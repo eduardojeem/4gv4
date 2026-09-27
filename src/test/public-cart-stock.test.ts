@@ -54,7 +54,9 @@ describe('public cart stock limits', () => {
     expect(result.quantity).toBe(1)
     expect(getPublicCartItems('tienda')).toEqual([
       expect.objectContaining({
+        cartItemId: product.id,
         productId: product.id,
+        variantId: null,
         quantity: 1,
         availableStock: 1,
       }),

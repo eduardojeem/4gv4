@@ -1,4 +1,5 @@
 import type { Product as UnifiedProduct } from '@/types/product-unified'
+import type { InstallmentPlanOption } from '@/types/product-unified'
 import type { ComponentType } from 'react'
 
 // Use the unified Product type for consistency
@@ -14,6 +15,11 @@ export interface Customer {
 
 export interface CartItem {
   id: string
+  productId?: string
+  variantId?: string
+  variantName?: string
+  variantSku?: string
+  variantAttributes?: unknown
   name: string
   sku: string
   price: number
@@ -28,9 +34,14 @@ export interface CartItem {
   originalPrice?: number
   // Categoría del producto (para promociones basadas en categoría)
   category?: string
+  categoryName?: string
+  brand?: string
   // Identificador para servicios/reparaciones
   isService?: boolean
   promoCode?: string
+  // Condiciones comerciales del producto usadas por el selector de cuotas del checkout.
+  installmentsEnabled?: boolean
+  installmentsPlans?: InstallmentPlanOption[]
 }
 
 export interface PaymentSplit {
@@ -54,19 +65,73 @@ export interface PaymentMethodOption {
   color?: string
 }
 
+export type CashMovementType = 'opening' | 'apertura' | 'sale' | 'venta' | 'in' | 'cash_in' | 'ingreso' | 'out' | 'cash_out' | 'egreso' | 'closing' | 'cierre'
+export type CashPaymentMethod = 'cash' | 'efectivo' | 'card' | 'tarjeta' | 'transfer' | 'transferencia' | 'qr' | 'sipap' | 'mixed' | 'mixto'
+
+/**
+ * Tipo canónico para los movimientos de caja.
+ * Todos los aliases en español/inglés se normalizan a este conjunto.
+ */
+export type CanonicalMovementType = 'opening' | 'sale' | 'cash_in' | 'cash_out' | 'closing'
+
+/**
+ * Normaliza cualquier variante de CashMovementType (español o inglés) al tipo canónico.
+ * Úsala siempre antes de comparar tipos de movimiento en cálculos o reportes.
+ *
+ * @example
+ * normalizeCashMovementType('venta')   // → 'sale'
+ * normalizeCashMovementType('ingreso') // → 'cash_in'
+ * normalizeCashMovementType('egreso')  // → 'cash_out'
+ * normalizeCashMovementType('cierre')  // → 'closing'
+ */
+export function normalizeCashMovementType(type: string | null | undefined): CanonicalMovementType {
+  switch (String(type || '').toLowerCase().trim()) {
+    case 'opening':
+    case 'apertura':
+      return 'opening'
+    case 'sale':
+    case 'venta':
+      return 'sale'
+    case 'cash_in':
+    case 'in':
+    case 'ingreso':
+      return 'cash_in'
+    case 'cash_out':
+    case 'out':
+    case 'egreso':
+      return 'cash_out'
+    case 'closing':
+    case 'cierre':
+      return 'closing'
+    default:
+      // Fallback conservador: tratar desconocidos como entrada para no perder importes
+      return 'cash_in'
+  }
+}
+
 export interface CashMovement {
   id: string
-  type: 'opening' | 'sale' | 'in' | 'cash_in' | 'out' | 'cash_out' | 'closing'
+  type: CashMovementType
   amount: number
   note?: string
   reason?: string // Alias for note
   timestamp?: string
   created_at?: string // Alias for timestamp
-  payment_method?: 'cash' | 'card' | 'transfer' | 'mixed'
+  payment_method?: CashPaymentMethod
+  created_by?: string
+  userName?: string
+  userEmail?: string
 }
 
 export interface CashRegisterState {
   isOpen: boolean
   balance: number
   movements: CashMovement[]
+  register_id?: string
+  opened_at?: string
+  opened_by?: string
+  opening_balance?: number
+  total_sales?: number
+  total_cash_in?: number
+  total_cash_out?: number
 }

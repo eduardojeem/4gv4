@@ -1,7 +1,7 @@
 "use client"
 
 import useSWR, { mutate as globalMutate } from 'swr'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import customerService from '@/services/customer-service'
 import { cacheUtils } from '@/providers/swr-provider'
 import type { Customer } from '@/hooks/use-customer-state'
@@ -17,11 +17,16 @@ interface UseOptimizedCustomersOptions {
  * Hook optimizado para manejo de clientes con cache inteligente
  */
 export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
   const {
     segment,
     status = 'all',
     prefetchRelated = true,
-    enableRealtime = false
+    enableRealtime: _enableRealtime = false
   } = options
 
   // Generar clave de cache dinámica
@@ -75,9 +80,10 @@ export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}
       
       // Configuración de errores
       errorRetryCount: 2,
-      shouldRetryOnError: (error: any) => {
+      shouldRetryOnError: (error: unknown) => {
         // No reintentar errores de autorización
-        return error?.status !== 401 && error?.status !== 403
+        const status = (error as { status?: number } | null)?.status
+        return status !== 401 && status !== 403
       },
       
       // Callback de éxito
@@ -158,11 +164,11 @@ export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}
       segments: [...new Set(data.map(c => c.segment).filter(Boolean))],
       recentlyAdded: data.filter(c => {
         const addedDate = new Date(c.registration_date)
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
         return addedDate > weekAgo
       }).length
     }
-  }, [data])
+  }, [data, now])
 
   return {
     customers: data || [],
@@ -209,7 +215,7 @@ export function useOptimizedCustomer(customerId: string | null) {
       
       // Configuración de errores
       errorRetryCount: 2,
-      shouldRetryOnError: (error: any) => error?.status !== 404
+      shouldRetryOnError: (error: unknown) => (error as { status?: number } | null)?.status !== 404
     }
   )
 

@@ -4,7 +4,12 @@ import { useRepairsRealtime } from './useRepairsRealtime'
 
 const subscribe = vi.fn()
 const unsubscribe = vi.fn()
-const chain: any = { on: vi.fn(() => chain), subscribe, unsubscribe }
+interface MockChain {
+  on: ReturnType<typeof vi.fn>
+  subscribe: ReturnType<typeof vi.fn>
+  unsubscribe: ReturnType<typeof vi.fn>
+}
+const chain: MockChain = { on: vi.fn(() => chain), subscribe, unsubscribe }
 const channelMock = vi.fn(() => chain)
 
 vi.mock('@/lib/supabase/client', () => ({

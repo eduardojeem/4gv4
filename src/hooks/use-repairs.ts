@@ -68,7 +68,7 @@ export function useRepairs() {
                   notify_customer,
                   notify_technician,
                   notify_manager,
-                  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email),
+                  customer:customers!customer_id(id, customer_code, name, first_name, last_name, phone, email, ruc, customer_type, alternate_phone, alternate_phone_label),
                   technician:profiles!technician_id(id, full_name, email)
                 `)
                 .order('created_at', { ascending: false })
@@ -113,24 +113,10 @@ export function useRepairs() {
     }
   }, [handleError, repairs.length, selectedBranchId])
 
+  // Sin Realtime: repairs no está en la publicación supabase_realtime.
   useEffect(() => {
     fetchRepairs()
-    const supabase = createSupabaseClient()
-    const channel = supabase
-      .channel(`repairs-${selectedBranchId || 'all'}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'repairs',
-        ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
-      }, () => {
-        fetchRepairs()
-      })
-      .subscribe()
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [fetchRepairs, selectedBranchId])
+  }, [fetchRepairs])
 
 
 

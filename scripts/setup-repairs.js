@@ -104,7 +104,7 @@ async function main() {
   // Paso 1: Crear estructura
   header('PASO 1: Creando estructura de tablas');
   
-  const setupPath = path.join(__dirname, '..', 'supabase', 'migrations', '20241207_repairs_complete_setup.sql');
+  const setupPath = path.join(__dirname, '..', 'supabase', 'migrations_legacy', '20241207_repairs_complete_setup.sql');
   
   if (!fs.existsSync(setupPath)) {
     log('✗ Error: No se encuentra el archivo de migración', 'red');
@@ -126,7 +126,7 @@ async function main() {
   const answer = await askQuestion('¿Deseas insertar datos de ejemplo? (s/n): ');
   
   if (answer.toLowerCase() === 's' || answer.toLowerCase() === 'si') {
-    const seedPath = path.join(__dirname, '..', 'supabase', 'migrations', '20241207_repairs_seed_data.sql');
+    const seedPath = path.join(__dirname, '..', 'supabase', 'migrations_legacy', '20241207_repairs_seed_data.sql');
     
     if (!fs.existsSync(seedPath)) {
       log('✗ Error: No se encuentra el archivo de datos de ejemplo', 'red');

@@ -173,11 +173,11 @@ export function exportCustomersToCSV(
     downloadCSV(csvContent, filename || defaultFilename)
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error exporting customers to CSV:', error)
     return {
       success: false,
-      error: error.message || 'Error al exportar clientes'
+      error: error instanceof Error ? error.message : 'Error al exportar clientes'
     }
   }
 }
@@ -229,11 +229,11 @@ export function exportCustomersToExcel(
     URL.revokeObjectURL(url)
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error exporting customers to Excel:', error)
     return {
       success: false,
-      error: error.message || 'Error al exportar clientes'
+      error: error instanceof Error ? error.message : 'Error al exportar clientes'
     }
   }
 }
@@ -273,11 +273,11 @@ export function exportCustomersToJSON(
     URL.revokeObjectURL(url)
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error exporting customers to JSON:', error)
     return {
       success: false,
-      error: error.message || 'Error al exportar clientes'
+      error: error instanceof Error ? error.message : 'Error al exportar clientes'
     }
   }
 }

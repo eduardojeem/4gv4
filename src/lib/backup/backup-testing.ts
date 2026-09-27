@@ -399,7 +399,7 @@ export class BackupTesting {
     if (!test) throw new Error(`Test ${testId} not found`)
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const execution: TestExecution = {
       id: executionId,
       testIds: [testId],
@@ -434,7 +434,7 @@ export class BackupTesting {
     if (!suite) throw new Error(`Test suite ${suiteId} not found`)
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const execution: TestExecution = {
       id: executionId,
       testIds: suite.tests,
@@ -469,7 +469,7 @@ export class BackupTesting {
       await this.updateExecutionStatus(executionId, 'running')
 
       const result = await this.performTest(test)
-      
+
       await this.saveTestResult(result)
       await this.updateExecutionWithResult(executionId, result)
 
@@ -488,7 +488,7 @@ export class BackupTesting {
       for (let i = 0; i < suite.tests.length; i++) {
         const testId = suite.tests[i]
         const test = await this.getTest(testId)
-        
+
         if (!test) {
           console.warn(`Test ${testId} not found, skipping`)
           continue
@@ -498,7 +498,7 @@ export class BackupTesting {
 
         const result = await this.performTest(test)
         results.push(result)
-        
+
         await this.saveTestResult(result)
         await this.updateExecutionWithResult(executionId, result)
       }
@@ -768,8 +768,8 @@ export class BackupTesting {
     test: BackupTest,
     steps: TestStep[],
     assertions: TestAssertion[],
-    logs: TestLog[],
-    metrics: TestMetrics
+    _logs: TestLog[],
+    _metrics: TestMetrics
   ): Promise<void> {
     // Simular test de cumplimiento
     steps.push({
@@ -810,7 +810,7 @@ export class BackupTesting {
 
   private async updateExecutionStatus(executionId: string, status: TestExecution['status']): Promise<void> {
     const updates: Partial<TestExecution> = { status }
-    
+
     if (status === 'completed' || status === 'failed' || status === 'cancelled') {
       updates.endTime = new Date()
     }
@@ -824,8 +824,8 @@ export class BackupTesting {
   }
 
   private async updateExecutionProgress(
-    executionId: string, 
-    progress: number, 
+    executionId: string,
+    progress: number,
     currentTest?: string
   ): Promise<void> {
     const { error } = await this.supabase
@@ -914,7 +914,7 @@ export class BackupTesting {
     if (!execution) throw new Error(`Execution ${executionId} not found`)
 
     const reportId = `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const report: TestReport = {
       id: reportId,
       executionId,
@@ -983,7 +983,7 @@ export class BackupTesting {
   }
 
   // Métricas y estadísticas
-  async getTestingMetrics(period: 'day' | 'week' | 'month' = 'week'): Promise<Record<string, unknown>> {
+  async getTestingMetrics(_period: 'day' | 'week' | 'month' = 'week'): Promise<Record<string, unknown>> {
     // Implementar métricas de testing
     return {
       totalExecutions: 0,

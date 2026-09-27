@@ -1,7 +1,14 @@
 import type { createAdminSupabase } from '@/lib/supabase/admin'
 import {
+  sumInstallmentsOutstanding,
+  sumRepairsOutstanding,
+  type OutstandingRepair,
+} from './customer-outstanding'
+import {
   buildCreditInstallmentPlan,
   type CreditFrequency,
+  type FirstInstallmentTiming,
+  creditBusinessDate,
 } from '@/lib/credits/installments'
 
 type AdminSupabase = ReturnType<typeof createAdminSupabase>
@@ -25,6 +32,7 @@ export type CreateCreditAccountInput = {
   installmentCount: number
   frequency: CreditFrequency
   dueDate?: Date | null
+  firstInstallmentTiming?: FirstInstallmentTiming
   /** Venta asociada, o null para crédito manual (p.ej. reparación). */
   saleId?: string | null
   label: string
@@ -110,21 +118,39 @@ export async function createCreditAccount(
     throw new CreditAccountError('No se pudo preparar el plan de crédito del cliente.', 500)
   }
 
+  const creditStartedAt = new Date()
   const creditPlan = buildCreditInstallmentPlan({
     principalAmount: amount,
     interestRate,
     installmentCount,
     frequency,
     firstDueDate: dueDate,
+    firstInstallmentTiming: input.firstInstallmentTiming,
+    now: new Date(`${creditBusinessDate(creditStartedAt)}T12:00:00Z`),
     startInstallmentNumber: 1,
   })
 
-  const currentBalance = ((existingInstallments as InstallmentRow[] | null) ?? []).reduce((sum, installment) => {
-    if (installment.status !== 'pending' && installment.status !== 'late') return sum
-    const amountValue = Math.max(0, Number(installment.amount || 0))
-    const paidValue = Math.min(amountValue, Math.max(0, Number(installment.amount_paid || 0)))
-    return sum + Math.max(0, amountValue - paidValue)
-  }, 0)
+  const installmentsBalance = sumInstallmentsOutstanding(
+    (existingInstallments as InstallmentRow[] | null) ?? []
+  )
+
+  // La deuda de reparaciones tambien consume la linea de credito: cualquier
+  // saldo abierto del cliente ocupa cupo, no solo las ventas financiadas. Antes
+  // el servidor solo miraba las cuotas y la ficha del cliente ya descontaba las
+  // reparaciones, asi que la pantalla y la caja no coincidian.
+  const { data: customerRepairs, error: customerRepairsError } = await supabase
+    .from('repairs')
+    .select('status, payment_status, final_cost, estimated_cost, paid_amount')
+    .eq('organization_id', organizationId)
+    .eq('customer_id', customerId)
+
+  if (customerRepairsError) {
+    console.error('[createCreditAccount] Error fetching customer repairs:', customerRepairsError)
+    throw new CreditAccountError('No se pudo validar la deuda de reparaciones del cliente.', 500)
+  }
+
+  const repairsBalance = sumRepairsOutstanding((customerRepairs ?? []) as OutstandingRepair[])
+  const currentBalance = installmentsBalance + repairsBalance
 
   const availableCredit = creditLimit - currentBalance
   if (availableCredit < creditPlan.financedTotal) {
@@ -143,7 +169,8 @@ export async function createCreditAccount(
       principal: creditPlan.financedTotal,
       interest_rate: interestRate,
       term_months: installmentCount,
-      start_date: new Date().toISOString(),
+      start_date: creditStartedAt.toISOString(),
+      metadata: { frequency, first_installment_timing: dueDate ? 'custom' : input.firstInstallmentTiming ?? 'at_start' },
       status: 'active',
       credit_code: buildCreditCode(),
       credit_type: creditType,

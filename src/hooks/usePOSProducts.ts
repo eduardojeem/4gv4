@@ -24,6 +24,11 @@ type Product = DbProductRow & {
 
 interface CartItem {
   id: string
+  product_id?: string
+  variant_id?: string
+  variant_name?: string
+  variant_sku?: string
+  variant_attributes?: unknown
   name: string
   sku: string
   price: number
@@ -31,6 +36,8 @@ interface CartItem {
   stock: number
   subtotal: number
   discount_amount?: number
+  installmentsEnabled?: boolean
+  installmentsPlans?: Array<{ count: number; rate: number }>
 }
 
 interface StockMovement {
@@ -38,7 +45,7 @@ interface StockMovement {
   new_stock?: number
 }
 
-interface SaleData {
+export interface SaleData {
   items: CartItem[]
   total: number
   payment_method: 'cash' | 'card' | 'transfer' | 'credit'
@@ -57,10 +64,11 @@ interface SaleData {
   order_discount_rate?: number
   customer_id?: string
   notes?: string
-  credit?: { interest_rate: number; installment_count: number; frequency: 'weekly' | 'biweekly' | 'monthly' }
+  credit?: { interest_rate: number; installment_count: number; frequency: 'weekly' | 'biweekly' | 'monthly'; first_installment_timing?: 'at_start' | 'next_cycle'; start_date?: string; first_payment?: import('@/lib/credits/first-payment').FirstInstallmentPayment }
   repair_ids?: string[]
   mark_repairs_delivered?: boolean
   delivery_outcome?: string
+  store_credit_amount?: number
 }
 
 // ============================================================================
@@ -100,13 +108,22 @@ export function usePOSProducts() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true)
+  // Desactivado por defecto: products y product_movements no están en la
+  // publicación supabase_realtime, así que el canal solo generaba errores.
+  const [realTimeEnabled, setRealTimeEnabled] = useState(false)
 
   const pendingSaleAttempt = useRef<{ signature: string; idempotencyKey: string } | null>(null)
 
   // Función para actualizar un producto específico en tiempo real
   const updateProductInState = useCallback((updatedProduct: Product) => {
     setProducts(prevProducts => {
+      // Si el producto fue desactivado, se retira del catálogo activo del POS
+      if (updatedProduct.is_active === false) {
+        const newProducts = prevProducts.filter(p => p.id !== updatedProduct.id)
+        setProductsCache(selectedBranchId, newProducts)
+        return newProducts
+      }
+
       const productIndex = prevProducts.findIndex(p => p.id === updatedProduct.id)
       
       if (productIndex >= 0) {
@@ -184,11 +201,10 @@ export function usePOSProducts() {
       const cacheKey = getBranchCacheKey(selectedBranchId)
       if (!productsFetchPromisesByBranch[cacheKey]) {
         productsFetchPromisesByBranch[cacheKey] = (async () => {
-          // NOTE: no filtramos por is_active. is_active controla la visibilidad
-          // en el catálogo PÚBLICO; en el POS (venta interna) se debe poder
-          // vender cualquier producto aunque esté oculto del público.
+          // El POS solo ofrece productos activos; los inactivos están
+          // dados de baja comercialmente y no deben figurar en la caja.
           const loadPage = async (page: number) => {
-            const response = await fetch(`/api/products?page=${page}&per_page=100&strict_branch_stock=true`, {
+            const response = await fetch(`/api/products?page=${page}&per_page=100&strict_branch_stock=true&is_active=true`, {
               headers: branchHeaders(selectedBranchId),
               cache: 'no-store',
             })
@@ -207,16 +223,30 @@ export function usePOSProducts() {
           }
 
           const firstPage = await loadPage(1)
-          const pageCount = Math.max(1, Math.ceil(firstPage.total / 100))
-          const remainingPages = pageCount > 1
-            ? await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => loadPage(index + 2)))
-            : []
-          const dbProducts = [firstPage, ...remainingPages].flatMap(page => page.products)
+          let dbProducts = [...firstPage.products]
+          const publishProducts = (rows: Array<PosProductRow & { category?: { name?: string } | null }>) => {
+            const mapped = rows
+              .filter((product) => product.is_active !== false)
+              .map((product) => mapProductForPOS({
+                ...product,
+                categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
+              } as PosProductRow))
+            setProducts(mapped)
+            setProductsCache(selectedBranchId, mapped)
+            return mapped
+          }
 
-          return dbProducts.map((product) => mapProductForPOS({
-            ...product,
-            categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
-          } as PosProductRow))
+          // La primera tanda se muestra de inmediato; el catálogo restante se
+          // incorpora progresivamente para no bloquear la caja.
+          publishProducts(dbProducts)
+          setLoading(false)
+          const pageCount = Math.max(1, Math.ceil(firstPage.total / 100))
+          for (let page = 2; page <= pageCount; page += 1) {
+            const nextPage = await loadPage(page)
+            dbProducts = [...dbProducts, ...nextPage.products]
+            publishProducts(dbProducts)
+          }
+          return publishProducts(dbProducts)
         })().finally(() => {
           delete productsFetchPromisesByBranch[cacheKey]
         })
@@ -246,11 +276,15 @@ export function usePOSProducts() {
 
   // Función para buscar producto por código de barras
   const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
-    return products.find(product => product.barcode === barcode) ?? null
+    return products.find(product => product.barcode === barcode && product.is_active !== false) ?? null
   }, [products])
 
   // Función para agregar producto al carrito
   const addToCart = useCallback((product: UnifiedProduct, quantity: number = 1) => {
+    if (product.is_active === false) {
+      setError('El producto se encuentra inactivo')
+      return false
+    }
     if (quantity <= 0) return false
     if (quantity > (product.stock_quantity || 0)) {
       setError(`Stock insuficiente. Disponible: ${product.stock_quantity || 0}`)
@@ -284,7 +318,9 @@ export function usePOSProducts() {
           price: product.sale_price || 0,
           quantity,
           stock: product.stock_quantity || 0,
-          subtotal: quantity * (product.sale_price || 0)
+          subtotal: quantity * (product.sale_price || 0),
+          installmentsEnabled: Boolean(product.installments_enabled),
+          installmentsPlans: Array.isArray(product.installments_plans) ? product.installments_plans : [],
         }
         return [...prevCart, newItem]
       }
@@ -347,7 +383,11 @@ export function usePOSProducts() {
 
     try {
       const saleItems = (saleData.items || cart).map(item => ({
-        product_id: item.id,
+        product_id: item.product_id || item.id,
+        variant_id: item.variant_id || null,
+        variant_name: item.variant_name || null,
+        variant_sku: item.variant_sku || null,
+        variant_attributes: item.variant_attributes || null,
         quantity: item.quantity,
         discount_amount: item.discount_amount || 0,
       }))
@@ -364,6 +404,7 @@ export function usePOSProducts() {
         credit: saleData.credit || null,
         markRepairsDelivered: saleData.mark_repairs_delivered === true,
         deliveryOutcome: saleData.delivery_outcome || null,
+        storeCreditAmount: saleData.store_credit_amount || 0,
       })
       if (pendingSaleAttempt.current?.signature !== signature) {
         pendingSaleAttempt.current = { signature, idempotencyKey: crypto.randomUUID() }
@@ -384,6 +425,7 @@ export function usePOSProducts() {
         p_repair_ids: saleData.repair_ids || [],
         p_mark_repairs_delivered: saleData.mark_repairs_delivered === true,
         p_delivery_outcome: saleData.delivery_outcome || null,
+        p_store_credit_amount: saleData.store_credit_amount || 0,
       }
 
       const response = await fetch('/api/pos/process-sale', {
@@ -434,6 +476,8 @@ export function usePOSProducts() {
   // Productos filtrados
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
+      if (product.is_active === false) return false
+
       const matchesSearch = searchTerm === '' || 
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -463,14 +507,17 @@ export function usePOSProducts() {
     return cart.reduce((count, item) => count + item.quantity, 0)
   }, [cart])
 
-  // Realtime sync (products already loaded above)
+  // Realtime sync (products already loaded above).
+  // Depende solo de subscribe/unsubscribe: el objeto realTimeSync cambia con
+  // cada cambio de estado y recreaba los canales en bucle.
+  const { subscribe: subscribeRealTime, unsubscribe: unsubscribeRealTime } = realTimeSync
   useEffect(() => {
     if (!config.supabase.isConfigured) return
     if (!realTimeEnabled) return
 
-    realTimeSync.subscribe()
-    return () => realTimeSync.unsubscribe()
-  }, [realTimeEnabled, realTimeSync])
+    subscribeRealTime()
+    return () => unsubscribeRealTime()
+  }, [realTimeEnabled, subscribeRealTime, unsubscribeRealTime])
 
   // Función para alternar tiempo real
   const toggleRealTime = useCallback(() => {

@@ -2,10 +2,9 @@
 
 import React, { ReactNode } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { usePermissions, PermissionRequirement, ROUTE_PERMISSIONS } from '@/hooks/use-permissions'
+import { usePermissions, PermissionRequirement } from '@/hooks/use-permissions'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Lock, AlertTriangle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Lock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { AccessDenied } from '@/components/auth/AccessDenied'
 
@@ -149,7 +148,7 @@ export function usePermissionGuard(requirements: PermissionRequirement) {
 }
 
 // Componente para mostrar información de permisos (útil para debugging)
-export function PermissionDebugger({ requirements }: { requirements: PermissionRequirement }) {
+export function PermissionDebugger({ requirements: _requirements }: { requirements: PermissionRequirement }) {
   // Componente deshabilitado - no mostrar información sensible
   return null
 }

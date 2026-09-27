@@ -405,13 +405,13 @@ class ExternalAPIManager {
     try {
       // Obtener datos desde la API externa
       const externalData = await this.fetchExternalData(integration)
-      
+
       // Procesar datos en lotes
       const batchSize = integration.config.batchSize
       for (let i = 0; i < externalData.length; i += batchSize) {
         const batch = externalData.slice(i, i + batchSize)
         const batchResult = await this.processBatch(integration, batch)
-        
+
         syncResult.recordsProcessed += batchResult.processed
         syncResult.recordsCreated += batchResult.created
         syncResult.recordsUpdated += batchResult.updated
@@ -477,7 +477,7 @@ class ExternalAPIManager {
     // Verificar firma (si está configurada)
     if (webhook.secret) {
       const signature = headers['x-signature'] || headers['x-hub-signature']
-      if (!this.verifyWebhookSignature(payload, webhook.secret, signature)) {
+      if (!await this.verifyWebhookSignature(payload, webhook.secret, signature)) {
         throw new Error('Invalid webhook signature')
       }
     }
@@ -628,10 +628,10 @@ class ExternalAPIManager {
       try {
         // Transformar datos según mapping
         const transformedRecord = this.transformData(record, integration.config.dataMapping)
-        
+
         // Verificar si el registro ya existe
         const existingRecord = await this.findExistingRecord(transformedRecord, integration.type)
-        
+
         if (existingRecord) {
           // Actualizar registro existente
           const recordId = typeof existingRecord.id === 'string' ? existingRecord.id : String(existingRecord.id)
@@ -642,7 +642,7 @@ class ExternalAPIManager {
           await this.createRecord(transformedRecord, integration.type)
           result.created++
         }
-        
+
         result.processed++
       } catch (error) {
         result.errors.push({
@@ -733,18 +733,15 @@ class ExternalAPIManager {
     }
   }
 
-  private verifyWebhookSignature(payload: Record<string, unknown>, secret: string, signature?: string): boolean {
+  private async verifyWebhookSignature(payload: Record<string, unknown>, secret: string, signature?: string): Promise<boolean> {
     if (!signature) return false
-    
-    // Implementar verificación de firma según el proveedor
-    // Ejemplo para GitHub/GitLab style webhooks
-    const crypto = require('crypto')
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(JSON.stringify(payload))
-      .digest('hex')
-    
-    return signature === `sha256=${expectedSignature}`
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'])
+    const hex = signature.replace(/^sha256=/, '')
+    if (!/^[0-9a-f]{64}$/i.test(hex)) return false
+    const bytes = Uint8Array.from(hex.match(/.{2}/g) ?? [], value => Number.parseInt(value, 16))
+    return crypto.subtle.verify('HMAC', key, bytes, encoder.encode(JSON.stringify(payload)))
   }
 
   private passesWebhookFilters(payload: Record<string, unknown>, filters: WebhookFilter[]): boolean {
@@ -753,7 +750,7 @@ class ExternalAPIManager {
       if (value === undefined || value === null) return false
 
       const stringValue = String(value)
-      
+
       switch (filter.operator) {
         case 'equals':
           return stringValue === filter.value
@@ -927,7 +924,7 @@ class ExternalAPIManager {
     console.log(`Scheduling retry for webhook event: ${event.id}`)
   }
 
-  private async findExistingRecord(record: Record<string, unknown>, type: string): Promise<Record<string, unknown> | null> {
+  private async findExistingRecord(_record: Record<string, unknown>, _type: string): Promise<Record<string, unknown> | null> {
     // Implementar búsqueda de registro existente según el tipo
     return null
   }
@@ -954,9 +951,9 @@ class RateLimiter {
 
   canMakeRequest(): boolean {
     const now = new Date()
-    
+
     // Limpiar requests antiguos
-    this.requests = this.requests.filter(req => 
+    this.requests = this.requests.filter(req =>
       now.getTime() - req.getTime() < 60000 // Últimos 60 segundos
     )
 

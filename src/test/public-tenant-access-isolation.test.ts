@@ -43,7 +43,7 @@ describe('public tenant access isolation', () => {
 
   it('scopes wholesale grants and prevents new cross-organization repair links', () => {
     const migration = read(
-      'supabase/migrations/20260802173000_scope_public_customer_access.sql'
+      'supabase/migrations_legacy/20260802173000_scope_public_customer_access.sql'
     )
 
     expect(migration).toContain('add column if not exists organization_id uuid')

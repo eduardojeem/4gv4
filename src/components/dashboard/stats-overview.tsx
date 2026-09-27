@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { isCompletedSaleStatus, isPendingSaleStatus } from '@/lib/sales-status'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useBranch } from '@/contexts/branch-context'
 // Tipos locales para evitar dependencias profundas de generics de Supabase
 type SaleRow = { id: string; total?: number | null; status?: string | null; created_at: string }
 type RepairRow = {
@@ -241,27 +243,8 @@ export function StatsOverview() {
     }
     
     fetchStats()
-    
-    // Set up realtime subscription for updates
-    const setupRealtime = async () => {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      
-      const channel = supabase.channel('stats_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchStats())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => fetchStats())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchStats())
-        .subscribe()
-        
-      return () => {
-        supabase.removeChannel(channel)
-      }
-    }
-    
-    const cleanupPromise = setupRealtime()
-    return () => {
-      cleanupPromise.then(cleanup => cleanup && cleanup())
-    }
+    // Sin suscripción Realtime: sales, repairs y products no están en la
+    // publicación supabase_realtime y el canal fallaba siempre.
   }, [])
 
   return (
@@ -350,6 +333,8 @@ export function QuickActions() {
 }
 
 export function RecentActivity() {
+  const { organization } = useActiveOrganization()
+  const { selectedBranchId } = useBranch()
   const [windowHours, setWindowHours] = useState<24 | 48 | 72>(72)
   const recentSinceIso = useMemo(
     () => new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString(),
@@ -370,6 +355,10 @@ export function RecentActivity() {
   useEffect(() => {
     const load = async () => {
       try {
+        if (!organization?.id) {
+          setItems([])
+          return
+        }
         const { config } = await import('@/lib/config')
         if (!config.supabase.isConfigured) {
           setItems([])
@@ -380,6 +369,7 @@ export function RecentActivity() {
         const supabase = createClient()
         type SBQuery = {
           select: (...args: unknown[]) => SBQuery
+          eq: (...args: unknown[]) => SBQuery
           gte: (...args: unknown[]) => SBQuery
           order: (...args: unknown[]) => SBQuery
           limit: (...args: unknown[]) => unknown
@@ -387,10 +377,16 @@ export function RecentActivity() {
         const from = (table: string) =>
           ((supabase as unknown as { from: (t: string) => unknown }).from(table) as unknown as SBQuery)
         // Evitar TS2589 por generics profundos usando cast a unknown en el builder
+        let salesQuery = from('sales').select('id,total:total_amount,status,created_at').eq('organization_id', organization.id)
+        let repairsQuery = from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').eq('organization_id', organization.id)
+        if (selectedBranchId) {
+          salesQuery = salesQuery.eq('branch_id', selectedBranchId)
+          repairsQuery = repairsQuery.eq('branch_id', selectedBranchId)
+        }
         const [{ data: sales }, { data: repairs }, { data: customers }] = await Promise.all([
-          from('sales').select('id,total:total_amount,status,created_at').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
-          from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
-          from('customers').select('id,first_name,last_name,created_at').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>
+          salesQuery.gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
+          repairsQuery.gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
+          from('customers').select('id,first_name,last_name,created_at').eq('organization_id', organization.id).gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>
         ])
 
         const toTime = (iso?: string): string => {
@@ -471,15 +467,15 @@ export function RecentActivity() {
       }
     }
     load()
-  }, [recentSinceIso])
+  }, [organization?.id, recentSinceIso, selectedBranchId])
   
   useEffect(() => {
     const subscribe = async () => {
       const { config } = await import('@/lib/config')
       if (!config.supabase.isConfigured) return
       const { createClient } = await import('@/lib/supabase/client')
-      const { formatCurrency } = await import('@/lib/currency')
       const supabase = createClient()
+      if (!organization?.id) return
       
       const toTime = (iso?: string): string => {
         if (!iso) return ''
@@ -494,42 +490,11 @@ export function RecentActivity() {
         return `Hace ${days} día${days > 1 ? 's' : ''}`
       }
       
+      // Solo customers está publicada en supabase_realtime; ventas y
+      // reparaciones se ven al recargar la actividad.
       const channel = supabase
         .channel('dashboard-activity')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, (payload: unknown) => {
-          const row = (payload as { new: SaleRow }).new
-          const status: 'completed' | 'in_progress' | 'updated' =
-            isCompletedSaleStatus(row.status) ? 'completed' : isPendingSaleStatus(row.status) ? 'in_progress' : 'updated'
-          const item = {
-            id: `sale:${row.id}`,
-            type: 'sale' as const,
-            description: 'Venta',
-            amount: formatCurrency(Number(row.total ?? 0) || 0),
-            time: toTime(row.created_at),
-            createdAt: new Date(row.created_at).getTime(),
-            status,
-            icon: <ShoppingCart className="h-4 w-4" />
-          }
-          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
-        })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'repairs' }, (payload: unknown) => {
-          const row = (payload as { new: RepairRow }).new
-          const label = [row.device_brand || '', row.device_model || ''].filter(Boolean).join(' ')
-          const status: 'completed' | 'in_progress' | 'updated' =
-            row.status === 'listo' || row.status === 'entregado' ? 'completed' : row.status === 'reparacion' ? 'in_progress' : 'updated'
-          const item = {
-            id: `repair:${row.id}`,
-            type: 'repair' as const,
-            description: label ? `Reparación - ${label}` : 'Reparación',
-            amount: row.final_cost !== null && row.final_cost !== undefined ? formatCurrency(Number(row.final_cost ?? 0) || 0) : undefined,
-            time: toTime(row.created_at),
-            createdAt: new Date(row.created_at).getTime(),
-            status,
-            icon: <Wrench className="h-4 w-4" />
-          }
-          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
-        })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, (payload: unknown) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
           const row = (payload as { new: CustomerRow }).new
           const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
           const item = {
@@ -555,7 +520,7 @@ export function RecentActivity() {
         if (typeof cleanup === 'function') cleanup()
       })
     }
-  }, [])
+  }, [organization?.id])
 
   const getStatusConfig = (status: string) => {
     const statusConfig = {

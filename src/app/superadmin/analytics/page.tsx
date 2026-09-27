@@ -15,7 +15,7 @@ export default function SuperAdminAnalyticsPage() {
           Analíticas de la plataforma
         </h1>
         <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-          Crecimiento, ingresos recurrentes, distribución de planes y actividad de tenants.
+          Seguí el crecimiento, los ingresos recurrentes y la actividad de las empresas en un mismo período.
         </p>
       </header>
 

@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from 'react'
 
-type PreloadFunction = () => Promise<any>
+type PreloadFunction = () => Promise<unknown>
 
 interface PreloadConfig {
   [key: string]: PreloadFunction

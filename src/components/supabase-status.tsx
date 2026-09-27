@@ -35,7 +35,7 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
         const supabase = createClient()
         
         // Verificar conexion basica
-        const { data, error } = await supabase
+        const { data: _data, error } = await supabase
           .from('products')
           .select('id', { count: 'exact', head: true })
           .limit(1)

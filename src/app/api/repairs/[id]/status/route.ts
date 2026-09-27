@@ -4,7 +4,7 @@ import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/requi
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { roleHasPermission } from '@/lib/saas/permissions'
-import { FULL_REPAIR_SELECT } from '@/app/api/repairs/_lib'
+import { FULL_REPAIR_SELECT, isNextResponse, resolveRepairModuleContext } from '@/app/api/repairs/_lib'
 import { canTransition } from '@/lib/repairs/state-machine'
 import type { RepairStatus } from '@/types/repairs'
 
@@ -70,6 +70,8 @@ function buildStatusUpdate(stage: RepairStage, currentCompletedAt: string | null
 // PATCH /api/repairs/:id/status
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const moduleContext = await resolveRepairModuleContext()
+    if (isNextResponse(moduleContext)) return moduleContext
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse
@@ -92,6 +94,17 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       return NextResponse.json({ ok: false, error: 'invalid_or_missing_stage' }, { status: 400 })
     }
 
+    if (stage === 'entregado') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'La entrega debe registrar resultado, garantia y estado financiero.',
+          code: 'USE_DELIVERY_ENDPOINT',
+        },
+        { status: 409 },
+      )
+    }
+
     const supabase = createAdminSupabase()
     const requestedBranchId = getRequestedBranchId(req)
     const branchScope = await resolveBranchScopeForUser({
@@ -112,7 +125,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // Obtener estado actual de la reparación
     const { data: currentRepair, error: fetchError } = await supabase
       .from('repairs')
-      .select('id, status, technician_id, completed_at')
+      .select('id, status, technician_id, completed_at, qualityCheck:repair_quality_checks!repairs_current_quality_check_fk(result)')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .eq('branch_id', branchScope.branchId)
@@ -124,10 +137,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     const currentStatus = currentRepair.status as RepairStage
+    const qualityCheck = Array.isArray(currentRepair.qualityCheck)
+      ? currentRepair.qualityCheck[0]
+      : currentRepair.qualityCheck
 
     // Validar transición con la state machine
     const validation = canTransition(currentStatus, stage, {
       technician_id: currentRepair.technician_id,
+      quality_check_result: qualityCheck?.result ?? null,
     })
 
     if (!validation.allowed) {

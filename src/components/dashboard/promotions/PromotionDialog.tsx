@@ -50,7 +50,6 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import type { Promotion, PromotionPublicMode, PromotionType } from '@/types/promotion'
-import { createClient } from '@/lib/supabase/client'
 
 interface PromotionDialogProps {
     open: boolean
@@ -251,14 +250,14 @@ export function PromotionDialog({
     // Load products for selection
     useEffect(() => {
         if (!open) return
-        const supabase = createClient()
         ;(async () => {
-            const { data, error } = await supabase
-                .from('products')
-                .select('id,name,sku')
-                .order('name', { ascending: true })
-            if (!error && Array.isArray(data)) {
-                const productRows = (data as Array<{ id: string; name: string; sku: string }>).map(row => ({ ...row, type: 'product' as const }))
+            const response = await fetch('/api/products?is_active=true&sort_by=name&sort_order=asc&per_page=200', { cache: 'no-store' })
+            const payload = await response.json().catch(() => null) as {
+                success?: boolean
+                data?: { products?: Array<{ id: string; name: string; sku: string }> }
+            } | null
+            if (response.ok && payload?.success && Array.isArray(payload.data?.products)) {
+                const productRows = payload.data.products.map(row => ({ ...row, type: 'product' as const }))
                 setProducts(productRows)
             }
         })()

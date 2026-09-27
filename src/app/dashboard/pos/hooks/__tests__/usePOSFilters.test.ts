@@ -47,6 +47,10 @@ const mockProducts: Product[] = [
 ] as Product[]
 
 describe('usePOSFilters', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('should initialize with default state', () => {
     const { result } = renderHook(() => usePOSFilters(mockProducts))
     

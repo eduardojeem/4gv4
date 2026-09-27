@@ -41,7 +41,7 @@ echo "PASO 1: Creando estructura de tablas"
 echo "========================================="
 echo ""
 
-supabase db push --file supabase/migrations/20241207_repairs_complete_setup.sql
+supabase db push --file supabase/migrations_legacy/20241207_repairs_complete_setup.sql
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Estructura de tablas creada exitosamente${NC}"
@@ -63,7 +63,7 @@ read -p "¿Deseas insertar datos de ejemplo? (s/n): " -n 1 -r
 echo ""
 
 if [[ $REPLY =~ ^[Ss]$ ]]; then
-    supabase db push --file supabase/migrations/20241207_repairs_seed_data.sql
+    supabase db push --file supabase/migrations_legacy/20241207_repairs_seed_data.sql
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Datos de ejemplo insertados exitosamente${NC}"

@@ -32,14 +32,18 @@ export default async function OffersPage() {
     brand: p.brand,
     description: p.description,
     sale_price: p.sale_price,
-    offer_price: p.offer_price ?? p.sale_price,
+    offer_price: p.offer_price ?? 0,
     has_offer: p.has_offer,
     in_stock: p.in_stock,
     stock_quantity: p.stock_quantity,
     featured: p.featured,
     image: p.image,
     images: p.images,
+    has_variants: p.has_variants,
+    variant_attribute_config: p.variant_attribute_config,
+    variants: p.variants,
     category: p.category ? { id: p.category.id, name: p.category.name } : undefined,
+    created_at: p.created_at ?? null,
   }))
 
   return (

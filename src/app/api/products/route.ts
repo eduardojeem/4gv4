@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -9,15 +10,111 @@ import { stripProductCost, canViewProductCost, PRODUCT_COST_PERMISSION } from '@
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { filterProductsByCatalogKind, parseProductCatalogKind } from '@/lib/products/catalog-kind'
+import { ProductVariantsPayloadSchema } from '@/lib/products/variant-contract'
+import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
+import { planVariantStockAdjustments } from '@/lib/products/variant-stock-sync'
+import { conflictMessage, findProductConflict } from '@/lib/products/uniqueness'
+import { recordStockAdjustment } from '@/lib/products/stock-movements'
+import { persistDeviceFields } from '@/lib/products/device-persist'
+import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
+import { HIDE_PRICE_COLUMN_MISSING_MESSAGE, persistPriceVisibility } from '@/lib/products/price-visibility'
+
+function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
+  try {
+    const paths: string[] = ['/', '/productos', '/ofertas', '/marketplace', '/marketplace/productos', '/marketplace/ofertas']
+    if (productId) {
+      paths.push(`/productos/${productId}`)
+    }
+    if (organizationSlug) {
+      paths.push(`/${organizationSlug}`)
+      paths.push(`/${organizationSlug}/productos`)
+      paths.push(`/${organizationSlug}/ofertas`)
+      if (productId) {
+        paths.push(`/${organizationSlug}/productos/${productId}`)
+      }
+    }
+    for (const p of paths) {
+      try {
+        revalidatePath(p)
+      } catch {
+        // Ignorar entornos o builds donde revalidatePath no esté activo
+      }
+    }
+    try {
+      revalidateTag('marketplace:products', 'max')
+      revalidateTag('marketplace:offers', 'max')
+      if (organizationId) {
+        revalidateTag(`product-facets:${organizationId}`, 'max')
+      }
+    } catch {
+      // Ignorar fallas de tags en mocks de test
+    }
+  } catch (error) {
+    logger.warn('Failed to revalidate storefront caches after product change', { error })
+  }
+}
 
 // GET /api/products - Get products with variants
+/**
+ * Cuantas filas se barren cuando el filtro de stock obliga a resolver en
+ * memoria. Generoso para cubrir catalogos grandes sin traer la tabla entera.
+ */
+const IN_MEMORY_STOCK_FILTER_CAP = 5000
+
+const VARIANT_ERROR_STATUS: Record<string, number> = {
+  VARIANT_SKU_DUPLICATE: 409,
+  VARIANT_BARCODE_DUPLICATE: 409,
+  VARIANT_STOCK_INSUFFICIENT: 409,
+  VARIANT_BRANCH_FORBIDDEN: 403,
+  VARIANT_ACTOR_FORBIDDEN: 403,
+  VARIANT_PRODUCT_NOT_IN_ORGANIZATION: 404,
+}
+
+function getVariantErrorCode(error: { message?: string | null }): string | null {
+  const message = error.message ?? ''
+  return Object.keys(VARIANT_ERROR_STATUS).find((code) => message.includes(code)) ?? null
+}
+
+function toVariantRpcRows(variants: Array<{
+  id?: string
+  name: string
+  attributes: Record<string, string>
+  sku?: string
+  barcode?: string
+  purchasePrice: number
+  salePrice: number
+  wholesalePrice?: number
+  minStock: number
+  stockQuantity: number
+  isActive: boolean
+}>) {
+  return variants.map((variant) => ({
+    id: variant.id,
+    name: variant.name,
+    attributes: variant.attributes,
+    sku: variant.sku ?? '',
+    barcode: variant.barcode,
+    purchase_price: variant.purchasePrice,
+    sale_price: variant.salePrice,
+    wholesale_price: variant.wholesalePrice,
+    min_stock: variant.minStock,
+    stock_quantity: variant.stockQuantity,
+    is_active: variant.isActive,
+  }))
+}
+
 export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     
     const query = searchParams.get('query')
-    const categoryId = searchParams.get('category_id')
-    const supplierId = searchParams.get('supplier_id')
+    const parseIdList = (raw: string | null) => (raw || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+    const categoryIds = parseIdList(searchParams.get('category_id'))
+    const supplierIds = parseIdList(searchParams.get('supplier_id'))
     const brand = searchParams.get('brand')
     const requestedStockStatus = searchParams.get('stock_status')
     const stockStatus = requestedStockStatus === 'low_stock' ||
@@ -53,10 +150,16 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       supplier: 'supplier_id',
       margin: 'sale_price',
       created_at: 'created_at',
+      // Marca y modelo del celular, con los números rellenados para que
+      // «iPhone 8» vaya antes que «iPhone 11». Ver la migración de compatibilidad.
+      device: 'device_sort_key',
     }
     const sortColumn = sortColumns[requestedSort] || 'name'
+    const deviceBrandFilter = searchParams.get('device_brand')?.trim() || null
+    const deviceModelFilter = searchParams.get('device_model')?.trim() || null
     const sortAscending = searchParams.get('direction') !== 'desc'
     const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
+    const catalogKind = parseProductCatalogKind(searchParams.get('catalog_kind'))
     const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1)
     const perPage = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('per_page') || '50', 10) || 50))
     const requestedBranchId = getRequestedBranchId(request)
@@ -79,9 +182,13 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       .select(`
         *,
         category:categories(id, name, description),
-        supplier:suppliers(id, name, contact_name, phone, address)
+        supplier:suppliers(id, name, contact_name, phone, address),
+        variants:product_variants(*)
       `, { count: 'exact' })
       .eq('organization_id', organization.id)
+      // Lo archivado por el ciclo de baja de plan sale del catalogo operativo:
+      // la fila se conserva para no romper el historico de ventas.
+      .is('archived_by_plan_at', null)
     
     // Apply filters
     if (query) {
@@ -91,16 +198,37 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       )
     }
     
-    if (categoryId) {
-      queryBuilder = queryBuilder.eq('category_id', categoryId)
+    // Acepta varios ids separados por coma: la busqueda avanzada ofrece
+    // multi-seleccion y antes el cliente mandaba solo el primero, descartando
+    // el resto en silencio mientras las fichas seguian en pantalla.
+    if (categoryIds.length === 1) {
+      queryBuilder = queryBuilder.eq('category_id', categoryIds[0])
+    } else if (categoryIds.length > 1) {
+      queryBuilder = queryBuilder.in('category_id', categoryIds)
     }
 
-    if (supplierId) {
-      queryBuilder = queryBuilder.eq('supplier_id', supplierId)
+    if (supplierIds.length === 1) {
+      queryBuilder = queryBuilder.eq('supplier_id', supplierIds[0])
+    } else if (supplierIds.length > 1) {
+      queryBuilder = queryBuilder.in('supplier_id', supplierIds)
     }
     
     if (brand) {
       queryBuilder = queryBuilder.ilike('brand', brand)
+    }
+
+    // Filtrar y ordenar por celular sólo si la base ya tiene las columnas: antes
+    // de la migración, pedirlas hace fallar el listado entero.
+    const puedeUsarCelular = (deviceBrandFilter || deviceModelFilter || sortColumn === 'device_sort_key')
+      ? await productsHaveDeviceColumns(supabase as never)
+      : false
+
+    if (puedeUsarCelular && deviceBrandFilter) {
+      queryBuilder = queryBuilder.eq('device_brand', deviceBrandFilter)
+    }
+
+    if (puedeUsarCelular && deviceModelFilter) {
+      queryBuilder = queryBuilder.contains('device_models', [deviceModelFilter])
     }
 
     if (priceMin !== null && Number.isFinite(priceMin)) {
@@ -138,37 +266,107 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const needsInMemoryPagination =
       stockStatus !== 'all' ||
       stockMin !== null ||
-      stockMax !== null
+      stockMax !== null ||
+      catalogKind !== null
 
-    queryBuilder = queryBuilder.order(sortColumn, { ascending: sortAscending })
+    if (sortColumn === 'device_sort_key' && puedeUsarCelular) {
+      // Los productos sin celular cargado van al final, en cualquier dirección.
+      queryBuilder = queryBuilder
+        .order('device_sort_key', { ascending: sortAscending, nullsFirst: false })
+        .order('name', { ascending: true })
+    } else {
+      queryBuilder = queryBuilder.order(sortColumn === 'device_sort_key' ? 'name' : sortColumn, { ascending: sortAscending })
+    }
     if (!needsInMemoryPagination) {
       queryBuilder = queryBuilder.range(from, to)
+    } else {
+      // Los filtros de stock se resuelven en memoria: con sucursal activa el
+      // stock sale del inventario por sucursal, y "stock bajo" compara contra
+      // `min_stock`, que PostgREST no puede filtrar columna contra columna.
+      //
+      // Sin un tope explicito la consulta quedaba sujeta al limite implicito de
+      // PostgREST (1000 filas): los productos que caian fuera desaparecian del
+      // listado Y del total, sin ninguna senal. Ahora el tope es propio y, si se
+      // alcanza, se avisa en la respuesta.
+      // Se pide una fila adicional para detectar de forma confiable si el
+      // barrido quedó truncado (los rangos de PostgREST son inclusivos).
+      queryBuilder = queryBuilder.range(0, IN_MEMORY_STOCK_FILTER_CAP)
     }
 
     const { data: products, error, count } = await queryBuilder
     
     if (error) {
-      logger.error('Failed to fetch products', { error: error.message, code: error.code })
-      throw error
+      logger.error('Failed to fetch products', { error: error.message, code: error.code, details: error.details, hint: error.hint })
+      // Se distingue del catch general: asi el cliente sabe que fallo la lectura
+      // del catalogo y no otra parte del pedido.
+      return NextResponse.json(
+        {
+          success: false,
+          code: error.code ?? 'PRODUCTS_QUERY_FAILED',
+          error: 'No se pudo leer el catálogo de productos.',
+        },
+        { status: 500 }
+      )
     }
     
-    const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
+    const baseProducts = (products || []) as Array<Record<string, unknown> & {
+      id: string
+      stock_quantity?: number | null
+      min_stock?: number | null
+      max_stock?: number | null
+      has_variants?: boolean | null
+      variants?: unknown
+    }>
     const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
-    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
-      branchInventoryClient,
-      branchScope.branchId,
-      baseProducts.map((product) => product.id)
-    )
+    const { stockMap, thresholdMap, reservedMap, branchScoped, failed: branchStockFailed, error: branchStockError } =
+      await loadBranchInventoryStockMap(
+        branchInventoryClient,
+        branchScope.branchId,
+        baseProducts.map((product) => product.id)
+      )
+    // Se pidio el stock de una sucursal y no se pudo leer. Devolver el stock
+    // global bajo un encabezado que dice el nombre de la sucursal es peor que
+    // no devolver nada: el mismo criterio que ya usa POST /api/orders.
+    if (branchScope.branchId && branchStockFailed) {
+      logger.error('Branch stock read failed for products listing', {
+        branchId: branchScope.branchId,
+        error: branchStockError,
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'BRANCH_STOCK_UNAVAILABLE',
+          error: 'No se pudo leer el inventario de la sucursal activa. Reintenta o cambia de sucursal.',
+        },
+        { status: 503 }
+      )
+    }
+    const cappedProducts = baseProducts.slice(0, IN_MEMORY_STOCK_FILTER_CAP)
     const branchAwareProducts = strictBranchStock && branchScope.branchId
-      ? baseProducts.map((product) => {
-          const branchStock = Number(stockMap.get(product.id) || 0)
+      ? cappedProducts.map((product) => {
+          const rawVariants = Array.isArray(product.variants) ? product.variants : []
+          const hasVariants = Boolean(product.has_variants || rawVariants.length > 0)
+          const variantStock = hasVariants && rawVariants.length > 0
+            ? rawVariants.reduce((sum: number, v: { is_active?: boolean | null; stock_quantity?: number | null }) => v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum, 0)
+            : null
+
+          // Misma regla que `applyBranchInventoryToProducts`: sin fila en la
+          // sucursal, el stock de la sucursal es cero. El de las variantes no
+          // sirve de reemplazo porque `product_variants` es global.
+          const tieneFilaEnSucursal = stockMap.has(product.id)
+          const branchStock = tieneFilaEnSucursal ? Number(stockMap.get(product.id) || 0) : 0
+          const effectiveStock = tieneFilaEnSucursal && hasVariants && variantStock !== null && branchStock === 0
+            ? variantStock
+            : branchStock
+
           return {
             ...product,
-            stock_quantity: branchStock,
-            branch_stock_quantity: branchStock,
+            stock_quantity: effectiveStock,
+            branch_stock_quantity: effectiveStock,
+            reserved_quantity: Number(reservedMap.get(product.id) || 0),
           }
         })
-      : applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
+      : applyBranchInventoryToProducts(cappedProducts, stockMap, branchScoped, thresholdMap)
     const stockFilteredProducts = branchAwareProducts.filter((product) => {
       const stock = Number(product.stock_quantity || 0)
       if (stockStatus === 'in_stock' && stock <= 0) return false
@@ -183,10 +381,13 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       if (stockMax !== null && Number.isFinite(stockMax) && stock > stockMax) return false
       return true
     })
+    const catalogFilteredProducts = filterProductsByCatalogKind(stockFilteredProducts, catalogKind)
     const filteredProducts = needsInMemoryPagination
-      ? stockFilteredProducts.slice(from, to + 1)
-      : stockFilteredProducts
-    const filteredTotal = needsInMemoryPagination ? stockFilteredProducts.length : (count || 0)
+      ? catalogFilteredProducts.slice(from, to + 1)
+      : catalogFilteredProducts
+    const filteredTotal = needsInMemoryPagination ? catalogFilteredProducts.length : (count || 0)
+    // Se alcanzo el tope del barrido: lo listado y el total son parciales.
+    const truncated = needsInMemoryPagination && baseProducts.length > IN_MEMORY_STOCK_FILTER_CAP
 
     // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
     // tenga el permiso específico products.read_cost.
@@ -211,13 +412,24 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         products: visibleProducts,
         total: filteredTotal,
         page,
-        per_page: perPage
+        per_page: perPage,
+        // Cuando es true el listado y el total son parciales: el filtro de stock
+        // barrio hasta el tope y quedaron productos sin evaluar.
+        truncated,
+        scan_cap: truncated ? IN_MEMORY_STOCK_FILTER_CAP : undefined,
       }
     })
   } catch (error) {
-    logger.error('Products API error', { error })
+    // "Failed to fetch products" no le decia nada a nadie y tapaba la causa:
+    // se registra el detalle y se devuelve algo accionable.
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error('Products API error', { error, message })
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch products' },
+      {
+        success: false,
+        code: 'PRODUCTS_UNEXPECTED_ERROR',
+        error: `No se pudieron cargar los productos: ${message}`,
+      },
       { status: 500 }
     )
   }
@@ -249,7 +461,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         code: 'VALIDATION_FAILED',
         details: errors
       }, { status: 400 })
@@ -280,6 +492,138 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       )
     }
 
+    const conflictoAlCrear = await findProductConflict(supabase as never, {
+      organizationId: organization.id,
+      sku: validated.sku,
+      barcode: validated.barcode,
+    })
+    if (conflictoAlCrear) {
+      return NextResponse.json({
+        success: false,
+        error: conflictMessage(conflictoAlCrear),
+        code: 'DUPLICATE_CODE',
+        field: conflictoAlCrear.field,
+        conflictProductId: conflictoAlCrear.id,
+      }, { status: 409 })
+    }
+
+    if (validated.has_variants) {
+      const rawAttrs = validated.variant_attribute_config ?? []
+      const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
+        ? rawAttrs
+        : (Array.isArray(validated.variants) && validated.variants.length > 0
+          ? deriveVariantAttributeConfig(validated.variants)
+          : [])
+
+      const variantPayload = ProductVariantsPayloadSchema.safeParse({
+        hasVariants: true,
+        attributes: effectiveAttrs,
+        variants: validated.variants,
+      })
+
+      if (!variantPayload.success) {
+        return NextResponse.json({
+          success: false,
+          error: 'Error de validación',
+          code: 'VALIDATION_FAILED',
+          details: variantPayload.error.issues.map((issue) => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+          })),
+        }, { status: 400 })
+      }
+
+      const variantBranchId = branchScope.branchId ?? defaultBranch?.id
+      if (!variantBranchId) {
+        return NextResponse.json(
+          { success: false, error: 'Seleccioná una sucursal para asignar el stock de las variantes.', code: 'BRANCH_REQUIRED' },
+          { status: 400 },
+        )
+      }
+
+      const admin = createAdminSupabase()
+      const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
+        p_product: {
+          ...validated,
+          organization_id: organization.id,
+          variant_attribute_config: variantPayload.data.attributes,
+        },
+        p_variants: toVariantRpcRows(variantPayload.data.variants),
+        p_branch_id: variantBranchId,
+        p_actor_id: user.id,
+      })
+
+      if (saveError) {
+        const code = getVariantErrorCode(saveError)
+        logger.error('Failed to create product with variants', {
+          code: code ?? saveError.code,
+          error: saveError.message,
+          organizationId: organization.id,
+        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: code === 'VARIANT_SKU_DUPLICATE'
+              ? 'Ya existe una variante con ese SKU en la organización.'
+              : code === 'VARIANT_BARCODE_DUPLICATE'
+                ? 'Ya existe una variante con ese código de barras en la organización.'
+                : 'No se pudo guardar el producto con sus variantes.',
+            code: code ?? 'PRODUCT_VARIANTS_SAVE_FAILED',
+          },
+          { status: code ? VARIANT_ERROR_STATUS[code] : 500 },
+        )
+      }
+
+      const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? '')
+      const [{ data: product, error: productError }, { data: variants, error: variantsError }] = await Promise.all([
+        admin.from('products').select('*').eq('id', savedProductId).eq('organization_id', organization.id).single(),
+        admin.from('product_variants').select('*').eq('product_id', savedProductId).eq('organization_id', organization.id).order('created_at'),
+      ])
+
+      if (productError || variantsError || !product) {
+        logger.error('Failed to reload product variants after save', {
+          productId: savedProductId,
+          productError: productError?.message,
+          variantsError: variantsError?.message,
+        })
+        return NextResponse.json(
+          { success: false, error: 'El producto se guardó, pero no se pudo recargar.', code: 'PRODUCT_VARIANTS_RELOAD_FAILED' },
+          { status: 500 },
+        )
+      }
+
+      const canReadCost = canViewProductCost(user.role)
+      const visibleVariants = (variants ?? []).map((variant) => {
+        if (canReadCost) return variant
+        const { purchase_price: _purchasePrice, ...visible } = variant
+        return visible
+      })
+
+      const dispositivo = await persistDeviceFields(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
+      const precio = await persistPriceVisibility(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
+      revalidateProductStorefront(organization.slug, organization.id, savedProductId)
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
+          variants: visibleVariants,
+        },
+        ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
+      }, { status: 201 })
+    }
+
     const requestedStock = Number(validated.stock_quantity || 0)
     const branchScopedCreate = Boolean(branchScope.branchId)
     const shouldZeroGlobalStock = Boolean(
@@ -299,6 +643,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         supplier_id: validated.supplier_id,
         brand: validated.brand,
         brand_id: validated.brand_id,
+        tags: validated.tags,
         stock_quantity: shouldZeroGlobalStock ? 0 : requestedStock,
         min_stock: validated.min_stock,
         max_stock: validated.max_stock,
@@ -392,9 +737,25 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         )[0]
       : product
     
+    const dispositivo = await persistDeviceFields(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
+    const precio = await persistPriceVisibility(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
+    revalidateProductStorefront(organization.slug, organization.id, String(product.id))
+
     return NextResponse.json({
       success: true,
-      data: responseProduct
+      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
+      ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     }, { status: 201 })
   } catch (error) {
     logger.error('Product creation error', { error })
@@ -437,7 +798,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       
       return NextResponse.json({
         success: false,
-        error: 'Validation failed',
+        error: 'Error de validación',
         details: errors
       }, { status: 400 })
     }
@@ -445,7 +806,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     const validated = validationResult.data
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
-      .select('id')
+      .select('*')
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -466,6 +827,220 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    // Dos productos con el mismo codigo llevan la misma etiqueta, y en el
+    // mostrador el lector no puede distinguirlos.
+    const conflictoAlEditar = await findProductConflict(supabase as never, {
+      organizationId: organization.id,
+      sku: validated.sku,
+      barcode: validated.barcode,
+      excludeId: validated.id,
+    })
+    if (conflictoAlEditar) {
+      return NextResponse.json(
+        { success: false, error: conflictMessage(conflictoAlEditar), code: 'DUPLICATE_CODE', field: conflictoAlEditar.field },
+        { status: 409 },
+      )
+    }
+
+    if (validated.has_variants !== undefined && (validated.has_variants || existingProduct.has_variants)) {
+      const rawAttrs = validated.variant_attribute_config ?? existingProduct.variant_attribute_config ?? []
+      const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
+        ? rawAttrs
+        : (Array.isArray(validated.variants) && validated.variants.length > 0
+          ? deriveVariantAttributeConfig(validated.variants)
+          : [])
+
+      const variantPayload = ProductVariantsPayloadSchema.safeParse({
+        hasVariants: validated.has_variants,
+        attributes: effectiveAttrs,
+        variants: validated.variants ?? [],
+      })
+
+      if (!variantPayload.success) {
+        return NextResponse.json({
+          success: false,
+          error: 'Error de validación',
+          code: 'VALIDATION_FAILED',
+          details: variantPayload.error.issues.map((issue) => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+          })),
+        }, { status: 400 })
+      }
+
+      const variantBranchId = branchScope.branchId ?? (await getDefaultBranch(organization.id))?.id
+      if (!variantBranchId) {
+        return NextResponse.json(
+          { success: false, error: 'Seleccioná una sucursal para actualizar las variantes.', code: 'BRANCH_REQUIRED' },
+          { status: 400 },
+        )
+      }
+
+      const admin = createAdminSupabase()
+
+      // Asegurar que las variantes existentes tengan su fila en branch_variant_inventory
+      // para evitar que el RPC intente registrar movimientos iniciales con ON CONFLICT inválido.
+      const existingVariantIds = variantPayload.data.variants
+        .map((v) => v.id)
+        .filter((id): id is string => Boolean(id))
+
+      if (existingVariantIds.length > 0) {
+        const { data: existingBvi } = await admin
+          .from('branch_variant_inventory')
+          .select('variant_id')
+          .eq('organization_id', organization.id)
+          .eq('branch_id', variantBranchId)
+          .in('variant_id', existingVariantIds)
+
+        const presentIds = new Set((existingBvi || []).map((row) => row.variant_id))
+        const missingFromBvi = variantPayload.data.variants.filter(
+          (v) => v.id && !presentIds.has(v.id),
+        )
+
+        if (missingFromBvi.length > 0) {
+          await admin.from('branch_variant_inventory').insert(
+            missingFromBvi.map((v) => ({
+              organization_id: organization.id,
+              branch_id: variantBranchId,
+              product_id: validated.id,
+              variant_id: v.id!,
+              stock_quantity: v.stockQuantity ?? 0,
+              min_stock: v.minStock ?? 0,
+            })),
+          )
+        }
+      }
+
+      // El stock de las variantes que ya existen no lo toca el RPC: se aplica
+      // despues como ajuste, para que quede el movimiento.
+      const { data: currentStockRows } = existingVariantIds.length > 0
+        ? await admin
+            .from('product_variants')
+            .select('id, stock_quantity')
+            .eq('organization_id', organization.id)
+            .in('id', existingVariantIds)
+        : { data: [] as Array<{ id: string; stock_quantity: number | null }> }
+      const currentStockById = new Map(
+        (currentStockRows ?? []).map((row) => [String(row.id), Number(row.stock_quantity ?? 0)]),
+      )
+
+      const { data: saved, error: saveError } = await admin.rpc('save_product_with_variants', {
+        p_product: {
+          ...existingProduct,
+          ...validated,
+          warranty_months: validated.warranty_months ?? existingProduct.warranty_months ?? 0,
+          return_window_days: validated.return_window_days ?? existingProduct.return_window_days ?? 0,
+          exchange_window_days: validated.exchange_window_days ?? existingProduct.exchange_window_days ?? 0,
+          id: validated.id,
+          organization_id: organization.id,
+          has_variants: variantPayload.data.hasVariants,
+          variant_attribute_config: variantPayload.data.attributes,
+        },
+        p_variants: toVariantRpcRows(variantPayload.data.variants),
+        p_branch_id: variantBranchId,
+        p_actor_id: user.id,
+      })
+
+      if (saveError) {
+        logger.error('Failed to update product with variants', {
+          code: saveError.code,
+          error: saveError.message,
+          details: saveError.details,
+          hint: saveError.hint,
+          productId: validated.id,
+          organizationId: organization.id,
+        })
+        const code = getVariantErrorCode(saveError)
+        return NextResponse.json(
+          {
+            success: false,
+            error: code === 'VARIANT_SKU_DUPLICATE'
+              ? 'Ya existe una variante con ese SKU en la organización.'
+              : code === 'VARIANT_BARCODE_DUPLICATE'
+                ? 'Ya existe una variante con ese código de barras en la organización.'
+                : (saveError.message || 'No se pudo actualizar el producto con sus variantes.'),
+            code: code ?? 'PRODUCT_VARIANTS_SAVE_FAILED',
+            details: saveError.details || saveError.message,
+          },
+          { status: code ? VARIANT_ERROR_STATUS[code] : 500 },
+        )
+      }
+
+      const savedProductId = String((saved as { product_id?: unknown } | null)?.product_id ?? validated.id)
+
+      const stockWarnings: string[] = []
+      for (const adjustment of planVariantStockAdjustments(currentStockById, variantPayload.data.variants)) {
+        const { error: adjustError } = await admin.rpc('adjust_variant_stock_atomic', {
+          p_organization_id: organization.id,
+          p_branch_id: variantBranchId,
+          p_variant_id: adjustment.variantId,
+          p_quantity_delta: adjustment.delta,
+          p_movement_type: 'adjustment',
+          p_idempotency_key: adjustment.idempotencyKey,
+          p_actor_id: user.id,
+          p_reference_type: 'product_edit',
+          p_reference_id: savedProductId,
+          p_reason: 'Ajuste de stock desde la ficha del producto',
+          p_metadata: { source: 'product-editor', from: adjustment.from, to: adjustment.to },
+        })
+
+        if (adjustError) {
+          logger.error('Failed to adjust variant stock after product save', {
+            variantId: adjustment.variantId,
+            productId: savedProductId,
+            organizationId: organization.id,
+            error: adjustError.message,
+          })
+          stockWarnings.push(
+            `No se pudo ajustar el stock de ${adjustment.variantName}: quedó en ${adjustment.from}.`,
+          )
+        }
+      }
+
+      const [{ data: product, error: productError }, { data: variants, error: variantsError }] = await Promise.all([
+        admin.from('products').select('*').eq('id', savedProductId).eq('organization_id', organization.id).single(),
+        admin.from('product_variants').select('*').eq('product_id', savedProductId).eq('organization_id', organization.id).order('created_at'),
+      ])
+
+      if (productError || variantsError || !product) {
+        return NextResponse.json(
+          { success: false, error: 'El producto se actualizó, pero no se pudo recargar.', code: 'PRODUCT_VARIANTS_RELOAD_FAILED' },
+          { status: 500 },
+        )
+      }
+
+      const visibleVariants = (variants ?? []).map((variant) => {
+        if (canViewProductCost(user.role)) return variant
+        const { purchase_price: _purchasePrice, ...visible } = variant
+        return visible
+      })
+
+      const dispositivo = await persistDeviceFields(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
+      const precio = await persistPriceVisibility(admin as never, {
+        productId: savedProductId,
+        organizationId: organization.id,
+        validated,
+      })
+
+      revalidateProductStorefront(organization.slug, organization.id, savedProductId)
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          product: stripProductCost({ ...(product as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) }, user.role),
+          variants: visibleVariants,
+        },
+        warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
+        ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
+      })
+    }
+
     const desiredStockQuantity = validated.stock_quantity
     const updatePayload: Record<string, unknown> = {
       name: validated.name,
@@ -474,6 +1049,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       supplier_id: validated.supplier_id,
       brand: validated.brand,
       brand_id: validated.brand_id,
+        tags: validated.tags,
       min_stock: validated.min_stock,
       max_stock: validated.max_stock,
       purchase_price: validated.purchase_price,
@@ -533,9 +1109,36 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       })
     }
 
+    // El stock ya quedo guardado; el historial es lo que permite reconstruir
+    // despues por que un producto aparecio en cero. Si falla, se avisa pero no
+    // se revierte el guardado.
+    if (desiredStockQuantity !== undefined) {
+      try {
+        await recordStockAdjustment(createAdminSupabase() as never, {
+          organizationId: organization.id,
+          productId: validated.id,
+          branchId: branchScope.branchId ?? null,
+          previousStock: Number(existingProduct.stock_quantity ?? 0),
+          nextStock: Number(desiredStockQuantity),
+          userId: user.id,
+          notes: 'Ajuste desde la edicion del producto',
+        })
+      } catch (movementError) {
+        logger.error('No se pudo registrar el movimiento de stock', {
+          productId: validated.id,
+          error: movementError instanceof Error ? movementError.message : String(movementError),
+        })
+      }
+    }
+
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
       .from('products')
-      .select('*')
+      .select(`
+        *,
+        category:categories(id, name, description),
+        supplier:suppliers(id, name, contact_name, phone, address),
+        variants:product_variants(*)
+      `)
       .eq('id', validated.id)
       .eq('organization_id', organization.id)
       .single()
@@ -552,17 +1155,76 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
 
     logger.info('Product updated', { productId: product.id, userId: user.id })
 
-    const responseProduct = branchScope.branchId && desiredStockQuantity !== undefined
+    let branchStockMap: Map<string, number> | undefined
+    let branchThresholdMap: Map<string, { minStock: number | null; maxStock: number | null }> | undefined
+    if (branchScope.branchId) {
+      if (desiredStockQuantity !== undefined) {
+        branchStockMap = new Map([[String(product.id), Number(desiredStockQuantity)]])
+      } else {
+        const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
+        const branchStockResult = await loadBranchInventoryStockMap(
+          branchInventoryClient,
+          branchScope.branchId,
+          [String(product.id)]
+        )
+        if (!branchStockResult.failed) {
+          branchStockMap = branchStockResult.stockMap
+          branchThresholdMap = branchStockResult.thresholdMap
+        }
+      }
+    }
+
+    let responseProduct = branchScope.branchId && branchStockMap
       ? applyBranchInventoryToProducts(
           [product as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
-          new Map([[String(product.id), Number(desiredStockQuantity)]]),
-          true
+          branchStockMap,
+          true,
+          branchThresholdMap
         )[0]
       : product
+
+    type ProductVariantSummary = { is_active?: boolean | null; stock_quantity?: number | null }
+    type ProductResponseRecord = {
+      variants?: ProductVariantSummary[]
+      has_variants?: boolean
+      stock_quantity?: number | null
+    }
+    const responseRecord = responseProduct as ProductResponseRecord
+    const rawVariants = Array.isArray(responseRecord.variants) ? responseRecord.variants : []
+    const hasVariants = Boolean(responseRecord.has_variants || rawVariants.length > 0)
+    if (hasVariants && rawVariants.length > 0) {
+      const variantStock = rawVariants.reduce(
+        (sum: number, v: ProductVariantSummary) => (v.is_active !== false ? sum + Number(v.stock_quantity || 0) : sum),
+        0
+      )
+      const currentStock = Number(responseRecord.stock_quantity || 0)
+      if (currentStock === 0 && variantStock > 0) {
+        responseProduct = {
+          ...responseProduct,
+          stock_quantity: variantStock,
+        }
+      }
+    }
     
+    const dispositivo = await persistDeviceFields(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
+    const precio = await persistPriceVisibility(createAdminSupabase() as never, {
+      productId: String(product.id),
+      organizationId: organization.id,
+      validated,
+    })
+
+    revalidateProductStorefront(organization.slug, organization.id, String(product.id))
+
     return NextResponse.json({
       success: true,
-      data: responseProduct
+      data: { ...(responseProduct as Record<string, unknown>), ...(dispositivo.campos ?? {}), ...(precio.campos ?? {}) },
+      ...(dispositivo.skipped && { device_fields_skipped: true, message: DEVICE_COLUMNS_MISSING_MESSAGE }),
+      ...(precio.skipped && { hide_price_skipped: true, message: HIDE_PRICE_COLUMN_MISSING_MESSAGE }),
     })
   } catch (error) {
     logger.error('Product update error', { error })
@@ -586,10 +1248,57 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       )
     }
     
-    const ids = idsParam.split(',')
-    const supabase = await createClient()
+    const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean)
+    if (ids.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Product IDs are required' },
+        { status: 400 }
+      )
+    }
+
+    const adminSupabase = createAdminSupabase()
+
+    // Verificar si alguno de los productos tiene transacciones
+    const [
+      { count: salesCount },
+      { count: ordersCount },
+      { count: repairPartsCount },
+      { count: repairCostsCount },
+    ] = await Promise.all([
+      adminSupabase.from('sale_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('order_items').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('repair_parts').select('id', { count: 'exact', head: true }).in('product_id', ids),
+      adminSupabase.from('repair_item_costs').select('id', { count: 'exact', head: true }).in('product_id', ids),
+    ])
+
+    const hasTransactions =
+      (salesCount ?? 0) > 0 ||
+      (ordersCount ?? 0) > 0 ||
+      (repairPartsCount ?? 0) > 0 ||
+      (repairCostsCount ?? 0) > 0
+
+    if (hasTransactions) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Algunos productos seleccionados tienen ventas o reparaciones asociadas. Te sugerimos desactivarlos para preservar el historial.',
+          code: 'PRODUCTS_HAVE_TRANSACTIONS',
+        },
+        { status: 409 }
+      )
+    }
+
+    // Limpiar tablas auxiliares dependientes sin transacciones
+    await Promise.allSettled([
+      adminSupabase.from('cart_items').delete().in('product_id', ids),
+      adminSupabase.from('branch_variant_inventory').delete().in('product_id', ids),
+      adminSupabase.from('branch_inventory').delete().in('product_id', ids),
+      adminSupabase.from('variant_inventory_movements').delete().in('product_id', ids),
+      adminSupabase.from('product_movements').delete().in('product_id', ids),
+      adminSupabase.from('product_variants').delete().in('product_id', ids),
+    ])
     
-    const { error } = await supabase
+    const { error } = await adminSupabase
       .from('products')
       .delete()
       .in('id', ids)
@@ -606,11 +1315,26 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       success: true,
       message: `Successfully deleted ${ids.length} product(s)`
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string; details?: string }
     logger.error('Product deletion error', { error })
+
+    const isFkConstraint =
+      err?.code === '23503' ||
+      (typeof err?.message === 'string' && /foreign key|referenc|constraint/i.test(err.message))
+
+    const message = isFkConstraint
+      ? 'No se pudieron eliminar los productos porque tienen registros relacionados en el sistema. Podés desactivarlos.'
+      : (err?.message || 'Error al eliminar los productos')
+
     return NextResponse.json(
-      { success: false, error: 'Failed to delete products' },
-      { status: 500 }
+      {
+        success: false,
+        error: message,
+        code: err?.code || 'DELETE_PRODUCTS_FAILED',
+        details: err?.details || err?.message,
+      },
+      { status: isFkConstraint ? 409 : 500 }
     )
   }
 })

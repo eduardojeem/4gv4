@@ -1,45 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { WebsiteSettingKey } from '@/types/website-settings'
-import { validateSetting } from '@/lib/validation/website-settings'
+import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 
-const VALID_KEYS: WebsiteSettingKey[] = [
-  'company_info',
-  'hero_stats',
-  'hero_content',
-  'offers_section',
-  'services',
-  'testimonials',
-  'maintenance_mode',
-  'process_steps',
-  'process_flows',
-  'checkout',
-]
+import { rateLimiter } from '@/lib/rate-limiter'
 
-// Rate limiting: Máximo 10 actualizaciones por minuto por usuario
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT = 10
+// Mismo límite y mismo contador que el guardado por lote: un mapa en memoria no
+// se comparte entre instancias y cada una contaba por su lado.
+const RATE_LIMIT = 30
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minuto
 
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
-  const now = Date.now()
-  const userLimit = rateLimitMap.get(userId)
-
-  if (!userLimit || now > userLimit.resetAt) {
-    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW })
-    return { allowed: true, remaining: RATE_LIMIT - 1 }
-  }
-
-  if (userLimit.count >= RATE_LIMIT) {
-    return { allowed: false, remaining: 0 }
-  }
-
-  userLimit.count++
-  return { allowed: true, remaining: RATE_LIMIT - userLimit.count }
+async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
+  const allowed = await rateLimiter.check(`website-settings:${userId}`, RATE_LIMIT, RATE_LIMIT_WINDOW)
+  return { allowed, remaining: allowed ? 1 : 0 }
 }
 
 /**
@@ -58,7 +35,7 @@ async function handler(
     const { key } = await context.params
 
     // Validar key
-    if (!VALID_KEYS.includes(key as WebsiteSettingKey)) {
+    if (!isWebsiteSettingKey(key)) {
       console.warn('Invalid setting key attempted', { key, userId: context.user.id })
       return NextResponse.json(
         { success: false, error: 'Invalid setting key' },
@@ -67,7 +44,7 @@ async function handler(
     }
 
     // Rate limiting
-    const rateLimit = checkRateLimit(context.user.id)
+    const rateLimit = await checkRateLimit(context.user.id)
     if (!rateLimit.allowed) {
       console.warn('Rate limit exceeded', { 
         userId: context.user.id, 
@@ -184,6 +161,7 @@ async function handler(
     // Registrar actualización en audit_log
     try {
       await supabase.from('audit_log').insert({
+        organization_id: orgId,
         user_id: context.user.id,
         action: 'update_website_setting',
         resource: 'website_settings',
@@ -200,6 +178,16 @@ async function handler(
       key,
       hasValue: !!value
     })
+
+    if (key === 'company_info' || key === 'hero_content') {
+      try {
+        revalidateTag('marketplace:organizations', 'max')
+        revalidatePath('/marketplace/empresas')
+        revalidatePath('/marketplace', 'layout')
+      } catch (cacheError) {
+        console.warn('Could not revalidate marketplace cache on setting update:', cacheError)
+      }
+    }
 
     return NextResponse.json({
       success: true,

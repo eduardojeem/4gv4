@@ -10,17 +10,15 @@
  * - Search suggestions
  */
 
-import React from 'react'
 import { motion } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { 
-  Search, 
-  TrendingUp, 
-  Clock, 
+import {
+  Search,
+  TrendingUp,
+  Clock,
   Target,
-  Zap,
-  Users
+  Zap
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -36,10 +34,9 @@ export function SearchStats({
   totalResults,
   searchTime = 0,
   query,
-  totalCustomers,
+  totalCustomers: _totalCustomers,
   className
 }: SearchStatsProps) {
-  const searchAccuracy = totalCustomers > 0 ? (totalResults / totalCustomers) * 100 : 0
   const isGoodResult = totalResults > 0 && totalResults <= 50
   const isTooManyResults = totalResults > 100
   
@@ -58,7 +55,7 @@ export function SearchStats({
         </span>
         {query && (
           <span>
-            para <strong className="text-blue-600 dark:text-blue-400">"{query}"</strong>
+            para <strong className="text-blue-600 dark:text-blue-400">&quot;{query}&quot;</strong>
           </span>
         )}
       </div>

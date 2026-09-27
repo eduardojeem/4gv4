@@ -12,7 +12,7 @@ export function measure(name: string, startMark: string, endMark: string) {
   }
 }
 
-export function time<T>(fn: () => T, label = 'operation') {
+export function time<T>(fn: () => T, _label = 'operation') {
   const start = typeof performance !== 'undefined' ? performance.now() : Date.now()
   const result = fn()
   const end = typeof performance !== 'undefined' ? performance.now() : Date.now()

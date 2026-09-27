@@ -35,7 +35,7 @@ Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Leer el contenido del archivo SQL
-$setupSql = Get-Content "supabase/migrations/20241207_repairs_complete_setup.sql" -Raw
+$setupSql = Get-Content "supabase/migrations_legacy/20241207_repairs_complete_setup.sql" -Raw
 
 # Ejecutar usando supabase db execute
 $setupSql | supabase db execute
@@ -59,7 +59,7 @@ Write-Host ""
 $response = Read-Host "¿Deseas insertar datos de ejemplo? (s/n)"
 
 if ($response -match '^[Ss]$') {
-    $seedSql = Get-Content "supabase/migrations/20241207_repairs_seed_data.sql" -Raw
+    $seedSql = Get-Content "supabase/migrations_legacy/20241207_repairs_seed_data.sql" -Raw
     $seedSql | supabase db execute
     
     if ($LASTEXITCODE -eq 0) {

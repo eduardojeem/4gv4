@@ -46,7 +46,7 @@ export function useTechnicianBoard() {
                     .order('created_at', { ascending: false })
 
                 if (error) {
-                    const msg = (error as any)?.message || String(error)
+                    const msg = error.message || String(error)
                     const missingTable = msg.includes("Could not find the table 'public.repairs'") || msg.includes('relation "repairs" does not exist')
                     if (missingTable) {
                         setRepairs([])
@@ -75,26 +75,9 @@ export function useTechnicianBoard() {
         }
     }, [])
 
+    // Sin Realtime: repairs no está en la publicación supabase_realtime.
     useEffect(() => {
         fetchRepairs()
-
-        if (!isDemoMode()) {
-            const supabase = createSupabaseClient()
-            const channel = supabase
-                .channel('repairs-tech-board')
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'repairs' },
-                    () => {
-                        fetchRepairs()
-                    }
-                )
-                .subscribe()
-
-            return () => {
-                (supabase as any).removeChannel(channel)
-            }
-        }
     }, [fetchRepairs])
 
     // Initialize Kanban Order

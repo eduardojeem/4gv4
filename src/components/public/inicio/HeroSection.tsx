@@ -2,13 +2,28 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
-import { usePathname } from 'next/navigation'
-import { ArrowRight, MessageCircle, ShoppingBag, Wrench, CheckCircle, Star } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import {
+  ArrowRight,
+  Briefcase, MessageCircle,
+  Package,
+  Search, ShoppingBag,
+  Sparkles, Truck,
+  Wrench, Clock
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { HeroCampaign } from './HeroCampaign'
+import type {
+  PublishedHeroAction,
+  StorefrontCapabilities,
+  StorefrontTracking,
+} from '@/lib/website/storefront-capabilities'
 
 interface HeroSectionProps {
   companyInfo: CompanyInfo
@@ -17,9 +32,16 @@ interface HeroSectionProps {
   brand: BrandTheme
   phoneClean: string
   contactHref: string
+  hasRepairs?: boolean
+  capabilities?: StorefrontCapabilities
+  primaryAction?: PublishedHeroAction
+  tracking?: StorefrontTracking
 }
 
-// ── Animated counter that counts up when in view ───────────────────────────
+const subscribeToHydration = () => () => undefined
+const getClientHydrationSnapshot = () => true
+const getServerHydrationSnapshot = () => false
+
 function AnimatedStat({ value, label }: { value: string; label: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
@@ -28,7 +50,12 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
     const el = ref.current
     if (!el || typeof IntersectionObserver === 'undefined') return
     const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect() } },
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true)
+          obs.disconnect()
+        }
+      },
       { threshold: 0.5 }
     )
     obs.observe(el)
@@ -36,201 +63,337 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
   }, [])
 
   return (
-    <div ref={ref} className={cn('transition-all duration-700', visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4')}>
-      <div className="text-xl font-black text-white tracking-tight whitespace-nowrap">{value}</div>
-      <div className="mt-1 text-xs text-white/60 font-medium leading-snug">{label}</div>
+    <div
+      ref={ref}
+      className={cn(
+        'transition-all duration-700',
+        visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+      )}
+    >
+      <div className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground tabular-nums">
+        {value}
+      </div>
+      <div className="mt-0.5 text-[11px] font-medium text-muted-foreground leading-tight">
+        {label}
+      </div>
     </div>
   )
 }
 
-// Suscripción no-op para useSyncExternalStore (el valor solo cambia entre SSR y cliente).
-const noopSubscribe = () => () => {}
-
-// ── Trust badges ──────────────────────────────────────────────────────────
-const DEFAULT_TRUST_BADGES = [
-  { icon: CheckCircle, label: 'Garantía escrita' },
-  { icon: Star,         label: 'Repuestos originales' },
-  { icon: Wrench,       label: 'Técnicos certificados' },
-]
-
-function getTrustBadges(customBadges?: string[]) {
-  const labels = customBadges
-    ?.map((label) => label.trim())
-    .filter(Boolean)
-    .map((label) => /^garant[ií]a escrita$/i.test(label) ? 'Garantía escrita' : label) ?? []
-  if (labels.length === 0) return DEFAULT_TRUST_BADGES
-  const icons = [CheckCircle, Star, Wrench]
-  return labels.map((label, i) => ({
-    icon: icons[i % icons.length],
-    label
-  }))
+export function HeroSection(props: HeroSectionProps) {
+  const storefrontStyle = useStorefrontStyle()
+  if (props.heroContent.enabled === false) return null
+  // Moda y deportivo usan una portada de campaña con fotos del catálogo; las
+  // estadísticas de garantía y despacho quedan para el aspecto clásico.
+  if (storefrontStyle !== 'classic') {
+    return (
+      <HeroCampaign
+        style={storefrontStyle}
+        companyInfo={props.companyInfo}
+        heroContent={props.heroContent}
+        phoneClean={props.phoneClean}
+        contactHref={props.contactHref}
+        hasRepairs={props.hasRepairs ?? false}
+        capabilities={props.capabilities}
+        primaryAction={props.primaryAction}
+        tracking={props.tracking}
+      />
+    )
+  }
+  return <ClassicHeroSection {...props} />
 }
 
-export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneClean, contactHref }: HeroSectionProps) {
+function ClassicHeroSection({
+  companyInfo,
+  heroStats,
+  heroContent,
+  brand: _brand,
+  phoneClean,
+  contactHref,
+  hasRepairs = false,
+  capabilities,
+  primaryAction = { kind: 'products', href: '/productos' },
+  tracking = hasRepairs
+    ? { kind: 'repairs', href: '/mis-reparaciones' }
+    : { kind: 'orders', href: '/track' },
+}: HeroSectionProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+  const tenantPrefix =
+    pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
 
-  // Estado de atención del día (según horarios de la empresa). Solo-cliente vía
-  // useSyncExternalStore: SSR asume "abierto" y el cliente corrige según el día real,
-  // sin mismatch de hidratación (el día depende de la zona horaria del visitante).
-  const closedToday = useSyncExternalStore(
-    noopSubscribe,
-    () => {
-      const dayIdx = new Date().getDay() // 0=Dom, 6=Sáb
-      const todayHours = dayIdx === 0
-        ? companyInfo.hours?.sunday
-        : dayIdx === 6
-          ? companyInfo.hours?.saturday
-          : companyInfo.hours?.weekdays
-      return !todayHours || /cerrad/i.test(todayHours)
-    },
-    () => false,
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
   )
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const mapsHref = getCompanyMapsHref(companyInfo.mapsUrl, companyInfo.address)
+
+  const closedToday = mounted
+    ? (() => {
+        const dayIdx = new Date().getDay()
+        const todayHours =
+          dayIdx === 0
+            ? companyInfo.hours?.sunday
+            : dayIdx === 6
+            ? companyInfo.hours?.saturday
+            : companyInfo.hours?.weekdays
+        return !todayHours || /cerrad/i.test(todayHours)
+      })()
+    : false
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      router.push(`${tenantPrefix}/productos?q=${encodeURIComponent(searchQuery.trim())}`)
+    } else {
+      router.push(`${tenantPrefix}/productos`)
+    }
+  }
+
+  if (heroContent.enabled === false) return null
+
   return (
-    <section className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} py-20 text-white md:py-28`}>
-      {/* Background decoration */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
-        <div className="absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-black/10 blur-3xl" />
-        {/* Dot grid */}
-        <svg className="absolute inset-0 h-full w-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="hero-dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-              <circle cx="2" cy="2" r="1.5" fill="white" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#hero-dots)" />
-        </svg>
-      </div>
+    <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.06] via-background to-background py-10 sm:py-16 lg:py-20">
+      {/* Luces de ambiente sutiles */}
+      <div className="pointer-events-none absolute -left-20 -top-20 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
 
-      <div className="container relative">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+      <div className="container relative mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-12">
 
-          {/* ── Left column: text ── */}
-          <div className="flex flex-col items-start">
-            {/* Logo if available */}
-            {companyInfo.logoUrl && (
-              <div className="mb-6">
-                <Image
-                  src={companyInfo.logoUrl}
-                  alt={companyInfo.name || 'Logo'}
-                  width={64}
-                  height={64}
-                  className="rounded-2xl shadow-xl ring-2 ring-white/20"
+          {/* ── Columna Izquierda: Mensaje Comercial y Búsqueda ── */}
+          <div className="flex flex-col items-start lg:col-span-7">
+
+            {/* Badges superiores: Estado & Tienda */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-xs">
+                <Sparkles className="h-3.5 w-3.5" />
+                {heroContent.badge || 'Catálogo Oficial'}
+              </span>
+
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
+                  closedToday
+                    ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300'
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    closedToday ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'
+                  )}
                 />
-              </div>
-            )}
-
-            {/* Badge */}
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur-sm ring-1 ring-white/20">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              {heroContent.badge}
+                {closedToday ? 'Cerrado hoy' : 'Abierto hoy'}
+              </span>
             </div>
 
-            {/* Title */}
-            <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-              {heroContent.title}
+            {/* Título Principal */}
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl lg:leading-[1.15]">
+              {heroContent.title || 'Los mejores productos al mejor precio'}
             </h1>
 
-            {/* Subtitle */}
-            <p className={`mt-5 text-lg leading-relaxed ${brand.text200} max-w-lg`}>
-              {heroContent.subtitle}
+            {/* Subtítulo */}
+            <p className="mt-3.5 max-w-xl text-base text-muted-foreground sm:text-lg leading-relaxed">
+              {heroContent.subtitle ||
+                'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.'}
             </p>
 
-            {/* Trust badges */}
-            <div className="mt-6 flex flex-wrap gap-3">
-              {getTrustBadges(heroContent.trustBadges).map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
-                  <Icon className="h-3.5 w-3.5 text-emerald-300" />
-                  {label}
-                </div>
-              ))}
-            </div>
-
-            {/* CTAs */}
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className={`rounded-xl bg-white ${brand.ctaBtn} font-bold shadow-lg shadow-black/20 hover:bg-white/90`}>
-                <Link href={`${tenantPrefix}/productos`}>
-                  <ShoppingBag className="mr-2 h-5 w-5" />
-                  {heroContent.ctaPrimaryText || 'Ver productos'}
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="rounded-xl border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20">
-                <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
-                  <MessageCircle className="mr-2 h-5 w-5" />
-                  {heroContent.ctaSecondaryText || 'Escribinos'}
-                </a>
-              </Button>
-            </div>
-
-            {/* Repair tracking link */}
-            <div className="mt-5">
-              <Link
-                href={`${tenantPrefix}/mis-reparaciones`}
-                className={`inline-flex items-center gap-1.5 text-sm font-medium ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
+            {/* ── Buscador Directo en el Hero ── */}
+            {(capabilities?.hasCatalog ?? true) && <form
+              onSubmit={handleSearchSubmit}
+              className="mt-6 flex w-full max-w-lg items-center gap-2 rounded-2xl border border-border/80 bg-card p-1.5 shadow-md focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all"
+            >
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="¿Qué estás buscando hoy?..."
+                  className="h-10 border-0 bg-transparent pl-9 pr-3 text-xs sm:text-sm focus-visible:ring-0 shadow-none placeholder:text-muted-foreground/70"
+                />
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                className="h-10 rounded-xl px-4 font-bold shadow-xs gap-1.5"
               >
-                <Wrench className="h-3.5 w-3.5" />
-                {heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'}
-              </Link>
+                <span>Buscar</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </form>}
+
+            {/* CTAs Principales */}
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Button asChild size="lg" className="rounded-xl font-bold shadow-sm gap-2">
+                {primaryAction.kind === 'contact' ? (
+                  <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
+                    <MessageCircle className="h-4 w-4" />
+                    {heroContent.ctaPrimaryText || 'Solicitar información'}
+                  </a>
+                ) : (
+                  <Link href={`${tenantPrefix}${primaryAction.href}`}>
+                    {primaryAction.kind === 'services' ? <Briefcase className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
+                    {heroContent.ctaPrimaryText || (primaryAction.kind === 'services' ? 'Ver servicios' : 'Explorar productos')}
+                  </Link>
+                )}
+              </Button>
+
+              {primaryAction.kind !== 'contact' && <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="rounded-xl border-border bg-card font-semibold text-foreground hover:bg-muted shadow-xs gap-2"
+              >
+                <a
+                  href={contactHref}
+                  target={phoneClean ? '_blank' : undefined}
+                  rel={phoneClean ? 'noopener noreferrer' : undefined}
+                >
+                  <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  {heroContent.ctaSecondaryText || 'Contactar por WhatsApp'}
+                </a>
+              </Button>}
             </div>
+
+            {/* Rastrear reparación u orden de compra */}
+            {tracking.kind !== 'none' && tracking.href && (
+              <div className="mt-4">
+                <Link
+                  href={`${tenantPrefix}${tracking.href}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {tracking.kind === 'repairs'
+                    ? <Wrench className="h-3.5 w-3.5 text-primary" />
+                    : <Truck className="h-3.5 w-3.5 text-primary" />}
+                  <span>{tracking.kind === 'repairs'
+                    ? heroContent.trackRepairText || '¿Tenés una orden técnica? Rastreá tu equipo aquí'
+                    : '¿Hiciste una compra? Rastreá el estado de tu pedido aquí'}</span>
+                  <ArrowRight className="h-3 w-3 opacity-60" />
+                </Link>
+              </div>
+            )}
           </div>
 
-          {/* ── Right column: stats panel ── */}
-          <div className="flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-sm">
-              {/* Main stats card */}
-              <div className="relative overflow-hidden rounded-3xl bg-white/10 p-8 shadow-2xl ring-1 ring-white/20 backdrop-blur-md">
-                {/* Inner glow */}
-                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+          {/* ── Columna Derecha: Tarjeta Comercial Destacada ──
+               En movil solo sobreviven las estadisticas y el horario: la identidad
+               de la tienda ya esta en el header y los accesos rapidos repiten los
+               CTA de arriba (ambos van a /productos), asi que ahi unicamente
+               empujaban los productos fuera de la pantalla. */}
+          <div className="lg:col-span-5 flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-md">
+              {/* Tarjeta de Resumen Comercial */}
+              <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-4 shadow-xl space-y-4 lg:p-6 lg:space-y-6">
 
-                {/* Stats grid */}
+                {/* Logo e Identidad de la Tienda */}
+                <div className="hidden lg:flex items-center gap-3.5 pb-4 border-b border-border/60">
+                  {companyInfo.logoUrl ? (
+                    <div className="relative h-12 max-w-[160px] shrink-0 overflow-hidden flex items-center justify-start">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={companyInfo.logoUrl}
+                        alt={companyInfo.name || 'Logo'}
+                        className="h-12 w-auto max-h-12 max-w-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-extrabold text-sm shadow-xs">
+                      {companyInfo.name?.slice(0, 2).toUpperCase() || '4G'}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate font-bold text-base text-foreground">
+                      {companyInfo.name || 'Tienda Oficial'}
+                    </h2>
+                    {mapsHref ? (
+                      <a
+                        href={mapsHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-xs text-muted-foreground hover:text-primary transition-colors hover:underline block"
+                      >
+                        {companyInfo.address || 'Ver ubicación en Google Maps'}
+                      </a>
+                    ) : (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {companyInfo.address || 'Atención personalizada y envíos'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Estadísticas de Confianza */}
                 {heroStats.enabled !== false && (
-                  <div className="grid grid-cols-3 gap-3 border-b border-white/15 pb-6">
-                    <AnimatedStat value={heroStats.repairs}      label="Reparaciones" />
-                    <AnimatedStat value={heroStats.satisfaction} label="Satisfacción"  />
-                    <AnimatedStat value={heroStats.avgTime}      label="Tiempo prom."  />
+                  <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/40 p-3.5 text-center border border-border/40">
+                    <AnimatedStat value={heroStats.repairs || '100%'} label={capabilities?.metricLabels[0] ?? 'Garantía'} />
+                    <AnimatedStat value={heroStats.satisfaction || '4.9★'} label={capabilities?.metricLabels[1] ?? 'Valoración'} />
+                    <AnimatedStat value={heroStats.avgTime || '24h'} label={capabilities?.metricLabels[2] ?? 'Despacho'} />
                   </div>
                 )}
 
-                {/* Quick links */}
-                <div className={`space-y-3 ${heroStats.enabled !== false ? 'mt-6' : ''}`}>
-                  <Link
+                {/* Accesos Rápidos de Compra (duplican los CTA del hero en movil) */}
+                <div className="hidden lg:block space-y-2">
+                  {(capabilities?.hasCatalog ?? true) && <Link
                     href={`${tenantPrefix}/productos`}
-                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                    className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-3 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs group"
                   >
-                    <span>Ver catálogo de productos</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    href={`${tenantPrefix}/ofertas`}
-                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
-                  >
-                    <span>Ofertas activas</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    href={`${tenantPrefix}/mis-reparaciones`}
-                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
-                  >
-                    <span>Rastrear reparación</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Package className="h-4 w-4" />
+                      </div>
+                      <span>Ver catálogo completo de productos</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                  </Link>}
 
-              {/* Floating badge: estado de atención del día */}
-              <div className={cn(
-                'absolute -bottom-4 -left-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-xl',
-                closedToday ? 'bg-slate-600 shadow-slate-900/30' : 'bg-emerald-500 shadow-emerald-900/30'
-              )}>
-                <span className={cn('flex h-2 w-2 rounded-full bg-white', !closedToday && 'animate-pulse')} />
-                <span className="text-sm font-bold text-white">{closedToday ? 'Hoy cerrado' : 'Atendemos hoy'}</span>
+                  {(capabilities?.hasCatalog ?? true) && <Link
+                    href={`${tenantPrefix}/productos?ofertas=true`}
+                    className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/50 p-3 text-xs font-bold text-rose-800 transition-all hover:bg-rose-100/70 hover:shadow-xs group dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-200 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <span>Promociones y ofertas especiales</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-rose-500 transition-transform group-hover:translate-x-1" />
+                  </Link>}
+
+                  {primaryAction.kind === 'services' && (
+                    <Link
+                      href={`${tenantPrefix}/servicios`}
+                      className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-3 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Briefcase className="h-4 w-4" />
+                        </div>
+                        <span>Ver catálogo completo de servicios</span>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                    </Link>
+                  )}
+                </div>
+
+                {/* Badge Inferior de Horarios */}
+                <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground border-t border-border/60">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    Horario de atención:
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {companyInfo.hours?.weekdays || 'Lunes a Sábados'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </section>

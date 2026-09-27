@@ -1,3 +1,5 @@
+import { getDisplayLocale } from '@/lib/currency'
+
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
 export function parseDateOnlyLocal(value: string | number | Date): Date {
@@ -40,7 +42,8 @@ export function formatDateInputLocal(value: string | number | Date = new Date())
 
 export function formatDateOnlyDisplay(
   value: string | number | Date,
-  locale = 'es-AR',
+  // Por defecto, el idioma configurado en la plataforma. Antes era 'es-AR' fijo.
+  locale = getDisplayLocale(),
   options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' }
 ): string {
   return parseDateOnlyLocal(value).toLocaleDateString(locale, options)

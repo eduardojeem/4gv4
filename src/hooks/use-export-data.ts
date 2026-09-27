@@ -114,7 +114,7 @@ export function useExportData() {
     }
 
     const exportToJSON = async (repairs: Repair[], filename: string, includeMetrics?: boolean) => {
-        const exportData: any = {
+        const exportData: Record<string, unknown> = {
             exportDate: new Date().toISOString(),
             totalRecords: repairs.length,
             repairs: repairs.map(repair => ({

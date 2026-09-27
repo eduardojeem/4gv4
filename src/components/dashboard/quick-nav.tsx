@@ -52,7 +52,7 @@ const items: QuickNavItem[] = [
   },
   { 
     title: 'Reportes', 
-    href: '/dashboard/reports', 
+    href: '/admin/reports',
     description: 'Métricas y análisis', 
     icon: BarChart3,
     color: 'from-indigo-500 to-indigo-600'

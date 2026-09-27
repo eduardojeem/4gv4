@@ -143,9 +143,9 @@ export function useProducts() {
           setLoading(false)
           return
         }
-        const filtered = (data2 || []).filter(p => {
-          const qty = Number((p as any).stock ?? 0)
-          const min = Number((p as any).min_stock ?? 0)
+        const filtered = ((data2 as DBProduct[] | null) || []).filter(p => {
+          const qty = Number(p.stock ?? 0)
+          const min = Number(p.min_stock ?? 0)
           return qty > 0 && qty <= min
         })
         const mapped = (filtered as DBProduct[]).map(p => mapDbToUi(p, new Map<string, string>(), new Map<string, string>()))
@@ -167,9 +167,9 @@ export function useProducts() {
           return
         }
         const [minM, maxM] = marginRange
-        const filteredByMargin = (data3 || []).filter(p => {
-          const purchase = Number((p as any).purchase_price ?? 0)
-          const sale = Number((p as any).sale_price ?? 0)
+        const filteredByMargin = ((data3 as DBProduct[] | null) || []).filter(p => {
+          const purchase = Number(p.purchase_price ?? 0)
+          const sale = Number(p.sale_price ?? 0)
           const margin = purchase > 0 ? ((sale - purchase) / purchase) * 100 : 0
           return margin >= (typeof minM === 'number' ? minM : -Infinity) && margin <= (typeof maxM === 'number' ? maxM : Infinity)
         })

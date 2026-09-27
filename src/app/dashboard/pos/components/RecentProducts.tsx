@@ -1,6 +1,7 @@
 'use client'
 
 import { Eye, Clock } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,10 +18,14 @@ export function RecentProducts({
   onProductClick,
   className
 }: RecentProductsProps) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000)
+    return () => clearInterval(timer)
+  }, [])
   if (products.length === 0) return null
 
   const formatTime = (timestamp: Date) => {
-    const now = Date.now()
     const ts = timestamp instanceof Date ? timestamp.getTime() : new Date(timestamp).getTime()
     const diff = now - ts
     const minutes = Math.floor(diff / 60000)

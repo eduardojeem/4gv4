@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Edit, Eye, Package, MoreHorizontal, ArrowUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -50,11 +49,11 @@ const getStockBadge = (current: number, min: number) => {
 }
 
 // Componente de acciones simplificado
-const ProductActions = ({ 
-  product, 
-  onEdit, 
-  onView 
-}: { 
+const ProductActions = ({
+  product,
+  onEdit,
+  onView
+}: {
   product: Product
   onEdit?: (product: Product) => void
   onView?: (product: Product) => void
@@ -79,12 +78,12 @@ const ProductActions = ({
 )
 
 // Componente de encabezado ordenable
-const SortableHeader = ({ 
-  children, 
-  field, 
-  sortBy, 
-  sortOrder, 
-  onSort 
+const SortableHeader = ({
+  children,
+  field,
+  sortBy: _sortBy,
+  sortOrder: _sortOrder,
+  onSort
 }: {
   children: React.ReactNode
   field: string
@@ -146,10 +145,7 @@ export default function ProductListOptimized({
           <TableRow className="bg-gray-50/50">
             <TableHead className="w-12">
               <Checkbox
-                checked={allSelected}
-                ref={(el) => {
-                  if (el) (el as any).indeterminate = someSelected
-                }}
+                checked={someSelected ? 'indeterminate' : allSelected}
                 onCheckedChange={(checked) => onProductSelectAll?.(!!checked)}
               />
             </TableHead>
@@ -173,7 +169,7 @@ export default function ProductListOptimized({
             const isOutOfStock = product.stock_quantity === 0
 
             return (
-              <TableRow 
+              <TableRow
                 key={product.id}
                 className={cn(
                   "hover:bg-gray-50/50 transition-colors",
@@ -187,11 +183,11 @@ export default function ProductListOptimized({
                     onCheckedChange={() => onProductSelect?.(product.id)}
                   />
                 </TableCell>
-                
+
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 rounded-lg">
-                      <AvatarImage src={(product as any).image || (product as any).images?.[0]} alt={product.name} />
+                      <AvatarImage src={product.image || product.images?.[0] || undefined} alt={product.name} />
                       <AvatarFallback className="rounded-lg bg-gray-100 text-gray-600 text-sm">
                         {product.name.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
@@ -202,30 +198,30 @@ export default function ProductListOptimized({
                     </div>
                   </div>
                 </TableCell>
-                
+
                 <TableCell>
                   <Badge variant="outline" className="font-normal">
-                    {typeof product.category === 'string' ? product.category : (product.category as any)?.name || 'Sin categoría'}
+                    {typeof product.category === 'string' ? product.category : product.category?.name || 'Sin categoría'}
                   </Badge>
                 </TableCell>
-                
+
                 <TableCell>
                   <div className="text-sm">
                     <span className="font-medium">{product.stock_quantity}</span>
                     <span className="text-gray-500 ml-1">unidades</span>
                   </div>
                 </TableCell>
-                
+
                 <TableCell>
                   <span className="font-semibold text-green-600">
                     ${product.sale_price.toFixed(2)}
                   </span>
                 </TableCell>
-                
+
                 <TableCell>
                   {getStockBadge(product.stock_quantity, product.min_stock)}
                 </TableCell>
-                
+
                 <TableCell>
                   <ProductActions
                     product={product}
@@ -238,7 +234,7 @@ export default function ProductListOptimized({
           })}
         </TableBody>
       </Table>
-      
+
       {products.length === 0 && (
         <div className="p-8 text-center">
           <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />

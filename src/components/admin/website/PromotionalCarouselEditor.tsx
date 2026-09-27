@@ -1,0 +1,1969 @@
+'use client'
+
+import { AppImage } from '@/components/ui/app-image'
+
+import { useEffect, useRef, useState } from 'react'
+import {
+  AlignCenter, AlignLeft, AlignRight,
+  ArrowDown, ArrowUp, Check, GalleryHorizontalEnd, ImagePlus, Link2, Loader2,
+  Monitor, MoonStar, Pencil, Plus, Save, Smartphone, SunMedium,
+  Trash2, Type, Upload, X,
+  ChevronDown, ChevronUp, HelpCircle, Sparkles, Lightbulb, ExternalLink, Images
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
+import { SectionCard } from '@/components/admin/website/SectionCard'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import type { PromotionalCarouselSettings, PromotionalCarouselSlide } from '@/types/website-settings'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
+import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
+import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
+import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
+import { cn } from '@/lib/utils'
+import { PromotionalCarouselSlideSchema } from '@/lib/validation/website-settings'
+import { getPromotionStoragePathFromUrl } from '@/lib/website/promotional-carousel-storage'
+
+const MAX_SLIDES = 6
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+type SlideFieldErrors = Partial<Record<keyof PromotionalCarouselSlide, string>>
+type EditorSection = 'template' | 'content' | 'image' | 'cta' | 'appearance'
+
+const EDITOR_SECTIONS: Array<{ value: EditorSection; label: string; icon: React.ElementType }> = [
+  { value: 'content', label: 'Texto y mensaje', icon: Type },
+  { value: 'image', label: 'Imagen', icon: Upload },
+  { value: 'cta', label: 'Botón', icon: Link2 },
+  { value: 'appearance', label: 'Diseño', icon: Monitor },
+  { value: 'template', label: 'Plantillas', icon: ImagePlus },
+]
+
+const TITLE_SUGGESTIONS = [
+  '🔥 30% OFF en Seleccionados',
+  '🚚 Envíos Gratis a Todo el País',
+  '✨ Nueva Colección de Temporada',
+  '⚡ Liquidación de Temporada',
+  '💳 Hasta 6 Cuotas Sin Interés',
+  '⭐ Los Productos Más Vendidos',
+  '🎉 Ofertas Exclusivas de la Semana',
+  '📱 Renovación de Equipos al Mejor Precio',
+]
+
+const MESSAGE_SUGGESTIONS = [
+  'Aprovechá precios especiales y descuentos por tiempo limitado.',
+  'Stock inmediato con despacho en 24 horas a todo el país.',
+  'Descubrí las últimas tendencias con la mejor calidad garantizada.',
+  'Consultá nuestro catálogo y hacé tu pedido directo por WhatsApp.',
+  'Diagnóstico claro, repuestos originales y atención técnica especializada.',
+  'Comprá con seguridad y recibí en la puerta de tu casa o trabajo.',
+]
+
+const CTA_TEXT_SUGGESTIONS = [
+  'Ver ofertas',
+  'Comprar ahora',
+  'Ver catálogo',
+  'Pedir por WhatsApp',
+  'Ver colección',
+  'Consultar stock',
+  'Pedir cotización',
+  'Ver productos',
+]
+
+const CTA_HREF_SHORTCUTS = [
+  { label: '📦 Catálogo (/productos)', href: '/productos' },
+  { label: '🔥 Ofertas (/productos?ofertas=true)', href: '/productos?ofertas=true' },
+  { label: '💼 Servicios (/servicios)', href: '/servicios' },
+]
+
+async function readImageDimensions(file: File) {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(file)
+    const dimensions = { width: bitmap.width, height: bitmap.height }
+    bitmap.close()
+    return dimensions
+  }
+
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new window.Image()
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve({ width: image.naturalWidth, height: image.naturalHeight })
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('Invalid image'))
+    }
+    image.src = objectUrl
+  })
+}
+
+async function deletePromotionImage(path: string, keepalive = false) {
+  const response = await fetch('/api/admin/website/promotion-image', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+    keepalive,
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.error || 'No se pudo eliminar la imagen')
+  }
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null
+  return <p id={id} role="alert" className="text-xs font-medium text-destructive">{message}</p>
+}
+
+function CharCount({ value, max }: { value: string; max: number }) {
+  const nearLimit = value.length >= max * 0.9
+  return (
+    <span className={cn('text-[11px] tabular-nums', nearLimit ? 'text-amber-600' : 'text-muted-foreground')}>
+      {value.length}/{max}
+    </span>
+  )
+}
+
+const CAROUSEL_EXAMPLES: Array<{
+  name: string
+  category: string
+  badgeIcon?: string
+  slide: Omit<PromotionalCarouselSlide, 'id' | 'active'>
+}> = [
+  {
+    name: 'Accesorios Tech',
+    category: 'Tecnología',
+    badgeIcon: '📱',
+    slide: {
+      title: 'Todo para acompañar tu celular',
+      message: 'Descubrí cargadores, cables, auriculares y fundas seleccionadas con garantía.',
+      imageUrl: '/images/promotional-carousel/accesorios.webp',
+      imageAlt: 'Cargadores, cables, auriculares y fundas para celulares',
+      ctaText: 'Ver accesorios',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Renovación de Celulares',
+    category: 'Tecnología',
+    badgeIcon: '📱',
+    slide: {
+      title: 'Encontrá tu próximo celular',
+      message: 'Conocé los equipos disponibles y elegí el que mejor se adapta a vos con financiación.',
+      imageUrl: '/images/promotional-carousel/renovacion.webp',
+      imageAlt: 'Tres celulares modernos exhibidos en una tienda',
+      ctaText: 'Ver celulares',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'right',
+    },
+  },
+  {
+    name: 'Servicio Técnico Especializado',
+    category: 'Tecnología',
+    badgeIcon: '🔧',
+    slide: {
+      title: 'Tu equipo en manos expertas',
+      message: 'Diagnóstico claro, repuestos originales y reparación profesional con seguimiento online.',
+      imageUrl: '/images/promotional-carousel/reparacion.webp',
+      imageAlt: 'Técnico revisando un celular en una mesa de reparación',
+      ctaText: 'Ver servicios',
+      ctaHref: '/servicios',
+      textTone: 'dark',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Nueva Colección de Ropa',
+    category: 'Moda & Ropa',
+    badgeIcon: '👗',
+    slide: {
+      title: 'Nueva Colección de Temporada',
+      message: 'Renová tu estilo con las últimas tendencias en prendas y calzados exclusivos.',
+      imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
+      imageAlt: 'Prendas de vestir y ropa de moda',
+      ctaText: 'Ver colección',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'right',
+    },
+  },
+  {
+    name: 'Moda Urbana & Streetwear',
+    category: 'Moda & Ropa',
+    badgeIcon: '🔥',
+    slide: {
+      title: 'Estilo Urbano & Calce Relajado',
+      message: 'Prendas básicas y oversize confeccionadas en algodón peinado premium para todo el día.',
+      imageUrl: '/images/promotional-carousel/hero-moda-urbana.jpg',
+      imageAlt: 'Modelos vistiendo prendas urbanas oversize y hoodies de moda',
+      ctaText: 'Ver catálogo',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Uniformes & Línea Corporativa',
+    category: 'Moda & Ropa',
+    badgeIcon: '💼',
+    slide: {
+      title: 'Prendas Corporativas para Empresas',
+      message: 'Camperas softshell, chombas polo y remeras con bordado de tu marca y precio mayorista.',
+      imageUrl: '/images/promotional-carousel/hero-linea-corporativa.jpg',
+      imageAlt: 'Equipo corporativo profesional con uniformes institucionales y camperas softshell',
+      ctaText: 'Ver Línea Empresas',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'right',
+    },
+  },
+  {
+    name: 'Cuidado Facial & Belleza',
+    category: 'Cosmética',
+    badgeIcon: '💄',
+    slide: {
+      title: 'Cuidado Personal & Skincare',
+      message: 'Productos 100% originales para realzar tu belleza y cuidar tu piel día a día.',
+      imageUrl: '/images/promotional-carousel/accesorios.webp',
+      imageAlt: 'Productos de cosmética y cuidado personal',
+      ctaText: 'Explorar catálogo',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Herramientas Profesionales',
+    category: 'Ferretería',
+    badgeIcon: '🔨',
+    slide: {
+      title: 'Herramientas & Materiales',
+      message: 'Equipate con las mejores marcas, asesoramiento técnico y garantía de fábrica.',
+      imageUrl: '/images/promotional-carousel/reparacion.webp',
+      imageAlt: 'Herramientas profesionales de trabajo y construcción',
+      ctaText: 'Ver herramientas',
+      ctaHref: '/productos',
+      textTone: 'dark',
+      contentAlign: 'left',
+    },
+  },
+  {
+    name: 'Envíos Gratis a Todo el País',
+    category: 'Promociones',
+    badgeIcon: '🚚',
+    slide: {
+      title: 'Envíos Gratis a Todo el País',
+      message: 'Hacé tu pedido hoy y recibilo en la comodidad de tu hogar sin costo de envío.',
+      imageUrl: '/images/promotional-carousel/renovacion.webp',
+      imageAlt: 'Paquete de envío a domicilio',
+      ctaText: 'Comprar ahora',
+      ctaHref: '/productos',
+      textTone: 'light',
+      contentAlign: 'center',
+    },
+  },
+]
+
+function newSlide(): PromotionalCarouselSlide {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    message: '',
+    imageUrl: '',
+    imageAlt: '',
+    ctaText: 'Ver productos',
+    ctaHref: '/productos',
+    active: true,
+    textTone: 'light',
+    contentAlign: 'left',
+    hideText: false,
+    badge: '',
+    titleSize: 'normal',
+    overlayIntensity: 'strong',
+    overlayColor: 'black',
+    backgroundColor: '',
+    titleColor: '',
+    fontFamily: 'sans',
+  }
+}
+
+const TITLE_COLOR_PRESETS = [
+  { label: 'Blanco', value: '#ffffff', bg: 'bg-white', border: 'border-zinc-300 dark:border-zinc-700' },
+  { label: 'Oro / Amarillo', value: '#facc15', bg: 'bg-yellow-400', border: 'border-yellow-500' },
+  { label: 'Naranja Fuego', value: '#fb923c', bg: 'bg-orange-400', border: 'border-orange-500' },
+  { label: 'Verde Neón', value: '#4ade80', bg: 'bg-emerald-400', border: 'border-emerald-500' },
+  { label: 'Celeste', value: '#38bdf8', bg: 'bg-sky-400', border: 'border-sky-500' },
+  { label: 'Negro Carbón', value: '#09090b', bg: 'bg-zinc-950', border: 'border-zinc-800' },
+]
+
+function isLightColor(color?: string): boolean {
+  if (!color) return false
+  const clean = color.trim().toLowerCase()
+  if (clean === '#ffffff' || clean === '#fff' || clean === 'white') return true
+  if (clean === '#000000' || clean === '#000' || clean === 'black' || clean === '#09090b') return false
+  const hex = clean.replace('#', '')
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16)
+    const g = parseInt(hex[1] + hex[1], 16)
+    const b = parseInt(hex[2] + hex[2], 16)
+    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
+  }
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return !isNaN(r) && (r * 299 + g * 587 + b * 114) / 1000 > 160
+  }
+  return false
+}
+
+// ── Slide Preview ────────────────────────────────────────────────────────────
+
+function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; uploading: boolean }) {
+  const [mode, setMode] = useState<'desktop' | 'mobile'>('desktop')
+  const alignClass = {
+    left: 'items-start text-left',
+    center: 'items-center text-center',
+    right: 'items-end text-right',
+  }[slide.contentAlign || 'left']
+
+  const isTextHidden = Boolean(
+    slide.hideText ||
+    (!slide.title?.trim() && !slide.message?.trim() && !slide.badge?.trim())
+  )
+
+  const intensity = slide.overlayIntensity || (slide.hideText ? 'none' : 'strong')
+  const overlayColor = slide.overlayColor || (slide.textTone === 'light' ? 'black' : 'white')
+
+  const titleSizeClass = {
+    compact: 'text-base sm:text-xl font-bold',
+    normal: 'text-lg sm:text-2xl font-black',
+    large: 'text-xl sm:text-3xl font-black tracking-tight',
+  }[slide.titleSize || 'normal']
+
+  const titleFontClass = {
+    sans: 'font-sans',
+    display: 'font-black tracking-tight uppercase',
+    serif: 'font-serif font-bold',
+    mono: 'font-mono font-bold tracking-tighter',
+  }[slide.fontFamily || 'sans']
+
+  const hasLightTitle = slide.titleColor
+    ? isLightColor(slide.titleColor)
+    : slide.textTone === 'light'
+
+  const overlayBgClass = (() => {
+    if (intensity === 'none') return 'opacity-0'
+    const opacityClass = {
+      subtle: 'opacity-25',
+      medium: 'opacity-55',
+      strong: 'opacity-85',
+    }[intensity] || 'opacity-85'
+
+    if (overlayColor === 'white') return cn('bg-white', opacityClass)
+    if (overlayColor === 'brand') return cn('bg-primary', opacityClass)
+    return cn('bg-black', opacityClass)
+  })()
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5">
+          {mode === 'desktop' ? <Monitor className="h-3.5 w-3.5 text-muted-foreground" /> : <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />}
+          <span className="text-xs font-medium text-muted-foreground">Vista previa</span>
+        </div>
+        <div className="flex rounded-md border bg-background p-0.5" aria-label="Formato de vista previa">
+          <button type="button" aria-label="Vista previa en computadora" aria-pressed={mode === 'desktop'} onClick={() => setMode('desktop')} className={cn('flex h-7 w-7 items-center justify-center rounded-sm', mode === 'desktop' ? 'bg-muted text-foreground' : 'text-muted-foreground')}>
+            <Monitor className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" aria-label="Vista previa en celular" aria-pressed={mode === 'mobile'} onClick={() => setMode('mobile')} className={cn('flex h-7 w-7 items-center justify-center rounded-sm', mode === 'mobile' ? 'bg-muted text-foreground' : 'text-muted-foreground')}>
+            <Smartphone className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <div className={cn('mx-auto overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm', mode === 'mobile' ? 'w-full max-w-[280px]' : 'w-full')}>
+        <div
+          style={slide.backgroundColor ? { backgroundColor: slide.backgroundColor } : undefined}
+          className={cn('relative overflow-hidden bg-muted', mode === 'mobile' ? 'aspect-[12/5]' : 'aspect-[16/8]')}
+        >
+        {slide.imageUrl ? (
+
+          <AppImage src={slide.imageUrl} alt={slide.imageAlt || ''} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            {uploading
+              ? <Loader2 className="h-7 w-7 animate-spin" />
+              : <Upload className="h-7 w-7 opacity-40" />}
+            <span className="text-xs opacity-60">
+              {uploading ? 'Subiendo imagen…' : 'Seleccioná o subí una imagen'}
+            </span>
+          </div>
+        )}
+
+        {/* Capa de oscurecimiento o tinte en desktop */}
+        {mode === 'desktop' && intensity !== 'none' && (
+          <div className={cn('absolute inset-0 transition-opacity', overlayBgClass)} />
+        )}
+
+        {mode === 'desktop' && (
+          isTextHidden ? (
+            <div className="relative flex h-full flex-col justify-end p-4">
+              <span className="w-fit rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-xs">
+                🖼️ Modo gráfico (sin textos superpuestos)
+                {slide.ctaHref && <span className="ml-1 text-white/80">· Enlace: {slide.ctaHref}</span>}
+              </span>
+            </div>
+          ) : (
+            <div className={cn('relative flex h-full flex-col justify-center px-8 py-6', alignClass, slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')}>
+              {slide.badge && (
+                <span className={cn('mb-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide border', slide.textTone === 'light' ? 'bg-white/20 text-white border-white/30' : 'bg-black/10 text-zinc-950 border-black/20')}>
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {slide.badge}
+                </span>
+              )}
+              <p
+                style={slide.titleColor ? { color: slide.titleColor } : undefined}
+                className={cn(
+                  'leading-tight',
+                  hasLightTitle && 'drop-shadow-sm',
+                  titleSizeClass,
+                  titleFontClass,
+                  !slide.titleColor && (slide.textTone === 'light' ? 'text-white' : 'text-zinc-950')
+                )}
+              >
+                {slide.title || <span className="opacity-40 font-normal text-base">Título de la promoción</span>}
+              </p>
+              <p className="mt-2 text-xs font-medium opacity-90 sm:text-sm line-clamp-2">
+                {slide.message || <span className="opacity-40 font-normal">El mensaje se mostrará sobre la imagen.</span>}
+              </p>
+              {slide.ctaText && (
+                <span className={cn('mt-3.5 w-fit rounded-lg px-3 py-1.5 text-[10px] font-bold shadow-sm sm:text-xs', slide.textTone === 'light' ? 'bg-white text-zinc-950' : 'bg-zinc-950 text-white')}>
+                  {slide.ctaText}
+                </span>
+              )}
+            </div>
+          )
+        )}
+        </div>
+        {mode === 'mobile' && (
+          isTextHidden ? (
+            <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20">
+              🖼️ Modo gráfico sin textos · Toda la imagen redirige {slide.ctaHref ? `a ${slide.ctaHref}` : 'al pulsar'}
+            </div>
+          ) : (
+            <div className={cn('flex min-h-[160px] flex-col justify-center px-5 py-5 text-foreground', alignClass)}>
+              {slide.badge && (
+                <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {slide.badge}
+                </span>
+              )}
+              <p
+                style={slide.titleColor ? { color: slide.titleColor } : undefined}
+                className={cn('leading-tight', titleSizeClass, titleFontClass, !slide.titleColor && 'font-black')}
+              >
+                {slide.title || <span className="text-base font-normal opacity-40">Título de la promoción</span>}
+              </p>
+              <p className="mt-1.5 text-xs font-medium text-muted-foreground">{slide.message || <span className="font-normal opacity-60">El mensaje se mostrará debajo de la imagen.</span>}</p>
+              {slide.ctaText && <span className="mt-3.5 w-fit rounded-md bg-foreground px-3 py-1.5 text-[11px] font-bold text-background">{slide.ctaText}</span>}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Form section wrapper ─────────────────────────────────────────────────────
+
+function FormSection({ icon: Icon, label, step, children }: { icon: React.ElementType; label: string; step?: number; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border border-border/70 bg-background p-4 shadow-xs sm:p-5">
+      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+        <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+        {step && <span className="ml-auto text-xs font-medium tabular-nums text-muted-foreground">Paso {step}</span>}
+      </div>
+      <div className="space-y-4 pt-4">{children}</div>
+    </section>
+  )
+}
+
+// ── Image upload zone ────────────────────────────────────────────────────────
+
+function ImageUploadZone({
+  imageUrl,
+  uploading,
+  onFileSelect,
+  onSelectFromHistory,
+  onClear,
+  error,
+}: {
+  imageUrl: string
+  uploading: boolean
+  onFileSelect: (file: File) => void
+  onSelectFromHistory?: (url: string) => void
+  onClear: () => void
+  error?: string
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [mediaOpen, setMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
+
+  const handleTriggerUpload = () => {
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: tu organización llegó al máximo de 20 imágenes. Eliminá imágenes desde el Historial para liberar espacio.')
+      setMediaOpen(true)
+      return
+    }
+    inputRef.current?.click()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: tu organización llegó al máximo de 20 imágenes. Eliminá imágenes desde el Historial para liberar espacio.')
+      setMediaOpen(true)
+      return
+    }
+    const file = e.dataTransfer.files?.[0]
+    if (file) onFileSelect(file)
+  }
+
+  return (
+    <div className="space-y-2">
+      {isMediaAtLimit && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+          <span className="font-semibold">⚠️ Límite de 20 imágenes alcanzado en tu organización</span>
+          <button
+            type="button"
+            onClick={() => setMediaOpen(true)}
+            className="underline font-bold hover:text-destructive/80 shrink-0 cursor-pointer"
+          >
+            Abrir historial y liberar espacio
+          </button>
+        </div>
+      )}
+      {imageUrl ? (
+        <div className={cn('relative overflow-hidden rounded-lg border bg-muted/30', error ? 'border-destructive' : 'border-border/60')}>
+          { }
+          <AppImage src={imageUrl} alt="" className="aspect-[16/7] w-full object-cover" />
+          <button
+            type="button"
+            onClick={onClear}
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition hover:bg-black/80"
+            aria-label="Quitar imagen"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMediaOpen(true)}
+              className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/85 cursor-pointer"
+              title="Seleccionar otra imagen del historial"
+            >
+              <Images className="h-3 w-3 text-primary-foreground" />
+              <span>Historial</span>
+            </button>
+            <button
+              id="promotion-image-upload"
+              type="button"
+              onClick={handleTriggerUpload}
+              disabled={uploading}
+              aria-describedby={error ? 'promotion-image-error' : undefined}
+              className="flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/85 disabled:opacity-60 cursor-pointer"
+            >
+              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+              {uploading ? 'Subiendo…' : 'Cambiar archivo'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <button
+            id="promotion-image-upload"
+            type="button"
+            onClick={handleTriggerUpload}
+            disabled={uploading}
+            aria-describedby={error ? 'promotion-image-error' : undefined}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            className={cn(
+              'flex w-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors cursor-pointer',
+              dragging
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-border/70 bg-muted/30 text-muted-foreground hover:border-primary/50 hover:bg-primary/5',
+              uploading && 'pointer-events-none opacity-60',
+              error && 'border-destructive',
+            )}
+          >
+            {uploading ? (
+              <Loader2 className="h-8 w-8 animate-spin" />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                <Upload className="h-5 w-5" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-semibold">{uploading ? 'Subiendo imagen…' : 'Subir imagen'}</p>
+              <p className="text-xs text-muted-foreground">Arrastrá o hacé click · JPG, PNG, WebP — máx. 5 MB</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Recomendado: 1200 × 500 px o mayor</p>
+            </div>
+          </button>
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] text-muted-foreground">¿Ya subiste imágenes antes?</span>
+            <button
+              type="button"
+              onClick={() => setMediaOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
+            >
+              <Images className="h-3.5 w-3.5" />
+              <span>Elegir del historial</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/avif"
+        disabled={uploading}
+        className="sr-only"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onFileSelect(file)
+          e.target.value = ''
+        }}
+      />
+      <WebsiteMediaLibraryDialog
+        open={mediaOpen}
+        onOpenChange={setMediaOpen}
+        filterSection="promotions"
+        title="Historial de Imágenes del Carrusel"
+        description="Elegí una imagen ya subida o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+        onSelect={(url) => {
+          onSelectFromHistory?.(url)
+        }}
+      />
+    </div>
+  )
+}
+
+// ── Segmented control ────────────────────────────────────────────────────────
+
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string; icon?: React.ElementType }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex overflow-hidden rounded-lg border border-border/70 bg-muted/40 p-0.5" role="group">
+      {options.map((opt) => {
+        const Icon = opt.icon
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            aria-pressed={value === opt.value}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all',
+              value === opt.value
+                ? 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+            {opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
+type PromotionalCarouselEditorProps = {
+  /** Clave de website_settings a editar. Permite reusar este editor para el
+   *  banner del inicio y para el de la pagina de ofertas. */
+  settingKey?: 'promotional_carousel' | 'offers_carousel'
+  title?: string
+  description?: string
+}
+
+export function PromotionalCarouselEditor({
+  settingKey = 'promotional_carousel',
+  title = 'Carrusel de promociones',
+  description = 'Publicá campañas con imágenes y mensajes propios en la página de inicio',
+}: PromotionalCarouselEditorProps = {}) {
+  const { settings, isLoading, error, isSaving, updateSetting, refetch } = useAdminWebsiteSettings()
+  const defaults = getWebsiteSettingsDefaults()[settingKey]!
+  const [draft, setDraft] = useState<PromotionalCarouselSettings | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingSlide, setEditingSlide] = useState<PromotionalCarouselSlide | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<SlideFieldErrors>({})
+  const [activeEditorSection, setActiveEditorSection] = useState<EditorSection>('content')
+  const [showCarouselGuide, setShowCarouselGuide] = useState(false)
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('all')
+  const [carouselMediaOpen, setCarouselMediaOpen] = useState(false)
+  const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
+  const current = draft ?? settings?.[settingKey] ?? defaults
+  const hasChanges = draft !== null
+  const dirtyContext = useWebsiteEditorDirty()
+  // Snapshot del slide tal como estaba al abrir el modal, para poder avisar
+  // si se cierra (X, Cancelar, Escape o click afuera) con cambios sin
+  // guardar — antes se perdían en silencio.
+  const originalSlideRef = useRef<PromotionalCarouselSlide | null>(null)
+  const editingUploadPathRef = useRef<string | null>(null)
+  const pendingUploadPathsRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    dirtyContext?.setDirty(hasChanges)
+    return () => dirtyContext?.setDirty(false)
+  }, [dirtyContext, hasChanges])
+
+  useEffect(() => () => {
+    for (const path of pendingUploadPathsRef.current) {
+      void deletePromotionImage(path, true).catch(() => undefined)
+    }
+  }, [])
+
+  const patch = <K extends keyof PromotionalCarouselSettings>(key: K, value: PromotionalCarouselSettings[K]) => {
+    setDraft((previous) => ({ ...(previous ?? current), [key]: value }))
+  }
+
+  const openNewSlide = () => {
+    if (current.slides.length >= MAX_SLIDES) {
+      toast.error(`Podés publicar hasta ${MAX_SLIDES} diapositivas`)
+      return
+    }
+    const slide = newSlide()
+    originalSlideRef.current = slide
+    editingUploadPathRef.current = null
+    setFieldErrors({})
+    setActiveEditorSection('content')
+    setEditingSlide(slide)
+    setDialogOpen(true)
+  }
+
+  const openSlide = (slide: PromotionalCarouselSlide) => {
+    originalSlideRef.current = slide
+    editingUploadPathRef.current = null
+    setFieldErrors({})
+    setActiveEditorSection('content')
+    setEditingSlide({ ...slide })
+    setDialogOpen(true)
+  }
+
+  const updateSlideField = <K extends keyof PromotionalCarouselSlide>(key: K, value: PromotionalCarouselSlide[K]) => {
+    setEditingSlide((previous) => previous ? { ...previous, [key]: value } : previous)
+    setFieldErrors((previous) => ({ ...previous, [key]: undefined }))
+  }
+
+  const discardTemporaryImage = (path: string | null) => {
+    if (!path || !pendingUploadPathsRef.current.has(path)) return
+    pendingUploadPathsRef.current.delete(path)
+    void deletePromotionImage(path).catch(() => toast.error('No se pudo limpiar la imagen temporal'))
+  }
+
+  const pendingPathForSlide = (slide: PromotionalCarouselSlide | null) => {
+    const path = slide ? getPromotionStoragePathFromUrl(slide.imageUrl) : null
+    return path && pendingUploadPathsRef.current.has(path) ? path : null
+  }
+
+  const hasUnsavedSlideChanges = () => {
+    if (!editingSlide || !originalSlideRef.current) return false
+    return JSON.stringify(editingSlide) !== JSON.stringify(originalSlideRef.current)
+  }
+
+  // Punto único de cierre: X, "Cancelar", Escape y click afuera pasan todos
+  // por acá, así ninguno queda sin el aviso de cambios sin guardar.
+  const requestCloseDialog = () => {
+    if (uploading) {
+      toast.error('Esperá a que termine la carga de la imagen')
+      return
+    }
+    if (hasUnsavedSlideChanges() && !window.confirm('Tenés cambios sin guardar en esta diapositiva. ¿Descartarlos?')) {
+      return
+    }
+    discardTemporaryImage(editingUploadPathRef.current)
+    editingUploadPathRef.current = null
+    setDialogOpen(false)
+    setEditingSlide(null)
+    setFieldErrors({})
+    originalSlideRef.current = null
+  }
+
+  const applyTemplate = (example: (typeof CAROUSEL_EXAMPLES)[number]) => {
+    const hasContent = Boolean(
+      editingSlide?.title.trim() || editingSlide?.message.trim() || editingSlide?.imageUrl.trim()
+    )
+    if (hasContent && !window.confirm('Esto reemplaza el título, mensaje, imagen y demás campos por los de la plantilla. ¿Continuar?')) {
+      return
+    }
+    discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
+    editingUploadPathRef.current = null
+    setFieldErrors({})
+    setEditingSlide((previous) => previous ? { ...previous, ...example.slide } : previous)
+    setActiveEditorSection('content')
+  }
+
+  const uploadImage = async (file: File) => {
+    if (!editingSlide) return
+    if (isMediaAtLimit) {
+      toast.error('Límite alcanzado: alcanzaste el máximo de 20 imágenes en tu organización. Eliminá imágenes desde el Historial para liberar espacio.', {
+        duration: 5000,
+      })
+      return
+    }
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      toast.error('Usá una imagen JPG, PNG, WebP o AVIF')
+      return
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      toast.error('La imagen no puede superar 5 MB')
+      return
+    }
+    try {
+      const { width, height } = await readImageDimensions(file)
+      const ratio = width / height
+      if (width < 1200 || height < 500) {
+        setFieldErrors((previous) => ({ ...previous, imageUrl: `La imagen mide ${width} × ${height} px. El mínimo es 1200 × 500 px.` }))
+        return
+      }
+      if (ratio < 1.7 || ratio > 3.2) {
+        setFieldErrors((previous) => ({ ...previous, imageUrl: 'Usá una imagen horizontal con proporción cercana a 12:5.' }))
+        return
+      }
+    } catch {
+      setFieldErrors((previous) => ({ ...previous, imageUrl: 'No se pudieron verificar las dimensiones de la imagen.' }))
+      return
+    }
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('slideId', editingSlide.id)
+    setUploading(true)
+    try {
+      const response = await fetch('/api/admin/website/promotion-image', { method: 'POST', body: formData })
+      const body = await response.json().catch(() => null)
+      if (!response.ok || !body?.url || !body?.path) throw new Error(body?.error || 'No se pudo subir la imagen')
+      discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
+      pendingUploadPathsRef.current.add(body.path)
+      editingUploadPathRef.current = body.path
+      setEditingSlide((previous) => previous ? {
+        ...previous,
+        imageUrl: body.url,
+        imageAlt: previous.imageAlt || file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '),
+      } : previous)
+      setFieldErrors((previous) => ({ ...previous, imageUrl: undefined, imageAlt: undefined }))
+      toast.success('Imagen cargada')
+    } catch (uploadError) {
+      toast.error(uploadError instanceof Error ? uploadError.message : 'No se pudo subir la imagen')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const saveSlide = () => {
+    if (!editingSlide) return
+    const result = PromotionalCarouselSlideSchema.safeParse(editingSlide)
+    if (!result.success) {
+      const errors: SlideFieldErrors = {}
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof PromotionalCarouselSlide | undefined
+        if (field && !errors[field]) errors[field] = issue.message
+      }
+      setFieldErrors(errors)
+      const firstField = result.error.issues[0]?.path[0]
+      const fieldSections: Partial<Record<keyof PromotionalCarouselSlide, EditorSection>> = {
+        title: 'content',
+        message: 'content',
+        imageUrl: 'image',
+        imageAlt: 'image',
+        ctaText: 'cta',
+        ctaHref: 'cta',
+      }
+      const fieldIds: Partial<Record<keyof PromotionalCarouselSlide, string>> = {
+        title: 'promotion-title',
+        message: 'promotion-message',
+        imageUrl: 'promotion-image-upload',
+        imageAlt: 'promotion-alt',
+        ctaText: 'promotion-cta',
+        ctaHref: 'promotion-href',
+      }
+      if (firstField) {
+        const field = firstField as keyof PromotionalCarouselSlide
+        setActiveEditorSection(fieldSections[field] || 'content')
+        window.requestAnimationFrame(() => document.getElementById(fieldIds[field] || '')?.focus())
+      }
+      toast.error('Revisá los campos marcados')
+      return
+    }
+    const exists = current.slides.some((slide) => slide.id === editingSlide.id)
+    const nextSlides = exists
+      ? current.slides.map((slide) => slide.id === editingSlide.id ? editingSlide : slide)
+      : [...current.slides, editingSlide]
+    setDraft((previous) => ({
+      ...(previous ?? current),
+      slides: nextSlides,
+      // Si el usuario agrega su primera diapositiva y estaba deshabilitado, activarlo automáticamente
+      enabled: true,
+    }))
+    setDialogOpen(false)
+    setEditingSlide(null)
+    setFieldErrors({})
+    editingUploadPathRef.current = null
+    originalSlideRef.current = null
+  }
+
+  const removeSlide = (id: string) => {
+    if (!window.confirm('¿Eliminar esta diapositiva del carrusel?')) return
+    const slide = current.slides.find((item) => item.id === id)
+    const path = slide ? getPromotionStoragePathFromUrl(slide.imageUrl) : null
+    discardTemporaryImage(path)
+    patch('slides', current.slides.filter((slide) => slide.id !== id))
+  }
+
+  const moveSlide = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= current.slides.length) return
+    const reordered = [...current.slides]
+    ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+    patch('slides', reordered)
+  }
+
+  const toggleSlide = (id: string, active: boolean) => {
+    patch('slides', current.slides.map((slide) => slide.id === id ? { ...slide, active } : slide))
+  }
+
+  const handleSave = async () => {
+    if (!draft) return
+    const result = await updateSetting(settingKey, draft)
+    if (!result.success) {
+      toast.error(result.error || 'No se pudo guardar el carrusel')
+      return
+    }
+    toast.success('Carrusel promocional actualizado', { icon: <Check className="h-4 w-4" /> })
+    const persistedPaths = new Set(
+      (settings?.[settingKey]?.slides ?? [])
+        .map((slide) => getPromotionStoragePathFromUrl(slide.imageUrl))
+        .filter((path): path is string => Boolean(path))
+    )
+    const nextPaths = new Set(
+      draft.slides
+        .map((slide) => getPromotionStoragePathFromUrl(slide.imageUrl))
+        .filter((path): path is string => Boolean(path))
+    )
+    pendingUploadPathsRef.current.clear()
+    for (const path of persistedPaths) {
+      if (!nextPaths.has(path)) {
+        void deletePromotionImage(path).catch(() => toast.error('El carrusel se guardó, pero no se pudo limpiar una imagen anterior'))
+      }
+    }
+    setDraft(null)
+  }
+
+  const discardDraft = () => {
+    for (const path of pendingUploadPathsRef.current) discardTemporaryImage(path)
+    setDraft(null)
+  }
+
+  const isEditing = current.slides.some((slide) => slide.id === editingSlide?.id)
+  const editorPanelClass = (section: EditorSection) => cn(
+    activeEditorSection === section ? 'block animate-in fade-in-50 duration-150' : 'hidden'
+  )
+
+  if (isLoading) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
+        <p className="text-sm font-semibold text-destructive">No se pudo cargar el carrusel promocional</p>
+        <p className="mt-1 text-xs text-muted-foreground">{error}</p>
+        <Button type="button" variant="outline" className="mt-4" onClick={() => void refetch()}>Reintentar</Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-5xl space-y-6 pb-24 md:pb-8">
+      <WebsiteMediaQuotaBanner onOpenHistory={() => setCarouselMediaOpen(true)} />
+
+      <SectionCard
+        icon={GalleryHorizontalEnd}
+        title={title}
+        description={description}
+      >
+        <div className="space-y-6">
+
+          {/* Guía Desplegable Carrusel */}
+          <div className="border-b border-border/60 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowCarouselGuide((prev) => !prev)}
+              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>{showCarouselGuide ? 'Ocultar guía de diseño' : '¿Cómo diseñar banners de alto impacto para tu portada?'}</span>
+              {showCarouselGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+
+            {showCarouselGuide && (
+              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
+                <p className="font-bold text-foreground">💡 Claves para banners promocionales exitosos:</p>
+                <ul className="space-y-1.5 text-muted-foreground list-disc list-inside leading-relaxed">
+                  <li><strong className="text-foreground">Dimensiones recomendadas:</strong> 1200 × 500 px (formato horizontal 16:7 o 12:5). Mantiene nitidez en pantallas Retina y computadoras.</li>
+                  <li><strong className="text-foreground">Tono del texto vs Imagen:</strong> Si tu imagen es clara o brillante, elegí tono de texto <em>&quot;Oscuro&quot;</em>. Si es oscura o contrastada, elegí tono <em>&quot;Claro&quot;</em>.</li>
+                  <li><strong className="text-foreground">Llamado a la acción:</strong> Usá botones directos como <em>&quot;Ver ofertas&quot;</em> o <em>&quot;Comprar ahora&quot;</em> para aumentar los clics.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1">
+              <PublicVisibilityCard
+                compact
+                title="Visualización del Carrusel de Promociones"
+                badgeLabel="Banners de Portada"
+                description="Activa o desactiva el carrusel en la página de inicio. Requiere al menos una diapositiva activa."
+                enabled={current.enabled}
+                onToggle={(value) => patch('enabled', value)}
+              />
+            </div>
+            <Button
+              type="button"
+              onClick={openNewSlide}
+              disabled={current.slides.length >= MAX_SLIDES}
+              className="shrink-0 font-bold self-start sm:self-center h-10 px-4"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva diapositiva
+            </Button>
+          </div>
+
+          <div className="grid gap-4 border-t pt-5 sm:grid-cols-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
+              <div>
+                <p className="text-sm font-medium">Reproducción automática</p>
+                <p className="text-xs text-muted-foreground">Se pausa al interactuar y respeta movimiento reducido.</p>
+              </div>
+              <Switch checked={current.autoplay} onCheckedChange={(value) => patch('autoplay', value)} aria-label="Reproducción automática" />
+            </div>
+            <div className="space-y-2 rounded-lg border p-4">
+              <Label htmlFor="carousel-interval">Tiempo por diapositiva</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="carousel-interval"
+                  type="number"
+                  min={5}
+                  max={15}
+                  value={current.intervalSeconds}
+                  onChange={(event) => patch('intervalSeconds', Math.min(15, Math.max(5, Number(event.target.value) || 5)))}
+                  className="w-24"
+                  disabled={!current.autoplay}
+                />
+                <span className="text-sm text-muted-foreground">segundos</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Formato y Ancho del Carrusel */}
+          <div className="border-t pt-5 space-y-3">
+            <div>
+              <Label className="text-sm font-semibold text-foreground">Formato y Ancho del Carrusel</Label>
+              <p className="text-xs text-muted-foreground">Elegí si el carrusel debe agarrar todo el ancho de la pantalla de borde a borde o mantenerse enmarcado/compacto.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => patch('layoutMode', 'contained')}
+                className={cn(
+                  'flex flex-col items-start gap-1.5 p-3.5 rounded-xl border text-left transition-all',
+                  (current.layoutMode || 'contained') === 'contained'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border/80 hover:bg-muted/50'
+                )}
+              >
+                <span className="text-xs font-bold text-foreground">📦 Enmarcado (Estándar)</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">Centrado con bordes redondeados y márgenes elegantes.</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => patch('layoutMode', 'full')}
+                className={cn(
+                  'flex flex-col items-start gap-1.5 p-3.5 rounded-xl border text-left transition-all',
+                  current.layoutMode === 'full'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border/80 hover:bg-muted/50'
+                )}
+              >
+                <span className="text-xs font-bold text-foreground">🖼️ Borde a Borde (Full Width)</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">Ocupa el 100% del ancho de la pantalla sin márgenes laterales.</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => patch('layoutMode', 'compact')}
+                className={cn(
+                  'flex flex-col items-start gap-1.5 p-3.5 rounded-xl border text-left transition-all',
+                  current.layoutMode === 'compact'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border/80 hover:bg-muted/50'
+                )}
+              >
+                <span className="text-xs font-bold text-foreground">📐 Compacto</span>
+                <span className="text-[11px] text-muted-foreground leading-tight">Formato más angosto y menor altura para ocupar menos espacio.</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Slides list */}
+      <section aria-labelledby="carousel-slides-title" className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div>
+            <h2 id="carousel-slides-title" className="text-base font-semibold">Diapositivas</h2>
+            <p className="text-xs text-muted-foreground">{current.slides.length} de {MAX_SLIDES} configuradas</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCarouselMediaOpen(true)}
+              className="gap-1.5"
+              title="Ver todas las imágenes subidas y administrar cuota"
+            >
+              <Images className="h-4 w-4 text-primary" />
+              <span>Historial de imágenes</span>
+            </Button>
+            {current.slides.length < MAX_SLIDES && (
+              <Button type="button" size="sm" onClick={openNewSlide} className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                Nueva diapositiva
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {current.slides.length === 0 ? (
+          <div className="flex flex-col items-center rounded-xl border border-dashed py-14 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+              <ImagePlus className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <p className="mt-4 text-sm font-semibold">Todavía no hay promociones visuales</p>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">Agregá una imagen horizontal, el mensaje y el enlace al producto o sección correspondiente.</p>
+            <Button type="button" variant="outline" className="mt-5" onClick={openNewSlide}>
+              <Plus className="mr-2 h-4 w-4" />Agregar primera diapositiva
+            </Button>
+          </div>
+        ) : (
+          <div className="divide-y rounded-xl border">
+            {current.slides.map((slide, index) => (
+              <div key={slide.id} className="grid gap-4 p-4 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-center">
+                <div className="relative aspect-[16/7] overflow-hidden rounded-lg bg-muted">
+                  { }
+                  <AppImage src={slide.imageUrl} alt={slide.imageAlt} className="h-full w-full object-cover" />
+                  {!slide.active && <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-semibold text-white">Oculta</span>}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {slide.badge && (
+                      <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
+                        {slide.badge}
+                      </span>
+                    )}
+                    {slide.hideText && (
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground border">
+                        🖼️ Modo gráfico
+                      </span>
+                    )}
+                    <p className="truncate text-sm font-semibold">
+                      {slide.title || (slide.hideText ? 'Banner sin textos superpuestos' : 'Sin título')}
+                    </p>
+                  </div>
+                  {slide.message && !slide.hideText && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{slide.message}</p>
+                  )}
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {slide.hideText
+                      ? (slide.ctaHref ? `Enlace: ${slide.ctaHref}` : 'Solo imagen (sin enlace)')
+                      : `${slide.ctaText || 'Sin botón'} · ${slide.contentAlign === 'left' ? 'Izquierda' : slide.contentAlign === 'center' ? 'Centro' : 'Derecha'}`}
+                    {slide.overlayIntensity && slide.overlayIntensity !== 'strong' ? ` · Capa: ${slide.overlayIntensity === 'none' ? 'sin oscurecer' : slide.overlayIntensity}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-1">
+                  <Switch checked={slide.active} onCheckedChange={(value) => toggleSlide(slide.id, value)} aria-label={`Mostrar ${slide.title}`} />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => moveSlide(index, -1)} disabled={index === 0} title="Subir"><ArrowUp className="h-4 w-4" /></Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => moveSlide(index, 1)} disabled={index === current.slides.length - 1} title="Bajar"><ArrowDown className="h-4 w-4" /></Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => openSlide(slide)} title="Editar"><Pencil className="h-4 w-4" /></Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeSlide(slide.id)} className="text-destructive hover:text-destructive" title="Eliminar"><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Save bar */}
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios en el carrusel sin guardar' : 'Banners actualizados'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={discardDraft}
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
+            >
+              Descartar
+            </Button>
+          )}
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isSaving || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Guardar carrusel</span>
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Dialog ── */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); else requestCloseDialog() }}>
+        <DialogContent showCloseButton={false} className="flex h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-w-[1700px] flex-col gap-0 overflow-hidden rounded-lg p-0 shadow-2xl sm:h-[96dvh] sm:w-[97vw] sm:max-w-[1700px]">
+
+          {/* Header */}
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/70 bg-background px-4 py-4 sm:px-7 sm:py-5">
+            <div className="min-w-0 pr-1">
+              <DialogTitle className="text-xl font-bold">
+                {isEditing ? 'Editar diapositiva' : 'Nueva diapositiva'}
+              </DialogTitle>
+              <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                Usá una imagen horizontal de al menos 1200 × 500 px para mantener buena calidad.
+              </DialogDescription>
+            </div>
+            <button
+              type="button"
+              onClick={requestCloseDialog}
+              disabled={uploading}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground transition hover:bg-muted/80 hover:text-foreground"
+              aria-label="Cerrar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {editingSlide && (
+            <div className="min-h-0 flex-1 overflow-y-auto xl:grid xl:grid-cols-[minmax(0,1fr)_480px] xl:overflow-hidden">
+
+              {/* Left: form */}
+              <div className="bg-muted/15 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+                {/* Tab bar - visible on all screen sizes */}
+                <div className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-3 py-2.5 backdrop-blur-sm sm:px-6">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2" role="tablist" aria-label="Secciones de la diapositiva">
+                    {EDITOR_SECTIONS.map((section) => {
+                      const Icon = section.icon
+                      const selected = activeEditorSection === section.value
+                      return (
+                        <button
+                          key={section.value}
+                          id={`carousel-tab-${section.value}`}
+                          type="button"
+                          role="tab"
+                          aria-selected={selected}
+                          aria-controls={`carousel-panel-${section.value}`}
+                          onClick={() => setActiveEditorSection(section.value)}
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer sm:px-3.5',
+                            selected
+                              ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                              : 'border-border/70 bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted hover:text-foreground'
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{section.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 xl:px-8 xl:py-7 [scrollbar-gutter:stable]">
+                  <div className="mx-auto max-w-2xl">
+
+                {/* Text */}
+                <div id="carousel-panel-content" role="tabpanel" aria-labelledby="carousel-tab-content" className={editorPanelClass('content')}>
+                <FormSection icon={Type} label="Contenido y textos del banner" step={1}>
+                  <div className="grid gap-4">
+                    {/* Interruptor modo banner gráfico / sin textos */}
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="promotion-hide-text" className="text-xs sm:text-sm font-bold text-foreground cursor-pointer">
+                          Sin textos superpuestos (Modo banner gráfico)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Activá esto si tu imagen ya tiene el diseño completo o querés mostrar la foto limpia sin tipografía encima.
+                        </p>
+                      </div>
+                      <Switch
+                        id="promotion-hide-text"
+                        checked={Boolean(editingSlide.hideText)}
+                        onCheckedChange={(checked) => {
+                          updateSlideField('hideText', checked)
+                          if (checked && (!editingSlide.overlayIntensity || editingSlide.overlayIntensity === 'strong')) {
+                            updateSlideField('overlayIntensity', 'none')
+                          }
+                        }}
+                        aria-label="Modo banner gráfico sin textos"
+                      />
+                    </div>
+
+                    {editingSlide.hideText ? (
+                      <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 text-xs text-foreground/80 space-y-1.5">
+                        <p className="font-bold text-primary flex items-center gap-1.5 text-sm">
+                          <Sparkles className="h-4 w-4" /> Banner en modo gráfico activo
+                        </p>
+                        <p className="leading-relaxed">
+                          La imagen se mostrará al 100% de su tamaño sin títulos, mensajes ni botones superpuestos.
+                        </p>
+                        <p className="text-muted-foreground">
+                          💡 Podés ir a la pestaña <strong>Botón</strong> para asignarle un enlace y hacer que toda la imagen sea cliqueable.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Insignia / Badge Superior */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="promotion-badge" className="text-xs font-bold text-foreground">
+                              Insignia o etiqueta superior <span className="text-muted-foreground font-normal">(Opcional)</span>
+                            </Label>
+                            <CharCount value={editingSlide.badge || ''} max={40} />
+                          </div>
+                          <Input
+                            id="promotion-badge"
+                            value={editingSlide.badge || ''}
+                            onChange={(e) => updateSlideField('badge', e.target.value)}
+                            maxLength={40}
+                            placeholder="Ej: 🔥 30% OFF, ✨ NUEVA TEMPORADA"
+                            className="h-9 text-xs font-medium"
+                          />
+                          {/* Sugerencias de Insignia */}
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {['🔥 30% OFF', '✨ NUEVA COLECCIÓN', '⚡ OFERTA FLASH', '🚚 ENVÍO GRATIS', '💳 HASTA 6 CUOTAS', '⭐ DESTACADO'].map((sug) => (
+                              <button
+                                key={sug}
+                                type="button"
+                                onClick={() => updateSlideField('badge', sug)}
+                                className={cn(
+                                  'rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer',
+                                  editingSlide.badge === sug
+                                    ? 'border-primary bg-primary/10 text-primary font-bold'
+                                    : 'border-border/60 bg-background text-muted-foreground hover:text-foreground'
+                                )}
+                              >
+                                {sug}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Título */}
+                        <div className="space-y-1.5 pt-2 border-t border-border/40">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="promotion-title" className="text-xs font-bold text-foreground">Título del banner</Label>
+                            <CharCount value={editingSlide.title} max={100} />
+                          </div>
+                          <Input
+                            id="promotion-title"
+                            aria-invalid={Boolean(fieldErrors.title)}
+                            aria-describedby={fieldErrors.title ? 'promotion-title-error' : undefined}
+                            value={editingSlide.title}
+                            onChange={(e) => updateSlideField('title', e.target.value)}
+                            maxLength={100}
+                            placeholder="Ej: 🔥 30% OFF en Seleccionados"
+                            className="h-10 text-sm font-semibold"
+                          />
+                          <FieldError id="promotion-title-error" message={fieldErrors.title} />
+
+                          {/* Selector de tamaño de título */}
+                          <div className="pt-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">Tamaño tipográfico del título:</p>
+                            <SegmentedControl
+                              value={editingSlide.titleSize || 'normal'}
+                              onChange={(v) => updateSlideField('titleSize', v)}
+                              options={[
+                                { value: 'compact' as const, label: 'Compacto' },
+                                { value: 'normal' as const, label: 'Normal' },
+                                { value: 'large' as const, label: 'Grande / Impacto' },
+                              ]}
+                            />
+                          </div>
+
+                          {/* Selector de estilo de fuente */}
+                          <div className="pt-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">Estilo tipográfico (Fuente):</p>
+                            <SegmentedControl
+                              value={editingSlide.fontFamily || 'sans'}
+                              onChange={(v) => updateSlideField('fontFamily', v)}
+                              options={[
+                                { value: 'sans' as const, label: 'Moderna (Sans)' },
+                                { value: 'display' as const, label: 'Impacto (Bold)' },
+                                { value: 'serif' as const, label: 'Elegante (Serif)' },
+                                { value: 'mono' as const, label: 'Urbana (Mono)' },
+                              ]}
+                            />
+                          </div>
+
+                          {/* Selector de color de título */}
+                          <div className="pt-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] font-semibold text-muted-foreground">Color de letra del título:</p>
+                              {editingSlide.titleColor ? (
+                                <button
+                                  type="button"
+                                  onClick={() => updateSlideField('titleColor', '')}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                                >
+                                  Restablecer a automático
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">
+                                  Automático por tono ({editingSlide.textTone === 'light' ? 'Blanco' : 'Oscuro'})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                              {TITLE_COLOR_PRESETS.map((preset) => {
+                                const isSelected = editingSlide.titleColor?.toLowerCase() === preset.value.toLowerCase()
+                                return (
+                                  <button
+                                    key={preset.value}
+                                    type="button"
+                                    onClick={() => updateSlideField('titleColor', preset.value)}
+                                    title={preset.label}
+                                    className={cn(
+                                      'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer',
+                                      isSelected
+                                        ? 'border-primary ring-2 ring-primary/40 bg-primary/10 text-primary'
+                                        : 'border-border/70 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                    )}
+                                  >
+                                    <span className={cn('h-3 w-3 rounded-full border shadow-xs shrink-0', preset.bg, preset.border)} />
+                                    <span>{preset.label}</span>
+                                  </button>
+                                )
+                              })}
+
+                              {/* Selector libre */}
+                              <div className="flex items-center gap-1.5 pl-1">
+                                <input
+                                  type="color"
+                                  value={editingSlide.titleColor || (editingSlide.textTone === 'light' ? '#ffffff' : '#09090b')}
+                                  onChange={(e) => updateSlideField('titleColor', e.target.value)}
+                                  className="h-7 w-7 rounded-md border border-border cursor-pointer bg-transparent p-0.5"
+                                  title="Elegir color libremente"
+                                  aria-label="Color personalizado del título"
+                                />
+                                <Input
+                                  value={editingSlide.titleColor || ''}
+                                  onChange={(e) => updateSlideField('titleColor', e.target.value)}
+                                  placeholder="#HEX"
+                                  maxLength={20}
+                                  className="h-7 w-20 text-[11px] font-mono px-2"
+                                  aria-label="Código HEX del color del título"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Sugerencias Rápidas de Título */}
+                          <div className="pt-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                              <Lightbulb className="h-3 w-3 text-amber-500" />
+                              Sugerencias de títulos comerciales:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {TITLE_SUGGESTIONS.map((sug, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => updateSlideField('title', sug)}
+                                  className={cn(
+                                    'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
+                                    editingSlide.title === sug
+                                      ? 'border-primary bg-primary/10 font-bold text-primary'
+                                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                  )}
+                                >
+                                  {sug}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mensaje */}
+                        <div className="space-y-1.5 pt-2 border-t border-border/40">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor="promotion-message" className="text-xs font-bold text-foreground">Mensaje descriptivo</Label>
+                            <CharCount value={editingSlide.message} max={240} />
+                          </div>
+                          <Textarea
+                            id="promotion-message"
+                            aria-invalid={Boolean(fieldErrors.message)}
+                            aria-describedby={fieldErrors.message ? 'promotion-message-error' : undefined}
+                            value={editingSlide.message}
+                            onChange={(e) => updateSlideField('message', e.target.value)}
+                            maxLength={240}
+                            rows={3}
+                            placeholder="Aprovechá precios especiales por tiempo limitado."
+                            className="min-h-20 resize-none text-sm"
+                          />
+                          <FieldError id="promotion-message-error" message={fieldErrors.message} />
+
+                          {/* Sugerencias Rápidas de Mensaje */}
+                          <div className="pt-1">
+                            <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                              <Lightbulb className="h-3 w-3 text-amber-500" />
+                              Sugerencias de mensajes:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {MESSAGE_SUGGESTIONS.map((sug, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => updateSlideField('message', sug)}
+                                  className={cn(
+                                    'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer text-left',
+                                    editingSlide.message === sug
+                                      ? 'border-primary bg-primary/10 font-bold text-primary'
+                                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                  )}
+                                >
+                                  {sug.slice(0, 42)}...
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* Image */}
+                <div id="carousel-panel-image" role="tabpanel" aria-labelledby="carousel-tab-image" className={editorPanelClass('image')}>
+                <FormSection icon={Upload} label="Imagen promocional" step={2}>
+                  <ImageUploadZone
+                    imageUrl={editingSlide.imageUrl}
+                    uploading={uploading}
+                    error={fieldErrors.imageUrl}
+                    onFileSelect={(file) => void uploadImage(file)}
+                    onSelectFromHistory={(url) => {
+                      updateSlideField('imageUrl', url)
+                      toast.success('Imagen seleccionada del historial')
+                    }}
+                    onClear={() => {
+                      discardTemporaryImage(editingUploadPathRef.current || pendingPathForSlide(editingSlide))
+                      editingUploadPathRef.current = null
+                      updateSlideField('imageUrl', '')
+                    }}
+                  />
+                  <FieldError id="promotion-image-error" message={fieldErrors.imageUrl} />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="promotion-alt" className="text-xs font-semibold text-foreground">Descripción para accesibilidad (Alt) <span className="text-destructive">*</span></Label>
+                      <CharCount value={editingSlide.imageAlt} max={160} />
+                    </div>
+                    <Input id="promotion-alt" required aria-invalid={Boolean(fieldErrors.imageAlt)} aria-describedby={fieldErrors.imageAlt ? 'promotion-alt-error' : 'promotion-alt-help'} value={editingSlide.imageAlt} onChange={(e) => updateSlideField('imageAlt', e.target.value)} maxLength={160} placeholder="Cargadores y cables incluidos en la promoción" className="text-sm" />
+                    <FieldError id="promotion-alt-error" message={fieldErrors.imageAlt} />
+                    <p id="promotion-alt-help" className="text-[11px] text-muted-foreground">Requerido para buscadores y lectores de pantalla.</p>
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* CTA */}
+                <div id="carousel-panel-cta" role="tabpanel" aria-labelledby="carousel-tab-cta" className={editorPanelClass('cta')}>
+                <FormSection icon={Link2} label="Botón de acción y enlace" step={3}>
+                  <div className="grid gap-4">
+                    {editingSlide.hideText && (
+                      <div className="rounded-lg border border-border/70 bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed">
+                        ℹ️ En modo banner gráfico no se muestra un botón visual, pero al ingresar un enlace, <strong>toda la imagen actuará como enlace</strong> al hacer clic o pulsar en la tienda.
+                      </div>
+                    )}
+
+                    {/* Texto del Botón (solo si no está en modo hideText) */}
+                    {!editingSlide.hideText && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="promotion-cta" className="text-xs font-bold text-foreground">Texto del botón</Label>
+                          <CharCount value={editingSlide.ctaText || ''} max={50} />
+                        </div>
+                        <Input id="promotion-cta" aria-invalid={Boolean(fieldErrors.ctaText)} aria-describedby={fieldErrors.ctaText ? 'promotion-cta-error' : undefined} value={editingSlide.ctaText || ''} onChange={(e) => updateSlideField('ctaText', e.target.value)} maxLength={50} placeholder="Ej: Ver ofertas, Comprar ahora" className="text-sm font-semibold" />
+                        <FieldError id="promotion-cta-error" message={fieldErrors.ctaText} />
+
+                        {/* Sugerencias Botón */}
+                        <div className="pt-1">
+                          <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                            <Lightbulb className="h-3 w-3 text-amber-500" />
+                            Sugerencias de botón:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {CTA_TEXT_SUGGESTIONS.map((sug, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => updateSlideField('ctaText', sug)}
+                                className={cn(
+                                  'rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer',
+                                  editingSlide.ctaText === sug
+                                    ? 'border-primary bg-primary/10 font-bold text-primary'
+                                    : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                                )}
+                              >
+                                {sug}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Enlace del Botón o Banner */}
+                    <div className={cn('space-y-1.5', !editingSlide.hideText && 'pt-2 border-t border-border/40')}>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="promotion-href" className="text-xs font-bold text-foreground">
+                          Enlace o destino
+                        </Label>
+                        <CharCount value={editingSlide.ctaHref || ''} max={500} />
+                      </div>
+                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder="/productos" className="text-sm font-mono" />
+                      <FieldError id="promotion-href-error" message={fieldErrors.ctaHref} />
+
+                      {/* Atajos de Destino */}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3 text-primary" />
+                          Destinos rápidos:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {CTA_HREF_SHORTCUTS.map((shortcut, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => updateSlideField('ctaHref', shortcut.href)}
+                              className={cn(
+                                'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
+                                editingSlide.ctaHref === shortcut.href
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                              )}
+                            >
+                              {shortcut.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* Appearance */}
+                <div id="carousel-panel-appearance" role="tabpanel" aria-labelledby="carousel-tab-appearance" className={editorPanelClass('appearance')}>
+                <FormSection icon={Monitor} label="Diseño, fondo y contrastes" step={4}>
+                  <div className="grid gap-5">
+                    {/* Alineación y Tono */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-foreground">Alineación del texto</p>
+                        <SegmentedControl
+                          value={editingSlide.contentAlign}
+                          onChange={(v) => updateSlideField('contentAlign', v)}
+                          options={[
+                            { value: 'left' as const, label: 'Izquierda', icon: AlignLeft },
+                            { value: 'center' as const, label: 'Centro', icon: AlignCenter },
+                            { value: 'right' as const, label: 'Derecha', icon: AlignRight },
+                          ]}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-foreground">Tono del texto</p>
+                        <SegmentedControl
+                          value={editingSlide.textTone}
+                          onChange={(v) => updateSlideField('textTone', v)}
+                          options={[
+                            { value: 'light' as const, label: 'Claro', icon: SunMedium },
+                            { value: 'dark' as const, label: 'Oscuro', icon: MoonStar },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Capa de oscurecimiento / Overlay */}
+                    <div className="space-y-2 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-foreground">Capa de oscurecimiento (Overlay sobre la imagen)</p>
+                        <span className="text-[11px] text-muted-foreground">Control de contraste</span>
+                      </div>
+                      <SegmentedControl
+                        value={editingSlide.overlayIntensity || (editingSlide.hideText ? 'none' : 'strong')}
+                        onChange={(v) => updateSlideField('overlayIntensity', v)}
+                        options={[
+                          { value: 'none' as const, label: 'Sin capa (0%)' },
+                          { value: 'subtle' as const, label: 'Sutil (25%)' },
+                          { value: 'medium' as const, label: 'Equilibrado (55%)' },
+                          { value: 'strong' as const, label: 'Intenso (85%)' },
+                        ]}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Usá <strong>Sin capa (0%)</strong> si querés que la foto o banner se vea completamente limpia y nítida.
+                      </p>
+                    </div>
+
+                    {/* Tinte de la capa */}
+                    {editingSlide.overlayIntensity !== 'none' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs font-semibold text-foreground">Tinte de la capa / degradé</p>
+                        <SegmentedControl
+                          value={editingSlide.overlayColor || (editingSlide.textTone === 'light' ? 'black' : 'white')}
+                          onChange={(v) => updateSlideField('overlayColor', v)}
+                          options={[
+                            { value: 'black' as const, label: 'Negro cine' },
+                            { value: 'white' as const, label: 'Blanco luminoso' },
+                            { value: 'brand' as const, label: 'Color de marca' },
+                          ]}
+                        />
+                      </div>
+                    )}
+
+                    {/* Color de fondo base */}
+                    <div className="space-y-2 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="promotion-bg-color" className="text-xs font-semibold text-foreground">
+                          Color de fondo base de la diapositiva <span className="text-muted-foreground font-normal">(Opcional)</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="promotion-bg-color"
+                          value={editingSlide.backgroundColor || ''}
+                          onChange={(e) => updateSlideField('backgroundColor', e.target.value)}
+                          placeholder="#09090b o rgb(15 23 42)"
+                          className="h-9 font-mono text-xs max-w-xs"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          {[
+                            { label: 'Negro', value: '#09090b' },
+                            { label: 'Grafito', value: '#1e293b' },
+                            { label: 'Blanco', value: '#ffffff' },
+                          ].map((c) => (
+                            <button
+                              key={c.value}
+                              type="button"
+                              onClick={() => updateSlideField('backgroundColor', c.value)}
+                              className="text-[11px] px-2 py-1 rounded border border-border/70 hover:bg-muted text-muted-foreground cursor-pointer"
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                          {editingSlide.backgroundColor && (
+                            <button
+                              type="button"
+                              onClick={() => updateSlideField('backgroundColor', '')}
+                              className="text-[11px] px-2 py-1 text-destructive hover:underline cursor-pointer"
+                            >
+                              Limpiar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Visible cuando la imagen tiene transparencia (PNG/WebP) o márgenes.
+                      </p>
+                    </div>
+                  </div>
+                </FormSection>
+                </div>
+
+                {/* Templates */}
+                <div id="carousel-panel-template" role="tabpanel" aria-labelledby="carousel-tab-template" className={editorPanelClass('template')}>
+                <FormSection icon={ImagePlus} label="Inicio rápido con plantillas por rubro" step={5}>
+                  {/* Filtro por Categorías */}
+                  <div className="flex flex-wrap gap-1.5 pb-2">
+                    {['all', 'Tecnología', 'Moda & Ropa', 'Cosmética', 'Ferretería', 'Promociones'].map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setTemplateCategoryFilter(cat)}
+                        className={cn(
+                          'rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer',
+                          templateCategoryFilter === cat
+                            ? 'bg-primary text-primary-foreground shadow-xs'
+                            : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
+                      >
+                        {cat === 'all' ? 'Todas' : cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {CAROUSEL_EXAMPLES
+                      .filter((ex) => templateCategoryFilter === 'all' || ex.category === templateCategoryFilter)
+                      .map((example) => (
+                      <button
+                        key={example.name}
+                        type="button"
+                        onClick={() => applyTemplate(example)}
+                        aria-pressed={editingSlide.imageUrl === example.slide.imageUrl}
+                        className={cn(
+                          'group overflow-hidden rounded-xl border bg-background text-left transition-all hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer',
+                          editingSlide.imageUrl === example.slide.imageUrl
+                            ? 'border-primary ring-2 ring-primary/30 shadow-sm'
+                            : 'border-border/70 hover:shadow-xs',
+                        )}
+                      >
+                        { }
+                        <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
+                          <AppImage src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                          <span className="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
+                            {example.badgeIcon} {example.category}
+                          </span>
+                        </div>
+                        <div className="p-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-foreground">{example.name}</span>
+                            {editingSlide.imageUrl === example.slide.imageUrl && (
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary">
+                                <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-[11px] text-muted-foreground line-clamp-1">{example.slide.title}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Elegí una plantilla para autocompletar título, mensaje, imagen y botón en 1 toque.</p>
+                </FormSection>
+                </div>
+
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: preview + publish */}
+              <div className="flex flex-col border-t border-border/60 bg-muted/30 px-4 py-5 sm:px-6 xl:h-full xl:overflow-y-auto xl:border-l xl:border-t-0 xl:py-6">
+                <div className="mx-auto w-full max-w-md space-y-6 xl:sticky xl:top-0">
+                  <SlidePreview slide={editingSlide} uploading={uploading} />
+
+                  <div className="space-y-4 border-t border-border/60 pt-5">
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-background px-4 py-4">
+                      <div>
+                        <p className="text-sm font-semibold">Publicar diapositiva</p>
+                        <p className="text-xs text-muted-foreground">Visible en la tienda cuando está activa.</p>
+                      </div>
+                      <Switch id="promotion-active" aria-label="Publicar diapositiva" checked={editingSlide.active} onCheckedChange={(value) => updateSlideField('active', value)} />
+                    </div>
+
+                    <div className="space-y-3 rounded-lg border border-border/60 bg-background px-4 py-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Consejos</p>
+                      <ul className="space-y-1.5 text-xs text-muted-foreground">
+                        <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Usá imágenes horizontales de al menos 1200 × 500 px.</li>
+                        <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Textos cortos y directos generan más clics.</li>
+                        <li className="flex items-start gap-1.5"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />Elegí tono claro para imágenes oscuras y viceversa.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex shrink-0 items-center gap-3 border-t border-border/70 bg-background px-3 py-3 shadow-[0_-6px_18px_-16px_rgba(0,0,0,0.45)] sm:justify-between sm:px-7 sm:py-4">
+            <Button type="button" variant="ghost" onClick={requestCloseDialog} disabled={uploading} className="flex-1 sm:flex-none">Cancelar</Button>
+            <Button type="button" onClick={saveSlide} disabled={uploading} className="flex-1 gap-2 sm:flex-none sm:px-6">
+              {uploading
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Subiendo imagen…</>
+                : <><Check className="h-4 w-4" />{isEditing ? 'Guardar cambios' : 'Agregar diapositiva'}</>
+              }
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <WebsiteMediaLibraryDialog
+        open={carouselMediaOpen}
+        onOpenChange={setCarouselMediaOpen}
+        filterSection="promotions"
+        title="Historial de Imágenes del Carrusel"
+        description="Elegí una imagen ya subida o eliminá archivos definitivamente para liberar espacio de tu cuota (máx 20)."
+        onSelect={(url) => {
+          if (editingSlide) {
+            setEditingSlide((prev) => prev ? { ...prev, imageUrl: url } : prev)
+            toast.success('Imagen asignada a la diapositiva')
+          } else {
+            toast.info('Imagen seleccionada. Para asignarla, edita una diapositiva o creá una nueva.')
+          }
+        }}
+      />
+    </div>
+  )
+}

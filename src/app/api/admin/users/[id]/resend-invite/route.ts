@@ -57,7 +57,7 @@ async function handler(
       return NextResponse.json({ success: false, error: 'No se pudo generar el enlace' }, { status: 500 })
     }
 
-    const inviteLink = (linkData as any)?.properties?.action_link
+    const inviteLink = (linkData as { properties?: { action_link?: string } } | null)?.properties?.action_link
 
     if (!inviteLink) {
       return NextResponse.json({ success: false, error: 'No se obtuvo el enlace de Supabase' }, { status: 500 })
@@ -89,8 +89,9 @@ async function handler(
     logger.info('Resent invite email', { adminId: context.user.id, targetUserId: userId })
 
     return NextResponse.json({ success: true, invite_link: inviteLink })
-  } catch (error: any) {
-    logger.error('Error resending invite', { error: error?.message })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error interno'
+    logger.error('Error resending invite', { error: message })
     return NextResponse.json({ success: false, error: 'Error interno' }, { status: 500 })
   }
 }

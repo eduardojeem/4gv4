@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,31 +9,16 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
-  Clock, 
-  Filter, 
-  Share2, 
-  Mail, 
-  Printer,
-  BarChart3,
-  PieChart,
-  TrendingUp,
-  Users,
-  ShoppingCart,
-  Eye,
-  Settings,
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  FileText,
+  Download, Clock, Share2,
+  Mail, TrendingUp, Settings,
   Play,
   Pause,
   RefreshCw,
-  CheckCircle,
-  AlertCircle,
-  XCircle
+  CheckCircle
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 
 // Interfaces para el sistema de reportes
 interface Report {
@@ -81,7 +66,7 @@ interface ReportSection {
   id: string
   name: string
   type: 'chart' | 'table' | 'metric' | 'text'
-  config: any
+  config: Record<string, unknown>
 }
 
 // Componente principal del sistema de reportes
@@ -297,7 +282,7 @@ export function ReportsSystem() {
           </div>
           <div>
             <Label htmlFor="type">Tipo de Reporte</Label>
-            <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as any })}>
+            <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as Report['type'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -325,7 +310,7 @@ export function ReportsSystem() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <Label htmlFor="schedule">Frecuencia</Label>
-            <Select value={formData.schedule} onValueChange={(value) => setFormData({ ...formData, schedule: value as any })}>
+            <Select value={formData.schedule} onValueChange={(value) => setFormData({ ...formData, schedule: value as Report['schedule'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -339,7 +324,7 @@ export function ReportsSystem() {
           </div>
           <div>
             <Label htmlFor="format">Formato</Label>
-            <Select value={formData.format} onValueChange={(value) => setFormData({ ...formData, format: value as any })}>
+            <Select value={formData.format} onValueChange={(value) => setFormData({ ...formData, format: value as Report['format'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -353,7 +338,7 @@ export function ReportsSystem() {
           </div>
           <div>
             <Label htmlFor="status">Estado</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as any })}>
+            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as Report['status'] })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

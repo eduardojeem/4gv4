@@ -1,26 +1,54 @@
 import type { NextConfig } from "next";
+import { createRequire } from 'node:module'
+import { REMOTE_IMAGE_HOSTS } from './image-hosts.ts'
 
-const withPWAInit = require("@ducanh2912/next-pwa").default({
-  dest: "public",
-  cacheOnFrontEndNav: true,
-  aggressiveFrontEndNavCaching: true,
-  reloadOnOnline: true,
-  swcMinify: true,
-  disable: process.env.NODE_ENV === "development",
-  workboxOptions: {
-    disableDevLogs: true,
-  },
-});
+const identityConfig = <T,>(config: T) => config
+const loadModule = createRequire(import.meta.url)
+
+// Evita resolver Workbox y sus dependencias desde disco durante `next dev`.
+// El plugin solo produce artefactos para builds de produccion.
+const withPWAInit = process.env.NODE_ENV === 'production'
+  ? loadModule('@ducanh2912/next-pwa').default({
+      dest: "public",
+      cacheOnFrontEndNav: true,
+      aggressiveFrontEndNavCaching: true,
+      reloadOnOnline: true,
+      swcMinify: true,
+      // El service worker guardaba en la cache `apis` la respuesta de
+      // CUALQUIER GET a /api/ durante 24 horas (NetworkFirst con 10 s de
+      // espera). Con la red lenta o caida servia esa copia como si fuera
+      // actual: se guardaba una promocion, la lista volvia a pintar lo de
+      // antes y solo recargar lo arreglaba. Ademas son respuestas de una
+      // sesion y una organizacion concretas guardadas en el navegador, que en
+      // un equipo compartido las ve el siguiente.
+      //
+      // `extendDefaultRuntimeCaching` mantiene el resto de las reglas (fuentes,
+      // imagenes, estaticos) y solo reemplaza la entrada con este `cacheName`.
+      extendDefaultRuntimeCaching: true,
+      workboxOptions: {
+        disableDevLogs: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, url }: { sameOrigin: boolean; url: URL }) =>
+              sameOrigin && url.pathname.startsWith('/api/'),
+            handler: 'NetworkOnly' as const,
+            options: { cacheName: 'apis' },
+          },
+        ],
+      },
+    })
+  : identityConfig
 
 // Configurar bundle analyzer
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true',
-});
+const withBundleAnalyzer = process.env.ANALYZE === 'true'
+  ? loadModule('@next/bundle-analyzer')({ enabled: true })
+  : identityConfig
 
 const nextConfig: NextConfig = {
+  // Next 16 no debe escribir archivos de instrucciones de agentes al iniciar.
+  agentRules: false,
   typescript: {
-    // TODO: Set to false once all TypeScript errors are resolved
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   
   // CRÍTICO: Deshabilitar source maps en producción
@@ -28,6 +56,10 @@ const nextConfig: NextConfig = {
   
   // Configuración experimental para optimización
   experimental: {
+    // En este proyecto grande, la cache persistente de desarrollo llego a
+    // bloquear Turbopack durante minutos mientras compactaba `.next/dev`.
+    // La cache de build/produccion se conserva; solo evitamos ese cuello local.
+    turbopackFileSystemCacheForDev: false,
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-accordion',
@@ -58,7 +90,14 @@ const nextConfig: NextConfig = {
       'dompurify',
       '@dnd-kit/core',
       '@dnd-kit/sortable',
-      'sonner'
+      'sonner',
+      'xlsx-js-style',
+      'jspdf',
+      'jspdf-autotable',
+      'swr',
+      '@tanstack/react-table',
+      'clsx',
+      'tailwind-merge'
     ],
     
     // Optimizaciones adicionales (optimizeCss usa Critters, solo tiene sentido en producción)
@@ -68,62 +107,18 @@ const nextConfig: NextConfig = {
 
   // Configuración de imágenes optimizada
   images: {
-    formats: ['image/webp', 'image/avif'],
+    // Un único formato evita crear una transformación AVIF y otra WebP para
+    // cada combinación de imagen y ancho. WebP conserva compatibilidad amplia.
+    formats: ['image/webp'],
+    qualities: [75],
     minimumCacheTTL: 31536000, // 1 año
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'example.com',
-        pathname: '/**',
-        },
-        {
-        protocol: 'https',
-        hostname: 'static.mobilesentrix.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'drive.google.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'doc.googleusercontent.com',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'cswtugmwazxdktntndpy.supabase.co',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'ui-avatars.com',
-        pathname: '/**',
-      },
-    ],
+    deviceSizes: [640, 768, 1024, 1280, 1536, 1920],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
+    remotePatterns: REMOTE_IMAGE_HOSTS.map((hostname) => ({
+      protocol: 'https' as const,
+      hostname,
+      pathname: '/**',
+    })),
   },
 
   // Configuración de compresión
@@ -217,11 +212,29 @@ const nextConfig: NextConfig = {
     return [
       {
         // Security headers para todas las rutas.
-        // Nota: no se define Content-Security-Policy acá porque requiere
-        // ajustarla y probarla contra los inline scripts / PWA / Supabase;
-        // dejarla mal configurada rompe la app. Queda como mejora a validar.
+        // CSP comienza en Report-Only para detectar incompatibilidades reales
+        // antes de bloquear scripts, conexiones o iframes legítimos.
         source: '/(.*)',
         headers: [
+          {
+            key: 'Content-Security-Policy-Report-Only',
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "object-src 'none'",
+              "frame-ancestors 'self'",
+              "form-action 'self'",
+              "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+              "frame-src https://challenges.cloudflare.com",
+              "worker-src 'self' blob:",
+              "manifest-src 'self'",
+              'upgrade-insecure-requests',
+            ].join('; '),
+          },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -236,15 +249,15 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        source: '/_next/static/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
+      // Se quito el header propio para /_next/static/(.*).
+      //
+      // Next ya sirve esos archivos con `max-age=31536000, immutable` por su
+      // cuenta, porque llevan hash en el nombre: repetirlo no agregaba nada en
+      // produccion y en desarrollo hacia dano. Los chunks cambian con cada
+      // edicion, asi que marcarlos inmutables por un año dejaba al navegador
+      // sirviendo JavaScript viejo y el HMR parecia no andar. El propio build
+      // lo advertia: "Setting a custom Cache-Control header can break Next.js
+      // development behavior".
       {
         source: '/images/(.*)',
         headers: [
@@ -255,6 +268,14 @@ const nextConfig: NextConfig = {
         ],
       },
     ]
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/saas/Soluciones',
+        destination: '/saas/soluciones',
+      },
+    ];
   },
 };
 

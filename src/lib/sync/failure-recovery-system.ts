@@ -9,7 +9,7 @@ export interface FailureEvent {
   severity: 'low' | 'medium' | 'high' | 'critical'
   operation: string
   error: string
-  context: Record<string, any>
+  context: Record<string, unknown>
   resolved: boolean
   resolvedAt?: Date
   resolutionMethod?: string
@@ -36,14 +36,14 @@ export interface RecoveryResult {
   message: string
   recoveredRecords?: number
   nextAction?: 'retry' | 'escalate' | 'ignore' | 'manual'
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface BackupPoint {
   id: string
   timestamp: Date
   operation: string
-  data: any
+  data: string
   checksum: string
   size: number
   compressed: boolean
@@ -83,7 +83,7 @@ export class CircuitBreaker {
   private failures: number = 0
   private lastFailureTime: number = 0
   private state: 'closed' | 'open' | 'half-open' = 'closed'
-  
+
   constructor(
     private threshold: number = 5,
     private timeout: number = 60000,
@@ -102,7 +102,7 @@ export class CircuitBreaker {
     try {
       const result = await Promise.race([
         operation(),
-        new Promise<never>((_, reject) => 
+        new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Operation timeout')), this.timeout)
         )
       ])
@@ -146,11 +146,11 @@ export class DataBackupManager {
   private backups: Map<string, BackupPoint> = new Map()
   private maxBackups: number = 100
 
-  async createBackup(operation: string, data: Record<string, unknown>): Promise<string> {
+  async createBackup(operation: string, data: unknown): Promise<string> {
     const id = `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const serialized = JSON.stringify(data)
     const checksum = await this.calculateChecksum(serialized)
-    
+
     const backup: BackupPoint = {
       id,
       timestamp: new Date(),
@@ -162,7 +162,7 @@ export class DataBackupManager {
     }
 
     this.backups.set(id, backup)
-    
+
     // Clean old backups
     if (this.backups.size > this.maxBackups) {
       const oldestKey = Array.from(this.backups.keys())[0]
@@ -172,7 +172,7 @@ export class DataBackupManager {
     return id
   }
 
-  async restoreBackup(backupId: string): Promise<any> {
+  async restoreBackup(backupId: string): Promise<unknown> {
     const backup = this.backups.get(backupId)
     if (!backup) {
       throw new Error(`Backup ${backupId} not found`)
@@ -189,11 +189,11 @@ export class DataBackupManager {
 
   getBackups(operation?: string): BackupPoint[] {
     const backups = Array.from(this.backups.values())
-    
+
     if (operation) {
       return backups.filter(b => b.operation === operation)
     }
-    
+
     return backups.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
   }
 
@@ -214,14 +214,14 @@ export class DataBackupManager {
 
   getStats(): { count: number; totalSize: number; oldestBackup?: Date; newestBackup?: Date } {
     const backups = Array.from(this.backups.values())
-    
+
     if (backups.length === 0) {
       return { count: 0, totalSize: 0 }
     }
 
     const totalSize = backups.reduce((sum, b) => sum + b.size, 0)
     const timestamps = backups.map(b => b.timestamp.getTime())
-    
+
     return {
       count: backups.length,
       totalSize,
@@ -264,7 +264,7 @@ export class FailureRecoverySystem {
         try {
           // Simular reintento de operación
           await new Promise(resolve => setTimeout(resolve, this.strategies.get('simple_retry')!.retryDelay))
-          
+
           if (context.operation) {
             await (context.operation as () => Promise<void>)()
           }
@@ -296,11 +296,11 @@ export class FailureRecoverySystem {
       retryDelay: 5000,
       backoffMultiplier: 1.5,
       timeout: 60000,
-      execute: async (failure: FailureEvent, context: Record<string, unknown>): Promise<RecoveryResult> => {
+      execute: async (failure: FailureEvent, _context: Record<string, unknown>): Promise<RecoveryResult> => {
         try {
           // Buscar backup más reciente
           const backups = this.backupManager.getBackups(failure.operation)
-          
+
           if (backups.length === 0) {
             return {
               success: false,
@@ -311,15 +311,16 @@ export class FailureRecoverySystem {
 
           const latestBackup = backups[0]
           const restoredData = await this.backupManager.restoreBackup(latestBackup.id)
-          
+
           // Validar integridad de datos restaurados
+          const rawRestored = (restoredData && typeof restoredData === 'object' ? restoredData : {}) as Record<string, unknown>
           const validationResults = await dataIntegrityValidator.validateSingleRecord(
-            failure.context.table || 'products',
-            restoredData
+            typeof failure.context.table === 'string' ? failure.context.table : 'products',
+            rawRestored
           )
 
           const hasErrors = validationResults.some(r => !r.passed && r.severity === 'error')
-          
+
           if (hasErrors) {
             return {
               success: false,
@@ -357,7 +358,7 @@ export class FailureRecoverySystem {
       retryDelay: 0,
       backoffMultiplier: 1,
       timeout: 10000,
-      execute: async (failure: FailureEvent, context: Record<string, unknown>): Promise<RecoveryResult> => {
+      execute: async (_failure: FailureEvent, _context: Record<string, unknown>): Promise<RecoveryResult> => {
         try {
           // Activar modo degradado
           const degradedMode = {
@@ -398,11 +399,11 @@ export class FailureRecoverySystem {
       retryDelay: 0,
       backoffMultiplier: 1,
       timeout: 5000,
-      execute: async (failure: FailureEvent, context: Record<string, unknown>): Promise<RecoveryResult> => {
+      execute: async (failure: FailureEvent, _context: Record<string, unknown>): Promise<RecoveryResult> => {
         try {
           // Notificar administradores
           await this.notifyAdministrators(failure)
-          
+
           // Registrar para intervención manual
           await this.logForManualIntervention(failure)
 
@@ -462,10 +463,10 @@ export class FailureRecoverySystem {
     severity: FailureEvent['severity'],
     operation: string,
     error: string,
-    context: Record<string, any> = {}
+    context: Record<string, unknown> = {}
   ): Promise<string> {
     const id = `failure_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
+
     const failure: FailureEvent = {
       id,
       timestamp: new Date(),
@@ -476,7 +477,7 @@ export class FailureRecoverySystem {
       context,
       resolved: false,
       retryCount: 0,
-      affectedRecords: context.affectedRecords || 0
+      affectedRecords: typeof context.affectedRecords === 'number' ? context.affectedRecords : 0
     }
 
     this.failures.set(id, failure)
@@ -532,12 +533,12 @@ export class FailureRecoverySystem {
     // Ejecutar estrategias según el plan
     for (const strategyId of plan.escalationPath) {
       const result = await this.executeStrategy(strategyId, failure)
-      
+
       if (result.success) {
         failure.resolved = true
         failure.resolvedAt = new Date()
         failure.resolutionMethod = strategyId
-        
+
         return result
       }
 
@@ -582,7 +583,7 @@ export class FailureRecoverySystem {
     try {
       const result = await Promise.race([
         strategy.execute(failure, failure.context),
-        new Promise<RecoveryResult>((_, reject) => 
+        new Promise<RecoveryResult>((_, reject) =>
           setTimeout(() => reject(new Error('Strategy timeout')), strategy.timeout)
         )
       ])
@@ -624,10 +625,10 @@ export class FailureRecoverySystem {
   async executeWithRecovery<T>(
     operation: string,
     fn: () => Promise<T>,
-    context: Record<string, any> = {}
+    context: Record<string, unknown> = {}
   ): Promise<T> {
     const circuitBreaker = await this.getCircuitBreaker(operation)
-    
+
     try {
       return await circuitBreaker.execute(fn)
     } catch (error) {
@@ -640,7 +641,7 @@ export class FailureRecoverySystem {
       )
 
       const recoveryResult = await this.initiateRecovery(failureId)
-      
+
       if (recoveryResult.success) {
         // Reintentar operación después de recuperación exitosa
         return await circuitBreaker.execute(fn)
@@ -662,23 +663,23 @@ export class FailureRecoverySystem {
 
   private async performHealthCheck(): Promise<SystemHealth> {
     const startTime = Date.now()
-    
+
     // Check database connectivity
     let databaseHealth: SystemHealth['components']['database'] = 'healthy'
     try {
       await this.supabase.from('products').select('count').limit(1)
-    } catch (error) {
+    } catch (_error) {
       databaseHealth = 'offline'
     }
 
     // Check network (simplified)
     let networkHealth: SystemHealth['components']['network'] = 'healthy'
     try {
-      await fetch('https://httpbin.org/status/200', { 
+      await fetch('https://httpbin.org/status/200', {
         method: 'HEAD',
         signal: AbortSignal.timeout(5000)
       })
-    } catch (error) {
+    } catch (_error) {
       networkHealth = 'degraded'
     }
 
@@ -688,7 +689,7 @@ export class FailureRecoverySystem {
     // Check sync system
     const recentFailures = Array.from(this.failures.values())
       .filter(f => Date.now() - f.timestamp.getTime() < 300000) // Last 5 minutes
-    
+
     let syncHealth: SystemHealth['components']['sync'] = 'healthy'
     if (recentFailures.length > 5) {
       syncHealth = 'degraded'
@@ -699,10 +700,10 @@ export class FailureRecoverySystem {
 
     const responseTime = Date.now() - startTime
     const errorRate = recentFailures.length / Math.max(1, recentFailures.length + 10) // Simplified calculation
-    
+
     let overall: SystemHealth['overall'] = 'healthy'
     const components = { database: databaseHealth, network: networkHealth, cache: cacheHealth, sync: syncHealth }
-    
+
     if (Object.values(components).some(status => status === 'offline')) {
       overall = 'critical'
     } else if (Object.values(components).some(status => status === 'degraded')) {
@@ -734,11 +735,11 @@ export class FailureRecoverySystem {
 
   getFailures(resolved?: boolean): FailureEvent[] {
     const failures = Array.from(this.failures.values())
-    
+
     if (resolved !== undefined) {
       return failures.filter(f => f.resolved === resolved)
     }
-    
+
     return failures.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
   }
 

@@ -1,10 +1,10 @@
 'use client'
 
-import React from 'react'
+import React from 'react';
 import { motion, AnimatePresence } from '../ui/motion';
-import { Scan, Keyboard, History, X, Check, AlertCircle, Zap } from 'lucide-react'
-import { useBarcodeScanner, BarcodeResult } from '@/hooks/useBarcodeScanner'
-import { cn } from '@/lib/utils'
+import { Scan, Keyboard, History, Check, AlertCircle, Zap } from 'lucide-react';
+import { useBarcodeScanner, BarcodeResult } from '@/hooks/useBarcodeScanner';
+import { cn } from '@/lib/utils';
 
 interface BarcodeScannerProps {
   onScan?: (result: BarcodeResult) => void

@@ -1,5 +1,5 @@
 import { toast } from 'sonner'
-import { NotificationError, ErrorType } from './error-handling'
+import { NotificationError } from './error-handling'
 
 // Tipos de contexto para las notificaciones
 export enum NotificationContext {
@@ -156,7 +156,7 @@ export class ContextualNotificationGenerator {
     context: NotificationContext,
     action: ActionType,
     type: 'loading' | 'success' | 'error',
-    data?: any,
+    data?: Record<string, unknown>,
     error?: NotificationError
   ): { message: string; description?: string; duration?: number; icon?: string } {
     const contextMessages = CONTEXTUAL_MESSAGES[context]
@@ -194,7 +194,7 @@ export class ContextualNotificationGenerator {
   private static generateFallback(
     action: ActionType,
     type: 'loading' | 'success' | 'error',
-    data?: any,
+    data?: Record<string, unknown>,
     error?: NotificationError
   ): { message: string; description?: string; duration?: number } {
     const actionNames: Record<ActionType, string> = {
@@ -236,7 +236,7 @@ export function useContextualNotifications() {
     action: ActionType,
     type: 'loading' | 'success' | 'error' | 'info' | 'warning',
     options?: {
-      data?: any
+      data?: Record<string, unknown>
       error?: NotificationError
       customMessage?: string
       customDescription?: string
@@ -255,7 +255,7 @@ export function useContextualNotifications() {
         duration: customDuration || 3000
       }
     } else {
-      notificationConfig = ContextualNotificationGenerator.generate(context, action, type as any, data, error)
+      notificationConfig = ContextualNotificationGenerator.generate(context, action, type as 'loading' | 'success' | 'error', data, error)
     }
 
     const toastOptions = {
@@ -290,7 +290,7 @@ export function useContextualNotifications() {
   const notifyProductAction = (
     action: ActionType,
     type: 'loading' | 'success' | 'error',
-    options?: { data?: any; error?: NotificationError }
+    options?: { data?: Record<string, unknown>; error?: NotificationError }
   ) => {
     return notify(NotificationContext.PRODUCT_MANAGEMENT, action, type, options)
   }
@@ -298,21 +298,21 @@ export function useContextualNotifications() {
   const notifyImportExport = (
     action: ActionType.IMPORT | ActionType.EXPORT,
     type: 'loading' | 'success' | 'error',
-    options?: { data?: any; error?: NotificationError }
+    options?: { data?: Record<string, unknown>; error?: NotificationError }
   ) => {
     return notify(NotificationContext.IMPORT_EXPORT, action, type, options)
   }
 
   const notifyAuth = (
     type: 'loading' | 'success' | 'error',
-    options?: { data?: any; error?: NotificationError }
+    options?: { data?: Record<string, unknown>; error?: NotificationError }
   ) => {
     return notify(NotificationContext.AUTHENTICATION, ActionType.SAVE, type, options)
   }
 
   const notifySettings = (
     type: 'loading' | 'success' | 'error',
-    options?: { data?: any; error?: NotificationError }
+    options?: { data?: Record<string, unknown>; error?: NotificationError }
   ) => {
     return notify(NotificationContext.SETTINGS, ActionType.SAVE, type, options)
   }

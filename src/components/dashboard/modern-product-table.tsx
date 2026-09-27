@@ -1,5 +1,7 @@
 "use client"
 
+import { AppImage } from '@/components/ui/app-image'
+
 import { memo } from 'react'
 import { motion, AnimatePresence  } from '../ui/motion'
 import { ModernProductGrid } from './modern-product-grid'
@@ -319,7 +321,7 @@ export const ModernProductTable = memo(({
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
                               {product.image ? (
-                                <img src={product.image} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                                <AppImage src={product.image} alt={product.name} className="w-full h-full object-cover rounded-lg" />
                               ) : (
                                 <Package className="h-5 w-5 text-slate-500" />
                               )}

@@ -100,27 +100,28 @@ beforeAll(() => {
   })
 
   // Mock de PerformanceObserver
-  const MockPerformanceObserver = vi.fn().mockImplementation((callback) => {
-    const mockObserver = {
-      observe: vi.fn(),
-      disconnect: vi.fn(),
-      takeRecords: vi.fn(() => []),
-      // Simular callback para tests
-      _callback: callback,
-      _triggerCallback: (entries: PerformanceEntry[]) => {
-        if (callback) {
-          callback({ 
-            getEntries: () => entries,
-            getEntriesByName: (name: string) => entries.filter(e => e.name === name),
-            getEntriesByType: (type: string) => entries.filter(e => e.entryType === type)
-          }, mockObserver)
-        }
+  class PerformanceObserverMock {
+    static supportedEntryTypes: string[] = []
+    observe = vi.fn()
+    disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
+    _callback: PerformanceObserverCallback
+
+    constructor(callback: PerformanceObserverCallback) {
+      this._callback = callback
+    }
+
+    _triggerCallback(entries: PerformanceEntry[]) {
+      if (this._callback) {
+        this._callback({
+          getEntries: () => entries,
+          getEntriesByName: (name: string) => entries.filter(e => e.name === name),
+          getEntriesByType: (type: string) => entries.filter(e => e.entryType === type)
+        } as PerformanceObserverEntryList, this as unknown as PerformanceObserver)
       }
     }
-    return mockObserver
-  })
-  Object.assign(MockPerformanceObserver, { supportedEntryTypes: [] as string[] })
-  global.PerformanceObserver = MockPerformanceObserver as unknown as typeof PerformanceObserver
+  }
+  global.PerformanceObserver = PerformanceObserverMock as unknown as typeof PerformanceObserver
 
   // Mock de PerformanceEntry para Web Vitals
   global.PerformanceEntry = vi.fn().mockImplementation(() => ({
@@ -145,19 +146,27 @@ beforeAll(() => {
     createMockWebVitalEntry: typeof createMockWebVitalEntry
   }).createMockWebVitalEntry = createMockWebVitalEntry
 
-  // Mock de IntersectionObserver
-  global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn()
-  }))
+  // Mocks de observers. Van como clases y no como vi.fn(() => ({...})): una
+  // implementación de flecha no se puede invocar con `new`, y las librerías
+  // que instancian el observer de verdad (Radix usa ResizeObserver al medir
+  // tooltips y popovers) rompen con "is not a constructor".
+  class IntersectionObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
+    root = null
+    rootMargin = ''
+    thresholds: number[] = []
+  }
+  global.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
 
-  // Mock de ResizeObserver
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn()
-  }))
+  class ResizeObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  }
+  global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 
   // Mock de matchMedia
   Object.defineProperty(window, 'matchMedia', {
@@ -175,11 +184,14 @@ beforeAll(() => {
   })
 
   // Mock de localStorage
+  const storage = new Map<string, string>()
   const localStorageMock = {
-    getItem: vi.fn(),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn()
+    get length() { return storage.size },
+    getItem: vi.fn((key: string) => storage.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => { storage.set(key, String(value)) }),
+    removeItem: vi.fn((key: string) => { storage.delete(key) }),
+    clear: vi.fn(() => { storage.clear() }),
+    key: vi.fn((index: number) => Array.from(storage.keys())[index] ?? null)
   }
   Object.defineProperty(window, 'localStorage', {
     value: localStorageMock

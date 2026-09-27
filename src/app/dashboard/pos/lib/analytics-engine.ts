@@ -105,7 +105,7 @@ export interface Alert {
   title: string
   message: string
   timestamp: Date
-  data?: any
+  data?: unknown
   acknowledged: boolean
 }
 
@@ -132,7 +132,7 @@ export interface AnalyticsConfig {
 // Analytics Engine Class
 // ============================================================================
 
-class AnalyticsEngine {
+export class AnalyticsEngine {
   private sales: SaleEvent[] = []
   private alerts: Alert[] = []
   private config: AnalyticsConfig = {

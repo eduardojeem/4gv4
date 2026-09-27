@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { resolveTenantBrandFields, type GlobalBrand } from '@/lib/brands/global-catalog'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 
 const brandSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -10,9 +12,30 @@ const brandSchema = z.object({
   website: z.string().trim().max(240).optional().nullable(),
   country: z.string().trim().max(120).optional().nullable(),
   founded_year: z.number().int().min(1800).max(2200).optional().nullable(),
+  // Se acepta por compatibilidad pero no se guarda: el logo lo define el
+  // catálogo global. Ver `resolveTenantBrandFields`.
   logo_url: z.string().trim().max(500).optional().nullable(),
+  /** Marca oficial del catálogo de la plataforma. */
+  global_brand_id: z.string().uuid().optional().nullable(),
   is_active: z.boolean().optional(),
 })
+
+/**
+ * La marca oficial elegida, si existe y está vigente.
+ *
+ * El catálogo es de la plataforma, así que se lee con el cliente de servicio;
+ * el resto de la operación sigue acotado a la organización.
+ */
+async function loadGlobalBrand(globalBrandId: string | null | undefined): Promise<GlobalBrand | null> {
+  if (!globalBrandId) return null
+  const { data } = await createAdminSupabase()
+    .from('global_brands')
+    .select('id, name, slug, aliases, logo_url, website, is_active')
+    .eq('id', globalBrandId)
+    .eq('is_active', true)
+    .maybeSingle()
+  return (data as GlobalBrand | null) ?? null
+}
 
 const brandUpdateSchema = brandSchema.partial().extend({
   id: z.string().uuid(),
@@ -59,16 +82,22 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
   try {
     const validation = brandSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const payload = validation.data
+    const globalBrand = await loadGlobalBrand(payload.global_brand_id)
+    if (payload.global_brand_id && !globalBrand) {
+      return NextResponse.json({ success: false, error: 'Esa marca del catálogo ya no está disponible.' }, { status: 400 })
+    }
+    const official = resolveTenantBrandFields(payload, globalBrand)
+
     const supabase = await createClient()
     const { data: existing, error: existingError } = await supabase
       .from('brands')
       .select('id')
       .eq('organization_id', organization.id)
-      .ilike('name', payload.name)
+      .ilike('name', official.name)
       .maybeSingle()
 
     if (existingError) throw existingError
@@ -80,6 +109,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       .from('brands')
       .insert({
         ...payload,
+        ...official,
         organization_id: organization.id,
         is_active: payload.is_active ?? true,
         updated_at: new Date().toISOString(),
@@ -89,9 +119,9 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
 
     if (error) throw error
     return NextResponse.json({ success: true, data }, { status: 201 })
-  } catch (error: any) {
-    const code = error?.code || ''
-    const message = error?.message || ''
+  } catch (error: unknown) {
+    const code = (error as { code?: string })?.code || ''
+    const message = error instanceof Error ? error.message : String(error)
     if (code === '23505' || message.includes('duplicate') || message.includes('unique')) {
       return NextResponse.json({ success: false, error: 'Ya existe una marca con este nombre.' }, { status: 409 })
     }
@@ -104,14 +134,30 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
   try {
     const validation = brandUpdateSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const { id, ...updates } = validation.data
+    const globalBrand = await loadGlobalBrand(updates.global_brand_id)
+    if (updates.global_brand_id && !globalBrand) {
+      return NextResponse.json({ success: false, error: 'Esa marca del catálogo ya no está disponible.' }, { status: 400 })
+    }
+    // Al desvincular o al no tocar el vínculo, el logo nunca lo decide la
+    // empresa: o viene del catálogo o no hay.
+    const official = updates.global_brand_id !== undefined
+      ? resolveTenantBrandFields({ ...updates, name: updates.name ?? '' }, globalBrand)
+      : null
+
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('brands')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({
+        ...updates,
+        ...(official
+          ? { ...official, name: official.name || updates.name }
+          : { logo_url: undefined }),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .eq('organization_id', organization.id)
       .select('*')

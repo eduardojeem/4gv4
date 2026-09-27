@@ -180,5 +180,5 @@ export interface ModalState {
   isOpen: boolean
   mode: ModalMode
   type: CatalogItemType
-  item?: Category | Brand | any
+  item?: Category | Brand | Record<string, unknown>
 }

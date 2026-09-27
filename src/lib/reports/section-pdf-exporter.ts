@@ -1,0 +1,911 @@
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import type { CreditReport } from './credit-report'
+import {
+  renderAreaChartCanvas,
+  renderBarChartCanvas,
+  renderDonutChartCanvas
+} from './canvas-chart-renderer'
+
+interface AutoTableDoc extends jsPDF {
+  lastAutoTable?: { finalY?: number }
+  internal: jsPDF['internal'] & { getNumberOfPages: () => number }
+}
+
+export interface SalesDataPoint {
+  date: string
+  sales: number | string
+  orders?: number | string
+  profit?: number | string
+}
+
+export interface ProductReportItem {
+  name?: string
+  category?: string
+  sales?: number | string
+  quantity?: number | string
+  profit?: number | string
+  share?: number
+}
+
+export interface CategoryReportItem {
+  name?: string
+  sales?: number | string
+  quantity?: number | string
+}
+
+export interface RepairTrendItem {
+  date: string
+  count: number | string
+}
+
+export interface RepairStatusItem {
+  name: string
+  value: number | string
+  color?: string
+}
+
+// ── Helpers de formato ────────────────────────────────────────────────────────
+const formatGs = (amount: number | null | undefined): string => {
+  if (amount === null || amount === undefined || isNaN(amount)) return '0 Gs.'
+  return `${Math.round(amount).toLocaleString('es-PY')} Gs.`
+}
+
+const formatNumber = (num: number | null | undefined): string => {
+  if (num === null || num === undefined || isNaN(num)) return '0'
+  return Math.round(num).toLocaleString('es-PY')
+}
+
+const formatDateStr = (dateStr: string): string => {
+  if (!dateStr) return ''
+  try {
+    const parts = dateStr.split('T')[0].split('-')
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+    const d = new Date(dateStr)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    }
+  } catch {
+    // fallback
+  }
+  return dateStr
+}
+
+const getDayOfWeekStr = (dateStr: string): string => {
+  if (!dateStr) return ''
+  try {
+    const parts = dateStr.split('T')[0].split('-')
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+      const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+      return days[d.getDay()] || ''
+    }
+  } catch {
+    // fallback
+  }
+  return ''
+}
+
+const sanitizeFileName = (value: string) => {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 120) || 'reporte'
+}
+
+/**
+ * De qué habla el reporte, además de sus números.
+ *
+ * Sin esto un PDF de ventas solo decía "Emisión: <ahora>": no el período que
+ * cubre, ni la sucursal filtrada, ni quién lo pidió. Dos reportes del mismo
+ * local, uno de enero y otro de marzo, salían indistinguibles una vez
+ * descargados, y un reporte de una sucursal parecía el del negocio entero.
+ */
+export type ReportContext = {
+  periodFrom?: Date | string | null
+  periodTo?: Date | string | null
+  /** Nombre de la sucursal filtrada. Sin esto se asume "todas". */
+  branchName?: string | null
+  /** Quién lo descargó. Queda en el pie, junto a "Confidencial". */
+  generatedBy?: string | null
+}
+
+function toDateLabel(value: Date | string | null | undefined): string {
+  if (!value) return ''
+  const d = value instanceof Date ? value : new Date(value)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+/** "01/03/2026 al 31/03/2026 (31 días)". Vacío si no se pasó el rango. */
+export function describeReportPeriod(context?: ReportContext): string {
+  const desde = toDateLabel(context?.periodFrom)
+  const hasta = toDateLabel(context?.periodTo)
+  if (!desde && !hasta) return ''
+  if (!desde || !hasta) return desde || hasta
+
+  const from = context!.periodFrom instanceof Date ? context!.periodFrom : new Date(context!.periodFrom as string)
+  const to = context!.periodTo instanceof Date ? context!.periodTo : new Date(context!.periodTo as string)
+  const dias = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1)
+
+  return `${desde} al ${hasta} (${dias} día${dias === 1 ? '' : 's'})`
+}
+
+/**
+ * Recorta una tabla larga y dice cuánto quedó afuera.
+ *
+ * Antes las tablas de tendencia hacían `slice(0, 31)` en silencio mientras el
+ * pie seguía anunciando el total del período entero: con 60 días, las filas no
+ * sumaban lo que decía el pie y nada lo explicaba. El tope ahora es alto y,
+ * cuando aplica, se avisa.
+ */
+function capRows<T>(rows: T[], max = 400): { rows: T[]; omitidas: number } {
+  if (rows.length <= max) return { rows, omitidas: 0 }
+  return { rows: rows.slice(0, max), omitidas: rows.length - max }
+}
+
+function renderOmittedNote(doc: jsPDF, omitidas: number, margin: number) {
+  if (omitidas <= 0) return
+  const y = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 12
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(180, 83, 9)
+  doc.text(
+    `Se listan las primeras filas por tamaño del documento: quedaron ${formatNumber(omitidas)} fuera de la tabla. Los totales del pie sí incluyen todo el período.`,
+    margin,
+    y
+  )
+}
+
+/** Aclaracion al pie de los KPI. Devuelve la nueva `y`. */
+function renderKpiNote(doc: jsPDF, text: string, y: number, margin: number, contentWidth: number): number {
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(100, 116, 139)
+  const lines = doc.splitTextToSize(text, contentWidth)
+  doc.text(lines, margin, y)
+  return y + (lines.length * 9) + 6
+}
+
+// ── RENDERIZADOR DE CABECERA Y FOOTER ESTÁNDAR ────────────────────────────────
+function setupDocPageHeadersAndFooters(
+  doc: jsPDF,
+  title: string,
+  sectionSubtitle: string,
+  dateLabel: string,
+  context?: ReportContext
+) {
+  const totalPages = (doc as AutoTableDoc).internal.getNumberOfPages()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const margin = 32
+
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p)
+
+    // Cabecera en todas las páginas después de la 1
+    if (p > 1) {
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(148, 163, 184)
+      doc.text(`${title} • ${sectionSubtitle}`, margin, 20)
+      doc.text('Sistema 4G • Reporte Oficial', pageWidth - margin, 20, { align: 'right' })
+
+      doc.setDrawColor(226, 232, 240)
+      doc.setLineWidth(0.5)
+      doc.line(margin, 24, pageWidth - margin, 24)
+    }
+
+    // Pie de página en todas las páginas
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.5)
+    doc.line(margin, pageHeight - 22, pageWidth - margin, pageHeight - 22)
+
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(148, 163, 184)
+
+    // El pie va en todas las páginas: si alguien imprime solo la hoja 3, ahí
+    // tiene que decir de qué período habla.
+    const periodo = describeReportPeriod(context)
+    const pie = [
+      periodo ? `Período ${periodo}` : null,
+      `Generado el ${dateLabel}`,
+      context?.generatedBy?.trim() ? `por ${context.generatedBy.trim()}` : null,
+      'Documento Confidencial',
+    ].filter(Boolean).join(' • ')
+
+    doc.text(pie, margin, pageHeight - 10, { maxWidth: pageWidth - margin * 2 - 90 })
+    doc.text(`Página ${p} de ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' })
+  }
+}
+
+function renderExecutiveCoverHeader(
+  doc: jsPDF,
+  title: string,
+  sectionSubtitle: string,
+  dateLabel: string,
+  margin: number,
+  contentWidth: number,
+  pageWidth: number,
+  context?: ReportContext
+) {
+  const periodo = describeReportPeriod(context)
+  // La franja crece solo si hay algo que poner: sin periodo ni sucursal, el
+  // encabezado queda como estaba.
+  const alturaExtra = periodo || context?.branchName ? 20 : 0
+
+  doc.setFillColor(15, 23, 42)
+  doc.rect(margin, 24, contentWidth, 68 + alturaExtra, 'F')
+
+  doc.setFillColor(37, 99, 235)
+  doc.rect(margin, 24, contentWidth / 2, 4, 'F')
+  doc.setFillColor(16, 185, 129)
+  doc.rect(margin + contentWidth / 2, 24, contentWidth / 2, 4, 'F')
+
+  doc.setFontSize(17)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(255, 255, 255)
+  doc.text(title.toUpperCase(), margin + 16, 52)
+
+  doc.setFontSize(9.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(148, 163, 184)
+  doc.text(sectionSubtitle.toUpperCase(), margin + 16, 72)
+
+  doc.setFontSize(8.5)
+  doc.setTextColor(203, 213, 225)
+  doc.text(`Emisión: ${dateLabel}`, pageWidth - margin - 16, 52, { align: 'right' })
+  doc.text('Sistema 4G • Confidencial', pageWidth - margin - 16, 72, { align: 'right' })
+
+  // Período y sucursal: es lo que distingue este reporte del mismo reporte de
+  // otro mes o de otro local.
+  if (periodo || context?.branchName) {
+    const partes: string[] = []
+    if (periodo) partes.push(`Período: ${periodo}`)
+    // Decirlo siempre, incluso cuando son todas: un reporte de una sucursal que
+    // no lo aclara se lee como el del negocio entero.
+    partes.push(`Sucursal: ${context?.branchName?.trim() || 'Todas'}`)
+
+    doc.setFontSize(8.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(226, 232, 240)
+    doc.text(partes.join('     •     '), margin + 16, 92, { maxWidth: contentWidth - 32 })
+  }
+}
+
+/** Dónde arranca el contenido, según cuánto creció la portada. */
+function coverBottom(context?: ReportContext): number {
+  return describeReportPeriod(context) || context?.branchName ? 124 : 104
+}
+
+function renderKpiCardsGrid(
+  doc: jsPDF,
+  metrics: Record<string, string | number>,
+  currentY: number,
+  margin: number,
+  contentWidth: number
+): number {
+  const metricEntries = Object.entries(metrics)
+  if (metricEntries.length === 0) return currentY
+
+  const cardsPerRow = 4
+  const cardGap = 8
+  const cardWidth = (contentWidth - ((cardsPerRow - 1) * cardGap)) / cardsPerRow
+  const cardHeight = 48
+
+  metricEntries.forEach(([key, val], idx) => {
+    const row = Math.floor(idx / cardsPerRow)
+    const col = idx % cardsPerRow
+    const cardX = margin + col * (cardWidth + cardGap)
+    const cardY = currentY + row * (cardHeight + cardGap)
+
+    doc.setFillColor(248, 250, 252)
+    doc.setDrawColor(226, 232, 240)
+    doc.roundedRect(cardX, cardY, cardWidth, cardHeight, 5, 5, 'FD')
+
+    const colors = [
+      [37, 99, 235],
+      [16, 185, 129],
+      [124, 58, 237],
+      [217, 119, 6],
+      [6, 182, 212],
+      [236, 72, 153],
+    ]
+    const color = colors[idx % colors.length]
+    doc.setFillColor(color[0], color[1], color[2])
+    doc.roundedRect(cardX, cardY, 3.5, cardHeight, 1.5, 1.5, 'F')
+
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(100, 116, 139)
+    doc.text(key.toUpperCase(), cardX + 10, cardY + 16, { maxWidth: cardWidth - 16 })
+
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(15, 23, 42)
+    doc.text(String(val), cardX + 10, cardY + 34, { maxWidth: cardWidth - 16 })
+  })
+
+  const totalRows = Math.ceil(metricEntries.length / cardsPerRow)
+  return currentY + totalRows * (cardHeight + cardGap) + 14
+}
+
+// ── 1. EXPORTADOR PDF DE VENTAS ───────────────────────────────────────────────
+export async function exportSalesSectionPDF(params: {
+  title: string
+  salesData: SalesDataPoint[]
+  metrics: {
+    totalSales: number
+    totalOrders: number
+    /** Clientes distintos que compraron. NO son las altas nuevas del periodo. */
+    buyers: number
+    /** Fichas de cliente creadas en el periodo. */
+    newCustomers: number
+    avgOrderValue: number
+    totalProfit?: number
+    /**
+     * Facturacion de la que si se conoce el costo historico. El margen se
+     * calcula sobre esto, no sobre el total: dividir por la facturacion entera
+     * cuando solo se conoce el costo de una parte da un margen mas bajo que el
+     * de la pantalla, y el PDF es el que se comparte.
+     */
+    profitCoveredRevenue?: number
+    profitCoveredItems?: number
+    profitTotalItems?: number
+  }
+  chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  void (doc.internal.pageSize.getHeight());
+  const margin = 32
+  const contentWidth = pageWidth - (margin * 2)
+  const now = new Date()
+  const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  renderExecutiveCoverHeader(doc, params.title, 'Informe Específico de Ventas y Facturación', dateLabel, margin, contentWidth, pageWidth, params.context)
+
+  let y = coverBottom(params.context)
+  const coveredRevenue = params.metrics.profitCoveredRevenue ?? 0
+  const showProfit = params.metrics.totalProfit !== undefined && params.metrics.totalProfit > 0
+  const kpiMap: Record<string, string | number> = {
+    'Ventas Totales (POS)': formatGs(params.metrics.totalSales),
+    'Órdenes': formatNumber(params.metrics.totalOrders),
+    'Clientes que compraron': formatNumber(params.metrics.buyers),
+    'Clientes nuevos': formatNumber(params.metrics.newCustomers),
+    'Ticket Promedio': formatGs(params.metrics.avgOrderValue),
+    ...(showProfit ? {
+      'Ganancia Estimada': formatGs(params.metrics.totalProfit),
+      'Margen Bruto': coveredRevenue > 0
+        ? `${((params.metrics.totalProfit! / coveredRevenue) * 100).toFixed(1)}%`
+        : 'Sin costos',
+    } : {}),
+  }
+  y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  if (showProfit) {
+    const cubiertos = params.metrics.profitCoveredItems ?? 0
+    const totales = params.metrics.profitTotalItems ?? 0
+    y = renderKpiNote(
+      doc,
+      totales > 0
+        ? `La ganancia y el margen se calculan sobre los ${formatNumber(cubiertos)} de ${formatNumber(totales)} items con costo historico registrado (${formatGs(coveredRevenue)} de facturacion). El resto no tiene costo cargado y queda fuera del calculo.`
+        : 'La ganancia y el margen se calculan solo sobre los items con costo historico registrado.',
+      y,
+      margin,
+      contentWidth
+    )
+  }
+
+  // Gráfico Canvas de Alta Definición
+  if (params.salesData.length > 0) {
+    const chartImg = renderAreaChartCanvas(
+      'Tendencia y Evolución Diaria de Ventas',
+      params.salesData.map((d) => ({ label: formatDateStr(d.date), value: Number(d.sales) || 0 })),
+      { lineColor: '#2563eb', fillColor: '#3b82f6', formatValue: formatGs }
+    )
+    if (chartImg) {
+      doc.addImage(chartImg, 'PNG', margin, y, contentWidth, 175)
+      y += 185
+    }
+  }
+
+  // Tabla detallada de ventas
+  const totalSalesSum = params.metrics.totalSales
+  const rows = params.salesData.map((r) => {
+    const s = Number(r.sales) || 0
+    const o = Number(r.orders) || 0
+    const p = Number(r.profit) || 0
+    const t = o > 0 ? s / o : s
+    const m = s > 0 ? ((p / s) * 100).toFixed(1) : '0'
+    const share = totalSalesSum > 0 ? ((s / totalSalesSum) * 100).toFixed(1) : '0'
+
+    return [
+      formatDateStr(r.date),
+      getDayOfWeekStr(r.date),
+      formatGs(s),
+      formatNumber(o),
+      formatGs(t),
+      p > 0 ? formatGs(p) : '—',
+      p > 0 ? `${m}%` : '—',
+      `${share}%`,
+    ]
+  })
+
+  const foot = [[
+    'TOTALES DEL PERÍODO',
+    `${params.salesData.length} días`,
+    formatGs(totalSalesSum),
+    formatNumber(params.metrics.totalOrders),
+    formatGs(params.metrics.avgOrderValue),
+    params.metrics.totalProfit ? formatGs(params.metrics.totalProfit) : '—',
+    params.metrics.totalProfit && totalSalesSum > 0 ? `${((params.metrics.totalProfit / totalSalesSum) * 100).toFixed(1)}%` : '—',
+    '100%',
+  ]]
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Fecha', 'Día', 'Facturación (Gs.)', 'Órdenes', 'Ticket Promedio', 'Ganancia Est.', 'Margen %', 'Part. %']],
+    body: rows,
+    foot,
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+    headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { fontStyle: 'bold', halign: 'center' },
+      1: { halign: 'center' },
+      2: { halign: 'right', fontStyle: 'bold' },
+      3: { halign: 'center' },
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+      6: { halign: 'right' },
+      7: { halign: 'right' },
+    },
+  })
+
+  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte Específico de Ventas', dateLabel, params.context)
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+  doc.save(`${sanitizeFileName(params.title)}_ventas_${timestamp}.pdf`)
+}
+
+// ── 2. EXPORTADOR PDF DE PRODUCTOS ────────────────────────────────────────────
+export async function exportProductsSectionPDF(params: {
+  title: string
+  products: ProductReportItem[]
+  chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = 32
+  const contentWidth = pageWidth - (margin * 2)
+  const now = new Date()
+  const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  renderExecutiveCoverHeader(doc, params.title, 'Ranking y Análisis Comercial de Productos', dateLabel, margin, contentWidth, pageWidth, params.context)
+
+  const totalSalesSum = params.products.reduce((acc, p) => acc + (Number(p.sales) || 0), 0)
+  const totalQtySum = params.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
+  const totalProfitSum = params.products.reduce((acc, p) => acc + (Number(p.profit) || 0), 0)
+
+  let y = coverBottom(params.context)
+  const kpiMap: Record<string, string | number> = {
+    'Total Facturado Catálogo': formatGs(totalSalesSum),
+    'Unidades Vendidas': formatNumber(totalQtySum),
+    'Artículos Diferentes': formatNumber(params.products.length),
+    'Ganancia Total Estimada': formatGs(totalProfitSum),
+  }
+  y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  // Gráfico Canvas de Barras
+  if (params.products.length > 0) {
+    const chartImg = renderBarChartCanvas(
+      'Top 10 Productos Más Vendidos por Facturación',
+      params.products.slice(0, 10).map((p) => ({ label: p.name || 'Sin nombre', value: Number(p.sales) || 0 })),
+      { barColor: '#059669', formatValue: formatGs }
+    )
+    if (chartImg) {
+      doc.addImage(chartImg, 'PNG', margin, y, contentWidth, 180)
+      y += 190
+    }
+  }
+
+  const rows = params.products.map((p, idx: number) => {
+    const s = Number(p.sales) || 0
+    const q = Number(p.quantity) || 0
+    const prof = Number(p.profit) || 0
+    const avg = q > 0 ? s / q : s
+    const share = totalSalesSum > 0 ? ((s / totalSalesSum) * 100).toFixed(1) : (p.share?.toFixed(1) || '0')
+    const marginPct = s > 0 ? ((prof / s) * 100).toFixed(1) : '0'
+
+    return [
+      `#${idx + 1}`,
+      p.name || 'Sin nombre',
+      p.category || 'General',
+      formatNumber(q),
+      formatGs(avg),
+      formatGs(s),
+      `${share}%`,
+      prof > 0 ? formatGs(prof) : '—',
+      prof > 0 ? `${marginPct}%` : '—',
+    ]
+  })
+
+  const foot = [[
+    '',
+    'TOTALES CATÁLOGO',
+    '',
+    formatNumber(totalQtySum),
+    '—',
+    formatGs(totalSalesSum),
+    '100%',
+    totalProfitSum > 0 ? formatGs(totalProfitSum) : '—',
+    totalSalesSum > 0 ? `${((totalProfitSum / totalSalesSum) * 100).toFixed(1)}%` : '—',
+  ]]
+
+  autoTable(doc, {
+    startY: y,
+    head: [['#', 'Producto', 'Categoría', 'Unidades', 'Precio Prom. Unit.', 'Facturación Total (Gs.)', 'Part. %', 'Ganancia (Gs.)', 'Margen %']],
+    body: rows,
+    foot,
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 7.5, cellPadding: 3.5, font: 'helvetica' },
+    headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'center' },
+      3: { halign: 'center' },
+      4: { halign: 'right' },
+      5: { halign: 'right', fontStyle: 'bold' },
+      6: { halign: 'right' },
+      7: { halign: 'right' },
+      8: { halign: 'right' },
+    },
+  })
+
+  setupDocPageHeadersAndFooters(doc, params.title, 'Ranking de Productos', dateLabel, params.context)
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+  doc.save(`${sanitizeFileName(params.title)}_productos_${timestamp}.pdf`)
+}
+
+// ── 3. EXPORTADOR PDF DE CATEGORÍAS ───────────────────────────────────────────
+export async function exportCategoriesSectionPDF(params: {
+  title: string
+  categories: CategoryReportItem[]
+  chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = 32
+  const contentWidth = pageWidth - (margin * 2)
+  const now = new Date()
+  const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  renderExecutiveCoverHeader(doc, params.title, 'Participación y Ventas por Categoría Comercial', dateLabel, margin, contentWidth, pageWidth, params.context)
+
+  const totalSalesSum = params.categories.reduce((acc, c) => acc + (Number(c.sales) || 0), 0)
+  const totalQtySum = params.categories.reduce((acc, c) => acc + (Number(c.quantity) || 0), 0)
+
+  let y = coverBottom(params.context)
+  const kpiMap: Record<string, string | number> = {
+    'Total en Rubros': formatGs(totalSalesSum),
+    'Unidades Vendidas': formatNumber(totalQtySum),
+    'Total Categorías': formatNumber(params.categories.length),
+  }
+  y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  // Gráfico Canvas Donut
+  if (params.categories.length > 0) {
+    const chartImg = renderDonutChartCanvas(
+      'Participación de Facturación por Categoría',
+      params.categories.map((c) => ({ label: c.name || 'Sin Categoría', value: Number(c.sales) || 0 })),
+      { formatValue: formatGs }
+    )
+    if (chartImg) {
+      doc.addImage(chartImg, 'PNG', margin, y, contentWidth, 180)
+      y += 190
+    }
+  }
+
+  const rows = params.categories.map((c) => {
+    const s = Number(c.sales) || 0
+    const q = Number(c.quantity) || 0
+    const avg = q > 0 ? s / q : s
+    const share = totalSalesSum > 0 ? ((s / totalSalesSum) * 100).toFixed(1) : '0'
+
+    return [
+      c.name || 'Sin Categoría',
+      formatNumber(q),
+      formatGs(s),
+      formatGs(avg),
+      `${share}%`,
+    ]
+  })
+
+  const foot = [['TOTAL GENERAL', formatNumber(totalQtySum), formatGs(totalSalesSum), '—', '100%']]
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Categoría Comercial', 'Unidades Vendidas', 'Ventas Totales (Gs.)', 'Ticket Promedio / Unid.', 'Participación %']],
+    body: rows,
+    foot,
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 8.5, cellPadding: 4.5, font: 'helvetica' },
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'center' },
+      2: { halign: 'right', fontStyle: 'bold' },
+      3: { halign: 'right' },
+      4: { halign: 'right' },
+    },
+  })
+
+  setupDocPageHeadersAndFooters(doc, params.title, 'Desglose por Categorías', dateLabel, params.context)
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+  doc.save(`${sanitizeFileName(params.title)}_categorias_${timestamp}.pdf`)
+}
+
+// ── 4. EXPORTADOR PDF DE REPARACIONES / TALLER ─────────────────────────────────
+export async function exportRepairsSectionPDF(params: {
+  title: string
+  trend: RepairTrendItem[]
+  statusDist: RepairStatusItem[]
+  metrics: {
+    total: number
+    // Obligatorios a proposito: cuando eran opcionales, nadie los pasaba y
+    // `formatNumber(undefined)` los imprimia como «0» sin que nada avisara.
+    completed: number
+    inProgress: number
+    /**
+     * Equipos entregados DENTRO del periodo, por `delivered_at`. Es otra
+     * pregunta que `completed`, que cuenta cuantas de las ingresadas ya se
+     * entregaron —a la fecha de hoy, no al cierre del periodo—. `null` cuando la
+     * instalacion no tiene esa fecha cargada.
+     */
+    deliveredInPeriod?: number | null
+    completionRate: number
+    avgCost?: number
+    avgTATDays?: number
+    avgLabor?: number
+    avgParts?: number
+  }
+  chartRefs?: React.RefObject<HTMLDivElement | null>[]
+  context?: ReportContext
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = 32
+  const contentWidth = pageWidth - (margin * 2)
+  const now = new Date()
+  const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  renderExecutiveCoverHeader(doc, params.title, 'Informe Técnico de Reparaciones y Taller', dateLabel, margin, contentWidth, pageWidth, params.context)
+
+  let y = coverBottom(params.context)
+  const kpiMap: Record<string, string | number> = {
+    'Ingresadas en el Período': formatNumber(params.metrics.total),
+    'Ya Entregadas (de las ingresadas)': formatNumber(params.metrics.completed),
+    'En Proceso Técnico': formatNumber(params.metrics.inProgress),
+    'Tasa de Finalización': `${params.metrics.completionRate.toFixed(1)}%`,
+    ...(params.metrics.deliveredInPeriod !== null && params.metrics.deliveredInPeriod !== undefined ? {
+      'Entregadas en el Período': formatNumber(params.metrics.deliveredInPeriod),
+    } : {}),
+  }
+  y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  y = renderKpiNote(
+    doc,
+    'Las tres primeras cifras miran los equipos INGRESADOS en el periodo, con el estado que tienen hoy: la tasa sube sola con el tiempo y un equipo que ingreso antes del periodo no cuenta, aunque se haya entregado dentro. «Entregadas en el Periodo» cuenta las entregas hechas entre esas fechas, sin importar cuando ingreso el equipo, y no cambia si se vuelve a bajar el informe mas adelante.',
+    y,
+    margin,
+    contentWidth
+  )
+
+  // Gráficos Canvas (Distribución de Estados y Tendencia)
+  if (params.statusDist.length > 0) {
+    const chartImg = renderDonutChartCanvas(
+      'Distribución de Órdenes por Estado Operativo',
+      params.statusDist.map((s) => ({ label: s.name, value: Number(s.value) || 0, color: s.color })),
+      { formatValue: (v) => `${v} equipos` }
+    )
+    if (chartImg) {
+      doc.addImage(chartImg, 'PNG', margin, y, contentWidth, 160)
+      y += 170
+    }
+  }
+
+  // Tablas de estados y tendencia
+  const totalRepairs = params.statusDist.reduce((acc, s) => acc + (Number(s.value) || 0), 0)
+  const statusRows = params.statusDist.map((s) => {
+    const val = Number(s.value) || 0
+    const pct = totalRepairs > 0 ? ((val / totalRepairs) * 100).toFixed(1) : '0'
+    return [s.name, formatNumber(val), `${pct}%`]
+  })
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Estado de la Orden', 'Equipos Registrados', 'Distribución %']],
+    body: statusRows,
+    foot: [['TOTAL ÓRDENES', formatNumber(totalRepairs), '100%']],
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 8.5, cellPadding: 4, font: 'helvetica' },
+    headStyles: { fillColor: [124, 58, 237], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'right', fontStyle: 'bold' },
+      2: { halign: 'right' },
+    },
+  })
+
+  const nextY = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 16
+
+  if (params.trend.length > 0) {
+    const totalTrendCount = params.trend.reduce((acc, t) => acc + (Number(t.count) || 0), 0)
+    // Antes esto era `slice(0, 31)`: con un período más largo la tabla mostraba
+    // 31 filas mientras el pie anunciaba el total de todos los días, y nada
+    // explicaba por qué no sumaban.
+    const { rows: trendVisibles, omitidas: trendOmitidas } = capRows(params.trend)
+    const trendRows = trendVisibles.map((t) => {
+      const c = Number(t.count) || 0
+      const pct = totalTrendCount > 0 ? ((c / totalTrendCount) * 100).toFixed(1) : '0'
+      return [formatDateStr(t.date), getDayOfWeekStr(t.date), formatNumber(c), `${pct}%`]
+    })
+
+    autoTable(doc, {
+      startY: nextY,
+      head: [['Fecha', 'Día', 'Reparaciones Ingresadas', 'Participación %']],
+      body: trendRows,
+      foot: [['TOTAL INGRESOS TALLER', `${params.trend.length} días`, formatNumber(totalTrendCount), '100%']],
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+      headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold' },
+      footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { fontStyle: 'bold', halign: 'center' },
+        1: { halign: 'center' },
+        2: { halign: 'right', fontStyle: 'bold' },
+        3: { halign: 'right' },
+      },
+    })
+    renderOmittedNote(doc, trendOmitidas, margin)
+  }
+
+  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte de Taller y Reparaciones', dateLabel, params.context)
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+  doc.save(`${sanitizeFileName(params.title)}_reparaciones_${timestamp}.pdf`)
+}
+
+// ── 5. EXPORTADOR PDF DE CRÉDITOS Y COBRANZAS ──────────────────────────────────
+export async function exportCreditsSectionPDF(params: {
+  title: string
+  report: CreditReport | null
+  chartRef?: React.RefObject<HTMLDivElement | null>
+  context?: ReportContext
+}) {
+  if (!params.report) return
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = 32
+  const contentWidth = pageWidth - (margin * 2)
+  const now = new Date()
+  const dateLabel = now.toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  renderExecutiveCoverHeader(doc, params.title, 'Informe de Créditos, Cartera y Cobranzas', dateLabel, margin, contentWidth, pageWidth, params.context)
+
+  let y = coverBottom(params.context)
+  const kpiMap: Record<string, string | number> = {
+    'Créditos Otorgados': formatNumber(params.report.period.grantedCount),
+    'Capital Financiado': formatGs(params.report.period.principalGranted),
+    'Cobranzas Recibidas': formatGs(params.report.period.paymentsReceived),
+    'Cartera Activa por Cobrar': formatGs(params.report.portfolio.outstandingAmount),
+    'Monto en Mora': formatGs(params.report.portfolio.overdueAmount),
+    'Tasa de Cobranza': `${params.report.portfolio.collectionRate.toFixed(1)}%`,
+    'Clientes con Mora': formatNumber(params.report.portfolio.overdueCustomers),
+    'Cuotas por Vencer Pronto': formatGs(params.report.portfolio.dueSoonAmount),
+  }
+  y = renderKpiCardsGrid(doc, kpiMap, y, margin, contentWidth)
+
+  // Gráfico Canvas de Cobranzas
+  if (params.report.paymentTrend.length > 0) {
+    const chartImg = renderAreaChartCanvas(
+      'Evolución Diaria de Cobranzas y Pagos Recibidos',
+      params.report.paymentTrend.map((p) => ({ label: formatDateStr(p.date), value: p.amount })),
+      { lineColor: '#0f766e', fillColor: '#14b8a6', formatValue: formatGs }
+    )
+    if (chartImg) {
+      doc.addImage(chartImg, 'PNG', margin, y, contentWidth, 160)
+      y += 170
+    }
+  }
+
+  // Tabla 1: Estado de Cartera
+  const statusLabels: Record<string, string> = {
+    active: 'Al día',
+    overdue: 'Con mora',
+    completed: 'Cancelados / Pagados',
+  }
+  const totalStatusCount = params.report.statusDistribution.reduce((acc, s) => acc + s.count, 0)
+  const statusRows = params.report.statusDistribution.map((st) => {
+    const pct = totalStatusCount > 0 ? ((st.count / totalStatusCount) * 100).toFixed(1) : '0'
+    return [
+      statusLabels[st.status] || st.status,
+      formatNumber(st.count),
+      `${pct}%`,
+    ]
+  })
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Estado de la Cuenta de Crédito', 'Cantidad de Créditos', 'Participación %']],
+    body: statusRows,
+    foot: [['TOTAL CUENTAS REGISTRADAS', formatNumber(totalStatusCount), '100%']],
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 8.5, cellPadding: 4, font: 'helvetica' },
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'right', fontStyle: 'bold' },
+      2: { halign: 'right' },
+    },
+  })
+
+  const nextY = ((doc as AutoTableDoc).lastAutoTable?.finalY ?? 0) + 16
+
+  // Tabla 2: Evolución de Pagos Recibidos
+  if (params.report.paymentTrend.length > 0) {
+    const totalPaymentsReceived = params.report.paymentTrend.reduce((acc, p) => acc + p.amount, 0)
+    const { rows: pagosVisibles, omitidas: pagosOmitidos } = capRows(params.report.paymentTrend)
+    const paymentRows = pagosVisibles.map((p) => {
+      const pct = totalPaymentsReceived > 0 ? ((p.amount / totalPaymentsReceived) * 100).toFixed(1) : '0'
+      return [
+        formatDateStr(p.date),
+        getDayOfWeekStr(p.date),
+        formatGs(p.amount),
+        `${pct}%`,
+      ]
+    })
+
+    autoTable(doc, {
+      startY: nextY,
+      head: [['Fecha', 'Día', 'Monto Cobrado (Gs.)', 'Participación sobre Cobranzas %']],
+      body: paymentRows,
+      foot: [['TOTAL COBRANZAS DEL PERÍODO', `${params.report.paymentTrend.length} días`, formatGs(totalPaymentsReceived), '100%']],
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 3.5, font: 'helvetica' },
+      headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
+      footStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { fontStyle: 'bold', halign: 'center' },
+        1: { halign: 'center' },
+        2: { halign: 'right', fontStyle: 'bold' },
+        3: { halign: 'right' },
+      },
+    })
+    renderOmittedNote(doc, pagosOmitidos, margin)
+  }
+
+  setupDocPageHeadersAndFooters(doc, params.title, 'Reporte de Créditos y Cobranzas', dateLabel, params.context)
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+  doc.save(`${sanitizeFileName(params.title)}_creditos_${timestamp}.pdf`)
+}

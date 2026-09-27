@@ -5,6 +5,7 @@
  */
 
 import type { Database } from '@/lib/supabase/types'
+import type { ProductAttributeDefinition, ProductVariantInput } from '@/lib/products/variant-contract'
 
 // Base types from Supabase
 export type DbProduct = Database['public']['Tables']['products']['Row']
@@ -13,7 +14,26 @@ export type DbSupplier = Database['public']['Tables']['suppliers']['Row']
 export type DbBrand = Database['public']['Tables']['brands']['Row']
 
 // Json type compatibility
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
+
+export interface InstallmentPlanOption {
+  count: number
+  rate: number
+}
+
+export type ProductVariantRecord = ProductVariantInput | {
+  id: string
+  variant_name?: string | null
+  name?: string | null
+  attributes: Record<string, string>
+  sku: string
+  barcode?: string | null
+  purchase_price?: number | null
+  sale_price?: number | null
+  wholesale_price?: number | null
+  stock_quantity?: number | null
+  min_stock?: number | null
+  is_active?: boolean | null
+}
 
 // Unified Product type - extends Supabase with computed fields and compatibility
 export type Product = Omit<DbProduct, 'dimensions'> & {
@@ -32,6 +52,23 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   
   // New field
   visibility?: 'public' | 'wholesale' | 'hidden'
+
+  // Financing configuration (columns may be newer than generated DB types)
+  installments_enabled?: boolean | null
+  installments_public?: boolean | null
+  installments_plans?: InstallmentPlanOption[] | null
+
+  // Configuración completa usada por el editor y por las vistas de inventario.
+  // La API puede devolver filas DB (snake_case) o el contrato del formulario.
+  has_variants?: boolean | null
+  variant_attribute_config?: ProductAttributeDefinition[] | null
+  variants?: ProductVariantRecord[]
+
+  // Para qué celular es el repuesto. `brand` es la marca del repuesto.
+  device_brand?: string | null
+  device_models?: string[] | null
+  /** Publicado sin precio: la tienda muestra «Preguntar» y abre WhatsApp. */
+  hide_price?: boolean | null
 
   // Legacy compatibility - ensure these exist
   stock_quantity: number
@@ -79,7 +116,7 @@ export interface ProductAlert {
     last_sale?: string
     old_price?: number
     new_price?: number
-    [key: string]: any
+    [key: string]: unknown
   }
   // DB compatibility
   alert_type?: string

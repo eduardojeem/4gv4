@@ -41,7 +41,7 @@ export function useGlobalNotifications(enabled: boolean = true) {
 
   useEffect(() => {
     if (!enabled) return
-    fetchItems()
+    void Promise.resolve().then(fetchItems)
     const interval = setInterval(fetchItems, REFRESH_MS)
     return () => clearInterval(interval)
   }, [enabled, fetchItems])

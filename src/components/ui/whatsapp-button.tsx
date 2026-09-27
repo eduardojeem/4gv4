@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { MessageCircle } from 'lucide-react'
-import { openWhatsApp, type WhatsAppMessageOptions } from '@/lib/whatsapp'
+import { openWhatsApp } from '@/lib/whatsapp'
 import { cn } from '@/lib/utils'
 
 interface WhatsAppButtonProps {

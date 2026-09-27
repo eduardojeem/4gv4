@@ -11,7 +11,7 @@ export interface ProductAnalyticsEvent {
   timestamp: Date
   page_url: string
   product_id?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface UserInteractionEvent extends ProductAnalyticsEvent {
@@ -65,7 +65,7 @@ export class ProductAnalytics {
     interactionType: UserInteractionEvent['interaction_type'],
     elementId: string,
     elementType: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   ): void {
     const event: UserInteractionEvent = {
       event_type: 'user_interaction',
@@ -350,7 +350,7 @@ export class UsabilityAnalyzer {
 export function useProductAnalytics(userId?: string) {
   const analytics = new ProductAnalytics(userId)
 
-  const trackClick = (elementId: string, elementType: string, metadata?: Record<string, any>) => {
+  const trackClick = (elementId: string, elementType: string, metadata?: Record<string, unknown>) => {
     analytics.trackUserInteraction('click', elementId, elementType, metadata)
   }
 

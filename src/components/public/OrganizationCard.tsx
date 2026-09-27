@@ -1,15 +1,9 @@
-import Image from 'next/image'
+import { AppImage } from '@/components/ui/app-image'
+import { rubroLabel } from '@/lib/public/organization-rubro'
 import Link from 'next/link'
-import { ArrowRight, Building2, Package } from 'lucide-react'
+import { ArrowRight, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
-
-const planStyles: Record<string, string> = {
-  FREE: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
-  BASIC: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900',
-  PRO: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900',
-  ENTERPRISE: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
-}
 
 type Props = {
   organization: MarketplaceOrganization
@@ -17,8 +11,8 @@ type Props = {
 }
 
 export function OrganizationCard({ organization, className }: Props) {
-  const plan = organization.plan ?? 'FREE'
-  const planClass = planStyles[plan] ?? planStyles.FREE
+  // Acá iba el plan contratado: le decía al visitante cuánto paga el comercio.
+  const rubro = rubroLabel(organization.rubro)
 
   return (
     <Link
@@ -36,22 +30,25 @@ export function OrganizationCard({ organization, className }: Props) {
       <div className="flex flex-1 flex-col p-5">
         {/* Logo + plan */}
         <div className="flex items-start justify-between gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-white p-1 shadow-xs dark:border-slate-800 dark:bg-slate-900">
             {organization.logo_url ? (
-              <Image
+              <AppImage
                 src={organization.logo_url}
                 alt={organization.name}
-                width={48}
-                height={48}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
+                loading="lazy"
               />
             ) : (
-              <Building2 className="h-5 w-5 text-slate-400" />
+              <div className="flex h-full w-full items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 font-bold text-xs text-white">
+                {organization.name.slice(0, 2).toUpperCase()}
+              </div>
             )}
           </div>
-          <span className={cn('rounded-md border px-2 py-0.5 text-xs font-medium', planClass)}>
-            {plan}
-          </span>
+          {rubro && (
+            <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300">
+              {rubro}
+            </span>
+          )}
         </div>
 
         {/* Name + slug */}

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { validateSetting } from '@/lib/validation/website-settings'
+import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 
 describe('website services validation', () => {
+  it('allows the services section copy through the settings API contract', () => {
+    expect(isWebsiteSettingKey('services_section')).toBe(true)
+    expect(validateSetting('services_section', {
+      badge: 'Servicio técnico',
+      title: 'Soluciones para tus equipos',
+      subtitle: 'Elegí el servicio que necesitás.',
+    }).success).toBe(true)
+  })
+
   it('preserves public service fields used by the admin editor', () => {
     const result = validateSetting('services', [
       {

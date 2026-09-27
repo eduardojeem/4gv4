@@ -87,26 +87,10 @@ export function RepairsChart() {
     }
   }, [selectedBranchId])
 
+  // Sin Realtime: repairs no está en la publicación supabase_realtime.
   useEffect(() => {
     fetchData()
-
-    const supabase = createClient()
-    const channel = supabase
-      .channel('repairs-chart-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'repairs',
-        ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
-      }, () => {
-        fetchData()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [fetchData, selectedBranchId])
+  }, [fetchData])
 
   if (isLoading) {
     return (

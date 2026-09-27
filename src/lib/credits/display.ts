@@ -1,14 +1,21 @@
 import { formatCreditId } from '@/lib/utils'
+import { isCreditInstallmentOverdue } from './installments'
 import type { CreditRow, InstallmentRow } from '@/hooks/use-credits'
 
-type SaleLike = {
+/**
+ * Lo minimo que la vista necesita de una venta. Se exporta para que el hook
+ * declare exactamente esta forma: antes guardaba las ventas como
+ * `Record<string, unknown>` y el compilador no podia verificar nada, asi que un
+ * cambio en la consulta solo se notaba cuando el credito ya se veia mal.
+ */
+export type SaleLike = {
   id: string
   code?: string | null
   created_at?: string | null
   total_amount?: number | null
 }
 
-type SaleItemLike = {
+export type SaleItemLike = {
   sale_id?: string | null
   quantity?: number | null
   product?: { name?: string | null } | null
@@ -149,4 +156,25 @@ export function getInstallmentDisplayInfo(
           .join(', ')
       : display.productSummary,
   }
+}
+
+/**
+ * El estado que ve el usuario, que no es el de la base: una cuota sigue
+ * guardada como `pending` despues de su vencimiento, y en pantalla figura como
+ * vencida. La regla vivia solo dentro de CreditDetailDialog, asi que cualquier
+ * documento impreso mostraba el estado crudo y contradecia a la pantalla que el
+ * cliente acababa de mirar. Se centraliza aca para que no puedan separarse.
+ */
+export type InstallmentDisplayStatus = 'paid' | 'late' | 'overdue' | 'pending'
+
+export function resolveInstallmentStatus(
+  installment: Pick<InstallmentRow, 'status' | 'due_date'>,
+  now: Date = new Date()
+): InstallmentDisplayStatus {
+  if (installment.status === 'paid') return 'paid'
+  // `late` lo marca el sistema de forma explicita y pesa mas que la fecha:
+  // significa que la cuota ya entro en mora, no solo que paso su vencimiento.
+  if (installment.status === 'late') return 'late'
+  if (isCreditInstallmentOverdue(installment.due_date, now)) return 'overdue'
+  return 'pending'
 }

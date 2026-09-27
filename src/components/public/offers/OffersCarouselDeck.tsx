@@ -1,0 +1,592 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import {
+  Package,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+  Flame,
+  ArrowRight,
+  Star,
+  ShoppingCart,
+  Check,
+  MessageCircle,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { OffersSectionSettings } from '@/types/website-settings'
+import { cn } from '@/lib/utils'
+import { usePublicCart } from '@/hooks/use-public-cart'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
+import { resolveProductImageUrl } from '@/lib/images'
+import { toast } from 'sonner'
+import type { PublicProduct } from '@/types/public'
+import { OfferDetailModal, type OfferDetailProduct } from './OfferDetailModal'
+
+export interface OfferSlide {
+  id: string
+  title: string
+  description: string
+  priceLabel: string
+  originalPriceLabel?: string
+  tag: string
+  ctaHref: string
+  image: string | null
+  brand: string | null
+  inStock: boolean
+  offerPrice?: number
+  salePrice?: number
+  /** Producto completo: con esto la tarjeta abre el detalle en un modal. */
+  product?: OfferDetailProduct
+}
+
+export type OffersAccent = {
+  section: string
+  eyebrow: string
+  price: string
+  button: string
+  activeDot: string
+}
+
+export function getOfferCardWidthClass() {
+  return 'min-w-[72%] sm:min-w-[40%] lg:min-w-[24%] xl:min-w-[23%]'
+}
+
+export const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], OffersAccent> = {
+  brand: {
+    section: 'border-primary/20 bg-gradient-to-b from-primary/[0.04] via-background to-background',
+    eyebrow: 'text-primary',
+    price: 'text-primary',
+    button: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20',
+    activeDot: 'bg-primary',
+  },
+  rose: {
+    section: 'border-rose-500/20 bg-gradient-to-b from-rose-500/[0.04] via-background to-background dark:border-rose-900/30',
+    eyebrow: 'text-rose-600 dark:text-rose-400',
+    price: 'text-rose-600 dark:text-rose-400',
+    button: 'bg-rose-600 text-white hover:bg-rose-500 shadow-md shadow-rose-600/25',
+    activeDot: 'bg-rose-600',
+  },
+  amber: {
+    section: 'border-amber-500/20 bg-gradient-to-b from-amber-500/[0.04] via-background to-background dark:border-amber-900/30',
+    eyebrow: 'text-amber-600 dark:text-amber-400',
+    price: 'text-amber-600 dark:text-amber-400',
+    button: 'bg-amber-600 text-white hover:bg-amber-500 shadow-md shadow-amber-600/25',
+    activeDot: 'bg-amber-600',
+  },
+  orange: {
+    section: 'border-orange-500/20 bg-gradient-to-b from-orange-500/[0.04] via-background to-background dark:border-orange-900/30',
+    eyebrow: 'text-orange-600 dark:text-orange-400',
+    price: 'text-orange-600 dark:text-orange-400',
+    button: 'bg-orange-600 text-white hover:bg-orange-500 shadow-md shadow-orange-600/25',
+    activeDot: 'bg-orange-600',
+  },
+  emerald: {
+    section: 'border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.04] via-background to-background dark:border-emerald-900/30',
+    eyebrow: 'text-emerald-600 dark:text-emerald-400',
+    price: 'text-emerald-600 dark:text-emerald-400',
+    button: 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/25',
+    activeDot: 'bg-emerald-600',
+  },
+  blue: {
+    section: 'border-blue-500/20 bg-gradient-to-b from-blue-500/[0.04] via-background to-background dark:border-blue-900/30',
+    eyebrow: 'text-blue-600 dark:text-blue-400',
+    price: 'text-blue-600 dark:text-blue-400',
+    button: 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/25',
+    activeDot: 'bg-blue-600',
+  },
+  sky: {
+    section: 'border-sky-500/20 bg-gradient-to-b from-sky-500/[0.04] via-background to-background dark:border-sky-900/30',
+    eyebrow: 'text-sky-600 dark:text-sky-400',
+    price: 'text-sky-600 dark:text-sky-400',
+    button: 'bg-sky-600 text-white hover:bg-sky-500 shadow-md shadow-sky-600/25',
+    activeDot: 'bg-sky-600',
+  },
+  violet: {
+    section: 'border-violet-500/20 bg-gradient-to-b from-violet-500/[0.04] via-background to-background dark:border-violet-900/30',
+    eyebrow: 'text-violet-600 dark:text-violet-400',
+    price: 'text-violet-600 dark:text-violet-400',
+    button: 'bg-violet-600 text-white hover:bg-violet-500 shadow-md shadow-violet-600/25',
+    activeDot: 'bg-violet-600',
+  },
+  fuchsia: {
+    section: 'border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-500/[0.04] via-background to-background dark:border-fuchsia-900/30',
+    eyebrow: 'text-fuchsia-600 dark:text-fuchsia-400',
+    price: 'text-fuchsia-600 dark:text-fuchsia-400',
+    button: 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-md shadow-fuchsia-600/25',
+    activeDot: 'bg-fuchsia-600',
+  },
+  red: {
+    section: 'border-red-500/20 bg-gradient-to-b from-red-500/[0.04] via-background to-background dark:border-red-900/30',
+    eyebrow: 'text-red-600 dark:text-red-400',
+    price: 'text-red-600 dark:text-red-400',
+    button: 'bg-red-600 text-white hover:bg-red-500 shadow-md shadow-red-600/25',
+    activeDot: 'bg-red-600',
+  },
+  teal: {
+    section: 'border-teal-500/20 bg-gradient-to-b from-teal-500/[0.04] via-background to-background dark:border-teal-900/30',
+    eyebrow: 'text-teal-600 dark:text-teal-400',
+    price: 'text-teal-600 dark:text-teal-400',
+    button: 'bg-teal-600 text-white hover:bg-teal-500 shadow-md shadow-teal-600/25',
+    activeDot: 'bg-teal-600',
+  },
+}
+
+interface OffersCarouselDeckProps {
+  offers: OfferSlide[]
+  accent: OffersAccent
+  fallbackBrand: string
+  tenantPrefix: string
+  autoplay?: boolean
+  intervalSeconds?: number
+  ariaLabel?: string
+}
+
+export function OffersCarouselDeck({
+  offers,
+  accent,
+  fallbackBrand,
+  tenantPrefix,
+  autoplay = true,
+  intervalSeconds = 5,
+  ariaLabel = 'Carrusel de ofertas destacadas',
+}: OffersCarouselDeckProps) {
+  const [activeOfferIndex, setActiveOfferIndex] = useState(0)
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false)
+  const [isUserPaused, setIsUserPaused] = useState(false)
+  const [isSectionVisible, setIsSectionVisible] = useState(true)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(true)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  const [addedItemIds, setAddedItemIds] = useState<Record<string, boolean>>({})
+  const [detailOffer, setDetailOffer] = useState<OfferDetailProduct | null>(null)
+
+  const { addProduct } = usePublicCart()
+  const { settings: websiteSettings } = useWebsiteSettings()
+
+  const commerceMode = websiteSettings?.checkout.commerceMode ?? 'cart'
+  const contactPhone =
+    websiteSettings?.company_info.whatsapp?.trim() ||
+    websiteSettings?.company_info.phone?.trim() ||
+    ''
+
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setPrefersReducedMotion(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    const handleVisibility = () => setIsDocumentVisible(document.visibilityState === 'visible')
+    handleVisibility()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  useEffect(() => {
+    if (!containerRef.current || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => setIsSectionVisible(Boolean(entries[0]?.isIntersecting)),
+      { threshold: 0.2 }
+    )
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  const findNearestOfferIndex = useCallback(() => {
+    const track = trackRef.current
+    if (!track) return 0
+    const children = Array.from(track.children) as HTMLElement[]
+    if (children.length === 0) return 0
+    const containerLeft = track.getBoundingClientRect().left
+    let nearest = 0
+    let minDistance = Number.POSITIVE_INFINITY
+    children.forEach((child, idx) => {
+      const distance = Math.abs(child.getBoundingClientRect().left - containerLeft)
+      if (distance < minDistance) {
+        minDistance = distance
+        nearest = idx
+      }
+    })
+    return nearest
+  }, [])
+
+  // Con el detalle abierto la rotacion se frena: si no, al cerrar el modal la
+  // tarjeta que estabas mirando ya no esta.
+  const effectivelyPaused = isCarouselPaused || isUserPaused || !autoplay || Boolean(detailOffer)
+
+  useEffect(() => {
+    if (effectivelyPaused || offers.length <= 1 || !isSectionVisible || !isDocumentVisible) return
+    const delay = Math.max(4, intervalSeconds) * 1000
+    const interval = window.setInterval(() => {
+      setActiveOfferIndex((prev) => {
+        const next = (prev + 1) % offers.length
+        const node = trackRef.current?.children?.item(next) as HTMLElement | null
+        node?.scrollIntoView({
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+          inline: 'start',
+          block: 'nearest',
+        })
+        return next
+      })
+    }, delay)
+    return () => window.clearInterval(interval)
+  }, [offers.length, effectivelyPaused, isSectionVisible, isDocumentVisible, prefersReducedMotion, intervalSeconds])
+
+  const goToOffer = useCallback((index: number) => {
+    if (offers.length === 0) return
+    const normalized = (index + offers.length) % offers.length
+    setActiveOfferIndex(normalized)
+    const node = trackRef.current?.children?.item(normalized) as HTMLElement | null
+    node?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      inline: 'start',
+      block: 'nearest',
+    })
+  }, [offers.length, prefersReducedMotion])
+
+  // La foto y «Ver» abren el detalle sin salir de la pagina, pero siguen siendo
+  // enlaces: con Ctrl+clic o «abrir en otra pestaña» va a la pagina completa.
+  const openDetail = (event: React.MouseEvent, offer: OfferSlide) => {
+    if (!offer.product || event.metaKey || event.ctrlKey || event.shiftKey) return
+    event.preventDefault()
+    setDetailOffer(offer.product)
+  }
+
+  const resolveHref = (href: string | undefined) => {
+    const target = href ?? '/productos'
+    return target.startsWith('/productos') ? `${tenantPrefix}${target}` : target
+  }
+
+  const handleAddToCart = (e: React.MouseEvent, offer: OfferSlide) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (commerceMode !== 'cart') return
+    if (!offer.inStock) {
+      toast.error('Producto sin stock')
+      return
+    }
+    // Con variantes se abre el detalle: el pedido rechaza una linea sin variante.
+    if (offer.product?.has_variants) {
+      setDetailOffer(offer.product)
+      toast.info('Elegí una variante para continuar.')
+      return
+    }
+
+    // Extract price
+    const price = offer.offerPrice ?? (
+      Number(offer.priceLabel.replace(/[^0-9]/g, '')) || 0
+    )
+
+    const product: PublicProduct = {
+      id: offer.id,
+      name: offer.title,
+      brand: offer.brand,
+      description: offer.description,
+      sale_price: offer.salePrice ?? price,
+      offer_price: price,
+      has_offer: true,
+      in_stock: offer.inStock,
+      stock_quantity: offer.product?.stock_quantity ?? 99,
+      featured: true,
+      image: offer.image,
+      images: offer.image ? [offer.image] : [],
+      sku: '',
+      wholesale_price: null,
+      is_active: true,
+      unit_measure: 'unidad',
+      barcode: null,
+    }
+
+    const result = addProduct(product, price, 1)
+    if (result.limited) {
+      toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
+      return
+    }
+    toast.success('¡Agregado al carrito!')
+    setAddedItemIds((prev) => ({ ...prev, [offer.id]: true }))
+    setTimeout(() => {
+      setAddedItemIds((prev) => ({ ...prev, [offer.id]: false }))
+    }, 2000)
+  }
+
+  if (offers.length === 0) return null
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative space-y-4"
+      onMouseEnter={() => setIsCarouselPaused(true)}
+      onMouseLeave={() => setIsCarouselPaused(false)}
+      onTouchStart={() => setIsCarouselPaused(true)}
+      onTouchEnd={() => setIsCarouselPaused(false)}
+    >
+      {/* ── Controles Superiores de Navegación ── */}
+      {offers.length > 1 && <div className="flex items-center justify-between gap-3">
+        {/* Indicadores de Progreso */}
+        <div className="flex items-center gap-1.5" role="tablist" aria-label="Indicadores de oferta">
+          {offers.map((offer, idx) => (
+            <button
+              key={offer.id}
+              type="button"
+              role="tab"
+              aria-selected={idx === activeOfferIndex}
+              onClick={() => goToOffer(idx)}
+              className={cn(
+                'h-2 rounded-full transition-all duration-300',
+                idx === activeOfferIndex
+                  ? `w-7 ${accent.activeDot}`
+                  : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
+              )}
+              aria-label={`Ir a oferta ${idx + 1}`}
+            />
+          ))}
+
+          {autoplay && (
+            <button
+              type="button"
+              onClick={() => setIsUserPaused((p) => !p)}
+              className="ml-2 flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={isUserPaused ? 'Reanudar carrusel' : 'Pausar carrusel'}
+            >
+              {isUserPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+            </button>
+          )}
+        </div>
+
+        {/* Flechas de Navegación */}
+        {offers.length > 1 && (
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-xl border-border/80 bg-card hover:bg-muted shadow-2xs"
+              onClick={() => goToOffer(activeOfferIndex - 1)}
+              aria-label="Oferta anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-xl border-border/80 bg-card hover:bg-muted shadow-2xs"
+              onClick={() => goToOffer(activeOfferIndex + 1)}
+              aria-label="Siguiente oferta"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>}
+
+      {/* ── Pista Deslizable de Tarjetas Premium ── */}
+      <div
+        ref={trackRef}
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 motion-safe:scroll-smooth scrollbar-none"
+        tabIndex={0}
+        role="region"
+        aria-label={ariaLabel}
+        aria-live={effectivelyPaused ? 'polite' : 'off'}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft') {
+            event.preventDefault()
+            goToOffer(activeOfferIndex - 1)
+          } else if (event.key === 'ArrowRight') {
+            event.preventDefault()
+            goToOffer(activeOfferIndex + 1)
+          }
+        }}
+        onScroll={() => {
+          const next = findNearestOfferIndex()
+          setActiveOfferIndex(Math.max(0, Math.min(offers.length - 1, next)))
+        }}
+      >
+        {offers.map((offer, idx) => (
+          <article
+            key={offer.id}
+            aria-labelledby={`offer-title-${offer.id}`}
+            className={cn(
+              cn(
+                'group relative flex flex-col justify-between snap-start overflow-hidden rounded-2xl border border-border/80 bg-card p-3 shadow-xs transition-all duration-300 motion-reduce:transition-none',
+                getOfferCardWidthClass(),
+              ),
+              offer.inStock
+                ? 'hover:-translate-y-1 hover:shadow-xl hover:border-primary/50'
+                : 'opacity-55 grayscale-[25%] hover:opacity-65'
+            )}
+          >
+            <div>
+              {/* Imagen del Producto con Badges */}
+                  <div className="relative aspect-4/3 w-full overflow-hidden rounded-xl bg-muted/40 p-2 mb-2">
+                <Link
+                  href={resolveHref(offer.ctaHref)}
+                  onClick={(event) => openDetail(event, offer)}
+                  aria-haspopup={offer.product ? 'dialog' : undefined}
+                  aria-label={offer.product ? `Ver detalle de ${offer.title}` : undefined}
+                  className="relative block h-full w-full"
+                >
+                  {offer.image ? (
+                    <Image
+                      src={offer.image}
+                      alt={offer.title || 'Imagen de oferta destacada'}
+                      fill
+                      unoptimized
+                      className="object-contain transition-transform duration-500 group-hover:scale-105"
+                      sizes="(max-width: 640px) 85vw, (max-width: 1024px) 48vw, 32vw"
+                      priority={idx === 0}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Package className="h-12 w-12 text-muted-foreground/30" />
+                    </div>
+                  )}
+                </Link>
+
+                {/* Badge de Descuento */}
+                <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
+                  <span className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm',
+                    accent.button
+                  )}>
+                    <Flame className="h-3.5 w-3.5 fill-current animate-pulse" />
+                    <span>{offer.tag}</span>
+                  </span>
+                </div>
+
+                {/* Badge Destacado */}
+                <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                    <Star className="h-3 w-3 fill-white" />
+                    <span>Top Semana</span>
+                  </span>
+                </div>
+
+                {!offer.inStock && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55 backdrop-blur-[1px]">
+                    <span className="rounded-full bg-foreground/90 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-widest text-background shadow-md">
+                      Sin stock
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Marca & Título */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {offer.brand || fallbackBrand}
+                </p>
+                <Link href={resolveHref(offer.ctaHref)} className="group-hover:text-primary transition-colors">
+                  <h3 id={`offer-title-${offer.id}`} className="line-clamp-2 text-sm font-bold leading-snug text-foreground" title={offer.title}>
+                    {offer.title}
+                  </h3>
+                </Link>
+              </div>
+            </div>
+
+            {/* Precios & Botón de Acción */}
+            <div className="mt-3 pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                {offer.originalPriceLabel && (
+                  <p className="text-xs font-semibold text-muted-foreground line-through tabular-nums leading-none truncate">
+                    {offer.originalPriceLabel}
+                  </p>
+                )}
+                <p className={cn('text-base sm:text-lg font-black tracking-tight tabular-nums mt-0.5 truncate', accent.price)}>
+                  {offer.priceLabel}
+                </p>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl font-bold text-xs px-2.5 sm:px-3 h-8 sm:h-9 border-border/80 hover:bg-muted"
+                >
+                  <Link
+                    href={resolveHref(offer.ctaHref)}
+                    onClick={(event) => openDetail(event, offer)}
+                    aria-haspopup={offer.product ? 'dialog' : undefined}
+                  >
+                    <span>Ver</span>
+                    <ArrowRight className="h-3 w-3 ml-1 transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                </Button>
+
+                {commerceMode === 'cart' && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleAddToCart(e, offer)}
+                    disabled={!offer.inStock}
+                    aria-label={`Agregar ${offer.title} al carrito`}
+                    title={`Agregar ${offer.title} al carrito`}
+                    className={cn(
+                      'flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                      addedItemIds[offer.id]
+                        ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                        : accent.button
+                    )}
+                  >
+                    {addedItemIds[offer.id] ? (
+                      <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-in zoom-in" />
+                    ) : (
+                      <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform hover:scale-110" />
+                    )}
+                  </button>
+                )}
+
+                {commerceMode === 'whatsapp' && contactPhone && (
+                  <a
+                    href={getWhatsAppLink({
+                      phone: contactPhone,
+                      message: buildProductWhatsAppMessage({
+                        storeName: websiteSettings?.company_info?.name || null,
+                        productName: offer.title,
+                        price: offer.offerPrice ?? 0,
+                        originalPrice: offer.salePrice ?? null,
+                        inStock: offer.inStock,
+                        productUrl: siteUrl(offer.ctaHref),
+                        imageUrl: offer.image ? resolveProductImageUrl(offer.image) : null,
+                        intent: 'order',
+                      }),
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    suppressHydrationWarning
+                    className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
+                    aria-label={`Pedir oferta de ${offer.title} en WhatsApp`}
+                    title={`Pedir oferta de ${offer.title} en WhatsApp`}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <OfferDetailModal
+        offer={detailOffer}
+        isOpen={Boolean(detailOffer)}
+        onClose={() => setDetailOffer(null)}
+        tenantPrefix={tenantPrefix}
+        commerceMode={commerceMode}
+        contactPhone={contactPhone}
+      />
+    </div>
+  )
+}

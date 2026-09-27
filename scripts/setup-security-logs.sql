@@ -2,10 +2,10 @@
 -- Ejecutar este script en Supabase SQL Editor
 
 -- 1. Crear las funciones de logging si no existen
-\i supabase/migrations/create_security_logging_functions.sql
+\i supabase/migrations_legacy/create_security_logging_functions.sql
 
 -- 2. Insertar datos de ejemplo
-\i supabase/migrations/insert_sample_security_logs.sql
+\i supabase/migrations_legacy/insert_sample_security_logs.sql
 
 -- 3. Verificar que todo esté funcionando
 SELECT 

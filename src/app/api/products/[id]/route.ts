@@ -4,7 +4,12 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
 import { logger } from '@/lib/logger'
-import type { AppRole } from '@/lib/auth/role-utils'
+import {
+  type AppRole,
+  stripProductCost,
+  canViewProductCost,
+  PRODUCT_COST_PERMISSION,
+} from '@/lib/auth/role-utils'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import {
   applyBranchInventoryToProducts,
@@ -24,7 +29,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
   try {
     const { params } = routeContext as ProductRouteContext
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
     const requestedBranchId = getRequestedBranchId(request)
     const branchScope = await resolveBranchScopeForUser({
       userId: user.id,
@@ -36,7 +41,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
 
     const { data: product, error } = await supabase
       .from('products')
-      .select('*, category:categories(id, name)')
+      .select('*, category:categories(id, name), variants:product_variants(*)')
       .eq('id', id)
       .eq('organization_id', organization.id)
       .maybeSingle()
@@ -65,9 +70,24 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       branchScoped
     )[0]
 
+    // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
+    // tenga el permiso específico products.read_cost.
+    let costPermissions: string[] | undefined
+    if (!canViewProductCost(user.role)) {
+      const { data: perms } = await supabase
+        .from('user_permissions')
+        .select('permission')
+        .eq('user_id', user.id)
+        .eq('permission', PRODUCT_COST_PERMISSION)
+        .eq('is_active', true)
+        .limit(1)
+      costPermissions = perms && perms.length > 0 ? [PRODUCT_COST_PERMISSION] : []
+    }
+    const safeProduct = stripProductCost(responseProduct as Record<string, unknown>, user.role, costPermissions)
+
     return NextResponse.json({
       success: true,
-      data: responseProduct,
+      data: safeProduct,
     })
   } catch (error) {
     logger.error('Product detail API error', { error })
@@ -108,6 +128,21 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       )
     }
 
+    // Esta ruta no persiste variantes: antes las validaba y las descartaba en
+    // silencio, asi que el editor creia haber guardado. El guardado con
+    // variantes vive en PUT /api/products.
+    const sendsVariants = (Array.isArray(body?.variants) && body.variants.length > 0) || body?.has_variants === true
+    if (sendsVariants) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Para guardar variantes usá PUT /api/products.',
+          code: 'VARIANTS_NOT_SUPPORTED_HERE',
+        },
+        { status: 400 },
+      )
+    }
+
     const validationResult = productUpdateSchema.safeParse({
       ...body,
       id,
@@ -120,7 +155,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }))
 
       return NextResponse.json(
-        { success: false, error: 'Validation failed', details },
+        { success: false, error: 'Error de validación', details },
         { status: 400 }
       )
     }
@@ -162,6 +197,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       'supplier_id',
       'brand',
       'brand_id',
+      'tags',
       'min_stock',
       'max_stock',
       'purchase_price',
@@ -226,12 +262,54 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
 
     if (branchScope.branchId && desiredStockQuantity !== undefined) {
+      const adminSupabase = createAdminSupabase()
+
+      // El stock previo se lee antes de escribir: es lo que va a la fila del
+      // movimiento. Sin esto, reponer desde «Alertas → Reabastecer» cambiaba el
+      // stock sin dejar rastro, mientras el mismo cambio hecho desde «Stock por
+      // sucursal» sí quedaba registrado. La misma accion por dos puertas
+      // distintas tenia dos historiales distintos.
+      const { data: previousRow } = await adminSupabase
+        .from('branch_inventory')
+        .select('stock_quantity')
+        .eq('branch_id', branchScope.branchId)
+        .eq('product_id', id)
+        .maybeSingle()
+      const previousStock = Number(previousRow?.stock_quantity ?? 0)
+      const nextStock = Number(desiredStockQuantity)
+
       await upsertBranchInventoryStock({
-        supabase: createAdminSupabase() as unknown as BranchInventoryClient,
+        supabase: adminSupabase as unknown as BranchInventoryClient,
         branchId: branchScope.branchId,
         productId: id,
-        stockQuantity: Number(desiredStockQuantity),
+        stockQuantity: nextStock,
       })
+
+      if (nextStock !== previousStock) {
+        const { error: movementError } = await adminSupabase
+          .from('product_movements')
+          .insert({
+            organization_id: organization.id,
+            branch_id: branchScope.branchId,
+            product_id: id,
+            movement_type: 'adjustment',
+            quantity: Math.abs(nextStock - previousStock),
+            previous_stock: previousStock,
+            new_stock: nextStock,
+            notes: 'Ajuste desde la ficha del producto',
+            user_id: user.id,
+          })
+
+        // El stock ya se guardo: no se revierte por el historial, pero tampoco
+        // se calla, porque un hueco en la trazabilidad no se recupera despues.
+        if (movementError) {
+          logger.error('Stock updated without movement record', {
+            productId: id,
+            branchId: branchScope.branchId,
+            error: movementError.message,
+          })
+        }
+      }
     }
 
     const { data: refreshedProduct, error: refreshedProductError } = await supabase
@@ -286,12 +364,12 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
   { organization },
   routeContext?: unknown
 ) => {
+  const { params } = routeContext as ProductRouteContext
+  const { id } = await params
   try {
-    const { params } = routeContext as ProductRouteContext
-    const { id } = await params
-    const supabase = await createClient()
+    const adminSupabase = createAdminSupabase()
 
-    const { data: existing, error: existingError } = await supabase
+    const { data: existing, error: existingError } = await adminSupabase
       .from('products')
       .select('id,name,sku')
       .eq('id', id)
@@ -310,15 +388,55 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       )
     }
 
-    const { error } = await supabase
+    // Verificar si el producto tiene historial de transacciones (ventas, pedidos, repuestos de taller)
+    const [
+      { count: salesCount },
+      { count: ordersCount },
+      { count: repairPartsCount },
+      { count: repairCostsCount },
+    ] = await Promise.all([
+      adminSupabase.from('sale_items').select('id', { count: 'exact', head: true }).eq('product_id', id),
+      adminSupabase.from('order_items').select('id', { count: 'exact', head: true }).eq('product_id', id),
+      adminSupabase.from('repair_parts').select('id', { count: 'exact', head: true }).eq('product_id', id),
+      adminSupabase.from('repair_item_costs').select('id', { count: 'exact', head: true }).eq('product_id', id),
+    ])
+
+    const hasTransactions =
+      (salesCount ?? 0) > 0 ||
+      (ordersCount ?? 0) > 0 ||
+      (repairPartsCount ?? 0) > 0 ||
+      (repairCostsCount ?? 0) > 0
+
+    if (hasTransactions) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `"${existing.name}" no se puede eliminar porque tiene ventas o reparaciones asociadas. Podés desactivarlo para que no aparezca en ventas ni catálogo.`,
+          code: 'PRODUCT_HAS_TRANSACTIONS',
+        },
+        { status: 409 }
+      )
+    }
+
+    // Limpiar tablas auxiliares dependientes sin historial transaccional
+    await Promise.allSettled([
+      adminSupabase.from('cart_items').delete().eq('product_id', id),
+      adminSupabase.from('branch_variant_inventory').delete().eq('product_id', id),
+      adminSupabase.from('branch_inventory').delete().eq('product_id', id),
+      adminSupabase.from('variant_inventory_movements').delete().eq('product_id', id),
+      adminSupabase.from('product_movements').delete().eq('product_id', id),
+      adminSupabase.from('product_variants').delete().eq('product_id', id),
+    ])
+
+    const { error: deleteError } = await adminSupabase
       .from('products')
       .delete()
       .eq('id', id)
       .eq('organization_id', organization.id)
 
-    if (error) {
-      logger.error('Failed to delete product by id', { productId: id, error: error.message })
-      throw error
+    if (deleteError) {
+      logger.error('Failed to delete product by id', { productId: id, error: deleteError.message, code: deleteError.code })
+      throw deleteError
     }
 
     return NextResponse.json({
@@ -328,11 +446,26 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
         deleted_product: existing,
       },
     })
-  } catch (error) {
-    logger.error('Product delete by id API error', { error })
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string; details?: string }
+    logger.error('Product delete by id API error', { productId: id, error: err?.message || error })
+
+    const isFkConstraint =
+      err?.code === '23503' ||
+      (typeof err?.message === 'string' && /foreign key|referenc|constraint/i.test(err.message))
+
+    const message = isFkConstraint
+      ? 'No se puede eliminar el producto porque está referenciado en otros registros del sistema (ventas, compras o movimientos). Podés desactivarlo u ocultarlo del catálogo.'
+      : (err?.message || 'Error al eliminar el producto')
+
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
+      {
+        success: false,
+        error: message,
+        code: err?.code || 'DELETE_PRODUCT_FAILED',
+        details: err?.details || err?.message,
+      },
+      { status: isFkConstraint ? 409 : 500 }
     )
   }
 })

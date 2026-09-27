@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getSessionIdFromAccessToken } from '@/lib/session-id'
+import { getSessionIdFromAccessToken, isSessionRegistered, markSessionRegistered } from '@/lib/session-id'
 
 interface SessionInfo {
   userAgent: string
@@ -13,7 +13,8 @@ interface SessionInfo {
   city?: string
 }
 
-const REGISTERED_SESSION_STORAGE_KEY = 'dashboard-registered-session-id'
+// last_activity solo se reescribe si quedó más vieja que este margen.
+const ACTIVITY_WRITE_INTERVAL_MS = 5 * 60 * 1000
 const activeSessionRegistrations = new Set<string>()
 
 const detectDeviceType = (userAgent: string): 'mobile' | 'tablet' | 'desktop' => {
@@ -89,7 +90,7 @@ export function useSessionTracking() {
       sessionId = await getSessionIdFromAccessToken(session.access_token)
       if (!sessionId) return
 
-      if (typeof window !== 'undefined' && sessionStorage.getItem(REGISTERED_SESSION_STORAGE_KEY) === sessionId) {
+      if (isSessionRegistered(sessionId)) {
         return
       }
 
@@ -124,9 +125,7 @@ export function useSessionTracking() {
         return
       }
 
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem(REGISTERED_SESSION_STORAGE_KEY, sessionId)
-      }
+      markSessionRegistered(sessionId)
     } catch (error) {
       console.error('Error in registerSession:', error)
     } finally {
@@ -151,6 +150,8 @@ export function useSessionTracking() {
         })
         .eq('session_id', sessionId)
         .eq('is_active', true)
+        // Sin cambios reales no se escribe la fila (evita WAL innecesario).
+        .lt('last_activity', new Date(Date.now() - ACTIVITY_WRITE_INTERVAL_MS).toISOString())
     } catch (error) {
       console.error('Error updating session activity:', error)
     }
@@ -205,7 +206,7 @@ export function useSessionTracking() {
   useEffect(() => {
     const interval = setInterval(() => {
       void updateSessionActivity()
-    }, 5 * 60 * 1000)
+    }, ACTIVITY_WRITE_INTERVAL_MS)
 
     return () => clearInterval(interval)
   }, [updateSessionActivity])
@@ -213,7 +214,7 @@ export function useSessionTracking() {
   useEffect(() => {
     const throttledActivity = () => {
       const now = Date.now()
-      if (now - lastActivityRef.current <= 60000) {
+      if (now - lastActivityRef.current <= ACTIVITY_WRITE_INTERVAL_MS) {
         return
       }
 

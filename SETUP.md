@@ -17,7 +17,7 @@ NEXT_PUBLIC_LOCALE=es-PY
 NEXT_PUBLIC_CURRENCY=PYG
 NEXT_PUBLIC_TAX_RATE=0.10
 RESEND_API_KEY=re_xxxxxxxxx
-EMAIL_FROM="SERVIX 360 <onboarding@resend.dev>"
+EMAIL_FROM="MiTiendaPy <onboarding@resend.dev>"
 EMAIL_REPLY_TO=soporte@tudominio.com
 ```
 

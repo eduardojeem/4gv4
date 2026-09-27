@@ -68,8 +68,9 @@ export function useRepairAnalytics(timeRange: string) {
     })
 
     // Usar Maps para mejor rendimiento O(1) lookup
-    const repairsByMonth = new Map<string, any[]>()
-    const completedByMonth = new Map<string, any[]>()
+    type RepairItem = (typeof repairs)[number]
+    const repairsByMonth = new Map<string, RepairItem[]>()
+    const completedByMonth = new Map<string, RepairItem[]>()
     const technicianStats = new Map<string, TechnicianPerformance>()
     const statusStats = new Map<string, { name: string; count: number; revenue: number }>()
     const deviceStats = new Map<string, { name: string; count: number; revenue: number }>()
@@ -219,11 +220,11 @@ export function useRepairAnalytics(timeRange: string) {
       const monthRepairs = repairsByMonth.get(range.key) || []
       const completedRepairs = completedByMonth.get(range.key) || []
       
-      const revenue = completedRepairs.reduce((sum: number, r: any) => sum + (r.finalCost || r.estimatedCost || 0), 0)
+      const revenue = completedRepairs.reduce((sum: number, r) => sum + (r.finalCost || r.estimatedCost || 0), 0)
       
       let avgRepairTime = 0
       if (completedRepairs.length > 0) {
-        const totalTime = completedRepairs.reduce((sum: number, r: any) => {
+        const totalTime = completedRepairs.reduce((sum: number, r) => {
           if (r.completedAt && r.createdAt) {
             return sum + differenceInDays(new Date(r.completedAt), new Date(r.createdAt))
           }

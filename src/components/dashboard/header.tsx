@@ -30,6 +30,8 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { getDashboardNavItemByPath } from '@/config/dashboard-navigation'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -45,7 +47,8 @@ export const Header = memo(function Header() {
   const [isMacPlatform, setIsMacPlatform] = useState(false)
   const router = useRouter()
   const { toggleSidebar } = useDashboardLayout()
-  const { search } = useDashboardSearch()
+  const { search, availableTypes } = useDashboardSearch()
+  const { effectiveModules } = useSubscriptionStatus()
   const { user, signOut } = useAuth()
 
   // Notifications logic
@@ -114,6 +117,10 @@ export const Header = memo(function Header() {
     if (!shouldTrackStock || !config.supabase.isConfigured) return
     try {
       const supabase = createClient()
+      // Sin sesión la consulta sale como anon y falla por RLS
+      // (permission denied for function has_org_permission).
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
       const { data } = await supabase
         .from('products')
         .select('id, name, stock_quantity, min_stock')
@@ -185,33 +192,22 @@ export const Header = memo(function Header() {
 
   const pathname = usePathname()
   const breadcrumb = useMemo(() => {
-    const sectionMap: Array<{ prefix: string; label: string }> = [
-      { prefix: '/dashboard/customers', label: 'Clientes' },
-      { prefix: '/dashboard/orders', label: 'Pedidos' },
-      { prefix: '/dashboard/products', label: 'Productos' },
-      { prefix: '/dashboard/suppliers', label: 'Proveedores' },
-      { prefix: '/dashboard/pos/caja', label: 'Caja' },
-      { prefix: '/dashboard/pos', label: 'Punto de Venta' },
-      { prefix: '/dashboard/repairs', label: 'Reparaciones' },
-      { prefix: '/dashboard/technician', label: 'Panel Técnico' },
+    const navigationItem = getDashboardNavItemByPath(pathname)
+    if (navigationItem) return navigationItem.label
+
+    const secondarySections: Array<{ prefix: string; label: string }> = [
       { prefix: '/dashboard/reports', label: 'Reportes' },
       { prefix: '/dashboard/settings', label: 'Configuración' },
       { prefix: '/dashboard/catalog', label: 'Catálogo' },
       { prefix: '/dashboard/posts', label: 'Publicaciones' },
       { prefix: '/dashboard/profile', label: 'Perfil' },
-      { prefix: '/dashboard/brands', label: 'Marcas' },
-      { prefix: '/dashboard/categories', label: 'Categorías' },
-      { prefix: '/dashboard/promotions', label: 'Promociones' },
-      { prefix: '/dashboard/credits', label: 'Créditos' },
-      { prefix: '/admin', label: 'Administración' },
-      { prefix: '/dashboard', label: 'Dashboard' },
     ]
 
-    const mapped = sectionMap.find(section => pathname === section.prefix || pathname.startsWith(`${section.prefix}/`))
+    const mapped = secondarySections.find(section => pathname === section.prefix || pathname.startsWith(`${section.prefix}/`))
     if (mapped) return mapped.label
 
     const lastSegment = pathname.split('/').filter(Boolean).pop()
-    if (!lastSegment) return 'Dashboard'
+    if (!lastSegment) return 'Resumen'
     return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1).replace(/-/g, ' ')
   }, [pathname])
 
@@ -250,9 +246,9 @@ export const Header = memo(function Header() {
 
           {/* Breadcrumb + Title */}
           <div className="min-w-0 flex flex-col">
-            {breadcrumb !== 'Dashboard' && (
+            {breadcrumb !== 'Resumen' && (
               <div className={cn("text-xs text-muted-foreground hidden sm:block", isCompact && "opacity-80")}>
-                Dashboard / {breadcrumb}
+                Resumen / {breadcrumb}
               </div>
             )}
             <h2 className={cn("font-semibold truncate leading-tight transition-all duration-200", isCompact ? "text-base" : "text-lg")}>
@@ -272,7 +268,11 @@ export const Header = memo(function Header() {
             onClick={() => setSearchOpen(true)}
           >
             <Search className="mr-2 h-4 w-4" />
-            <span className="truncate">Buscar productos, clientes, reparaciones...</span>
+            <span className="truncate">
+              {effectiveModules.includes('repairs')
+                ? 'Buscar productos, clientes, reparaciones...'
+                : 'Buscar productos y clientes...'}
+            </span>
             <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 shadow-sm">
               {isMacPlatform ? <><span className="text-xs">⌘</span>K</> : 'Ctrl+K'}
             </kbd>
@@ -284,6 +284,7 @@ export const Header = memo(function Header() {
           open={searchOpen}
           onOpenChange={setSearchOpen}
           onSearch={search}
+          availableTypes={availableTypes}
         />
 
         {/* Right side */}
@@ -299,9 +300,7 @@ export const Header = memo(function Header() {
           <div className="hidden lg:block">
             <BranchSelector compact={isCompact} />
           </div>
-          <div className="hidden sm:block">
-            <InstallPrompt />
-          </div>
+          <InstallPrompt />
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"

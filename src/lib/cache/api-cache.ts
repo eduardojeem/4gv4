@@ -19,7 +19,7 @@ interface CacheOptions {
 }
 
 interface CacheEntry {
-  data: any
+  data: unknown
   timestamp: number
   ttl: number
   tags: string[]
@@ -43,7 +43,7 @@ class APICache {
     }, 5 * 60 * 1000)
   }
 
-  async get(key: string): Promise<any | null> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     this.totalRequests++
     
     const entry = this.cache.get(key)
@@ -64,13 +64,13 @@ class APICache {
     
     // Descomprimir si es necesario
     if (entry.compressed) {
-      return this.decompress(entry.data)
+      return this.decompress<T>(entry.data as string)
     }
     
-    return entry.data
+    return entry.data as T
   }
 
-  async set(key: string, data: any, options: CacheOptions = {}): Promise<void> {
+  async set<T = unknown>(key: string, data: T, options: CacheOptions = {}): Promise<void> {
     const {
       ttl = this.DEFAULT_TTL,
       compress = false,
@@ -85,7 +85,7 @@ class APICache {
       }
     }
 
-    let processedData = data
+    let processedData: unknown = data
     
     // Comprimir si es necesario
     if (compress) {
@@ -152,7 +152,7 @@ class APICache {
     }
   }
 
-  private async compress(data: any): Promise<string> {
+  private async compress(data: unknown): Promise<string> {
     try {
       // Comprimir usando gzip si está disponible
       if (typeof CompressionStream !== 'undefined') {
@@ -189,7 +189,7 @@ class APICache {
     return JSON.stringify(data)
   }
 
-  private async decompress(compressedData: string): Promise<any> {
+  private async decompress<T = unknown>(compressedData: string): Promise<T> {
     try {
       // Intentar descomprimir
       if (typeof DecompressionStream !== 'undefined') {

@@ -1,3 +1,5 @@
+import type { CashPaymentMethod } from '@/app/dashboard/pos/types'
+
 // ============================================================================
 // CASH ADMIN MONITOR - Types & Interfaces
 // ============================================================================
@@ -60,8 +62,20 @@ export interface CashSession {
   current_balance?: number
   movements_count?: number
   sales_count?: number
+  total_sales?: number
+  sales_by_cash?: number
+  sales_by_card?: number
+  sales_by_transfer?: number
+  sales_by_mixed?: number
+  income_total?: number
+  expense_total?: number
   last_movement?: CashMovementAdmin | null
   duration_hours?: number
+  /**
+   * Lo guardado en el cierre y lo que suman los movimientos no coinciden.
+   * `null` cuando no hay con que comparar. Manda lo guardado; esto es el aviso.
+   */
+  sales_mismatch?: number | null
 }
 
 export interface CashMovementAdmin {
@@ -70,7 +84,7 @@ export interface CashMovementAdmin {
   type: 'opening' | 'sale' | 'cash_in' | 'cash_out' | 'closing'
   amount: number
   reason: string | null
-  payment_method: 'cash' | 'card' | 'transfer' | 'mixed' | null
+  payment_method: CashPaymentMethod | null
   created_by: string | null
   created_by_name?: string
   created_at: string
@@ -111,6 +125,13 @@ export interface CashAlert {
   id: string
   session_id: string | null
   register_id: string
+  /**
+   * Tienda y sucursal denormalizadas desde la sesion de caja. Sin ellas la
+   * unica forma de acotar una alerta era recorrer su sesion, cosa que el camino
+   * de tiempo real no puede hacer con el payload que recibe.
+   */
+  organization_id: string | null
+  branch_id: string | null
   alert_type: AlertType
   severity: AlertSeverity
   title: string
@@ -149,6 +170,9 @@ export interface CashRegisterConfig {
 // Dashboard / Metrics Types
 // ============================================================================
 
+export type MonitorPeriod = 'today' | 'week' | 'month' | 'year' | 'all'
+export type DiscrepancyFilterType = 'all' | 'perfect' | 'with_diff' | 'over' | 'short'
+
 export interface CashMonitorMetrics {
   totalRegisters: number
   openSessions: number
@@ -156,13 +180,24 @@ export interface CashMonitorMetrics {
   suspendedSessions: number
   blockedSessions: number
   totalBalance: number
+  totalSales: number
   totalDiscrepancies: number
+  totalOver: number
+  totalShort: number
+  perfectSessions: number
+  sessionsWithDiff: number
+  salesCash: number
+  salesCard: number
+  salesTransfer: number
+  salesMixed: number
   unresolvedAlerts: number
   criticalAlerts: number
 }
 
 export interface SessionFilter {
   status?: SessionStatus | 'all'
+  period?: MonitorPeriod
+  discrepancy?: DiscrepancyFilterType
   registerId?: string
   branch?: string
   dateFrom?: string

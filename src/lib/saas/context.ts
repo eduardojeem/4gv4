@@ -78,3 +78,36 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
     role: mapLegacyRoleToOrganizationRole(chosen.role),
   }
 }
+
+/**
+ * Organizacion a la que pertenece un usuario: primero la activa, y si no hay,
+ * su membresia mas antigua. Devuelve null cuando no es miembro de ninguna.
+ *
+ * Se comparte porque el registro de auditoria la necesita en lugares que no
+ * pasan por el envoltorio de admin, y sin ella los eventos quedan invisibles en
+ * /admin/security, que filtra por esa columna.
+ */
+export async function resolveUserOrganizationId(userId: string): Promise<string | null> {
+  try {
+    const activeOrganization = await getCurrentOrganizationContext(userId)
+    if (activeOrganization?.id) return activeOrganization.id
+  } catch {
+    // Se sigue con la membresia: no poder resolver la activa no es motivo para
+    // dejar el evento sin tienda.
+  }
+
+  try {
+    const { createAdminSupabase } = await import('@/lib/supabase/admin')
+    const { data } = await createAdminSupabase()
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    return data?.organization_id ?? null
+  } catch {
+    return null
+  }
+}

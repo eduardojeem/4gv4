@@ -26,32 +26,22 @@ const DEFAULT_SETTINGS: AccessibilitySettings = {
   colorBlindFriendly: false
 }
 
-export function useAccessibility() {
-  const [state, setState] = useState<AccessibilityState>({
-    settings: DEFAULT_SETTINGS,
-    isLoading: true,
-    hasUnsavedChanges: false
-  })
+function readSettings(): AccessibilitySettings {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS
+  try {
+    const saved = localStorage.getItem('accessibility-settings')
+    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
 
-  // Cargar configuraciones desde localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('accessibility-settings')
-      if (saved) {
-        const parsedSettings = JSON.parse(saved)
-        setState(prev => ({
-          ...prev,
-          settings: { ...DEFAULT_SETTINGS, ...parsedSettings },
-          isLoading: false
-        }))
-      } else {
-        setState(prev => ({ ...prev, isLoading: false }))
-      }
-    } catch (error) {
-      console.error('Error loading accessibility settings:', error)
-      setState(prev => ({ ...prev, isLoading: false }))
-    }
-  }, [])
+export function useAccessibility() {
+  const [state, setState] = useState<AccessibilityState>(() => ({
+    settings: readSettings(),
+    isLoading: false,
+    hasUnsavedChanges: false
+  }))
 
   // Aplicar configuraciones al DOM
   useEffect(() => {
@@ -103,10 +93,10 @@ export function useAccessibility() {
     } else {
       root.classList.remove('color-blind-friendly')
     }
-  }, [state.settings])
+  }, [state])
 
   // Actualizar una configuración específica
-  const updateSetting = useCallback((key: keyof AccessibilitySettings, value: any) => {
+  const updateSetting = useCallback(<K extends keyof AccessibilitySettings>(key: K, value: AccessibilitySettings[K]) => {
     setState(prev => ({
       ...prev,
       settings: {

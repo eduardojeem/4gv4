@@ -1,8 +1,6 @@
 "use client"
 
 import useSWR, { mutate as globalMutate } from 'swr'
-import { useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import customerService from '@/services/customer-service'
 
 type AuthorizedPerson = {
@@ -28,25 +26,8 @@ export function useAuthorizedPersons(profileId: string | null, enabled: boolean)
     { revalidateOnFocus: false, dedupingInterval: 4000 }
   )
 
-  useEffect(() => {
-    if (!enabled || !profileId) return
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`authorized_persons_${profileId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'authorized_persons', filter: `profile_id=eq.${profileId}` },
-        () => {
-          mutate()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [enabled, profileId, mutate])
-
+  // Sin Realtime: authorized_persons no está en la publicación
+  // supabase_realtime; los cambios propios se reflejan con mutate().
   return { data: data || [], error, isLoading, mutate }
 }
 

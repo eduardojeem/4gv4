@@ -4,10 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  Check,
-  Eye,
-  EyeOff,
-  Footprints,
+  Check, Footprints,
   Landmark,
   Loader2,
   MessagesSquare,
@@ -16,10 +13,11 @@ import {
   Save,
   ShoppingBag,
   Trash2,
-  Wrench,
+  Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { cn } from '@/lib/utils'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { SectionHowItWorks } from '@/components/admin/website/SectionHowItWorks'
 import { Button } from '@/components/ui/button'
@@ -27,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +41,6 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import {
   createProcessStepsFromTemplate,
   getConfiguredProcessFlows,
-  getProcessSaveOrder,
   PROCESS_STEP_TEMPLATES,
   type ProcessStepTemplateId,
 } from '@/lib/website/process-steps'
@@ -81,8 +79,7 @@ export function ProcessStepsEditor() {
     isLoading,
     error,
     isSaving,
-    updateSetting,
-    refetch,
+    updateSettings,
   } = useAdminWebsiteSettings()
   const [flowsDraft, setFlowsDraft] = useState<ProcessFlow[] | null>(null)
   const [processEnabledDraft, setProcessEnabledDraft] = useState<boolean | null>(null)
@@ -125,37 +122,6 @@ export function ProcessStepsEditor() {
     )
   }
 
-  const persistFlows = async (): Promise<boolean> => {
-    if (flowsDraft === null) return true
-
-    const result = await updateSetting('process_flows', normalizeFlows(flows))
-    if (!result.success) {
-      toast.error(result.error || 'No se pudieron guardar los procesos')
-      return false
-    }
-
-    setFlowsDraft(null)
-    return true
-  }
-
-  const persistVisibility = async (): Promise<boolean> => {
-    if (processEnabledDraft === null) return true
-
-    const newCompanyInfo = {
-      ...defaults.company_info,
-      ...settings?.company_info,
-      processSectionEnabled: processEnabledDraft,
-    }
-    const result = await updateSetting('company_info', newCompanyInfo)
-    if (!result.success) {
-      toast.error(result.error || 'No se pudo guardar la visibilidad de la sección')
-      return false
-    }
-
-    setProcessEnabledDraft(null)
-    return true
-  }
-
   const handleSave = async () => {
     const invalidFlow = flows.find(
       (flow) =>
@@ -181,22 +147,26 @@ export function ProcessStepsEditor() {
       return
     }
 
-    const saveOrder = getProcessSaveOrder({
-      hasStepsChanges: flowsDraft !== null,
-      visibilityDraft: processEnabledDraft,
+    const result = await updateSettings({
+      ...(flowsDraft !== null ? { process_flows: normalizeFlows(flows) } : {}),
+      ...(processEnabledDraft !== null
+        ? {
+            company_info: {
+              ...defaults.company_info,
+              ...settings?.company_info,
+              processSectionEnabled: processEnabledDraft,
+            },
+          }
+        : {}),
     })
 
-    for (const target of saveOrder) {
-      const success =
-        target === 'steps'
-          ? await persistFlows()
-          : await persistVisibility()
-      if (!success) {
-        await refetch()
-        return
-      }
+    if (!result.success) {
+      toast.error(result.error || 'No se pudieron guardar los procesos')
+      return
     }
 
+    setFlowsDraft(null)
+    setProcessEnabledDraft(null)
     toast.success('Procesos actualizados', {
       icon: <Check className="h-4 w-4" />,
     })
@@ -366,46 +336,17 @@ export function ProcessStepsEditor() {
         </Button>
       </div>
 
-      <section className="rounded-lg border p-4 sm:p-5" aria-labelledby="process-status-title">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-3">
-            <div
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${
-                processEnabled
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {processEnabled
-                ? <Eye className="h-4 w-4" aria-hidden="true" />
-                : <EyeOff className="h-4 w-4" aria-hidden="true" />}
-            </div>
-            <div>
-              <h3 id="process-status-title" className="text-sm font-semibold">
-                {processEnabled ? 'Sección visible' : 'Sección oculta'}
-              </h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {processEnabled
-                  ? `${activeFlowsCount} de ${flows.length} procesos se mostrarán al público.`
-                  : 'Los procesos se conservan, pero no aparecen en el inicio.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/20 px-3 py-2 sm:min-w-[220px]">
-            <div>
-              <Label htmlFor="enable-process" className="text-sm font-medium">
-                Mostrar sección
-              </Label>
-              <p className="text-[11px] text-muted-foreground">Se aplica al guardar.</p>
-            </div>
-            <Switch
-              id="enable-process"
-              checked={processEnabled !== false}
-              onCheckedChange={setProcessEnabledDraft}
-            />
-          </div>
-        </div>
-        <SectionHowItWorks
+      <PublicVisibilityCard
+        compact
+        title="Visualización de la Sección de Procesos"
+        badgeLabel="Cómo Trabajamos"
+        description={processEnabled
+          ? `Sección activa: ${activeFlowsCount} de ${flows.length} procesos configurados se mostrarán en la portada.`
+          : 'Sección oculta: Los procesos se conservan pero no se muestran a los clientes en la portada.'}
+        enabled={processEnabled !== false}
+        onToggle={setProcessEnabledDraft}
+      />
+      <SectionHowItWorks
           sectionName="los procesos públicos"
           steps={[
             {
@@ -422,7 +363,6 @@ export function ProcessStepsEditor() {
             },
           ]}
         />
-      </section>
 
       <section className="rounded-lg border p-4" aria-labelledby="process-selector-title">
         <div className="flex items-center justify-between gap-3">
@@ -742,44 +682,43 @@ export function ProcessStepsEditor() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="sticky bottom-0 z-30 -mx-2 border-t bg-background/95 px-2 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-4 sm:px-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                hasChanges ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
-              aria-hidden="true"
-            />
-            <span>
-              {hasChanges
-                ? 'Hay cambios en los procesos sin guardar'
-                : 'Los procesos están guardados'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex">
+      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full shrink-0',
+              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            )}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-foreground">
+            {hasChanges ? 'Hay cambios en los procesos sin guardar' : 'Procesos de atención guardados'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          {hasChanges && (
             <Button
               type="button"
               variant="outline"
               onClick={handleDiscard}
               disabled={isSaving || !hasChanges}
-              className="h-10 rounded-md"
+              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
             >
               <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
               Descartar
             </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !hasChanges}
-              className="h-10 rounded-md"
-            >
-              {isSaving
-                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                : <Save className="mr-2 h-4 w-4" aria-hidden="true" />}
-              {isSaving ? 'Guardando...' : 'Guardar cambios'}
-            </Button>
-          </div>
+          )}
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving || !hasChanges}
+            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
+          >
+            {isSaving
+              ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              : <Save className="h-4 w-4" aria-hidden="true" />}
+            <span>{isSaving ? 'Guardando...' : 'Guardar cambios'}</span>
+          </Button>
         </div>
       </div>
     </div>

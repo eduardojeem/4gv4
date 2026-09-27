@@ -1,13 +1,16 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import { AppImage } from '@/components/ui/app-image'
+
+import React, { useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Printer, Download, Share2, CheckCircle2 } from 'lucide-react'
-import { getTaxConfig, config } from '@/lib/config'
+import { config } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import QRCode from 'qrcode'
+import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'
+import { buildReceiptPaymentSummary, type ReceiptDocumentKind } from '@/lib/receipt-utils'
 
 interface CartItem {
   id: string
@@ -21,7 +24,7 @@ interface CartItem {
 
 interface PaymentSplit {
   id: string
-  method: 'cash' | 'card' | 'transfer' | 'credit'
+  method: 'cash' | 'card' | 'transfer' | 'credit' | 'store_credit'
   amount: number
   reference?: string
   cardLast4?: string
@@ -48,6 +51,11 @@ interface ReceiptData {
   payments: PaymentSplit[]
   change?: number
   loyaltyPoints?: number
+  raffleTickets?: {
+    raffleName: string
+    ticketNumbers: number[]
+    drawDate?: string
+  }
   creditInfo?: {
     baseTotal: number
     interestAmount: number
@@ -56,6 +64,13 @@ interface ReceiptData {
     installmentAmount: number
     frequency: string
     interestRate: number
+    firstDueDate: string
+    firstInstallmentTiming?: 'at_start' | 'next_cycle'
+    startDate?: string
+    lastInstallmentAmount?: number
+    firstPayment?: { amount: number; method: 'cash' | 'transfer'; bank?: string; reference?: string; cashReceived?: number; change?: number; paymentId: string }
+    remainingBalance?: number
+    installments?: Array<{ number: number; dueDate: string; amount: number }>
   }
 }
 
@@ -65,6 +80,7 @@ interface ReceiptGeneratorProps {
   onDownload: () => void
   onShare: () => void
   formatCurrency: (amount: number) => string
+  documentKind?: ReceiptDocumentKind
 }
 
 export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
@@ -72,17 +88,17 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   onPrint,
   onDownload,
   onShare,
-  formatCurrency
+  formatCurrency,
+  documentKind = 'internal',
 }) => {
-  const componentRef = useRef<HTMLDivElement>(null)
+  void (useRef<HTMLDivElement>(null));
   const { settings } = useSharedSettings()
   const { settings: websiteSettings } = useAdminWebsiteSettings()
   const logoUrl = websiteSettings?.company_info?.logoUrl
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
-  
+
   const companyInfo = {
-    name: settings.companyName && settings.companyName !== 'Mi Empresa' 
-      ? settings.companyName 
+    name: settings.companyName && settings.companyName !== 'Mi Empresa'
+      ? settings.companyName
       : config.company.name,
     address: settings.companyAddress || config.company.address,
     phone: settings.companyPhone || config.company.phone,
@@ -91,117 +107,99 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       : config.company.email,
     ruc: settings.companyRuc || config.company.ruc,
     website: settings.companyName ? `www.${settings.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'www.miempresa.com',
-    logoUrl: logoUrl
+    logoUrl: logoUrl,
+    slogan: websiteSettings?.company_info?.slogan || 'Servicio Técnico Especializado'
   }
-
-  // Generar código QR
-  useEffect(() => {
-    const generateQR = async () => {
-      try {
-        const verifyUrl = `${companyInfo.website}/verify/${receiptData.receiptNumber}`
-        const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-          width: 120,
-          margin: 1,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          }
-        })
-        setQrCodeUrl(qrDataUrl)
-      } catch (error) {
-        console.error('Error generating QR code:', error)
-      }
-    }
-    generateQR()
-  }, [receiptData.receiptNumber, companyInfo.website])
 
   const getPaymentMethodLabel = (method: string) => {
     const labels = {
-      cash: '💵 Efectivo',
-      card: '💳 Tarjeta',
-      transfer: '🏦 Transferencia',
-      credit: '📝 Crédito'
+      cash: 'Efectivo',
+      card: 'Tarjeta',
+      transfer: 'Transferencia',
+      credit: 'Crédito',
+      store_credit: 'Saldo a favor'
     }
     return labels[method as keyof typeof labels] || method
   }
 
-  const getPaymentIcon = (method: string) => {
-    const icons = {
-      cash: '💵',
-      card: '💳',
-      transfer: '🏦',
-      credit: '📝'
-    }
-    return icons[method as keyof typeof icons] || '💰'
-  }
+  const creditInfo = receiptData.creditInfo
+  const summary = buildReceiptPaymentSummary(receiptData)
+  const settledNow = summary.cashPaid + summary.nonCashPaid
+  const collectedToday = summary.collectedToday
+  const financedBalance = summary.financedBalance
+  const totalWithFinancing = settledNow + summary.financedTotal
+  const paymentState = summary.paymentState
+
 
   return (
-    <div id="receipt-content" className="max-w-md mx-auto bg-card text-foreground rounded-lg shadow-lg border border-border">
+    <div id="receipt-content" className="max-w-md mx-auto bg-card text-foreground rounded-lg shadow-lg border border-border print:max-w-full print:shadow-none print:border-none print:rounded-none print:mx-0 print:bg-transparent print:text-black">
       {/* Encabezado mejorado con logo */}
-      <div className="text-center border-b-2 border-dashed border-border pb-4 mb-4 bg-gradient-to-b from-primary/5 to-transparent pt-4">
+      <div className="text-center border-b-2 border-dashed border-border pb-4 mb-4 bg-gradient-to-b from-primary/5 to-transparent pt-4 print:bg-transparent print:border-black">
         {/* Initials placeholder */}
         <div className="flex justify-center mb-2">
           {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
+            <AppImage src={logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
           ) : (
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl">
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl print:border print:border-black print:bg-transparent print:text-black">
               {companyInfo.name ? companyInfo.name.substring(0, 2).toUpperCase() : 'Mi'}
             </div>
           )}
         </div>
         <h1 className="text-2xl font-bold uppercase tracking-tight">{companyInfo.name}</h1>
-        <p className="text-sm font-medium text-primary">Reparación y Service</p>
-        {companyInfo.ruc && (
-          <p className="text-xs font-semibold text-muted-foreground mt-1">RUC: {companyInfo.ruc}</p>
+        {companyInfo.slogan && (
+          <p className="text-sm font-medium text-primary print:text-black">{companyInfo.slogan}</p>
         )}
-        <p className="text-xs text-muted-foreground">{companyInfo.address}</p>
-        <p className="text-xs text-muted-foreground">☎ {companyInfo.phone}</p>
-        <p className="text-xs text-muted-foreground">📧 {companyInfo.email}</p>
+        {companyInfo.ruc && (
+          <p className="text-xs font-semibold text-muted-foreground mt-1 print:text-black">RUC: {companyInfo.ruc}</p>
+        )}
+        {companyInfo.address && <p className="text-xs text-muted-foreground print:text-black">{companyInfo.address}</p>}
+        {companyInfo.phone && <p className="text-xs text-muted-foreground print:text-black">Tel: {companyInfo.phone}</p>}
+        {companyInfo.email && <p className="text-xs text-muted-foreground print:text-black">Email: {companyInfo.email}</p>}
       </div>
 
       {/* Número de ticket destacado */}
       <div className="bg-primary/10 border-l-4 border-primary px-4 py-3 mb-4 rounded-r">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground">Ticket N°</span>
+          <span className="text-sm font-medium text-muted-foreground">Ticket Nº</span>
           <span className="text-lg font-bold font-mono text-primary">{receiptData.receiptNumber}</span>
         </div>
       </div>
 
-      {/* Información de la venta mejorada */}
-      <div className="mb-4 text-sm space-y-1 px-4">
+      {/* Información de la venta */}
+      <div className="mb-4 text-sm space-y-1 px-4 print:px-0">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">📅 Fecha:</span>
+          <span className="text-muted-foreground">Fecha:</span>
           <span className="font-medium">{receiptData.date}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">⏰ Hora:</span>
+          <span className="text-muted-foreground">Hora:</span>
           <span className="font-medium">{receiptData.time}</span>
         </div>
         {receiptData.cashRegister && (
           <div className="flex justify-between">
-            <span className="text-muted-foreground">🏪 Caja:</span>
+            <span className="text-muted-foreground">Caja:</span>
             <span className="font-medium">{receiptData.cashRegister}</span>
           </div>
         )}
         {receiptData.shift && (
           <div className="flex justify-between">
-            <span className="text-muted-foreground">🕐 Turno:</span>
+            <span className="text-muted-foreground">Turno:</span>
             <span className="font-medium">{receiptData.shift}</span>
           </div>
         )}
         <div className="flex justify-between">
-          <span className="text-muted-foreground">👤 Cajero:</span>
+          <span className="text-muted-foreground">Cajero:</span>
           <span className="font-medium">{receiptData.cashier}</span>
         </div>
         {receiptData.customer && (
           <>
             <Separator className="my-2" />
             <div className="flex justify-between">
-              <span className="text-muted-foreground">👥 Cliente:</span>
+              <span className="text-muted-foreground">Cliente:</span>
               <span className="font-medium">{receiptData.customer.name}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">📱 Teléfono:</span>
+              <span className="text-muted-foreground">Teléfono:</span>
               <span className="font-medium">{receiptData.customer.phone}</span>
             </div>
           </>
@@ -210,31 +208,31 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
       <Separator className="my-4" />
 
-      {/* Detalle de productos mejorado */}
-      <div className="mb-4 px-4">
-        <h3 className="font-bold text-sm mb-3 text-center bg-muted/50 py-2 rounded">
+      {/* Detalle de productos */}
+      <div data-receipt-products="compact" className="mb-3 px-4 text-xs print:px-0">
+        <h3 className="mb-2 rounded bg-muted/50 py-1.5 text-center text-[11px] font-bold print:rounded-none print:border-y print:border-black print:bg-transparent">
           DETALLE DE PRODUCTOS
         </h3>
-        {receiptData.items.map((item, index) => (
-          <div key={item.id} className="mb-3 pb-3 border-b border-dashed border-border/50 last:border-0">
-            <div className="flex justify-between items-start font-medium mb-1">
-              <span className="flex-1 leading-tight">
+        {receiptData.items.map((item, _index) => (
+          <div key={item.id} className="mb-2 border-b border-dashed border-border/50 pb-2 last:mb-0 last:border-0 print:border-black">
+            <div className="mb-0.5 flex items-start justify-between gap-2 font-medium leading-tight">
+              <span className="min-w-0 flex-1 break-words">
                 {item.name}
                 {item.isService && (
-                  <span className="ml-2 inline-block text-[10px] font-semibold text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-full">
-                    🔧 SERVICIO
+                  <span className="ml-2 inline-block text-[10px] font-semibold text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-full print:border-black print:text-black print:bg-transparent">
+                    SERVICIO
                   </span>
                 )}
               </span>
-              <span className="ml-3 font-bold whitespace-nowrap">{formatCurrency(item.price * item.quantity)}</span>
+              <span className="shrink-0 whitespace-nowrap font-bold">{formatCurrency(item.price * item.quantity)}</span>
             </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>SKU: {item.sku}</span>
-              <span>{item.quantity} × {formatCurrency(item.price)}</span>
+            <div className="flex justify-between gap-3 text-xs text-muted-foreground">
+              {item.sku && <span>SKU: {item.sku}</span>}
+              <span>{item.quantity} x {formatCurrency(item.price)}</span>
             </div>
             {item.discount && item.discount > 0 && (
-              <div className="flex justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">
-                <span>✨ Descuento:</span>
+              <div className="flex justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1 print:text-black">
+                <span>Descuento:</span>
                 <span>-{formatCurrency(item.discount)}</span>
               </div>
             )}
@@ -244,79 +242,78 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
       <Separator className="my-4" />
 
-      {/* Resumen de totales con desglose IVA */}
-      <div className="mb-4 text-sm px-4 space-y-1">
+      {/* Resumen de totales */}
+      <div className="mb-4 text-sm px-4 print:px-0 space-y-1">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Subtotal ({receiptData.items.length} {receiptData.items.length === 1 ? 'item' : 'items'}):</span>
           <span className="font-medium">{formatCurrency(receiptData.subtotal)}</span>
         </div>
         {receiptData.totalDiscount > 0 && (
-          <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
-            <span>✨ Descuento:</span>
+          <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium print:text-black">
+            <span>Descuento:</span>
             <span>-{formatCurrency(receiptData.totalDiscount)}</span>
           </div>
         )}
-        {receiptData.creditInfo && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+        {creditInfo && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100 print:bg-transparent print:border-black print:text-black">
             <div className="flex justify-between">
-              <span>Subtotal contado:</span>
-              <span>{formatCurrency(receiptData.creditInfo.baseTotal)}</span>
+              <span>Capital financiado:</span>
+              <span>{formatCurrency(creditInfo.baseTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Interes credito ({receiptData.creditInfo.interestRate}%):</span>
-              <span>+{formatCurrency(receiptData.creditInfo.interestAmount)}</span>
+              <span>Costo financiero:</span>
+              <span>+{formatCurrency(creditInfo.interestAmount)}</span>
             </div>
             <div className="flex justify-between font-semibold">
               <span>Total financiado:</span>
-              <span>{formatCurrency(receiptData.creditInfo.financedTotal)}</span>
+              <span>{formatCurrency(creditInfo.financedTotal)}</span>
             </div>
             <div className="mt-1 text-xs">
-              {receiptData.creditInfo.installmentCount} cuotas {receiptData.creditInfo.frequency} de {formatCurrency(receiptData.creditInfo.installmentAmount)}
+              {creditInfo.installmentCount} cuotas {creditInfo.frequency === 'weekly' ? 'semanales' : creditInfo.frequency === 'biweekly' ? 'quincenales' : 'mensuales'} desde {formatCurrency(creditInfo.installmentAmount)}
             </div>
+            <div className="mt-1 flex justify-between border-t border-blue-200 pt-1 text-xs font-semibold dark:border-blue-800 print:border-black">
+              <span>Primera cuota:</span>
+              <span>{formatPosCreditDueDate(creditInfo.firstDueDate)}</span>
+            </div>
+            {creditInfo.lastInstallmentAmount !== undefined && creditInfo.lastInstallmentAmount !== creditInfo.installmentAmount && <p className="text-xs">Última cuota: {formatCurrency(creditInfo.lastInstallmentAmount)}.</p>}
+            {creditInfo.firstPayment ? <div className="mt-2 border-t pt-2 text-xs">
+              <p className="font-bold">Primera cuota PAGADA: {formatCurrency(creditInfo.firstPayment.amount)}</p>
+              <p>Medio: {creditInfo.firstPayment.method === 'cash' ? 'Efectivo' : 'Transferencia'}</p>
+              {creditInfo.firstPayment.method === 'transfer' && <p>{creditInfo.firstPayment.bank ? `Banco/cuenta: ${creditInfo.firstPayment.bank}. ` : ''}Referencia: {creditInfo.firstPayment.reference}</p>}
+              {creditInfo.firstPayment.method === 'cash' && <p>Recibido: {formatCurrency(creditInfo.firstPayment.cashReceived ?? creditInfo.firstPayment.amount)}</p>}
+              <p>Saldo del crédito al emitir: {formatCurrency(financedBalance)}</p>
+              <p>Este cobro cancela la cuota 1; no es un cargo adicional.</p>
+            </div> : <p className="mt-2 text-xs">Cuotas pendientes de cobro. El vencimiento no acredita su pago.</p>}
+          </div>
+        )}
+        {documentKind === 'fiscal' && receiptData.tax > 0 && (
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>IVA incluido:</span>
+            <span>{formatCurrency(receiptData.tax)}</span>
           </div>
         )}
 
-        {/* Desglose IVA */}
-        <div className="border-t border-dashed border-border/50 pt-2 mt-2 space-y-1">
-          {(() => {
-            const taxCfg = getTaxConfig()
-            const rate = taxCfg.rate
-            const inclTax = config.pricesIncludeTax
-            const total = receiptData.total
-            const base = inclTax ? Math.round(total / (1 + rate)) : receiptData.subtotal - receiptData.totalDiscount
-            const iva = inclTax ? total - base : Math.round(base * rate)
-
-            return (
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{taxCfg.label} {taxCfg.percentage}% incluido:</span>
-                <span>{formatCurrency(iva)}</span>
-              </div>
-            )
-          })()}
+        <Separator className="my-2" />
+        <div
+          data-receipt-total={creditInfo ? 'financed' : 'standard'}
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-primary/10 px-2.5 py-2 dark:bg-primary/20 print:rounded-none print:border-y print:border-black print:bg-transparent"
+        >
+          <span className="min-w-0 pr-1 text-xs font-bold leading-tight">{creditInfo ? 'TOTAL CON FINANCIACIÓN:' : 'TOTAL:'}</span>
+          <span className="shrink-0 whitespace-nowrap text-base font-bold text-primary print:text-black">{formatCurrency(creditInfo ? totalWithFinancing : receiptData.total)}</span>
         </div>
-
-        <Separator className="my-3" />
-        <div className="flex justify-between items-center bg-primary/10 dark:bg-primary/20 px-3 py-2.5 rounded-lg">
-          <span className="font-bold text-lg">TOTAL:</span>
-          <span className="font-bold text-2xl text-primary">{formatCurrency(receiptData.total)}</span>
-        </div>
-        <p className="text-center text-[10px] text-muted-foreground mt-1">
-          {config.pricesIncludeTax ? 'Precios con IVA incluido' : 'IVA calculado sobre el subtotal'}
-        </p>
       </div>
 
       <Separator className="my-4" />
 
-      {/* Métodos de pago mejorados */}
-      <div className="mb-4 text-sm px-4">
-        <h3 className="font-bold mb-3 text-center bg-muted/50 py-2 rounded">FORMA DE PAGO</h3>
+      {/* Métodos de pago */}
+      <div className="mb-4 text-sm px-4 print:px-0">
+        <h3 className="font-bold mb-3 text-center bg-muted/50 py-2 rounded print:bg-transparent print:border-y print:border-black print:rounded-none">FORMA DE PAGO</h3>
         <div className="space-y-2">
           {receiptData.payments.map((payment) => (
-            <div key={payment.id} className="flex justify-between items-center bg-muted/30 px-3 py-2 rounded">
+            <div key={payment.id} className="flex justify-between items-center bg-muted/30 px-3 py-2 rounded print:px-0 print:bg-transparent">
               <span className="flex items-center gap-2">
-                <span>{getPaymentIcon(payment.method)}</span>
+                <span>{getPaymentMethodLabel(payment.method).replace(/^[^\s]+\s/, '')}</span>
                 <span>
-                  {getPaymentMethodLabel(payment.method).replace(/^[^\s]+\s/, '')}
                   {payment.reference && ` (${payment.reference})`}
                   {payment.cardLast4 && ` ****${payment.cardLast4}`}
                 </span>
@@ -324,89 +321,81 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
               <span className="font-bold">{formatCurrency(payment.amount)}</span>
             </div>
           ))}
-          {receiptData.change && receiptData.change > 0 && (
-            <div className="flex justify-between items-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 rounded mt-2">
-              <span className="flex items-center gap-2">
-                <span>💰</span>
-                <span>Cambio:</span>
-              </span>
+          {!creditInfo && receiptData.change && receiptData.change > 0 && (
+            <div className="flex justify-between items-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 rounded mt-2 print:text-black print:bg-transparent print:px-0">
+              <span>Cambio:</span>
               <span>{formatCurrency(receiptData.change)}</span>
             </div>
           )}
-          <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400 font-bold mt-3 bg-green-50 dark:bg-green-900/20 py-2 rounded">
-            <CheckCircle2 className="h-5 w-5" />
-            <span>{receiptData.creditInfo ? 'CREDITO REGISTRADO' : 'PAGADO'}</span>
+          {creditInfo && (
+            <div className="mt-2 space-y-1 border-t border-dashed pt-2 text-sm">
+              <div className="flex justify-between"><span>Cobrado hoy:</span><strong>{formatCurrency(collectedToday)}</strong></div>
+              <div className="flex justify-between"><span>Saldo financiado:</span><strong>{formatCurrency(financedBalance)}</strong></div>
+            </div>
+          )}
+          <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400 font-bold mt-3 bg-green-50 dark:bg-green-900/20 py-2 rounded print:text-black print:bg-transparent print:border print:border-black">
+            <CheckCircle2 className="h-5 w-5 print:hidden" />
+            <span>{paymentState}</span>
           </div>
         </div>
       </div>
 
       {/* Puntos de lealtad */}
-      {receiptData.loyaltyPoints && receiptData.loyaltyPoints > 0 && (
+      {(receiptData.loyaltyPoints ?? 0) > 0 && (
         <>
           <Separator className="my-4" />
-          <div className="mb-4 text-sm text-center px-4">
-            <div className="rounded-lg p-3 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border border-amber-200 dark:border-amber-800">
-              <span className="font-bold text-amber-700 dark:text-amber-400 text-base">
-                🎉 ¡Ganaste {receiptData.loyaltyPoints} puntos de lealtad! 🎉
+          <div className="mb-4 text-sm text-center px-4 print:px-0">
+            <div className="rounded-lg p-3 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border border-amber-200 dark:border-amber-800 print:bg-none print:border-black print:rounded-none">
+              <span className="font-bold text-amber-700 dark:text-amber-400 text-base print:text-black">
+                ¡Ganaste {receiptData.loyaltyPoints} puntos de lealtad!
               </span>
             </div>
           </div>
         </>
       )}
 
-      <Separator className="my-4" />
-
-      {/* Información de garantía */}
-      <div className="mb-4 px-4">
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-center">
-          <p className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-1">
-            🛡️ GARANTÍA: 30 días
-          </p>
-          <p className="text-xs text-blue-600 dark:text-blue-300">
-            Válido para cambios y reparaciones
-          </p>
-        </div>
-      </div>
-
-      {/* Código QR de verificación */}
-      {qrCodeUrl && (
+      {/* Sorteos automáticos ganados en la compra */}
+      {receiptData.raffleTickets && receiptData.raffleTickets.ticketNumbers.length > 0 && (
         <>
-          <Separator className="my-4 print:hidden" />
-          <div className="mb-4 text-center px-4 print:hidden">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              Verificar ticket en línea:
-            </p>
-            <div className="flex justify-center mb-2">
-              <img src={qrCodeUrl} alt="QR Code" className="w-28 h-28 border-2 border-border rounded" />
+          <Separator className="my-4" />
+          <div className="mb-4 text-sm text-center px-4 print:px-0">
+            <div className="rounded-lg p-3 bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 border border-rose-200 dark:border-rose-800 print:bg-none print:border-black print:rounded-none">
+              <span className="font-extrabold text-rose-700 dark:text-rose-400 text-sm print:text-black block mb-1">
+                🎟️ ¡Estás participando del {receiptData.raffleTickets.raffleName}!
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1 font-mono font-bold text-xs">
+                {receiptData.raffleTickets.ticketNumbers.map((num) => (
+                  <span key={num} className="bg-rose-100 dark:bg-rose-900/40 text-rose-900 dark:text-rose-200 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-700 print:border-black print:text-black">
+                    #{num}
+                  </span>
+                ))}
+              </div>
+              {receiptData.raffleTickets.drawDate && (
+                <span className="text-[11px] text-rose-600 dark:text-rose-300 block mt-1 print:text-black">
+                  Fecha del sorteo: {receiptData.raffleTickets.drawDate}
+                </span>
+              )}
             </div>
-            <p className="text-xs text-primary font-medium">
-              {companyInfo.website}/verify
-            </p>
           </div>
         </>
       )}
 
       <Separator className="my-4" />
 
-      {/* Pie del ticket mejorado */}
-      <div className="text-center text-xs text-muted-foreground mb-4 px-4 space-y-1">
+      {/* Pie del ticket */}
+      <div className="text-center text-xs text-muted-foreground mb-4 px-4 print:px-0 space-y-1">
         <p className="font-bold text-sm text-foreground">¡Gracias por su compra!</p>
         <p>Conserve este ticket como comprobante</p>
-        <p>📱 Consultas: {companyInfo.phone}</p>
-        {companyInfo.email && <p>📧 {companyInfo.email}</p>}
+        <p>Consultas: {companyInfo.phone}</p>
+        {companyInfo.email && <p>{companyInfo.email}</p>}
         <Separator className="my-2" />
-        <div className="border border-border/50 rounded p-2 text-[10px] text-muted-foreground/80">
+        {documentKind === 'internal' && <div className="border border-border/50 rounded p-2 text-[10px] text-muted-foreground/80 print:border-black print:rounded-none">
           <span className="font-semibold block mb-0.5">DOCUMENTO NO FISCAL</span>
           Este ticket es un comprobante interno de venta y NO tiene validez<br />
           tributaria ante la DNIT. No sustituye factura legal.<br />
           Solicite su factura con timbrado vigente si la necesita.
-        </div>
-        <p className="font-mono text-[10px] mt-2">
-          ID: {receiptData.receiptNumber}
-        </p>
-        <p className="font-mono text-[10px]">
-          Generado: {new Date().toLocaleString('es-PY')}
-        </p>
+        </div>}
+        <p className="font-mono text-[10px] mt-2">ID: {receiptData.receiptNumber}</p>
       </div>
 
       {/* Botones de acción */}

@@ -12,6 +12,7 @@
     "build:production": "NODE_ENV=production npm run build",
     "start": "next start",
     "lint": "eslint --ext .ts,.tsx src",
+    "lint:inventory": "node scripts/lint-inventory.mjs",
     "lint:fix": "eslint --ext .ts,.tsx src --fix",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "typecheck:fast": "tsc --noEmit --skipLibCheck --incremental",
@@ -34,6 +35,7 @@
     "postbuild": "node scripts/post-build-checks.mjs",
     "grant:superadmin": "node scripts/grant-super-admin.js --email=jeem101595@gmail.com",
     "verify:supabase": "npx tsx scripts/verify-supabase.ts",
+    "audit:barcodes": "npx tsx scripts/audit-barcodes.ts",
     "setup:repairs": "node scripts/setup-repairs.js",
     "setup:segmentation": "node scripts/setup-segmentation.js",
     "test:segmentation": "node scripts/test-segmentation.js",
@@ -48,6 +50,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@hookform/resolvers": "^5.2.2",
+    "@marsidev/react-turnstile": "^1.6.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -87,17 +90,18 @@
     "cmdk": "^1.1.1",
     "critters": "^0.0.23",
     "date-fns": "^4.1.0",
-    "dompurify": "^3.3.1",
+    "dompurify": "^3.4.15",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.26",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "2.3.8",
     "jose": "^5.9.6",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.1",
     "lucide-react": "^0.544.0",
-    "next": "^16.3.0",
+    "next": "^16.3.5",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-day-picker": "^9.11.0",
@@ -111,6 +115,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xlsx-js-style": "^1.2.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -155,5 +160,6 @@
     "typescript": "5.9.3",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^4.0.3"
-  }
+  },
+  "packageManager": "npm@11.7.0"
 }

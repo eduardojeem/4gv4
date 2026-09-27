@@ -24,12 +24,14 @@ async function handler(request: Request, context: AdminAuthContext) {
     }
 
     const admin = createAdminSupabase()
+    // Ver la nota en admin/set-role-by-email: sin `onConflict` el upsert no
+    // actualiza el rol existente, choca contra el UNIQUE(user_id).
     const { error: roleError } = await admin.from('user_roles').upsert({
       user_id: userId,
       role,
       is_active: true,
       updated_at: new Date().toISOString(),
-    })
+    }, { onConflict: 'user_id' })
 
     if (roleError) {
       return NextResponse.json(

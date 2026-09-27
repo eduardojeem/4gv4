@@ -94,6 +94,12 @@ export async function GET() {
           .map((row) => row.permission)
           .filter((permission): permission is string => Boolean(permission)),
       organizationPermissions: Boolean(organization && globalRole !== 'super_admin'),
+      // El negocio al que pertenece, si tiene uno. El marketplace lo usa para
+      // ofrecerle entrar a su panel: antes solo miraba el rol global, así que
+      // un dueño con perfil de cliente no veía el acceso por ningún lado.
+      organization: organization
+        ? { id: organization.id, name: organization.name, slug: organization.slug, role: organization.role }
+        : null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno'

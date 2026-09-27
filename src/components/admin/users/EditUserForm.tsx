@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Search, Mail, Lock, User as UserIcon, ShieldCheck, KeyRound, Eraser, Loader2 } from 'lucide-react'
@@ -15,16 +15,25 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
 import { PERMISSION_GROUPS } from './permissions'
 import { ROLE_PERMISSIONS, WHOLESALE_PRICE_PERMISSION, PRODUCT_COST_PERMISSION } from '@/lib/auth/roles-permissions'
+import {
+  USER_ROLES,
+  USER_STATUSES,
+  userDepartmentSchema,
+  userNameSchema,
+  userPermissionsSchema,
+  userPhoneSchema,
+} from '@/lib/admin/user-edit-validation'
 import { BranchAssignment } from './BranchAssignment'
 import { UserAvatarUpload } from './user-avatar-upload'
 
+// Las mismas reglas que aplica el servidor, para avisar mientras se escribe.
 const schema = z.object({
-  name: z.string().min(1, 'El nombre es requerido'),
-  phone: z.string().optional(),
-  role: z.enum(['super_admin', 'admin', 'vendedor', 'tecnico', 'cliente']),
-  status: z.enum(['active', 'inactive', 'suspended']),
-  department: z.string().optional(),
-  permissions: z.array(z.string()).default([]),
+  name: userNameSchema,
+  phone: userPhoneSchema.optional().or(z.literal('')),
+  role: z.enum(USER_ROLES),
+  status: z.enum(USER_STATUSES),
+  department: userDepartmentSchema.optional().or(z.literal('')),
+  permissions: userPermissionsSchema.default([]),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -106,7 +115,7 @@ export function EditUserForm({
   )
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(schema) as any,
+    resolver: zodResolver(schema) as Resolver<FormValues>,
     defaultValues,
     mode: 'onChange',
   })
@@ -117,7 +126,8 @@ export function EditUserForm({
 
   const role = useWatch({ control: form.control, name: 'role' })
   const status = useWatch({ control: form.control, name: 'status' })
-  const specificPermissions = useWatch({ control: form.control, name: 'permissions' }) || []
+  const watchedPermissions = useWatch({ control: form.control, name: 'permissions' })
+  const specificPermissions = useMemo(() => watchedPermissions || [], [watchedPermissions])
 
   const roleEffective = useMemo(() => {
     const roleConfig = ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS]
@@ -218,7 +228,7 @@ export function EditUserForm({
                   <FormItem>
                     <FormLabel className="text-slate-700 dark:text-slate-300">Nombre completo</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Nombre y apellido" className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
+                      <Input {...field} maxLength={120} placeholder="Nombre y apellido" className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -231,7 +241,7 @@ export function EditUserForm({
                   <FormItem>
                     <FormLabel className="text-slate-700 dark:text-slate-300">Teléfono</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="+595 ..." className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
+                      <Input {...field} inputMode="tel" maxLength={30} placeholder="+595 ..." className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -308,7 +318,7 @@ export function EditUserForm({
                   <FormItem>
                     <FormLabel className="text-slate-700 dark:text-slate-300">Departamento</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Opcional" className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
+                      <Input {...field} maxLength={60} placeholder="Opcional" className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

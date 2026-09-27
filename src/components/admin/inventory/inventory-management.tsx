@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,6 @@ import {
   SelectLabel,
   SelectSeparator,
 } from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import AdvancedSearch from '@/components/admin/advanced-search'
@@ -27,8 +26,10 @@ import InventoryReports from '@/components/admin/reports/inventory-reports'
 import SupplierManagement from '@/components/admin/inventory/supplier-management'
 import { PromotionManager } from '@/components/admin/inventory/PromotionManager'
 import { VariantManager } from '@/components/admin/inventory/VariantManager'
+import { InventoryAlertsPanel } from '@/components/admin/inventory/InventoryAlertsPanel'
+import { InventoryGuide } from '@/components/admin/inventory/InventoryGuide'
 import { ProductModal } from '@/components/dashboard/product-modal'
-import { useInventory, Product } from '@/hooks/use-inventory'
+import { useInventory, type Product, type InventorySort, type InventorySortColumn } from '@/hooks/use-inventory'
 import { useBranch } from '@/contexts/branch-context'
 import {
   Package,
@@ -39,15 +40,12 @@ import {
   Tag,
   Search,
   XCircle,
-  AlertTriangle,
-  RefreshCw,
-  Trash2,
+  AlertTriangle, Trash2,
   Edit,
   Loader2,
   ChevronLeft,
   ChevronRight,
   Layers,
-  Info,
   Building2,
   ArrowUpRight,
   Warehouse,
@@ -58,11 +56,22 @@ import {
   Percent,
   BarChart3,
   SlidersHorizontal,
-  RotateCcw
+  RotateCcw,
+  ArrowUpDown,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatCurrency } from '@/lib/currency'
+import { resolveStockLevel } from '@/lib/inventory/stock-status'
+import { exportInventoryCsvRows } from '@/lib/inventory/export'
+
+// Excel en espanol necesita las dos cosas para abrir bien el archivo: BOM
+// para las tildes y CRLF como fin de linea. Van como constantes con nombre
+// para que no se pierdan en un reformateo.
+const BOM_UTF8 = String.fromCharCode(0xfeff)
+const LINE_BREAK_CRLF = String.fromCharCode(13, 10)
 
 const operationTabs = [
   { value: 'products', label: 'Catálogo', icon: Package },
@@ -70,6 +79,11 @@ const operationTabs = [
   { value: 'movements', label: 'Movimientos', icon: History },
   { value: 'alerts', label: 'Alertas', icon: Bell },
 ] as const
+
+const INVENTORY_TAB_VALUES = new Set([
+  'products', 'stock-control', 'movements', 'alerts',
+  'suppliers', 'categories', 'variants', 'promotions', 'reports', 'search',
+])
 
 const managementTabs = [
   { value: 'suppliers', label: 'Proveedores', icon: Truck },
@@ -80,35 +94,52 @@ const managementTabs = [
   { value: 'search', label: 'Búsqueda avanzada', icon: SlidersHorizontal },
 ] as const
 
-interface ValidationError {
-  field: string
-  message: string
-}
-
-interface SearchResult {
-  id: string
-  name: string
-  sku: string
-  category: string
-  supplier: string
-  price: number
-  stock: number
-  status: string
-  lastMovement: Date
-}
-
 interface AdvancedSearchFilter {
   id: string
   type: string
   value: unknown
 }
 
+/** Cabecera que ordena. Antes eran texto plano y el orden estaba fijo. */
+function SortableHeader({
+  column,
+  label,
+  sort,
+  onSort,
+}: {
+  column: InventorySortColumn
+  label: string
+  sort: InventorySort
+  onSort: (column: InventorySortColumn) => void
+}) {
+  const active = sort.column === column
+  return (
+    <th
+      aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className="p-0 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+    >
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        aria-label={`Ordenar por ${label}`}
+        className="flex w-full items-center gap-1 p-3.5 text-left transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-slate-200"
+      >
+        {label}
+        <ArrowUpDown className={`h-3 w-3 shrink-0 transition-opacity ${active ? 'opacity-100 text-blue-500' : 'opacity-30'}`} />
+      </button>
+    </th>
+  )
+}
+
 export default function InventoryManagement() {
-  const { selectedBranch, loading: branchLoading } = useBranch()
+  const { selectedBranch, selectedBranchId, loading: branchLoading } = useBranch()
   const {
     products,
     categories,
     suppliers,
+    snapshot,
+    listTruncated,
+    referenceDataError,
     loading,
     isRefreshing,
     error,
@@ -120,24 +151,42 @@ export default function InventoryManagement() {
     setFilters,
     createProduct,
     updateProduct,
-    deleteProduct
+    deleteProduct,
+    refreshSuppliers,
+    sort,
+    setSort,
+    setPageSize
   } = useInventory()
 
   // Estados de interfaz locales
-  const [activeTab, setActiveTab] = useState('products')
+  // La pestaña viaja en la URL: con diez secciones y `useState`, recargar,
+  // volver desde el detalle de un producto o compartir un enlace te devolvia
+  // siempre a «Catalogo».
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === 'undefined') return 'products'
+    const desdeUrl = new URLSearchParams(window.location.search).get('tab')
+    return INVENTORY_TAB_VALUES.has(desdeUrl || '') ? (desdeUrl as string) : 'products'
+  })
+
+  const changeTab = (value: string) => {
+    setActiveTab(value)
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (value === 'products') url.searchParams.delete('tab')
+    else url.searchParams.set('tab', value)
+    window.history.replaceState(null, '', url)
+  }
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   // Estados del formulario
-  const [formData, setFormData] = useState<Partial<Product>>({})
-  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [successMessage, setSuccessMessage] = useState('')
   const [actionError, setActionError] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const categoryOptions = useMemo(
     () => categories.map((category) => ({ label: category.name, value: category.id })),
     [categories]
@@ -147,110 +196,72 @@ export default function InventoryManagement() {
     [suppliers]
   )
 
-  const parseNumberInput = (rawValue: string, parser: (value: string) => number) => {
-    const trimmed = rawValue.trim()
-    if (trimmed === '') return undefined
-    const parsed = parser(trimmed)
-    return Number.isFinite(parsed) ? parsed : undefined
-  }
-
-  // Validaciones
-  const validateProduct = (data: Partial<Product>): ValidationError[] => {
-    const errors: ValidationError[] = []
-    const salePrice = Number(data.sale_price)
-    const purchasePrice = Number(data.purchase_price)
-    const stockQuantity = Number(data.stock_quantity)
-
-    if (!data.name?.trim()) errors.push({ field: 'name', message: 'El nombre es requerido' })
-    if (!data.sku?.trim()) errors.push({ field: 'sku', message: 'El SKU es requerido' })
-    if (!data.category_id) errors.push({ field: 'category_id', message: 'La categoría es requerida' })
-    if (!data.supplier_id) errors.push({ field: 'supplier_id', message: 'El proveedor es requerido' })
-    if (!Number.isFinite(salePrice) || salePrice <= 0) errors.push({ field: 'sale_price', message: 'Precio inválido' })
-    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) errors.push({ field: 'purchase_price', message: 'Costo inválido' })
-    if (!Number.isFinite(stockQuantity) || stockQuantity < 0) errors.push({ field: 'stock_quantity', message: 'Stock inválido' })
-
-    return errors
-  }
-
   // Helpers UI
-  const getStockStatus = (product: Product) => {
-    if (product.stock_quantity === 0) return { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', text: 'Agotado', icon: XCircle }
-    if (product.stock_quantity <= product.min_stock) return { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', text: 'Bajo', icon: AlertTriangle }
-    if (product.stock_quantity >= product.max_stock) return { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', text: 'Alto', icon: TrendingUp }
-    return { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', text: 'Normal', icon: CheckCircle }
-  }
+  // El nivel sale de `resolveStockLevel`, que trata `max_stock: 0` como «sin
+  // maximo definido». La regla anterior era `stock >= max_stock`: con el 0 por
+  // defecto del modal de producto, casi todo el catalogo decia «Stock alto».
+  const STOCK_LEVEL_BADGE = {
+    out: { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', text: 'Agotado', icon: XCircle },
+    low: { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', text: 'Bajo', icon: AlertTriangle },
+    high: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', text: 'Alto', icon: TrendingUp },
+    normal: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', text: 'Normal', icon: CheckCircle },
+  } as const
+
+  const getStockStatus = (product: Product) => STOCK_LEVEL_BADGE[resolveStockLevel(product)]
 
   const getStatusBadge = (product: Product) => {
     const isActive = product.status === 'active'
     return isActive 
       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+      : 'bg-muted text-muted-foreground'
   }
 
-  // KPIs calculados sobre la página actual (idealmente deberían venir del backend para total global)
-  // Nota: Para una app real grande, estos KPIs deben ser endpoints dedicados.
-  const stats = useMemo(() => {
-    const lowStock = products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length
-    const outStock = products.filter(p => p.stock_quantity === 0).length
-    const totalValue = products.reduce((sum, p) => sum + (p.stock_quantity * p.purchase_price), 0)
-    // Margen promedio simple de la vista actual
-    const avgMargin = products.length ? products.reduce((sum, p) => {
-      const margin = p.sale_price > 0 ? ((p.sale_price - p.purchase_price) / p.sale_price) * 100 : 0
-      return sum + margin
-    }, 0) / products.length : 0
+  // Los indicadores vienen del servidor, sobre toda la empresa y la sucursal
+  // activa. Antes se calculaban sobre `products` —la pagina actual, diez
+  // filas— y cambiaban al pasar de pagina, al lado de un «Total de productos»
+  // que si era global.
+  const kpiCards = useMemo(() => {
+    const alcance = snapshot?.branchScoped
+      ? `En ${selectedBranch?.name || 'la sucursal activa'}`
+      : 'En toda la empresa'
 
-    return { lowStock, outStock, totalValue, avgMargin }
-  }, [products])
+    return [
+      {
+        label: 'Productos en catálogo',
+        value: snapshot ? snapshot.totalProducts.toLocaleString() : null,
+        hint: 'Compartido entre sucursales',
+        icon: Package,
+        tone: 'text-blue-600 dark:text-blue-400',
+        bg: 'bg-blue-100 dark:bg-blue-500/20',
+      },
+      {
+        label: 'Sin stock',
+        value: snapshot ? snapshot.outOfStock.toLocaleString() : null,
+        hint: alcance,
+        icon: XCircle,
+        tone: 'text-rose-600 dark:text-rose-400',
+        bg: 'bg-rose-100 dark:bg-rose-500/20',
+      },
+      {
+        label: 'Stock bajo',
+        value: snapshot ? snapshot.lowStock.toLocaleString() : null,
+        hint: alcance,
+        icon: AlertTriangle,
+        tone: 'text-amber-600 dark:text-amber-400',
+        bg: 'bg-amber-100 dark:bg-amber-500/20',
+      },
+      {
+        label: 'Valor a costo',
+        value: snapshot ? formatCurrency(snapshot.stockCostValue) : null,
+        hint: alcance,
+        icon: GSIcon,
+        tone: 'text-emerald-600 dark:text-emerald-400',
+        bg: 'bg-emerald-100 dark:bg-emerald-500/20',
+      },
+    ]
+  }, [snapshot, selectedBranch?.name])
 
   // Handlers CRUD
-  const handleAddProduct = async () => {
-    setValidationErrors([])
-    setActionError('')
-    setIsSubmitting(true)
-    const errors = validateProduct(formData)
-    if (errors.length > 0) {
-      setValidationErrors(errors)
-      setIsSubmitting(false)
-      return
-    }
-
-    const result = await createProduct(formData)
-    if (result.success) {
-      setSuccessMessage('Producto creado correctamente')
-      setIsAddDialogOpen(false)
-      setFormData({})
-      setTimeout(() => setSuccessMessage(''), 3000)
-    } else {
-      setActionError(result.error || 'No fue posible crear el producto')
-    }
-    setIsSubmitting(false)
-  }
-
-  const handleEditProduct = async () => {
-    if (!selectedProduct) return
-    setValidationErrors([])
-    setActionError('')
-    setIsSubmitting(true)
-
-    const errors = validateProduct(formData)
-    if (errors.length > 0) {
-      setValidationErrors(errors)
-      setIsSubmitting(false)
-      return
-    }
-
-    const result = await updateProduct(selectedProduct.id, formData)
-    if (result.success) {
-      setSuccessMessage('Producto actualizado')
-      setIsEditDialogOpen(false)
-      setSelectedProduct(null)
-      setTimeout(() => setSuccessMessage(''), 3000)
-    } else {
-      setActionError(result.error || 'No fue posible actualizar el producto')
-    }
-    setIsSubmitting(false)
-  }
-
   const handleDeleteProduct = async () => {
     if (!selectedProduct) return
     setActionError('')
@@ -269,13 +280,9 @@ export default function InventoryManagement() {
 
   const openEditDialog = (product: Product) => {
     setSelectedProduct(product)
-    setFormData({ ...product })
-    setValidationErrors([])
     setActionError('')
     setIsEditDialogOpen(true)
   }
-
-  const getFieldError = (field: string) => validationErrors.find(e => e.field === field)?.message
 
   const handleAdvancedSearch = (activeFilters: AdvancedSearchFilter[]) => {
     const byId = new Map(activeFilters.map((f) => [f.id, f]))
@@ -295,14 +302,17 @@ export default function InventoryManagement() {
         : 'all'
     const productStatus = statusFilter.find((status) => ['active', 'inactive', 'discontinued'].includes(status)) || 'all'
 
-    setSearchResults([])
     setPage(1)
-    setActiveTab('products')
+    changeTab('products')
+    setSuccessMessage('Filtros aplicados al catálogo')
+    setTimeout(() => setSuccessMessage(''), 3000)
     setFilters(prev => ({
       ...prev,
       search,
-      category: categoriesFilter[0] || 'all',
-      supplier: suppliersFilter[0] || 'all',
+      // La seleccion completa, no solo la primera: elegias tres categorias y se
+      // usaba una mientras las tres fichas seguian en pantalla.
+      category: categoriesFilter.length > 0 ? categoriesFilter.join(',') : 'all',
+      supplier: suppliersFilter.length > 0 ? suppliersFilter.join(',') : 'all',
       status: productStatus,
       stockStatus,
       minPrice: priceRange && typeof priceRange[0] === 'number' ? priceRange[0] : null,
@@ -316,7 +326,6 @@ export default function InventoryManagement() {
   }
 
   const clearAdvancedSearch = () => {
-    setSearchResults([])
     setPage(1)
     setFilters(prev => ({
       ...prev,
@@ -335,37 +344,53 @@ export default function InventoryManagement() {
     }))
   }
 
-  const handleExportProducts = () => {
-    const rows = [
-      ['Nombre', 'SKU', 'Categoria', 'Proveedor', 'Precio Venta', 'Costo', 'Stock', 'Estado'],
-      ...products.map((product) => [
-        product.name,
-        product.sku,
-        product.category?.name || '',
-        product.supplier?.name || '',
-        String(product.sale_price),
-        String(product.purchase_price),
-        String(product.stock_quantity),
-        product.status
-      ])
-    ]
+  // Exportaba `products`, o sea las filas de la pagina actual, en un archivo
+  // llamado «inventario_<fecha>.csv». Quien lo abria creia tener el inventario.
+  const handleExportProducts = async () => {
+    if (isExporting) return
+    setIsExporting(true)
+    setActionError('')
+    try {
+      const rows = await exportInventoryCsvRows(filters, selectedBranchId)
 
-    const csv = rows
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+        .join(LINE_BREAK_CRLF)
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
+      // Separador `;` y BOM: es lo que Excel en español necesita para no meter
+      // todo en una sola columna ni romper las tildes.
+      const blob = new Blob([BOM_UTF8 + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+      setSuccessMessage(`Se exportaron ${rows.length - 1} productos`)
+      setTimeout(() => setSuccessMessage(''), 4000)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'No se pudo exportar el inventario.')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
+  // Ordenar por stock es lo primero que se busca en una pantalla de inventario,
+  // y la API ya lo soportaba.
+  const toggleSort = (column: InventorySortColumn) => {
+    setSort((current) => current.column === column
+      ? { column, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { column, direction: column === 'stock' ? 'asc' : 'asc' })
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const hasNextPage = page * pageSize < totalCount
   const rangeStart = totalCount === 0 ? 0 : ((page - 1) * pageSize) + 1
   const rangeEnd = totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount)
+  // `filters.category` puede traer varios ids separados por coma desde la
+  // busqueda avanzada.
+  const multiCategoryCount = filters.category !== 'all' ? filters.category.split(',').length : 0
+
   const hasCatalogFilters = Boolean(
     filters.search.trim() || filters.category !== 'all' || filters.stockStatus !== 'all'
   )
@@ -387,6 +412,15 @@ export default function InventoryManagement() {
         <Alert className="border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800">
           <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
           <AlertDescription className="text-green-800 dark:text-green-300">{successMessage}</AlertDescription>
+        </Alert>
+      )}
+      {referenceDataError && (
+        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300">
+            {referenceDataError} Los selectores de categoría y proveedor van a quedar vacíos, y el
+            formulario de producto los exige.
+          </AlertDescription>
         </Alert>
       )}
       {(error || actionError) && (
@@ -433,15 +467,18 @@ export default function InventoryManagement() {
             <Button
               variant="outline"
               onClick={handleExportProducts}
+              disabled={isExporting}
               className="h-9 rounded-xl border-slate-200 bg-white text-xs dark:border-white/10 dark:bg-[#0d1117]"
             >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Exportar CSV
+              {isExporting ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {isExporting ? 'Exportando...' : 'Exportar CSV'}
             </Button>
             <Button
               onClick={() => {
-                setFormData({})
-                setValidationErrors([])
                 setActionError('')
                 setIsAddDialogOpen(true)
               }}
@@ -454,64 +491,23 @@ export default function InventoryManagement() {
         </div>
       </div>
 
-      <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
-              <Info className="h-4 w-4 text-blue-500" /> ¿Cómo funciona la Gestión de Inventario?
-            </div>
-            <div className="select-none text-xs font-semibold text-slate-400">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-4">
-            <div className="grid gap-4 text-xs sm:grid-cols-3">
-              <div className="space-y-1 border-l-2 border-blue-500 pl-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">1</Badge>
-                  Productos y Catálogo
-                </h4>
-                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  El producto, SKU, precios y categoría forman parte del catálogo compartido entre sucursales.
-                </p>
-              </div>
-              <div className="space-y-1 border-l-2 border-amber-500 pl-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">2</Badge>
-                  Control y Alertas de Stock
-                </h4>
-                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  Las existencias corresponden a la sucursal activa seleccionada en la cabecera.
-                </p>
-              </div>
-              <div className="space-y-1 border-l-2 border-emerald-500 pl-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">3</Badge>
-                  Movimientos e Historial
-                </h4>
-                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                  Usa ajustes o transferencias para modificar stock de forma auditada.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
+      <InventoryGuide />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {[
-          { label: 'Total de productos', value: totalCount.toLocaleString(), icon: Package, tone: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-500/20' },
-          { label: 'Stock bajo (Lote)', value: stats.lowStock.toLocaleString(), icon: AlertTriangle, tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-500/20' },
-          { label: 'Valor del Lote (Costo)', value: formatCurrency(stats.totalValue), icon: GSIcon, tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-500/20' },
-          { label: 'Margen Promedio', value: `${stats.avgMargin.toFixed(1)}%`, icon: TrendingUp, tone: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-500/20' },
-        ].map(({ label, value, icon: Icon, tone, bg }) => (
+        {kpiCards.map(({ label, value, hint, icon: Icon, tone, bg }) => (
           <Card key={label} className="border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="space-y-1">
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
-                <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">{value}</p>
+                {value === null ? (
+                  <p className="text-sm font-medium text-slate-400 dark:text-slate-500">Sin datos</p>
+                ) : (
+                  <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">{value}</p>
+                )}
+                {/* Cada cifra dice de que universo habla: eran cuatro tarjetas
+                    identicas, una global y tres de la pagina que estabas viendo. */}
+                <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{hint}</p>
               </div>
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg}`}>
                 <Icon className={`h-5 w-5 ${tone}`} />
@@ -521,10 +517,20 @@ export default function InventoryManagement() {
         ))}
       </div>
 
+      {snapshot?.truncated && (
+        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300">
+            El catálogo supera el máximo que se puede recorrer de una vez: los indicadores de arriba
+            son parciales.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-5">
+      <Tabs value={activeTab} onValueChange={changeTab} className="min-w-0 space-y-5">
         <div className="lg:hidden">
-          <Select value={activeTab} onValueChange={setActiveTab}>
+          <Select value={activeTab} onValueChange={changeTab}>
             <SelectTrigger className="h-11 w-full rounded-lg border-border bg-card px-3 shadow-sm" aria-label="Seleccionar sección de inventario">
               <SelectValue placeholder="Seleccionar sección" />
             </SelectTrigger>
@@ -636,6 +642,14 @@ export default function InventoryManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas las categorías</SelectItem>
+                    {/* La busqueda avanzada puede dejar varias categorias
+                        aplicadas; el selector simple no puede representarlas,
+                        pero tampoco puede mentir diciendo «Todas». */}
+                    {multiCategoryCount > 1 && (
+                      <SelectItem value={filters.category}>
+                        {multiCategoryCount} categorías (desde búsqueda avanzada)
+                      </SelectItem>
+                    )}
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -655,15 +669,19 @@ export default function InventoryManagement() {
             </div>
 
           {/* Tabla */}
-            <div className="overflow-x-auto">
+            {/* La tabla de siete columnas resolvia el celular con scroll
+                horizontal. En movil se cambia por tarjetas, que es el patron
+                que ya usaba la pestaña de Alertas dentro de esta misma
+                pantalla. */}
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm text-left">
                 <thead className="border-b border-slate-100 bg-slate-50/50 dark:border-white/5 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Producto</th>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">SKU</th>
+                    <SortableHeader column="name" label="Producto" sort={sort} onSort={toggleSort} />
+                    <SortableHeader column="sku" label="SKU" sort={sort} onSort={toggleSort} />
                     <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Categoría</th>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Precio / Costo</th>
-                    <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Stock</th>
+                    <SortableHeader column="price" label="Precio / Costo" sort={sort} onSort={toggleSort} />
+                    <SortableHeader column="stock" label="Stock" sort={sort} onSort={toggleSort} />
                     <th className="p-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado</th>
                     <th className="p-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Acciones</th>
                   </tr>
@@ -690,8 +708,6 @@ export default function InventoryManagement() {
                             : {
                                 label: 'Nuevo producto',
                                 onClick: () => {
-                                  setFormData({})
-                                  setValidationErrors([])
                                   setActionError('')
                                   setIsAddDialogOpen(true)
                                 },
@@ -721,6 +737,16 @@ export default function InventoryManagement() {
                               <span className="min-w-6 font-bold tabular-nums text-xs text-slate-900 dark:text-white">{product.stock_quantity}</span>
                               <Badge className={`text-[10px] px-2 py-0.5 border-0 ${stockInfo.color}`}>{stockInfo.text}</Badge>
                             </div>
+                            {/* Lo comprometido por pedidos: la columna existia
+                                en la base y no la leia nadie, asi que se
+                                mostraba stock fisico donde se lee «disponible». */}
+                            {Number(product.reserved_quantity || 0) > 0 && (
+                              <p className="mt-1 text-[11px] tabular-nums text-amber-600 dark:text-amber-400">
+                                {product.reserved_quantity} reservado{Number(product.reserved_quantity) === 1 ? '' : 's'}
+                                {' · '}
+                                {Math.max(0, product.stock_quantity - Number(product.reserved_quantity || 0))} disponible
+                              </p>
+                            )}
                           </td>
                           <td className="p-3.5">
                             <Badge className={`text-[10px] px-2 py-0.5 border-0 ${getStatusBadge(product)}`}>
@@ -757,17 +783,107 @@ export default function InventoryManagement() {
                 </tbody>
               </table>
             </div>
+
+            {/* Misma informacion, apilada, para pantallas angostas. */}
+            <div className="divide-y divide-slate-100 dark:divide-white/5 md:hidden">
+              {loading && (
+                <div className="p-8 text-center text-slate-400">
+                  <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin text-blue-500" />
+                  Cargando catálogo...
+                </div>
+              )}
+              {!loading && products.length === 0 && (
+                <EmptyState
+                  icon={Package}
+                  title={hasCatalogFilters ? 'No hay resultados' : 'Todavía no hay productos'}
+                  description={hasCatalogFilters
+                    ? 'Probá con otros términos o quitá los filtros aplicados.'
+                    : 'Creá el primer producto para comenzar a controlar existencias.'}
+                  className="py-12"
+                />
+              )}
+              {!loading && products.map((product) => {
+                const stockInfo = getStockStatus(product)
+                return (
+                  <div key={product.id} className="space-y-2 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{product.name}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-slate-400">{product.sku}</p>
+                      </div>
+                      <Badge className={`shrink-0 border-0 px-2 py-0.5 text-[10px] ${stockInfo.color}`}>{stockInfo.text}</Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold tabular-nums text-slate-900 dark:text-white">{formatCurrency(product.sale_price)}</span>
+                      <span className="tabular-nums">Stock {product.stock_quantity}</span>
+                      {product.category?.name && <span className="truncate">{product.category.name}</span>}
+                    </div>
+                    <div className="flex gap-1 pt-1">
+                      <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg text-xs" onClick={() => openEditDialog(product)}>
+                        <Edit className="mr-1.5 h-3.5 w-3.5" /> Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs"
+                        onClick={() => { setSelectedProduct(product); setIsVariantDialogOpen(true) }}
+                        aria-label={`Gestionar variantes de ${product.name}`}
+                      >
+                        <Layers className="h-3.5 w-3.5 text-purple-500" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs"
+                        onClick={() => { setSelectedProduct(product); setIsDeleteDialogOpen(true) }}
+                        aria-label={`Eliminar ${product.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
             {/* Paginación */}
-            <div className="flex items-center justify-between border-t p-3 dark:border-gray-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
               <span className="text-xs text-muted-foreground">
                 Mostrando {rangeStart} - {rangeEnd} de {totalCount}
+                {/* La API avisa cuando el filtro de stock barrió hasta su tope y
+                    quedaron productos sin evaluar: el total es parcial. */}
+                {listTruncated && (
+                  <span className="ml-2 font-medium text-amber-600 dark:text-amber-400">
+                    (parcial: quedaron productos sin evaluar por el filtro de stock)
+                  </span>
+                )}
               </span>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                  <SelectTrigger className="h-8 w-[112px] rounded-md text-xs" aria-label="Productos por página">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Con 10 filas fijas, revisar 400 productos eran 40 clics. */}
+                    {[10, 25, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)}>{size} por página</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(1)} disabled={page === 1 || loading} aria-label="Primera página">
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} aria-label="Página anterior">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
+                {/* Eran dos flechas sin numero: no habia forma de saber donde estabas. */}
+                <span className="min-w-[86px] text-center text-xs tabular-nums text-muted-foreground">
+                  Página {page} de {totalPages}
+                </span>
                 <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(p => p + 1)} disabled={!hasNextPage || loading} aria-label="Página siguiente">
                   <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8 rounded-md" onClick={() => setPage(totalPages)} disabled={!hasNextPage || loading} aria-label="Última página">
+                  <ChevronsRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -809,17 +925,18 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="suppliers">
-          <SupplierManagement />
+          <SupplierManagement onSuppliersChanged={refreshSuppliers} />
         </TabsContent>
 
         <TabsContent value="search">
           <AdvancedSearch
             onSearch={handleAdvancedSearch}
             onClearFilters={clearAdvancedSearch}
-            results={searchResults}
             isLoading={loading}
             categoryOptions={categoryOptions}
             supplierOptions={supplierOptions}
+            priceCeiling={snapshot?.maxSalePrice}
+            stockCeiling={snapshot?.maxStockQuantity}
           />
         </TabsContent>
 
@@ -832,66 +949,20 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
-            {/* Out of Stock Card */}
-            <Card className="border-red-200 dark:border-red-800 dark:bg-gray-800">
-              <CardHeader className="bg-red-50/50 dark:bg-red-950/10 border-b dark:border-red-900/20">
-                <CardTitle className="text-red-800 dark:text-red-400 flex items-center text-base">
-                  <XCircle className="h-5 w-5 mr-2 shrink-0" />
-                  Productos Agotados ({products.filter(p => p.stock_quantity === 0).length})
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">Artículos sin inventario disponible para la venta</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
-                {products.filter(p => p.stock_quantity === 0).length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No hay productos agotados. ¡Excelente!</p>
-                ) : (
-                  products.filter(p => p.stock_quantity === 0).map(product => (
-                    <div key={product.id} className="flex justify-between items-center p-3 rounded-lg border bg-card dark:border-gray-700 hover:bg-muted/10 transition-colors">
-                      <div>
-                        <p className="font-semibold text-sm">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(product)} className="h-8 rounded-lg text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/20">
-                        Reabastecer
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Low Stock Card */}
-            <Card className="border-yellow-200 dark:border-yellow-800 dark:bg-gray-800">
-              <CardHeader className="bg-yellow-50/50 dark:bg-yellow-950/10 border-b dark:border-yellow-900/20">
-                <CardTitle className="text-yellow-800 dark:text-yellow-400 flex items-center text-base">
-                  <AlertTriangle className="h-5 w-5 mr-2 shrink-0" />
-                  Stock Bajo ({products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length})
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">Artículos cerca o por debajo de su cantidad mínima</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
-                {products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No hay productos con stock bajo.</p>
-                ) : (
-                  products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).map(product => (
-                    <div key={product.id} className="flex justify-between items-center p-3 rounded-lg border bg-card dark:border-gray-700 hover:bg-muted/10 transition-colors">
-                      <div>
-                        <p className="font-semibold text-sm">{product.name}</p>
-                        <div className="flex gap-2 items-center mt-1">
-                          <Badge variant="outline" className="text-[10px] h-4 py-0 dark:border-gray-600">SKU: {product.sku}</Badge>
-                          <span className="text-xs text-amber-600 font-medium">Stock: {product.stock_quantity} (Min: {product.min_stock})</span>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(product)} className="h-8 rounded-lg text-xs border-yellow-200 text-yellow-600 hover:bg-yellow-50 hover:text-yellow-700 dark:border-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-950/20">
-                        Modificar
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <InventoryAlertsPanel
+            branchName={snapshot?.branchScoped ? selectedBranch?.name : null}
+            onRestock={(productId) => {
+              const product = products.find((item) => item.id === productId)
+              if (product) {
+                openEditDialog(product)
+                return
+              }
+              // La alerta puede ser de un producto que no esta en la pagina
+              // cargada: se lo busca por su id en el catalogo.
+              setFilters((current) => ({ ...current, search: productId }))
+              changeTab('products')
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="reports">
@@ -902,23 +973,23 @@ export default function InventoryManagement() {
 
       {/* Dialogs: Create/Edit Product - Sincronizado con ProductModal completo de Dashboard */}
       <ProductModal
-        product={(selectedProduct as any) || null}
+        product={(selectedProduct as unknown as import('@/types/products').Product) || null}
         isOpen={isAddDialogOpen || isEditDialogOpen}
         onClose={() => {
           setIsAddDialogOpen(false)
           setIsEditDialogOpen(false)
           setSelectedProduct(null)
         }}
-        categories={categories as any}
+        categories={categories as unknown as import('@/types/products').Category[]}
         brands={[]}
-        suppliers={suppliers as any}
+        suppliers={suppliers as unknown as import('@/types/products').Supplier[]}
         onSave={async (productData) => {
           if (isEditDialogOpen && selectedProduct) {
-            const result = await updateProduct(selectedProduct.id, productData as any)
+            const result = await updateProduct(selectedProduct.id, productData as unknown as Parameters<typeof updateProduct>[1])
             if (!result.success) throw new Error(result.error || 'No fue posible actualizar el producto')
             setSuccessMessage('Producto actualizado correctamente')
           } else {
-            const result = await createProduct(productData as any)
+            const result = await createProduct(productData as unknown as Parameters<typeof createProduct>[0])
             if (!result.success) throw new Error(result.error || 'No fue posible crear el producto')
             setSuccessMessage('Producto creado correctamente')
           }
@@ -931,10 +1002,10 @@ export default function InventoryManagement() {
 
       {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="dark:bg-gray-800 dark:border-gray-700">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="dark:text-gray-100">Confirmar Eliminación</DialogTitle>
-            <DialogDescription className="dark:text-gray-400">
+            <DialogTitle >Confirmar Eliminación</DialogTitle>
+            <DialogDescription >
               ¿Está seguro de que desea eliminar <strong>{selectedProduct?.name}</strong>? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
@@ -949,13 +1020,13 @@ export default function InventoryManagement() {
 
       {/* Variant Dialog */}
       <Dialog open={isVariantDialogOpen} onOpenChange={setIsVariantDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="dark:text-gray-100 flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               Variantes para: {selectedProduct?.name}
             </DialogTitle>
-            <DialogDescription className="dark:text-gray-400">
+            <DialogDescription >
               Administre variantes y opciones personalizadas (ej: Talla, Color, Capacidad) para este producto.
             </DialogDescription>
           </DialogHeader>

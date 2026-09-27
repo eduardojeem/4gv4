@@ -1,11 +1,9 @@
 'use client'
 
-import { motion, useMotionValue, useTransform, animate  } from '../ui/motion'
+import { motion, useMotionValue, useTransform, animate } from '../ui/motion'
 import { useEffect, memo } from 'react'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  ArrowUpRight, 
+import {
+  ArrowUpRight,
   ArrowDownRight,
   Minus
 } from 'lucide-react'
@@ -28,7 +26,7 @@ interface StatsCardProps {
   title: string
   value: string | number
   subtitle?: string
-  icon: React.ComponentType<any>
+  icon: React.ComponentType<{ className?: string }>
   trend?: "up" | "down" | "neutral"
   trendValue?: string
   color?: "blue" | "green" | "amber" | "red" | "purple" | "indigo"
@@ -192,6 +190,8 @@ export const ModernStatsCard = memo(({
     </motion.div>
   )
 })
+
+ModernStatsCard.displayName = 'ModernStatsCard'
 
 // Componente de tarjeta de estadística compacta
 export const CompactStatsCard = ({ 

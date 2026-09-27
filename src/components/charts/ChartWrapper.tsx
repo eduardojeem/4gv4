@@ -1,4 +1,3 @@
-import React from 'react'
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { BarChart } from 'recharts/es6/chart/BarChart';
@@ -14,8 +13,7 @@ import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
 import { Tooltip } from 'recharts/es6/component/Tooltip';
 import { Legend } from 'recharts/es6/component/Legend';
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { ReferenceLine } from 'recharts';
-import { formatValue, CHART_COLORS } from '@/lib/formatters'
+import { formatValue, CHART_COLORS } from '@/lib/formatters';
 
 interface ChartConfig {
   dataKey: string
@@ -25,9 +23,23 @@ interface ChartConfig {
   format?: 'currency' | 'percentage' | 'number' | 'compact'
 }
 
-interface ChartWrapperProps {
+interface TooltipPayloadEntry {
+  dataKey?: string
+  name?: string
+  value?: unknown
+  color?: string
+  [key: string]: unknown
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: TooltipPayloadEntry[]
+  label?: string | number
+}
+
+interface ChartWrapperProps<T = Record<string, unknown>> {
   type: 'line' | 'bar' | 'area' | 'pie'
-  data: any[]
+  data: T[]
   height?: number
   config: ChartConfig[]
   showGrid?: boolean
@@ -37,7 +49,7 @@ interface ChartWrapperProps {
   className?: string
 }
 
-export function ChartWrapper({
+export function ChartWrapper<T = Record<string, unknown>>({
   type,
   data,
   height = 300,
@@ -47,15 +59,15 @@ export function ChartWrapper({
   showTooltip = true,
   colors = Object.values(CHART_COLORS),
   className
-}: ChartWrapperProps) {
+}: ChartWrapperProps<T>) {
   
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
     if (!active || !payload || !payload.length) return null
     
     return (
       <div className="bg-background border rounded-lg shadow-lg p-3">
         <p className="font-medium mb-2">{label}</p>
-        {payload.map((entry: any, index: number) => {
+        {payload.map((entry, index: number) => {
           const configItem = config.find(c => c.dataKey === entry.dataKey)
           const format = configItem?.format || 'number'
           
@@ -177,7 +189,7 @@ export function ChartWrapper({
 }
 
 // Componentes específicos para casos comunes
-export function RevenueChart({ data, height = 300 }: { data: any[], height?: number }) {
+export function RevenueChart<T = Record<string, unknown>>({ data, height = 300 }: { data: T[], height?: number }) {
   return (
     <ChartWrapper
       type="area"
@@ -191,7 +203,7 @@ export function RevenueChart({ data, height = 300 }: { data: any[], height?: num
   )
 }
 
-export function CustomerGrowthChart({ data, height = 300 }: { data: any[], height?: number }) {
+export function CustomerGrowthChart<T = Record<string, unknown>>({ data, height = 300 }: { data: T[], height?: number }) {
   return (
     <ChartWrapper
       type="line"
@@ -205,7 +217,7 @@ export function CustomerGrowthChart({ data, height = 300 }: { data: any[], heigh
   )
 }
 
-export function SegmentDistributionChart({ data, height = 300 }: { data: any[], height?: number }) {
+export function SegmentDistributionChart<T = Record<string, unknown>>({ data, height = 300 }: { data: T[], height?: number }) {
   return (
     <ChartWrapper
       type="pie"
@@ -219,7 +231,7 @@ export function SegmentDistributionChart({ data, height = 300 }: { data: any[], 
   )
 }
 
-export function DebtDistributionChart({ data, height = 300 }: { data: any[], height?: number }) {
+export function DebtDistributionChart<T = Record<string, unknown>>({ data, height = 300 }: { data: T[], height?: number }) {
   return (
     <ChartWrapper
       type="pie"

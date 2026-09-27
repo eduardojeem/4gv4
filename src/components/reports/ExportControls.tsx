@@ -1,17 +1,13 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
-import { 
-  Download, 
-  FileText, 
-  BarChart3, 
-  RefreshCw, 
-  CheckCircle,
-  AlertCircle,
-  Settings,
-  Calendar,
-  Filter
+import { motion, AnimatePresence } from '../ui/motion'
+import {
+  Download,
+  FileText,
+  BarChart3,
+  RefreshCw,
+  CheckCircle, Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

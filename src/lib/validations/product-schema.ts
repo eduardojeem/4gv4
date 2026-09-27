@@ -1,5 +1,10 @@
 import * as z from "zod"
 import { validateBarcode } from "./product-validation"
+import {
+  ProductAttributeDefinitionSchema,
+  ProductVariantInputSchema,
+} from "@/lib/products/variant-contract"
+import { isPersistableImageSource } from '@/lib/image-url-policy'
 
 export const productSchema = z
   .object({
@@ -22,8 +27,14 @@ export const productSchema = z
       .nullable(),
     category_id: z.string().min(1, "La categoria es requerida"),
     brand_id: z.string().optional().nullable(),
+    // Marca del repuesto (quién fabricó la pieza). Para qué celular es va aparte.
     brand: z.string().optional().nullable(),
+    // Marca y modelos del celular al que pertenece el repuesto.
+    device_brand: z.string().max(60, "La marca del celular puede tener hasta 60 caracteres").optional().nullable(),
+    device_models: z.array(z.string().max(60, "Cada modelo puede tener hasta 60 caracteres")).max(20, "Se pueden cargar hasta 20 modelos").optional(),
     supplier_id: z.string().optional().nullable(),
+    // Publicar el producto sin mostrar el precio (la tienda ofrece «Preguntar»).
+    hide_price: z.boolean().optional(),
 
     // Pricing
     purchase_price: z
@@ -119,7 +130,8 @@ export const productSchema = z
       .number()
       .int()
       .min(0, "El stock minimo no puede ser negativo"),
-    // max_stock is UI-only and is not persisted in DB.
+    // El stock maximo si se guarda: la API lo escribe en products.max_stock
+    // y el filtro de stock alto del listado lo lee.
     max_stock: z
       .coerce
       .number()
@@ -140,9 +152,43 @@ export const productSchema = z
       ),
     is_active: z.boolean().default(true),
     visibility: z.enum(['public', 'wholesale', 'hidden']).optional().default('public'),
-    images: z.array(z.string()).default([]),
+    tags: z.array(z.string().trim().min(1).max(80)).max(30).optional().default([]),
+    fashion_audience: z.enum(['mujer', 'hombre', 'ninos', 'bebes', 'unisex', '']).optional().default(''),
+    images: z
+      .array(
+        z.string().trim()
+          .refine(
+            (source) => source.startsWith('data:image/') || source.length <= 2048,
+            'La URL de la imagen es demasiado larga',
+          )
+          .refine(
+            isPersistableImageSource,
+            'La imagen debe pertenecer a un dominio habilitado o al almacenamiento del sistema',
+          ),
+      )
+      .max(10, 'No se permiten más de 10 imágenes')
+      .default([]),
+    has_variants: z.boolean().default(false),
+    variant_attribute_config: z.array(ProductAttributeDefinitionSchema).default([]),
+    variants: z.array(ProductVariantInputSchema).default([]),
   })
   .superRefine((data, ctx) => {
+    if (data.has_variants && data.variant_attribute_config.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Agrega al menos un atributo para el producto con variantes",
+        path: ["variant_attribute_config"],
+      })
+    }
+
+    if (data.has_variants && data.variants.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Agrega al menos una variante",
+        path: ["variants"],
+      })
+    }
+
     // sale_price > purchase_price
     if (data.purchase_price > 0 && data.sale_price > 0) {
       if (data.sale_price <= data.purchase_price) {
@@ -221,7 +267,7 @@ export const productSchema = z
       })
     }
 
-    // max_stock checks (UI-only)
+    // Coherencia entre stock maximo y minimo.
     if (data.max_stock && data.max_stock > 0) {
       if (data.max_stock <= data.min_stock) {
         ctx.addIssue({

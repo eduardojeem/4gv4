@@ -12,6 +12,7 @@ import {
   ProductInput,
   ProductDisplay
 } from '@/types/product-unified'
+import type { ProductAttributeDefinition, ProductVariantInput } from '@/lib/products/variant-contract'
 
 export type {
   Product,
@@ -58,6 +59,9 @@ export interface ProductFormData {
   // Additional fields for compatibility
   offer_price?: number
   has_offer?: boolean
+  has_variants?: boolean
+  variant_attribute_config?: ProductAttributeDefinition[]
+  variants?: ProductVariantInput[]
 }
 
 // Additional legacy types that some components might need

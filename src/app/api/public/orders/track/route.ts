@@ -12,7 +12,7 @@ const TRACK_RATE_WINDOW_MS = 10 * 60 * 1000
 export async function GET(request: NextRequest) {
   // ── Rate limiting ──────────────────────────────────────────────────────
   const clientIp = getClientIp(request)
-  const allowed = rateLimiter.check(
+  const allowed = await rateLimiter.check(
     `track:${clientIp}`,
     TRACK_RATE_LIMIT,
     TRACK_RATE_WINDOW_MS
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       .eq('order_number', orderNumber)
 
     if (customerEmail) {
-      query = query.ilike('customer_email', customerEmail)
+      query = query.eq('customer_email', customerEmail)
     } else {
       // Exact match — prevents single-digit enumeration attack
       query = query.eq('customer_phone', customerPhone)

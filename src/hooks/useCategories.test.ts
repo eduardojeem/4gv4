@@ -9,7 +9,7 @@ describe('validateCategoryInput', () => {
   })
 
   it('should fail when description is too short', () => {
-    const res = validateCategoryInput({ name: 'Accesorios', description: 'corta' })
+    const res = validateCategoryInput({ name: 'Accesorios', description: 'x' })
     expect(res.valid).toBe(false)
     expect(res.errors.description).toBeTruthy()
   })
@@ -20,4 +20,3 @@ describe('validateCategoryInput', () => {
     expect(Object.keys(res.errors).length).toBe(0)
   })
 })
-

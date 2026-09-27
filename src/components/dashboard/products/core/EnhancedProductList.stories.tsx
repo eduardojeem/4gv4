@@ -1,80 +1,8 @@
-import type { Meta, StoryObj } from '@storybook/react'
- 
+import type { Meta, StoryObj } from '@storybook/nextjs-vite'
+
 import { EnhancedProductList } from './EnhancedProductList'
 
 // Mock de datos de productos para las stories
-const mockProducts = [
-  {
-    id: '1',
-    name: 'iPhone 15 Pro',
-    sku: 'IPH15P-256-BLU',
-    stock_quantity: 25,
-    min_stock: 10,
-    max_stock: 100,
-    sale_price: 1199.99,
-    purchase_price: 899.99,
-    category_name: 'Smartphones',
-    supplier_name: 'Apple Inc.',
-    created_at: '2024-01-15T10:00:00Z',
-    updated_at: '2024-01-20T15:30:00Z'
-  },
-  {
-    id: '2',
-    name: 'Samsung Galaxy S24',
-    sku: 'SGS24-128-BLK',
-    stock_quantity: 5,
-    min_stock: 10,
-    max_stock: 80,
-    sale_price: 899.99,
-    purchase_price: 649.99,
-    category_name: 'Smartphones',
-    supplier_name: 'Samsung Electronics',
-    created_at: '2024-01-10T08:00:00Z',
-    updated_at: '2024-01-18T12:00:00Z'
-  },
-  {
-    id: '3',
-    name: 'MacBook Air M3',
-    sku: 'MBA-M3-512-SLV',
-    stock_quantity: 0,
-    min_stock: 5,
-    max_stock: 30,
-    sale_price: 1499.99,
-    purchase_price: 1199.99,
-    category_name: 'Laptops',
-    supplier_name: 'Apple Inc.',
-    created_at: '2024-01-05T14:00:00Z',
-    updated_at: '2024-01-22T09:15:00Z'
-  },
-  {
-    id: '4',
-    name: 'Dell XPS 13',
-    sku: 'DXP13-1TB-BLK',
-    stock_quantity: 15,
-    min_stock: 8,
-    max_stock: 40,
-    sale_price: 1299.99,
-    purchase_price: 999.99,
-    category_name: 'Laptops',
-    supplier_name: 'Dell Technologies',
-    created_at: '2024-01-12T11:30:00Z',
-    updated_at: '2024-01-19T16:45:00Z'
-  },
-  {
-    id: '5',
-    name: 'AirPods Pro 2',
-    sku: 'APP2-WHT',
-    stock_quantity: 150,
-    min_stock: 20,
-    max_stock: 200,
-    sale_price: 249.99,
-    purchase_price: 179.99,
-    category_name: 'Audio',
-    supplier_name: 'Apple Inc.',
-    created_at: '2024-01-08T13:20:00Z',
-    updated_at: '2024-01-21T10:30:00Z'
-  }
-]
 
 const meta: Meta<typeof EnhancedProductList> = {
   title: 'Products/Core/EnhancedProductList',
@@ -265,7 +193,7 @@ export const Loading: Story = {
       }
     }
   },
-  render: (args) => {
+  render: (_args) => {
     // Simular estado de carga
     return (
       <div className="space-y-4">
@@ -306,7 +234,7 @@ export const Empty: Story = {
       }
     }
   },
-  render: (args) => {
+  render: (_args) => {
     return (
       <div className="text-center py-12">
         <div className="h-12 w-12 mx-auto text-muted-foreground mb-4">

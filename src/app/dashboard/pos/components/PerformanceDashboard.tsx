@@ -11,21 +11,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Activity, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
-  Database,
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2, Database,
   Gauge,
   RefreshCw,
   Search,
-  ShoppingCart,
-  TrendingDown,
-  TrendingUp,
-  Zap,
+  ShoppingCart, Zap,
   BarChart3,
   Eye,
   Settings
@@ -55,15 +49,15 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
     generateReport,
     refreshReport,
     setMonitoring,
-    getStatus
+    getStatus: _getStatus
   } = usePerformanceMonitor()
 
   const {
     alerts,
     criticalAlerts,
-    warningAlerts,
+    warningAlerts: _warningAlerts,
     hasCriticalAlerts,
-    hasWarnings,
+    hasWarnings: _hasWarnings,
     clearAlerts
   } = usePerformanceAlerts()
 
@@ -122,22 +116,6 @@ export const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({
     return `${value.toFixed(1)}${unit}`
   }
 
-  const getMetricIcon = (metricName: string) => {
-    switch (metricName) {
-      case 'cart-operation':
-        return <ShoppingCart className="h-4 w-4" />
-      case 'product-search':
-        return <Search className="h-4 w-4" />
-      case 'sale-processing':
-        return <Activity className="h-4 w-4" />
-      case 'database-query':
-        return <Database className="h-4 w-4" />
-      case 'render-time':
-        return <Eye className="h-4 w-4" />
-      default:
-        return <Gauge className="h-4 w-4" />
-    }
-  }
 
   if (!isMonitoring) {
     return (

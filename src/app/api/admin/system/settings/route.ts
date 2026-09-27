@@ -13,6 +13,7 @@ import {
   mergeTenantAdminSettings,
   normalizeOrganizationModules,
 } from '@/lib/organization/admin-settings'
+import { resolveSettingsOrganizationId } from '@/lib/organization/resolve-settings-organization'
 
 const RATE_LIMIT = 20
 const RATE_LIMIT_WINDOW = 60 * 1000
@@ -66,7 +67,7 @@ async function handleTenantUpdate(
       supabase.from('system_settings').select('*').eq('id', 'system').single(),
       supabase
         .from('organization_settings')
-        .select('modules, currency')
+        .select('modules, currency, repair_max_discount_percent, repair_labor_tax_rate')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
@@ -86,6 +87,8 @@ async function handleTenantUpdate(
     ...toFrontendSettings(globalRow as Record<string, unknown>),
     ...existingTenantSettings,
     ...(orgSettings?.currency ? { currency: orgSettings.currency } : {}),
+    repairMaxDiscountPercent: Number(orgSettings?.repair_max_discount_percent ?? 20),
+    repairLaborTaxRate: (orgSettings?.repair_labor_tax_rate ?? 10) as 0 | 5 | 10,
   }
   if (
     settings.currency !== undefined
@@ -116,6 +119,8 @@ async function handleTenantUpdate(
     currency: effectiveSettings.currency,
     timezone: effectiveSettings.timeZone,
     modules: mergeTenantAdminSettings(existingModules, tenantSettings),
+    repair_max_discount_percent: effectiveSettings.repairMaxDiscountPercent,
+    repair_labor_tax_rate: effectiveSettings.repairLaborTaxRate,
     updated_at: new Date().toISOString(),
   }
 
@@ -157,7 +162,11 @@ async function handleTenantUpdate(
     user_id: context.user.id,
     action: 'update_organization_settings',
     resource: 'organization_settings',
+    // El id de la tienda ya estaba a mano en `resource_id`, pero la pantalla de
+    // seguridad filtra por la columna propia y el evento no llegaba.
     resource_id: organizationId,
+    organization_id: organizationId,
+    severity: 'medium',
     new_values: withoutPlatformSettings(settings),
   })
   if (auditError) console.error('Failed to audit organization settings update', { auditError, organizationId })
@@ -195,6 +204,32 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       return handleTenantUpdate(context, validation.data, body?.confirmCurrencyChange === true)
     }
 
+    // Un superadmin guardando la configuracion de SU organizacion. Sin este
+    // alcance explicito, todo lo que guardaba desde /admin/settings —nombre,
+    // RUC, IVA, moneda de su empresa— se escribia en la fila global de la
+    // plataforma. La pantalla global (/superadmin/settings) no manda `scope` y
+    // sigue escribiendo en `system_settings` como antes.
+    if (body?.scope === 'organization') {
+      const organizationId = await resolveSettingsOrganizationId(createAdminSupabase(), context.user.id, {
+        requireStaff: true,
+      })
+      if (!organizationId) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'NO_ORGANIZATION',
+            error: 'No estás dentro de ninguna organización. La configuración de la plataforma está en Super Admin.',
+          },
+          { status: 403 }
+        )
+      }
+      return handleTenantUpdate(
+        { ...context, organizationId },
+        validation.data,
+        body?.confirmCurrencyChange === true
+      )
+    }
+
     const supabase = createAdminSupabase()
     const { data, error } = await supabase
       .from('system_settings')
@@ -223,6 +258,10 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       action: 'update_system_settings',
       resource: 'system_settings',
       resource_id: 'system',
+      // Sin organizacion a proposito: son los ajustes globales de la
+      // plataforma, no los de un comercio. El otro insert de este archivo, que
+      // si es por tienda, la escribe.
+      severity: 'high',
       new_values: validation.data,
     })
     if (auditError) console.error('Failed to audit global settings update', { auditError })

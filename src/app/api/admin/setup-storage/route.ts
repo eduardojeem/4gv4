@@ -21,6 +21,9 @@ async function handler(request: NextRequest, context: { user: { id: string; emai
       action: 'setup_storage',
       resource: 'storage',
       resource_id: 'buckets',
+      // Sin organizacion a proposito: prepara el almacenamiento de la
+      // plataforma, no de un comercio. Lo ve el registro de superadmin.
+      severity: 'medium',
       new_values: { success: true }
     })
 
@@ -35,10 +38,11 @@ async function handler(request: NextRequest, context: { user: { id: string; emai
       message: 'Storage configurado correctamente' 
     })
 
-  } catch (error: any) {
-    logger.error('Error configurando storage', { error: error.message })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
+    logger.error('Error configurando storage', { error: message })
     return NextResponse.json(
-      { error: 'Error interno del servidor', details: error.message }, 
+      { error: 'Error interno del servidor', details: message }, 
       { status: 500 }
     )
   }

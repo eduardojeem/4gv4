@@ -1,33 +1,16 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
-  Search,
-  Filter,
-  Plus,
-  MoreVertical,
-  Edit,
-  Trash2,
-  Eye,
-  Star,
-  Building2,
-  Phone,
-  Mail,
-  MapPin,
-  Calendar,
-  TrendingUp,
-  AlertCircle,
+  Search, Plus, Star,
+  Building2, AlertCircle,
   CheckCircle,
   Clock,
   SortAsc,
@@ -89,7 +72,6 @@ interface SupplierListProps {
 }
 
 // Mock data removed
-const mockSuppliers: SupplierData[] = []
 
 const supplierCategories = [
   'Todos',
@@ -118,7 +100,7 @@ export default function SupplierList({
   onSupplierCreate,
   onSupplierUpdate,
   onSupplierDelete,
-  onSupplierSelect
+  onSupplierSelect: _onSupplierSelect
 }: SupplierListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
@@ -127,10 +109,10 @@ export default function SupplierList({
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'createdAt'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
-  const [selectedSupplier, setSelectedSupplier] = useState<SupplierData | null>(null)
-  const [showFilters, setShowFilters] = useState(false)
+  const [_showCreateDialog, setShowCreateDialog] = useState(false)
+  const [_showEditDialog, setShowEditDialog] = useState(false)
+  const [_selectedSupplier, setSelectedSupplier] = useState<SupplierData | null>(null)
+  const [_showFilters, _setShowFilters] = useState(false)
 
   const filteredAndSortedSuppliers = useMemo(() => {
     const filtered = suppliers.filter(supplier => {
@@ -147,7 +129,8 @@ export default function SupplierList({
 
     // Ordenar
     filtered.sort((a, b) => {
-      let aValue: any, bValue: any
+      let aValue: string | number = 0
+      let bValue: string | number = 0
 
       switch (sortBy) {
         case 'name':
@@ -176,29 +159,29 @@ export default function SupplierList({
     return filtered
   }, [suppliers, debouncedSearchTerm, selectedCategory, selectedStatus, sortBy, sortOrder])
 
-  const handleCreateSupplier = useCallback((supplierData: SupplierData) => {
+  void (useCallback((supplierData: SupplierData) => {
     onSupplierCreate?.(supplierData)
     setShowCreateDialog(false)
-  }, [onSupplierCreate])
+  }, [onSupplierCreate]));
 
-  const handleUpdateSupplier = useCallback((supplierData: SupplierData) => {
+  void (useCallback((supplierData: SupplierData) => {
     onSupplierUpdate?.(supplierData)
     setShowEditDialog(false)
     setSelectedSupplier(null)
-  }, [onSupplierUpdate])
+  }, [onSupplierUpdate]));
 
-  const handleDeleteSupplier = useCallback((supplierId: string) => {
+  void (useCallback((supplierId: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar este proveedor?')) {
       onSupplierDelete?.(supplierId)
     }
-  }, [onSupplierDelete])
+  }, [onSupplierDelete]));
 
-  const handleEditSupplier = useCallback((supplier: SupplierData) => {
+  void (useCallback((supplier: SupplierData) => {
     setSelectedSupplier(supplier)
     setShowEditDialog(true)
-  }, [])
+  }, []));
 
-  const getStatusBadge = useCallback((status: string) => {
+  void (useCallback((status: string) => {
     switch (status) {
       case 'active':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Activo</Badge>
@@ -209,9 +192,9 @@ export default function SupplierList({
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
-  }, [])
+  }, []));
 
-  const getRatingStars = useCallback((rating: number) => {
+  void (useCallback((rating: number) => {
     return (
       <div className="flex items-center">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -223,7 +206,7 @@ export default function SupplierList({
         <span className="ml-1 text-sm text-muted-foreground">({rating})</span>
       </div>
     )
-  }, [])
+  }, []));
 
 
 

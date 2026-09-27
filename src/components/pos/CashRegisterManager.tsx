@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, TrendingDown, X, FileText } from 'lucide-react'
+import { TrendingUp, TrendingDown, FileText } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

@@ -17,10 +17,13 @@ interface RepairListCompanyInfo {
 interface RepairListProps {
     repairs: Repair[]
     onStatusChange?: (id: string, status: RepairStatus) => void
-    onEdit: (repair: Repair) => void
+    onEdit?: (repair: Repair) => void
     onView?: (repair: Repair) => void
     onDelete?: (id: string) => void
     onDeliver?: (repair: Repair) => void
+    onQualityCheck?: (repair: Repair) => void
+    onQuickPay?: (repair: Repair) => void
+    onClaimWarranty?: (repair: Repair) => void
     isLoading?: boolean
     companyInfo?: RepairListCompanyInfo
 }
@@ -32,6 +35,9 @@ export const RepairList = memo<RepairListProps>(function RepairList({
     onView,
     onDelete,
     onDeliver,
+    onQualityCheck,
+    onQuickPay,
+    onClaimWarranty,
     isLoading,
     companyInfo,
 }) {
@@ -87,6 +93,9 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                                 onView={onView}
                                 onDelete={onDelete}
                                 onDeliver={onDeliver}
+                                onQualityCheck={onQualityCheck}
+                                onQuickPay={onQuickPay}
+                                onClaimWarranty={onClaimWarranty}
                                 companyInfo={companyInfo}
                             />
                         ))}

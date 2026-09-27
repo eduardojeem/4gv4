@@ -519,6 +519,10 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
         action: 'bulk_user_import',
         resource: 'users',
         resource_id: 'bulk',
+        // Sin la tienda el evento no aparece en /admin/security, que filtra por
+        // esta columna: quedaba guardado e invisible.
+        organization_id: context.organizationId,
+        severity: 'medium',
         new_values: {
           total: users.length,
           imported: okCount,

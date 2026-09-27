@@ -1,19 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { AppImage } from '@/components/ui/app-image'
+
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Building2, Menu, Store, X, User, LayoutDashboard } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import {
+  Building2,
+  ChevronRight,
+  CreditCard, LayoutDashboard, LogOut,
+  Menu, Sparkles,
+  Store, LogIn,
+  X,
+  Zap
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { resolveLogoSize } from '@/lib/platform/logo-size'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AuthModal } from '@/components/public/AuthModal'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { cn } from '@/lib/utils'
 
 const navLinks = [
-  { label: 'Caracteristicas', href: '/saas#caracteristicas' },
-  { label: 'Negocios', href: '/saas/negocios' },
-  { label: 'Planes', href: '/saas/planes' },
+  { label: 'Inicio', href: '/saas', icon: Sparkles, exact: true },
+  { label: 'Soluciones', href: '/saas/Soluciones', icon: Zap, exact: false },
+  { label: 'Negocios', href: '/saas/negocios', icon: Building2, exact: false },
+  { label: 'Planes', href: '/saas/planes', icon: CreditCard, exact: false },
 ]
 
 interface SaaSPublicNavProps {
@@ -24,176 +38,417 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const pathname = usePathname()
-  const { user } = useAuth()
+  const router = useRouter()
+  const { user, signOut } = useAuth()
   const isDark = variant === 'dark'
   const { branding } = usePlatformBranding()
+  const isLoginPage = pathname === '/login' || pathname?.startsWith('/login')
 
-  function isActive(href: string) {
-    if (href.includes('#')) return pathname === '/saas'
-    return pathname === href || pathname.startsWith(href + '/')
+  // Cerrar drawer al cambiar de ruta
+  const [previousPathname, setPreviousPathname] = useState(pathname)
+  if (previousPathname !== pathname) {
+    setPreviousPathname(pathname)
+    setMobileOpen(false)
   }
+
+  // Bloquear scroll cuando el drawer está abierto
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileOpen])
+
+  const canAccessDashboard =
+    user?.role === 'super_admin' ||
+    user?.role === 'admin' ||
+    user?.role === 'tecnico' ||
+    user?.role === 'vendedor'
+
+  const userInitials = user?.profile?.name
+    ? user.profile.name
+        .split(' ')
+        .map((part: string) => part[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : 'U'
+
+  function isActive(href: string, exact = false) {
+    const lowerPath = (pathname || '').toLowerCase()
+    const lowerHref = href.toLowerCase()
+    if (exact) return lowerPath === lowerHref
+    if (href.includes('#')) return lowerPath === '/saas'
+    return lowerPath === lowerHref || lowerPath.startsWith(lowerHref + '/')
+  }
+
+  async function handleLogout() {
+    await signOut()
+    setMobileOpen(false)
+    router.push('/saas')
+    router.refresh()
+  }
+
+  // Tamaño del logo: definicion unica compartida con el nav del marketplace.
+  const logoSize = resolveLogoSize(branding)
+  const currentHeight = logoSize.className
+  const darkGlowClass =
+    branding.logoGlowDark !== false
+      ? 'drop-shadow-[0_3px_18px_rgba(6,182,212,0.4)]'
+      : 'drop-shadow-xs'
 
   return (
     <>
-    <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
-      isDark
-        ? 'border-slate-800/80 bg-slate-950/85'
-        : 'border-slate-200/70 bg-white/90 dark:border-slate-800 dark:bg-slate-950/90'
-    }`}>
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/saas" className="flex items-center gap-3">
-          {branding.logoUrl ? (
-            <div className="flex h-10 items-center">
-              <img src={branding.logoUrl} alt={branding.platformName} className="h-10 w-auto max-w-[180px] object-contain" />
-            </div>
-          ) : (
-            <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-              isDark ? 'bg-blue-600 text-white' : 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
-            }`}>
-              <Building2 className="h-5 w-5" />
-            </div>
-          )}
-          <div>
-            <div className={`text-sm font-semibold leading-none ${isDark ? 'text-white' : 'text-slate-950 dark:text-slate-50'}`}>{branding.platformName}</div>
-            <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{branding.platformTagline}</div>
-          </div>
-        </Link>
-
-        <nav className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-                href={link.href}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                isDark
-                  ? isActive(link.href)
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                  : isActive(link.href)
-                    ? 'bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-white'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white'
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-
-          <Button asChild variant="outline" size="sm" className={`hidden gap-2 sm:inline-flex ${
-            isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
-          }`}>
-            <Link href={branding.secondaryCtaHref}>
-              <Store className="h-4 w-4" />
-              {branding.secondaryCtaLabel}
-            </Link>
-          </Button>
-
-          {user ? (
-            <Button asChild size="sm" className="hidden gap-2 md:inline-flex bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md">
-              <Link href="/dashboard">
-                <LayoutDashboard className="h-4 w-4" />
-                Ir al Panel
-              </Link>
-            </Button>
-          ) : (
-            <>
-              {/* Botón "Mi cuenta" */}
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setAuthOpen(true)}
-                className="group hidden gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 pl-1.5 pr-4 text-white shadow-md shadow-cyan-600/25 transition-all duration-200 hover:from-cyan-500 hover:to-sky-500 hover:shadow-lg hover:shadow-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 active:scale-[0.97] dark:focus-visible:ring-offset-slate-950 md:inline-flex"
-              >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 transition-transform duration-200 group-hover:scale-110">
-                  <User className="h-3.5 w-3.5" />
-                </span>
-                Mi cuenta
-              </Button>
-            </>
-          )}
-          <button
-            onClick={() => setMobileOpen((v) => !v)}
-            className={`flex h-9 w-9 items-center justify-center rounded-md border transition md:hidden ${
-              isDark
-                ? 'border-slate-700 text-slate-300 hover:bg-slate-900 hover:text-white'
-                : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900'
-            }`}
-            aria-label={mobileOpen ? 'Cerrar menu' : 'Abrir menu'}
+      <header
+        className={`sticky top-0 z-40 border-b backdrop-blur-2xl transition-colors duration-200 ${
+          isDark
+            ? 'border-slate-800/80 bg-slate-950/90 shadow-[0_4px_30px_rgba(0,0,0,0.5)]'
+            : 'border-slate-200/80 bg-white/90 shadow-[0_4px_24px_rgba(0,0,0,0.04)] dark:border-slate-800/80 dark:bg-slate-950/90 dark:shadow-[0_4px_30px_rgba(0,0,0,0.5)]'
+        }`}
+      >
+        <div className="mx-auto flex h-16 sm:h-18 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          
+          {/* Logo & Identidad */}
+          <Link
+            href="/saas"
+            className="group flex items-center gap-3.5 shrink-0 transition-transform duration-200 active:scale-[0.98]"
           >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </button>
-        </div>
-      </div>
-
-      {mobileOpen && (
-        <div className={`border-t px-4 py-3 md:hidden ${
-          isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950'
-        }`}>
-          <nav className="flex flex-col gap-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive(link.href)
-                    ? isDark
-                      ? 'bg-slate-800 text-white'
-                      : 'bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-white'
-                    : isDark
-                      ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900'
+            {branding.logoUrl || branding.logoDarkUrl ? (
+              <div className="flex items-center transition-all duration-300 group-hover:scale-[1.03]">
+                {branding.logoDarkUrl && branding.logoUrl ? (
+                  <>
+                    <AppImage
+                      src={branding.logoUrl}
+                      alt={branding.platformName}
+                      className={`${currentHeight} w-auto object-contain drop-shadow-xs ${
+                        isDark ? 'hidden' : 'dark:hidden'
+                      }`}
+                      style={logoSize.style}
+                    />
+                    <AppImage
+                      src={branding.logoDarkUrl}
+                      alt={branding.platformName}
+                      className={`${currentHeight} w-auto object-contain ${darkGlowClass} ${
+                        isDark ? 'block' : 'hidden dark:block'
+                      }`}
+                      style={logoSize.style}
+                    />
+                  </>
+                ) : (
+                  <AppImage
+                    src={branding.logoUrl || branding.logoDarkUrl}
+                    alt={branding.platformName}
+                    className={`${currentHeight} w-auto object-contain ${
+                      isDark ? darkGlowClass : 'drop-shadow-xs'
+                    }`}
+                    style={logoSize.style}
+                  />
+                )}
+              </div>
+            ) : (
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg transition-transform group-hover:scale-105 ${
+                  isDark
+                    ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-cyan-950/50'
+                    : 'bg-gradient-to-br from-slate-900 to-slate-950 text-white shadow-slate-950/20 dark:from-cyan-500 dark:to-blue-600 dark:shadow-cyan-950/50'
                 }`}
               >
-                {link.label}
-              </Link>
-            ))}
+                <Building2 className="h-5 w-5" />
+              </div>
+            )}
+
+            {!branding.hideNavBrandText && (
+              <div className="hidden min-[420px]:block">
+                <div
+                  className={`text-sm sm:text-base font-extrabold leading-none tracking-tight transition-colors ${
+                    isDark
+                      ? 'text-white group-hover:text-cyan-300'
+                      : 'text-slate-950 group-hover:text-cyan-700 dark:text-slate-50 dark:group-hover:text-cyan-300'
+                  }`}
+                >
+                  {branding.platformName}
+                </div>
+                {!branding.hideNavTagline && (
+                  <div
+                    className={`mt-1 text-[11px] font-medium leading-tight ${
+                      isDark ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {branding.platformTagline}
+                  </div>
+                )}
+              </div>
+            )}
+          </Link>
+
+          {/* Desktop Navigation Links */}
+          <nav className="hidden items-center gap-1.5 lg:flex rounded-full border border-slate-200/80 bg-slate-100/70 p-1 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60">
+            {navLinks.map((link) => {
+              const active = isActive(link.href, link.exact)
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                    active
+                      ? isDark
+                        ? 'bg-cyan-500 text-slate-950 shadow-xs'
+                        : 'bg-white text-slate-950 shadow-xs dark:bg-cyan-500 dark:text-slate-950'
+                      : isDark
+                        ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        : 'text-slate-600 hover:bg-white/80 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              )
+            })}
           </nav>
-          <div className={`mt-3 flex flex-col gap-2 border-t pt-3 ${isDark ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
-            <Button asChild variant="outline" size="sm" className={`w-full gap-2 ${
-              isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
-            }`}>
-              <Link href={branding.secondaryCtaHref} onClick={() => setMobileOpen(false)}>
-                <Store className="h-4 w-4" />
+
+          {/* Right Action Buttons */}
+          <div className="flex items-center gap-2.5">
+            <ThemeToggle />
+
+            {/* Marketplace Button — Resaltado con color fijo que no cambia entre modo claro y oscuro */}
+            <Button
+              asChild
+              size="sm"
+              className="hidden gap-2 sm:inline-flex rounded-xl font-bold text-xs h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-700/25 border-0 transition-all duration-200 active:scale-[0.97]"
+            >
+              <Link href={branding.secondaryCtaHref}>
+                <Store className="h-4 w-4 text-white" />
                 {branding.secondaryCtaLabel}
               </Link>
             </Button>
 
             {user ? (
-              <Button asChild size="sm" className="w-full gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md">
-                <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
+              <Button
+                asChild
+                size="sm"
+                className="hidden gap-2 lg:inline-flex bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold shadow-md shadow-cyan-600/20 rounded-xl h-9 px-4 text-xs"
+              >
+                <Link href="/dashboard">
                   <LayoutDashboard className="h-4 w-4" />
                   Ir al Panel
                 </Link>
               </Button>
+            ) : isLoginPage ? (
+              <Button
+                asChild
+                size="sm"
+                className="group hidden gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 pl-2.5 pr-4 text-slate-950 font-bold shadow-md shadow-cyan-500/25 transition-all duration-200 active:scale-[0.97] lg:inline-flex h-9 text-xs"
+              >
+                <Link href="/register">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950/15 transition-transform duration-200 group-hover:scale-110">
+                    <Building2 className="h-3.5 w-3.5 text-slate-950" />
+                  </span>
+                  Registrar empresa
+                </Link>
+              </Button>
             ) : (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="w-full gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-600/20 transition-all hover:from-cyan-500 hover:to-sky-500 active:scale-[0.99]"
-                  onClick={() => { setMobileOpen(false); setAuthOpen(true) }}
-                >
-                  <User className="h-4 w-4" />
-                  Mi cuenta
-                </Button>
-              </>
+              <Button
+                asChild
+                size="sm"
+                className="group hidden gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 pl-2.5 pr-4 text-slate-950 font-bold shadow-md shadow-cyan-500/25 transition-all duration-200 active:scale-[0.97] lg:inline-flex h-9 text-xs"
+              >
+                <Link href="/login">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950/15 transition-transform duration-200 group-hover:scale-110">
+                    <LogIn className="h-3.5 w-3.5 text-slate-950" />
+                  </span>
+                  Iniciar sesión
+                </Link>
+              </Button>
             )}
+
+            {/* Mobile & Tablet Drawer Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/80 bg-background text-foreground hover:bg-muted transition-colors lg:hidden"
+              aria-label="Abrir menú de navegación"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── MODAL / DRAWER LATERAL OFF-CANVAS (SHEET ESTILO MARKETPLACE) ── */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop Difuminado */}
+          <div
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Panel Deslizante Lateral Derecho */}
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-l border-border/80 transition-transform duration-300 animate-in slide-in-from-right">
+            
+            {/* Cabecera del Drawer */}
+            <div className="flex items-center justify-between pb-5 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-xs">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <span className="font-bold text-sm text-foreground truncate">
+                  {branding.platformName}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Cerrar menú"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Sección de Usuario / Cuenta */}
+            <div className="py-4 border-b border-border/60">
+              {user ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border border-border">
+                      <AvatarImage src={user.profile?.avatar_url || ''} />
+                      <AvatarFallback className="bg-cyan-500/10 text-cyan-600 font-bold text-xs">
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-foreground">
+                        {user.profile?.name || 'Usuario'}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </div>
+
+                  {canAccessDashboard && (
+                    <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl text-xs font-semibold text-cyan-600 dark:text-cyan-400">
+                      <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
+                        <LayoutDashboard className="h-4 w-4" />
+                        Panel administrativo
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              ) : isLoginPage ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Creá la cuenta para tu empresa:</p>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="w-full gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold shadow-xs hover:from-cyan-400 hover:to-blue-500"
+                  >
+                    <Link
+                      href="/register"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <Building2 className="h-4 w-4" />
+                      Registrar empresa
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Accedé a tu panel administrativo:</p>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="w-full gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold shadow-xs hover:from-cyan-400 hover:to-blue-500"
+                  >
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      Iniciar sesión
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Enlaces de Navegación Principal */}
+            <nav className="flex-1 overflow-y-auto py-4 space-y-1 scrollbar-thin scrollbar-thumb-muted">
+              <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Secciones SaaS
+              </p>
+
+              {navLinks.map((link) => {
+                const Icon = link.icon
+                const active = isActive(link.href, link.exact)
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                      active
+                        ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400'
+                        : 'text-foreground hover:bg-muted'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-4 w-4" />
+                      <span>{link.label}</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 opacity-50" />
+                  </Link>
+                )
+              })}
+
+              <div className="pt-3">
+                <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Ecosistema
+                </p>
+                <Link
+                  href={branding.secondaryCtaHref}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center justify-between rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2.5 text-sm font-bold shadow-sm transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Store className="h-4 w-4 text-white" />
+                    <span>{branding.secondaryCtaLabel}</span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-white/70" />
+                </Link>
+              </div>
+            </nav>
+
+            {/* Pie del Drawer */}
+            <div className="pt-4 border-t border-border/60 space-y-3">
+              {user && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesión
+                </button>
+              )}
+            </div>
+
           </div>
         </div>
       )}
-    </header>
 
-    {/* Auth modal — mismo modal que el marketplace, con rutas del SaaS */}
-    <AuthModal
-      open={authOpen}
-      onClose={() => setAuthOpen(false)}
-      loginHref="/login"
-      registerHref="/register"
-    />
+      {/* Auth modal */}
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        loginHref="/login"
+        registerHref="/register"
+      />
     </>
   )
 }

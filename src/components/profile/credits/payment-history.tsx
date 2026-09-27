@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CreditPayment } from "./credits-client"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { paymentMethodLabel } from '@/lib/i18n/labels'
 
 interface PaymentHistoryProps {
   payments: CreditPayment[]
@@ -57,7 +58,7 @@ export function PaymentHistory({ payments }: PaymentHistoryProps) {
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="capitalize">
-                    {payment.payment_method}
+                    {paymentMethodLabel(payment.payment_method)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">

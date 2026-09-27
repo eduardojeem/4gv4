@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { verifyRepairHash } from '@/lib/repair-qr'
+import { verifyRepairHash } from '@/lib/repair-qr-hash'
 
 /**
  * API endpoint para verificar el hash de un QR de reparación
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // 1) Formato nuevo con customer_id (estable)
     // 2) Compatibilidad con comprobantes antiguos usando customer name
     const customerId = repair.customer_id || ''
-    const customerName = (repair.customers as any)?.name || ''
+    const customerName = (repair.customers as { name?: string | null } | null)?.name || ''
     const repairDate = new Date(repair.created_at)
     const isValid =
       (customerId ? verifyRepairHash(ticketNumber, customerId, repairDate, hash) : false) ||

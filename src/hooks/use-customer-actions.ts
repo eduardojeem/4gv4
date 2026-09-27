@@ -1,11 +1,20 @@
 import { useCallback, Dispatch, SetStateAction } from "react"
 import { toast } from "sonner"
-import { Customer, CustomerFilters, CustomerState, mapRawToCustomer } from "./use-customer-state"
+import {
+  Customer,
+  CustomerFilters,
+  CustomerState,
+  keepComputedSpend,
+  mapRawToCustomer,
+  syncCustomerSpend,
+  withEmptySpend,
+} from "./use-customer-state"
 import { AppError, ErrorCode } from "@/lib/errors"
 import { logger } from "@/lib/logging"
 
 interface UseCustomerActionsProps {
   setState: Dispatch<SetStateAction<CustomerState>>
+  onRefresh?: () => Promise<Customer[] | undefined>
 }
 
 async function readApiResponse(response: Response) {
@@ -34,15 +43,15 @@ async function readApiResponse(response: Response) {
 
 function toCustomerPayload(customerData: Partial<Customer>) {
   const {
-    id,
-    customerCode,
-    registration_date,
-    created_at,
-    last_visit,
-    last_activity,
-    repairs_history,
-    sales_history,
-    activity_timeline,
+    id: _id,
+    customerCode: _customerCode,
+    registration_date: _registration_date,
+    created_at: _created_at,
+    last_visit: _last_visit,
+    last_activity: _last_activity,
+    repairs_history: _repairs_history,
+    sales_history: _sales_history,
+    activity_timeline: _activity_timeline,
     ...payload
   } = customerData
 
@@ -50,7 +59,7 @@ function toCustomerPayload(customerData: Partial<Customer>) {
 }
 
 export function useCustomerActions(props?: UseCustomerActionsProps) {
-  const { setState } = props || {}
+  const { setState, onRefresh } = props || {}
 
   const updateFilters = useCallback((newFilters: Partial<CustomerFilters>) => {
     if (setState) {
@@ -87,6 +96,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   }, [setState])
 
   const refreshCustomers = useCallback(async (): Promise<Customer[] | undefined> => {
+    if (onRefresh) return onRefresh()
     try {
       // La API topea el limite en 200 por pagina: pedir 1000 devolvia solo los
       // primeros 200 y, como el filtrado es en memoria, el resto de los
@@ -148,8 +158,17 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         })
       }
 
+      // Recargar traía las columnas viejas: los totales se vuelven a calcular.
+      if (setState) {
+        void syncCustomerSpend(setState, customers).catch((spendError) => {
+          logger.warn('Customer spend sync failed after refresh', {
+            error: spendError instanceof Error ? spendError.message : String(spendError),
+          })
+        })
+      }
+
       return customers
-    } catch (error: any) {
+    } catch (error: unknown) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
         "Error al actualizar clientes",
@@ -160,7 +179,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.error(appError.message)
       throw appError
     }
-  }, [setState])
+  }, [setState, onRefresh])
 
   const createCustomer = useCallback(async (customerData: Partial<Customer>) => {
     try {
@@ -169,18 +188,20 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(toCustomerPayload(customerData)),
       }))
-      const customer = mapRawToCustomer(result.data)
+      const customer = withEmptySpend(mapRawToCustomer(result.data))
 
       if (setState) {
-        setState(prev => ({
-          ...prev,
-          customers: [customer, ...prev.customers]
-        }))
+        setState(prev => {
+          // El evento en tiempo real puede haberlo agregado antes que esta respuesta.
+          if (prev.customers.some((item) => item.id === customer.id)) return prev
+          return { ...prev, customers: [customer, ...prev.customers] }
+        })
       }
 
       toast.success("Cliente creado exitosamente")
+      if (onRefresh) void onRefresh()
       return { success: true, customer }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
         "Error al crear cliente",
@@ -191,7 +212,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.error(appError.message)
       return { success: false, error: appError }
     }
-  }, [setState])
+  }, [setState, onRefresh])
 
   const updateCustomer = useCallback(async (id: string, customerData: Partial<Customer>) => {
     try {
@@ -205,14 +226,15 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       if (setState) {
         setState(prev => ({
           ...prev,
-          customers: prev.customers.map(item => item.id === id ? customer : item),
-          selectedCustomer: prev.selectedCustomer?.id === id ? customer : prev.selectedCustomer,
+          // La respuesta trae la fila cruda: se conservan los totales calculados.
+          customers: prev.customers.map(item => item.id === id ? keepComputedSpend(customer, item) : item),
+          selectedCustomer: prev.selectedCustomer?.id === id ? keepComputedSpend(customer, prev.selectedCustomer) : prev.selectedCustomer,
         }))
       }
 
       logger.info('Customer updated successfully', { customerId: id })
       return { success: true, data: customer, customer }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
         "Error al actualizar cliente",
@@ -238,7 +260,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
       toast.success("Cliente eliminado exitosamente")
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // El servidor explica por que no se puede borrar (creditos, reparaciones):
       // ese mensaje es el util, no uno generico.
       const serverMessage = error instanceof Error ? error.message : ''
@@ -282,8 +304,9 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       }
 
       return result
-    } catch (error: any) {
-      toast.error("Error al exportar clientes: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al exportar clientes: " + message)
       return { success: false, error }
     }
   }, [])
@@ -314,62 +337,59 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     customerIds: string[],
     updates: Partial<Customer>
   ) => {
-    const MAX_BULK_UPDATE = 50
     try {
-      if (customerIds.length > MAX_BULK_UPDATE) {
-        toast.error(`No se pueden actualizar mas de ${MAX_BULK_UPDATE} clientes a la vez`)
-        return { success: false, error: `Limite de ${MAX_BULK_UPDATE} registros excedido` }
+      for (let index = 0; index < customerIds.length; index += 10) {
+        await Promise.all(customerIds.slice(index, index + 10).map(async (id) => readApiResponse(await fetch('/api/customers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...toCustomerPayload(updates), id }),
+        }))))
       }
-
-      await Promise.all(customerIds.map(async (id) => readApiResponse(await fetch('/api/customers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...toCustomerPayload(updates), id }),
-      }))))
 
       await refreshCustomers()
       toast.success(`${customerIds.length} cliente(s) actualizado(s)`)
       return { success: true, updated: customerIds.length }
-    } catch (error: any) {
-      toast.error("Error en actualizacion masiva: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error en actualizacion masiva: " + message)
       return { success: false, error }
     }
   }, [refreshCustomers])
 
   const bulkDelete = useCallback(async (customerIds: string[]) => {
-    const MAX_BULK_DELETE = 50
     try {
-      if (customerIds.length > MAX_BULK_DELETE) {
-        toast.error(`No se pueden eliminar mas de ${MAX_BULK_DELETE} clientes a la vez`)
-        return { success: false, error: `Limite de ${MAX_BULK_DELETE} registros excedido` }
+      let deleted = 0
+      for (let index = 0; index < customerIds.length; index += 50) {
+        const ids = customerIds.slice(index, index + 50)
+        const result = await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(ids.join(','))}`, { method: 'DELETE' }))
+        deleted += Number(result.deleted ?? 0)
       }
-
-      // El servidor devuelve cuantos borro realmente: un id de otra
-      // organizacion se filtra y no debe contarse como eliminado.
-      const result = await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(customerIds.join(','))}`, { method: 'DELETE' }))
-      const deleted = Number(result.deleted ?? customerIds.length)
       await refreshCustomers()
       toast.success(`${deleted} cliente(s) eliminado(s)`)
       return { success: true, deleted }
-    } catch (error: any) {
-      toast.error('No se pudieron eliminar los clientes', { description: error?.message })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error('No se pudieron eliminar los clientes', { description: message })
       return { success: false, error }
     }
   }, [refreshCustomers])
 
+  type CustomerNoteTagRecord = { id?: string; notes?: string; tags?: string[] }
+
   const addNote = useCallback(async (customerId: string, note: string) => {
     try {
       const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
-      const customersList = Array.isArray(result.data) ? result.data : []
-      const raw = customersList.find((customer: any) => customer.id === customerId)
+      const customersList = Array.isArray(result.data) ? (result.data as CustomerNoteTagRecord[]) : []
+      const raw = customersList.find((customer) => customer.id === customerId)
       const currentNotes = raw?.notes || ''
       const timestamp = new Date().toISOString()
       const notes = currentNotes ? `${currentNotes}\n\n[${timestamp}] ${note}` : `[${timestamp}] ${note}`
       await updateCustomer(customerId, { notes })
       toast.success("Nota agregada exitosamente")
       return { success: true }
-    } catch (error: any) {
-      toast.error("Error al agregar nota: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al agregar nota: " + message)
       return { success: false, error }
     }
   }, [updateCustomer])
@@ -377,14 +397,15 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   const addTag = useCallback(async (customerId: string, tag: string) => {
     try {
       const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
-      const customersList = Array.isArray(result.data) ? result.data : []
-      const raw = customersList.find((customer: any) => customer.id === customerId)
+      const customersList = Array.isArray(result.data) ? (result.data as CustomerNoteTagRecord[]) : []
+      const raw = customersList.find((customer) => customer.id === customerId)
       const tags = Array.from(new Set([...(raw?.tags || []), tag]))
       await updateCustomer(customerId, { tags })
       toast.success("Etiqueta agregada exitosamente")
       return { success: true }
-    } catch (error: any) {
-      toast.error("Error al agregar etiqueta: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al agregar etiqueta: " + message)
       return { success: false, error }
     }
   }, [updateCustomer])
@@ -392,14 +413,15 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   const removeTag = useCallback(async (customerId: string, tag: string) => {
     try {
       const result = await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(customerId)}&limit=1`))
-      const customersList = Array.isArray(result.data) ? result.data : []
-      const raw = customersList.find((customer: any) => customer.id === customerId)
+      const customersList = Array.isArray(result.data) ? (result.data as CustomerNoteTagRecord[]) : []
+      const raw = customersList.find((customer) => customer.id === customerId)
       const tags = (raw?.tags || []).filter((item: string) => item !== tag)
       await updateCustomer(customerId, { tags })
       toast.success("Etiqueta eliminada exitosamente")
       return { success: true }
-    } catch (error: any) {
-      toast.error("Error al eliminar etiqueta: " + error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error("Error al eliminar etiqueta: " + message)
       return { success: false, error }
     }
   }, [updateCustomer])

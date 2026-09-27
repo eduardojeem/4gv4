@@ -8,9 +8,24 @@ import {
 } from 'recharts'
 import { formatCurrency } from '@/lib/currency'
 
+export interface CashRegisterReportChartData {
+  incomes: number
+  expenses: number
+  cashSales?: number
+  cardSales?: number
+  transferSales?: number
+  mixedSales?: number
+}
+
 interface CashRegisterChartsProps {
-  cashReport: any
-  movements?: any[]
+  cashReport: CashRegisterReportChartData | null
+  movements?: Array<{
+    type?: string
+    amount?: number
+    payment_method?: string
+    reason?: string
+    note?: string
+  }>
   precalculatedTotals?: {
     cash: number
     card: number
@@ -29,7 +44,7 @@ export function CashRegisterCharts({ cashReport, movements, precalculatedTotals 
     methodTotals = precalculatedTotals
   } else if (movements) {
     const sales = movements.filter(m => m.type === 'sale')
-    const detectMethod = (m: any) => {
+    const detectMethod = (m: { payment_method?: string; reason?: string; note?: string }) => {
       if (m.payment_method) return m.payment_method
       const note = String((m.reason || m.note || '')).toLowerCase()
       if (note.includes('card') || note.includes('tarjeta')) return 'card'
@@ -39,7 +54,8 @@ export function CashRegisterCharts({ cashReport, movements, precalculatedTotals 
     }
 
     sales.forEach(s => {
-      const m = detectMethod(s) as keyof typeof methodTotals
+      const detected = detectMethod(s)
+      const m = (detected in methodTotals ? detected : 'cash') as keyof typeof methodTotals
       methodTotals[m] += Number(s.amount || 0)
     })
   }

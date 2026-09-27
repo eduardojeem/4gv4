@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ImageUpload } from './image-upload'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
-import type { Database } from '@/lib/supabase/types'
 
 interface ProductFormData {
   // Información básica
@@ -95,7 +94,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false }: ProductFormProps) {
-  const supabase = createClient() as any
+  const supabase = createClient()
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
@@ -144,11 +143,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
         const { data: catData, error: catError } = catResult
         const { data: supData, error: supError } = supResult
         if (!catError && Array.isArray(catData)) {
-          const mappedCats: Category[] = (catData as any[]).map(c => ({ id: c.id, name: c.name, subcategories: [] }))
+          const mappedCats: Category[] = catData.map(c => ({ id: c.id, name: c.name, subcategories: [] }))
           setCategories(mappedCats)
         }
         if (!supError && Array.isArray(supData)) {
-          const mappedSuppliers: Supplier[] = (supData as any[]).map(s => ({
+          const mappedSuppliers: Supplier[] = supData.map(s => ({
             id: s.id,
             name: s.name,
             contact: s.contact_name || '',
@@ -159,11 +158,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
           setSuppliers(mappedSuppliers)
         }
       } catch (e) {
-        console.error('Error al cargar datos desde Supabase:', (e as any)?.message)
+        const message = e instanceof Error ? e.message : 'Error desconocido'
+        console.error('Error al cargar datos desde Supabase:', message)
       }
     }
     loadData()
-  }, [])
+  }, [supabase])
 
   // Calcular márgenes automáticamente
   useEffect(() => {
@@ -203,7 +203,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
     setFormData(prev => ({ ...prev, sku }))
   }
 
-  const handleInputChange = (field: keyof ProductFormData, value: any) => {
+  const handleInputChange = <K extends keyof ProductFormData>(field: K, value: ProductFormData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))

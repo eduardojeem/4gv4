@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useTransition, useCallback } from 'react'
+import type { SaleItemLike, SaleLike } from '@/lib/credits/display'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '@/lib/config'
@@ -78,54 +79,6 @@ type InstallmentFilters = {
 export const isInstallmentLate = (i: InstallmentRow): boolean =>
   i.status === 'late' || (i.status === 'pending' && startOfLocalDay(i.due_date) < startOfLocalDay(new Date()))
 
-const fetchData = async (supabase: SupabaseClient) => {
-  const [
-    creditsResult,
-    installmentsResult,
-    paymentsResult,
-    summaryResult,
-    installmentsProgressResult,
-    customersResult
-  ] = await Promise.all([
-    // Credits: all records (usually small dataset)
-    supabase.from('credit_details').select('*') as unknown as Promise<{ data?: unknown }>,
-
-    // Installments: all for active/defaulted credits — limited to 1000 rows as safety net
-    supabase
-      .from('credit_installments')
-      .select('*')
-      .order('due_date', { ascending: true })
-      .order('installment_number', { ascending: true })
-      .limit(1000) as unknown as Promise<{ data?: unknown }>,
-
-    // Payments: most recent 300 only — history tab paginates the rest
-    supabase
-      .from('credit_payments')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(300) as unknown as Promise<{ data?: unknown }>,
-
-    // Summary view: aggregated per credit — small dataset
-    supabase.from('credit_summary').select('*') as unknown as Promise<{ data?: unknown }>,
-
-    // Progress view: limited to 1000 rows matching the installments limit
-    supabase.from('credit_installments_progress').select('*').limit(1000) as unknown as Promise<{ data?: unknown }>,
-
-    // Customers: only id + code needed for display
-    supabase.from('customers').select('id, customer_code') as unknown as Promise<{ data?: unknown }>
-  ])
-  return {
-    dbCredits: creditsResult.data,
-    dbInstallments: installmentsResult.data,
-    dbPayments: paymentsResult.data,
-    dbSummary: summaryResult.data,
-    dbInstallmentsProgress: installmentsProgressResult.data,
-    dbCustomers: customersResult.data
-  }
-}
-
-void fetchData
-
 const emptyTenantCreditsData = {
     dbCredits: [],
     dbInstallments: [],
@@ -174,8 +127,8 @@ export function useCredits(enabled = true) {
     const [payments, setPayments] = useState<PaymentRow[]>([])
     const [summary, setSummary] = useState<Record<string, CreditSummaryRow>>({})
     const [installmentsProgress, setInstallmentsProgress] = useState<Record<string, InstallmentProgressRow>>({})
-    const [sales, setSales] = useState<any[]>([])
-    const [saleItems, setSaleItems] = useState<any[]>([])
+    const [sales, setSales] = useState<SaleLike[]>([])
+    const [saleItems, setSaleItems] = useState<SaleItemLike[]>([])
 
     // Keep these exposed if components need them, or wrap them in actions
     const [filterValues, setFilterValues] = useState<InstallmentFilters>({
@@ -187,7 +140,16 @@ export function useCredits(enabled = true) {
         customerName: ''
     })
 
+    /**
+     * Numero de la carga en curso. Hay refresco por realtime, por accion del
+     * usuario y por cambio de filtros, asi que puede haber varias en vuelo: sin
+     * este contador, una respuesta lenta anterior pisa a la mas reciente y la
+     * pantalla termina mostrando el credito de otro cliente.
+     */
+    const loadSeqRef = useRef(0)
+
     const loadData = useCallback(async () => {
+        const requestId = ++loadSeqRef.current
         if (!enabled) {
             setCredits([])
             setInstallments([])
@@ -204,6 +166,9 @@ export function useCredits(enabled = true) {
         setError(null)
         try {
             const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems } = await fetchTenantCreditsData()
+
+            // Llego una carga mas nueva mientras esta viajaba: se descarta.
+            if (requestId !== loadSeqRef.current) return
 
             const customersMap = ((dbCustomers || []) as Array<{ id: string; customer_code?: string }>).reduce((acc, c) => {
                 acc[c.id] = c.customer_code ?? ''
@@ -272,11 +237,14 @@ export function useCredits(enabled = true) {
             setInstallmentsProgress(ip)
 
         } catch (err) {
+            if (requestId !== loadSeqRef.current) return
             const message = err instanceof Error ? err.message : 'Error al cargar los créditos.'
             console.error('[useCredits] loadData error:', err)
             setError(message)
         } finally {
-            setLoading(false)
+            // Solo la carga vigente apaga el indicador: si lo hiciera una vieja,
+            // la pantalla diria "listo" con una consulta todavia en curso.
+            if (requestId === loadSeqRef.current) setLoading(false)
         }
     }, [enabled])
 
@@ -405,7 +373,7 @@ export function useCredits(enabled = true) {
 
         await loadData()
         return { success: true, appliedAmount: selectedAmount, installmentId }
-    }, [installments, supabase, loadData])
+    }, [installments, loadData])
 
 
     // Derived Data Helpers

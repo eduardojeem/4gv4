@@ -1,22 +1,20 @@
 ﻿'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  CheckCircle2, Package, XCircle, Search, Calendar, User,
-  Smartphone, Clock, TrendingUp, Star, Timer, Wrench,
-  ChevronLeft, ChevronRight, Banknote, Activity, BarChart3
+  CheckCircle2, Package, Search, Clock, Star, Wrench,
+  ChevronLeft, ChevronRight, Banknote, Activity
 } from 'lucide-react'
 import { ExportButton } from '@/components/dashboard/technicians/history/ExportButton'
 import { Repair } from '@/types/repairs'
@@ -209,10 +207,11 @@ export default function TechnicianHistoryPage() {
   const pageSize = 15
 
   // Filter repairs for current technician
+  const userId = user?.id
   const myRepairs = useMemo(() => {
-    if (!user?.id) return []
-    return repairs.filter(r => r.technician?.id === user.id)
-  }, [repairs, user?.id])
+    if (!userId) return []
+    return repairs.filter(r => r.technician?.id === userId)
+  }, [repairs, userId])
 
   // Apply filters and sorting
   const filteredRepairs = useMemo(() => {
@@ -274,8 +273,12 @@ export default function TechnicianHistoryPage() {
     return filtered
   }, [myRepairs, dateFilter, statusFilter, searchTerm, sortBy])
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1) }, [dateFilter, statusFilter, searchTerm, sortBy])
+  const criteria = `${dateFilter}|${statusFilter}|${searchTerm}|${sortBy}`
+  const [pageCriteria, setPageCriteria] = useState(criteria)
+  if (pageCriteria !== criteria) {
+    setPageCriteria(criteria)
+    setPage(1)
+  }
 
   // KPIs (consolidated — no duplication)
   const kpis = useMemo(() => {

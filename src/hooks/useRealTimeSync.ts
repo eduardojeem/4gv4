@@ -37,6 +37,10 @@ export interface RealTimeSyncReturn {
   }
 }
 
+const MAX_AUTO_RECONNECT_ATTEMPTS = 5
+const RECONNECT_BASE_DELAY_MS = 5000
+const RECONNECT_MAX_DELAY_MS = 5 * 60 * 1000
+
 export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncReturn {
   const [isConnected, setIsConnected] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
@@ -49,6 +53,7 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
   const supabaseRef = useRef(createClient())
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
+  const reconnectAttemptsRef = useRef(0)
 
   const log = useCallback((message: string, data?: unknown) => {
     if (options.enableLogging) {
@@ -66,6 +71,8 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
       timestamp: new Date().toISOString()
     }
 
+    // Un evento real confirma que el canal funciona.
+    reconnectAttemptsRef.current = 0
     setEventsReceived(prev => prev + 1)
     setLastSync(new Date())
 
@@ -88,6 +95,10 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
   }, [options, log])
 
   const startHeartbeat = useCallback(() => {
+    // Cada canal que responde SUBSCRIBED llama a esta función; si ya hay un
+    // latido activo no se crea otro (antes se acumulaban intervalos).
+    if (heartbeatIntervalRef.current) return
+
     heartbeatIntervalRef.current = setInterval(async () => {
       const start = Date.now()
       try {
@@ -172,15 +183,24 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
     setConnectionStatus('disconnected')
   }, [log, stopHeartbeat])
 
-  const reconnect = useCallback(() => {
+  const restartChannels = useCallback(() => {
     log('Reconectando...')
     unsubscribe()
-    
+
     // Esperar un poco antes de reconectar
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+    }
     reconnectTimeoutRef.current = setTimeout(() => {
       subscribe()
     }, 2000)
   }, [subscribe, unsubscribe, log])
+
+  // Reconexión manual: reinicia el contador de reintentos automáticos.
+  const reconnect = useCallback(() => {
+    reconnectAttemptsRef.current = 0
+    restartChannels()
+  }, [restartChannels])
 
   const getConnectionHealth = useCallback(() => {
     return {
@@ -190,17 +210,27 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
     }
   }, [isConnected, connectionStatus, latency, lastHeartbeat])
 
-  // Auto-reconexión en caso de error
+  // Auto-reconexión en caso de error, con espera creciente y un tope de
+  // intentos. Un canal sobre una tabla fuera de la publicación de Realtime
+  // falla siempre; sin tope, reintentaba cada ~7 s indefinidamente.
   useEffect(() => {
-    if (connectionStatus === 'error') {
-      log('Detectado error de conexión, intentando reconectar en 5 segundos...')
-      const timeout = setTimeout(() => {
-        reconnect()
-      }, 5000)
-      
-      return () => clearTimeout(timeout)
+    if (connectionStatus !== 'error') return
+
+    const attempt = reconnectAttemptsRef.current
+    if (attempt >= MAX_AUTO_RECONNECT_ATTEMPTS) {
+      log('Se agotaron los reintentos automáticos; la sincronización queda en pausa')
+      return
     }
-  }, [connectionStatus, reconnect, log])
+
+    const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** attempt, RECONNECT_MAX_DELAY_MS)
+    reconnectAttemptsRef.current = attempt + 1
+    log(`Detectado error de conexión, reintento ${attempt + 1} en ${delay} ms...`)
+    const timeout = setTimeout(() => {
+      restartChannels()
+    }, delay)
+
+    return () => clearTimeout(timeout)
+  }, [connectionStatus, restartChannels, log])
 
   // Cleanup al desmontar
   useEffect(() => {

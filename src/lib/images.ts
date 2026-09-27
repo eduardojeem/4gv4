@@ -1,35 +1,57 @@
-import { config } from './config'
 import { getPublicUrl } from './supabase-storage'
+import { isSupportedImageSource } from './image-url-policy'
+
+const ALREADY_OPTIMIZED_IMAGE_HOSTS = new Set([
+  'pyunicentroprod.vtexassets.com',
+  'images.napali.app',
+])
+
+/** Evita pagar una segunda transformación para recursos que no la necesitan. */
+export const shouldBypassImageOptimization = (source?: string | null): boolean => {
+  if (!source) return true
+  const value = source.trim()
+  if (!value) return true
+  if (value.startsWith('data:') || value.startsWith('blob:')) return true
+  if (value === '/placeholder-product.svg' || /\.svg(?:$|[?#])/i.test(value)) return true
+
+  try {
+    return ALREADY_OPTIMIZED_IMAGE_HOSTS.has(new URL(value).hostname)
+  } catch {
+    return false
+  }
+}
 
 export const resolveProductImageUrl = (url?: string | null): string => {
-  // Si no hay URL, retornar placeholder
-  if (!url) return '/placeholder-product.svg'
+  // Si no hay URL o está vacía, retornar placeholder
+  if (!url || typeof url !== 'string' || !url.trim()) return '/placeholder-product.svg'
   
-  // Si es data URI, retornar tal cual
-  if (url.startsWith('data:image')) return url
+  const cleanUrl = url.trim()
+
+  // Si es data URI o blob URL, retornar tal cual
+  if (cleanUrl.startsWith('data:') || cleanUrl.startsWith('blob:')) return cleanUrl
   
-  // Si ya es una URL completa (http/https), retornar tal cual
-  if (/^https?:\/\//.test(url)) return url
-  
-  // Si es una ruta relativa que empieza con /, retornar tal cual (archivo público)
-  if (url.startsWith('/')) return url
-  
-  // Si Supabase no está configurado, intentar como ruta relativa
-  if (!config.supabase.isConfigured) {
-    console.warn('Supabase not configured, using relative path:', url)
-    return url.startsWith('/') ? url : `/${url}`
+  // Una URL externa que Next/Image no puede renderizar nunca debe llegar al
+  // componente: los registros antiguos o importados usan un fallback seguro.
+  if (/^https?:\/\//.test(cleanUrl)) {
+    return isSupportedImageSource(cleanUrl) ? cleanUrl : '/placeholder-product.svg'
   }
   
+  // Si es una ruta relativa que empieza con /, retornar tal cual (archivo público en /public)
+  if (cleanUrl.startsWith('/')) return cleanUrl
+  
+  // Si empieza con 'product-images/', limpiarlo para evitar duplicar el bucket en getPublicUrl
+  const normalizedPath = cleanUrl.replace(/^product-images\//, '')
+
   // Intentar obtener URL pública de Supabase Storage
   try {
-    const publicUrl = getPublicUrl('product-images', url)
+    const publicUrl = getPublicUrl('product-images', normalizedPath)
     if (publicUrl) {
       return publicUrl
     }
-    console.warn('No public URL returned for:', url)
-    return '/placeholder-product.svg'
   } catch (error) {
-    console.error('Error resolving product image URL:', error, 'for path:', url)
-    return '/placeholder-product.svg'
+    console.error('Error resolving product image URL:', error, 'for path:', cleanUrl)
   }
+
+  // Si Supabase no está configurado o falla, usar ruta relativa como último recurso
+  return cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`
 }

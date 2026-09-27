@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -14,9 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Info, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
 import { CashCountModal } from '../components/CashCountModal'
 import { useAuth } from '@/contexts/auth-context'
@@ -29,6 +27,7 @@ import { CashRegisterHistory } from './components/CashRegisterHistory'
 import { CashRegisterAudit } from './components/CashRegisterAudit'
 import { ElectronicPaymentsPanel } from './components/ElectronicPaymentsPanel'
 import { OpenCashRegisterDialog } from '../components/OpenCashRegisterDialog'
+import { POSCashMovementDialog } from '../components/POSCashMovementDialog'
 
 export default function CashRegisterPage() {
   const router = useRouter()
@@ -59,10 +58,8 @@ export default function CashRegisterPage() {
     }
   })
 
-  // Adjust state during render based on prop/context changes
-  const [prevIsAdmin, setPrevIsAdmin] = useState(isAdmin)
-  if (isAdmin !== prevIsAdmin) {
-    setPrevIsAdmin(isAdmin)
+  // Sync viewMode when isAdmin changes
+  useEffect(() => {
     if (!isAdmin) {
       setViewMode('simple')
     } else {
@@ -73,7 +70,7 @@ export default function CashRegisterPage() {
         setViewMode('advanced')
       }
     }
-  }
+  }, [isAdmin])
 
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
   const [openingAmount, setOpeningAmount] = useState('')
@@ -84,7 +81,7 @@ export default function CashRegisterPage() {
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
   const [movementType, setMovementType] = useState<'in' | 'out'>('in')
   const [movementAmount, setMovementAmount] = useState('')
-  const [movementNote, setMovementNote] = useState('')
+  const [_movementNote, setMovementNote] = useState('')
 
   const [isCashCountModalOpen, setIsCashCountModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -95,10 +92,10 @@ export default function CashRegisterPage() {
     }
   }, [registers, activeRegisterId, setActiveRegisterId])
 
-  const parsedMovementAmount = useMemo(() => {
+  void (useMemo(() => {
     const n = Number(movementAmount)
     return Number.isFinite(n) && n > 0 ? n : 0
-  }, [movementAmount])
+  }, [movementAmount]));
 
   const [closingCountedAmount, setClosingCountedAmount] = useState('')
 
@@ -150,10 +147,12 @@ export default function CashRegisterPage() {
   // Fix #12: incluir openMovementDialog en deps (ahora estabilizado con useCallback)
   }, [openMovementDialog])
 
-  // Adjust activeTab during render if permissions restrict it
-  if (!canAccessAudit && activeTab === 'audit') {
-    setActiveTab('overview')
-  }
+  // Reset activeTab to 'overview' when audit access is revoked
+  useEffect(() => {
+    if (!canAccessAudit && activeTab === 'audit') {
+      setActiveTab('overview')
+    }
+  }, [canAccessAudit, activeTab])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -168,51 +167,6 @@ export default function CashRegisterPage() {
     <div className="flex flex-col h-full p-4 md:p-6 space-y-6">
       <CashRegisterHeader />
 
-      {/* Guía de funcionamiento de caja */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Caja?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Apertura y Cierre
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Inicia tu turno ingresando el monto físico inicial en caja. Al finalizar, realiza el conteo del efectivo en caja y regístralo para conciliar las transacciones del día.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Entradas y Salidas
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Registra movimientos manuales de dinero para gastos menores o retiros de efectivo (salidas), así como aportes adicionales de caja (entradas) justificando su origen.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Arqueo de Caja
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Realiza arqueos rápidos contando los billetes y monedas por denominación. El sistema comparará el monto físico con el saldo teórico y reportará cualquier sobrante o faltante.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       {isAdmin && (
         <div className="flex justify-end">
@@ -236,13 +190,15 @@ export default function CashRegisterPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className={`grid w-full max-w-3xl ${canAccessAudit ? 'grid-cols-5' : 'grid-cols-4'} mb-4`}>
-          <TabsTrigger value="overview">Resumen</TabsTrigger>
-          <TabsTrigger value="electronic">Cobros</TabsTrigger>
-          <TabsTrigger value="report">Reporte</TabsTrigger>
-          <TabsTrigger value="history">Historial</TabsTrigger>
-          {canAccessAudit && <TabsTrigger value="audit">Auditoria</TabsTrigger>}
-        </TabsList>
+        <div className="w-full overflow-x-auto no-scrollbar pb-1 mb-4">
+          <TabsList className={`inline-flex w-auto min-w-full sm:min-w-0 sm:grid sm:max-w-3xl ${canAccessAudit ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} p-1 h-auto bg-muted/60 dark:bg-muted/30 rounded-xl border border-border/50`}>
+            <TabsTrigger value="overview" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Resumen</TabsTrigger>
+            <TabsTrigger value="electronic" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Cobros</TabsTrigger>
+            <TabsTrigger value="report" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Reporte</TabsTrigger>
+            <TabsTrigger value="history" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Historial</TabsTrigger>
+            {canAccessAudit && <TabsTrigger value="audit" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Auditoría</TabsTrigger>}
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-4">
           {activeTab === 'overview' && (
@@ -316,94 +272,102 @@ export default function CashRegisterPage() {
         setIsCloseDialogOpen(open)
         if (!open) setClosingCountedAmount('')
       }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cerrar Caja</DialogTitle>
-            <DialogDescription>
-              Registre el monto físico contado en caja para calcular diferencias.
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl bg-card border-border shadow-2xl">
+          <DialogHeader className="p-5 sm:p-6 border-b bg-muted/30 text-left">
+            <DialogTitle className="text-lg font-bold">Cerrar Turno de Caja</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              Registre el monto físico contado en caja para conciliar y calcular diferencias.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Fix #2: Resumen financiero antes de confirmar cierre */}
-          <div className="rounded-lg border bg-muted/40 p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Apertura:</span>
-              <span className="font-semibold">
-                {new Intl.NumberFormat('es-PY').format(currentRegister.movements.find(m => m.type === 'opening')?.amount ?? 0)} Gs.
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ventas:</span>
-              <span className="font-semibold text-emerald-600">
-                +{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(isPhysicalCashSale).reduce((s, m) => s + m.amount, 0)
-                )} Gs.
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Entradas:</span>
-              <span className="font-semibold text-emerald-600">
-                +{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
-                )} Gs.
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Salidas:</span>
-              <span className="font-semibold text-rose-600">
-                -{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
-                )} Gs.
-              </span>
-            </div>
-            <div className="h-px bg-border" />
-            <div className="flex justify-between font-bold">
-              <span>Esperado en caja:</span>
-              <span className="text-blue-700 dark:text-blue-400">
-                {new Intl.NumberFormat('es-PY').format(currentRegister.balance)} Gs.
-              </span>
-            </div>
-            {parsedClosingAmount !== null && (
-              <div className={`flex justify-between font-bold ${
-                parsedClosingAmount === currentRegister.balance
-                  ? 'text-emerald-600'
-                  : Math.abs(parsedClosingAmount - currentRegister.balance) > 0
-                    ? 'text-amber-600'
-                    : ''
-              }`}>
-                <span>Diferencia:</span>
-                <span>
-                  {parsedClosingAmount > currentRegister.balance ? '+' : ''}
-                  {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - currentRegister.balance)} Gs.
+          <div className="p-5 sm:p-6 space-y-4">
+            {/* Resumen financiero antes de confirmar cierre */}
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Fondo de Apertura:</span>
+                <span className="font-semibold tabular-nums">
+                  {new Intl.NumberFormat('es-PY').format(currentRegister.movements.find(m => m.type === 'opening')?.amount ?? 0)} Gs.
                 </span>
               </div>
-            )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ventas en Efectivo:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  +{new Intl.NumberFormat('es-PY').format(
+                    currentRegister.movements.filter(isPhysicalCashSale).reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ingresos Manuales:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  +{new Intl.NumberFormat('es-PY').format(
+                    currentRegister.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Egresos / Retiros:</span>
+                <span className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                  -{new Intl.NumberFormat('es-PY').format(
+                    currentRegister.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="h-px bg-border/60 my-1" />
+              <div className="flex justify-between font-bold text-sm">
+                <span>Esperado en caja:</span>
+                <span className="text-primary tabular-nums">
+                  {new Intl.NumberFormat('es-PY').format(currentRegister.balance)} Gs.
+                </span>
+              </div>
+              {parsedClosingAmount !== null && (
+                <div className={`flex justify-between font-bold text-sm pt-1 border-t border-dashed border-border/60 ${
+                  parsedClosingAmount === currentRegister.balance
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : Math.abs(parsedClosingAmount - currentRegister.balance) > 0
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : ''
+                }`}>
+                  <span>Diferencia:</span>
+                  <span className="tabular-nums">
+                    {parsedClosingAmount > currentRegister.balance ? '+' : ''}
+                    {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - currentRegister.balance)} Gs.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="closing-counted" className="text-xs font-semibold text-foreground">
+                Monto real contado en efectivo físico
+              </Label>
+              <Input
+                id="closing-counted"
+                type="text"
+                inputMode="numeric"
+                value={closingCountedAmount}
+                onChange={(e) => setClosingCountedAmount(e.target.value.replace(/\D/g, ''))}
+                placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(currentRegister.balance)}`}
+                className="h-11 text-base font-bold font-mono tabular-nums rounded-xl"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Cuente el dinero físico real del cajón e ingrese el total aquí.
+              </p>
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="closing-counted">Monto real contado en caja</Label>
-            <Input
-              id="closing-counted"
-              type="number"
-              inputMode="decimal"
-              value={closingCountedAmount}
-              onChange={(e) => setClosingCountedAmount(e.target.value)}
-              placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(currentRegister.balance)}`}
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">
-              Cuente el efectivo físico y escriba el total aquí.
-            </p>
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="p-4 sm:px-6 bg-muted/20 border-t border-border/50 flex flex-row items-center justify-between sm:justify-end gap-2">
             <Button variant="outline" onClick={() => {
               setIsCloseDialogOpen(false)
               setClosingCountedAmount('')
-            }}>Cancelar</Button>
+            }} className="h-10 text-xs rounded-xl flex-1 sm:flex-none">
+              Cancelar
+            </Button>
             <Button
               variant="destructive"
               disabled={parsedClosingAmount === null || isSubmitting}
+              className="h-10 text-xs font-bold rounded-xl flex-1 sm:flex-none shadow-md"
               onClick={async () => {
                 if (parsedClosingAmount === null) return
                 setIsSubmitting(true)
@@ -419,91 +383,19 @@ export default function CashRegisterPage() {
               }}
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting ? 'Cerrando...' : 'Confirmar Cierre'}
+              {isSubmitting ? 'Cerrando turno...' : 'Confirmar Cierre'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}</DialogTitle>
-            <DialogDescription>
-              {movementType === 'in'
-                ? 'Ingrese el monto a agregar a la caja.'
-                : 'Ingrese el monto a retirar de la caja.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="mov-amount">Monto</Label>
-              <Input
-                id="mov-amount"
-                type="number"
-                inputMode="decimal"
-                value={movementAmount}
-                onChange={(e) => setMovementAmount(e.target.value)}
-                autoFocus
-                placeholder="0"
-              />
-              <div className="flex flex-wrap gap-2 mt-1">
-                {[5000, 10000, 20000, 50000, 100000].map((amount) => (
-                  <Button
-                    key={amount}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setMovementAmount(amount.toString())}
-                  >
-                    {new Intl.NumberFormat('es-PY').format(amount)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="mov-note">Motivo / Nota</Label>
-              <Input
-                id="mov-note"
-                value={movementNote}
-                onChange={(e) => setMovementNote(e.target.value)}
-                placeholder={movementType === 'in' ? 'Ej. Cambio inicial' : 'Ej. Pago a proveedor'}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
-            <Button
-              variant={movementType === 'out' ? 'destructive' : 'default'}
-              disabled={parsedMovementAmount <= 0 || isSubmitting}
-              onClick={async () => {
-                if (parsedMovementAmount <= 0) return
-                setIsSubmitting(true)
-                try {
-                  const saved = await addMovement(
-                    movementType === 'in' ? 'cash_in' : 'cash_out',
-                    parsedMovementAmount,
-                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
-                  )
-                  if (saved) {
-                    setIsMovementDialogOpen(false)
-                    setMovementAmount('')
-                    setMovementNote('')
-                  }
-                } finally {
-                  setIsSubmitting(false)
-                }
-              }}
-            >
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting
-                ? 'Guardando...'
-                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <POSCashMovementDialog
+        open={isMovementDialogOpen}
+        onOpenChange={setIsMovementDialogOpen}
+        onAddMovement={addMovement}
+        initialType={movementType}
+        currentBalance={getCurrentRegister?.balance || 0}
+      />
 
       <CashCountModal
         isOpen={isCashCountModalOpen}

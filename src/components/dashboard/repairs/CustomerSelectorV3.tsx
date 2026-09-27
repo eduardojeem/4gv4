@@ -19,10 +19,30 @@ interface CustomerSelectorV3Props {
     name: string
     phone: string
     email: string
+    ruc?: string
+    alternate_phone?: string | null
+    alternate_phone_label?: string | null
+    customer_type?: string
+    is_wholesale?: boolean
+    first_name?: string | null
+    last_name?: string | null
+    company_name?: string | null
   }
   onChange: (
     customerId: string,
-    customerData?: { name: string; phone: string; email: string }
+    customerData?: {
+      name: string
+      phone: string
+      email: string
+      ruc?: string
+      alternate_phone?: string | null
+      alternate_phone_label?: string | null
+      customer_type?: string
+      is_wholesale?: boolean
+      first_name?: string | null
+      last_name?: string | null
+      company_name?: string | null
+    }
   ) => void
   error?: string
   disabled?: boolean
@@ -37,10 +57,17 @@ export function CustomerSelectorV3({
 }: CustomerSelectorV3Props) {
   const handleChange = (customerId: string, customer?: Customer) => {
     if (customer) {
+      const isWholesale = customer.segment === 'wholesale' ||
+        customer.customer_type === 'wholesale'
       onChange(customerId, {
         name: customer.name || '',
         phone: customer.phone || '',
         email: customer.email || '',
+        ruc: customer.ruc || '',
+        alternate_phone: customer.alternate_phone || null,
+        alternate_phone_label: customer.alternate_phone_label || null,
+        customer_type: customer.customer_type || (isWholesale ? 'wholesale' : 'regular'),
+        is_wholesale: isWholesale,
       })
     } else {
       onChange(customerId)

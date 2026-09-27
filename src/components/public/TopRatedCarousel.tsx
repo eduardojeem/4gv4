@@ -1,9 +1,11 @@
 'use client'
 
-import Image from 'next/image'
+import { AppImage } from '@/components/ui/app-image'
+
 import Link from 'next/link'
-import { Building2, Star } from 'lucide-react'
+import { Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { organizationAccentColor } from '@/lib/public/organization-brand'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 
 type Props = {
@@ -11,22 +13,31 @@ type Props = {
 }
 
 function OrgLogo({ org }: { org: MarketplaceOrganization }) {
+  const accentColor = organizationAccentColor(org)
+
   return (
     <Link
       href={`/${org.slug}/inicio`}
       className="group flex shrink-0 items-center gap-3 rounded-xl border border-transparent px-4 py-3 transition-all duration-200 hover:border-slate-200 hover:bg-slate-50 hover:shadow-sm dark:hover:border-slate-800 dark:hover:bg-slate-900"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-white p-1 shadow-xs transition-transform group-hover:scale-105 dark:border-slate-800 dark:bg-slate-900"
+        style={accentColor ? { borderTop: `2px solid ${accentColor}` } : undefined}
+      >
         {org.logo_url ? (
-          <Image
+          <AppImage
             src={org.logo_url}
             alt={org.name}
-            width={40}
-            height={40}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
+            loading="lazy"
           />
         ) : (
-          <Building2 className="h-5 w-5 text-slate-400" />
+          <div
+            className="flex h-full w-full items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 font-bold text-xs text-white"
+            style={accentColor ? { backgroundColor: accentColor, backgroundImage: 'none' } : undefined}
+          >
+            {org.name.slice(0, 2).toUpperCase()}
+          </div>
         )}
       </div>
       <div className="min-w-0">

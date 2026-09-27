@@ -7,8 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
+import { isProtectedOrganizationOwner } from '@/lib/auth/organization-owner-policy'
 
-type RoleKey = 'super_admin' | 'admin' | 'tecnico' | 'vendedor' | 'cliente'
+/**
+ * Esta vista es del equipo. Los clientes de la tienda tienen su propia pestaña:
+ * antes aparecian acá como un grupo más —y quien no tenía rol asignado caía en
+ * ese grupo, contado como cliente sin serlo.
+ */
+type RoleKey = 'super_admin' | 'owner' | 'admin' | 'tecnico' | 'vendedor' | 'sin_rol'
 
 type RoleNode = {
   key: RoleKey
@@ -30,6 +36,14 @@ const ROLE_NODES: RoleNode[] = [
     icon: ShieldCheck,
     accent: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
     badge: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800',
+  },
+  {
+    key: 'owner',
+    label: 'Propietario',
+    description: 'Responsable principal; controla empresa y facturación',
+    icon: ShieldCheck,
+    accent: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
+    badge: 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-800',
   },
   {
     key: 'admin',
@@ -56,12 +70,12 @@ const ROLE_NODES: RoleNode[] = [
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
   },
   {
-    key: 'cliente',
-    label: 'Cliente',
-    description: 'Compra en la tienda pública',
+    key: 'sin_rol',
+    label: 'Sin rol asignado',
+    description: 'Hay que asignarles un rol para que puedan trabajar',
     icon: User,
-    accent: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-    badge: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+    accent: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    badge: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
   },
 ]
 
@@ -105,7 +119,7 @@ export function UsersRoleTree({
     for (const node of ROLE_NODES) map.set(node.key, [])
 
     for (const user of users) {
-      const key = (ROLE_NODES.some((n) => n.key === user.role) ? user.role : 'cliente') as RoleKey
+      const key = (ROLE_NODES.some((n) => n.key === user.role) ? user.role : 'sin_rol') as RoleKey
       map.get(key)!.push(user)
     }
 
@@ -221,15 +235,17 @@ export function UsersRoleTree({
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            aria-label={`Editar ${user.name}`}
-                            onClick={() => onEdit(user)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
+                          {!isProtectedOrganizationOwner(user.role) ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label={`Editar ${user.name}`}
+                              onClick={() => onEdit(user)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
                         </span>
                       </li>
                     ))}

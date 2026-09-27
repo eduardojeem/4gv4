@@ -11,13 +11,17 @@ export interface ModuleTrial {
 
 export const MODULE_TRIAL_DAYS = 7
 
-/** Límite de fotos por reparación según el plan. null = ilimitado, 0 = sin fotos. */
-export function repairPhotoLimit(planCode: PlanCode): number | null {
-  switch (planCode) {
-    case 'FREE': return 0
-    case 'BASIC': return 3
-    default: return null // PRO / ENTERPRISE: ilimitado
-  }
+export const REPAIR_PHOTOS_TARGET_PLAN: PlanCode = 'ENTERPRISE'
+export const REPAIR_PHOTOS_TARGET_PLAN_LABEL = 'Plan Enterprise'
+
+/** Límite de fotos por reparación según el plan. Exclusivo para el Plan Enterprise. */
+export function repairPhotoLimit(planCode: PlanCode): number {
+  return planCode === 'ENTERPRISE' ? 6 : 0
+}
+
+/** ¿Puede agregar fotos a las reparaciones? Solo disponible en el plan más alto (ENTERPRISE). */
+export function canUploadRepairPhotos(planCode: PlanCode): boolean {
+  return planCode === 'ENTERPRISE'
 }
 
 /** ¿Puede exportar/descargar reportes? Disponible desde Basic (FREE no). */

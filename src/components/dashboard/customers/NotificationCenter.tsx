@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -11,15 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Progress } from '@/components/ui/progress'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Bell,
-  BellRing,
-  AlertTriangle,
+  Bell, AlertTriangle,
   CheckCircle,
   Info,
   Star,
@@ -29,12 +24,8 @@ import {
   MessageSquare,
   Settings,
   Search,
-  Filter,
-  MoreHorizontal,
-  X,
-  Eye,
-  EyeOff,
-  Archive,
+  Filter, X,
+  Eye, Archive,
   Trash2,
   Clock,
   Zap,
@@ -44,56 +35,14 @@ import {
   AlertCircle,
   Calendar,
   Phone,
-  Mail,
-  Send,
-  Bookmark,
-  BookmarkCheck,
-  Share2,
-  Download,
-  Upload,
-  RefreshCw,
+  Mail, Share2, RefreshCw,
   Lightbulb,
-  TrendingDown,
-  Heart,
-  Gift,
-  CreditCard,
-  MapPin,
-  Smartphone,
-  Globe,
-  BarChart3,
+  TrendingDown, BarChart3,
   PieChart,
-  Activity,
-  Wifi,
-  WifiOff,
-  Volume2,
-  VolumeX,
-  Moon,
-  Sun,
-  Palette,
-  Sliders,
+  Activity, Volume2,
+  VolumeX, Sliders,
   Database,
-  Shield,
-  Lock,
-  Unlock,
-  Key,
-  FileText,
-  Image,
-  Video,
-  Music,
-  Headphones,
-  Mic,
-  Camera,
-  Monitor,
-  Printer,
-  HardDrive,
-  Cpu,
-  MemoryStick,
-  Battery,
-  BatteryLow,
-  Plug,
-  Power,
-  PowerOff,
-  Plus
+  Shield, FileText, Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -132,7 +81,7 @@ export interface Notification {
     userAgent?: string
     referrer?: string
     sessionId?: string
-    [key: string]: any
+    [key: string]: unknown
   }
   actions?: NotificationAction[]
   attachments?: NotificationAttachment[]
@@ -183,7 +132,7 @@ export interface NotificationTemplate {
     timeRange?: { start: string; end: string }
     minAmount?: number
     maxAmount?: number
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -194,7 +143,7 @@ export interface NotificationRule {
   enabled: boolean
   trigger: {
     event: string
-    conditions: Record<string, any>
+    conditions: Record<string, unknown>
   }
   template: NotificationTemplate
   frequency: 'immediate' | 'hourly' | 'daily' | 'weekly'
@@ -472,7 +421,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
   }
 
   // 3. Análisis de comportamiento de compra
-  const frequentBuyers = customers.filter(c => c.purchase_frequency === 'high')
+  void (customers.filter(c => c.purchase_frequency === 'high'));
   const recentBigSpenders = customers.filter(c => 
     c.last_purchase_amount > 1000000 && 
     new Date(c.last_visit) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -753,8 +702,8 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
   const [showOnlyStarred, setShowOnlyStarred] = useState(false)
   const [showOnlyActionRequired, setShowOnlyActionRequired] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [showTemplates, setShowTemplates] = useState(false)
-  const [showRules, setShowRules] = useState(false)
+  const [_showTemplates, _setShowTemplates] = useState(false)
+  const [_showRules, _setShowRules] = useState(false)
   const [selectedNotifications, setSelectedNotifications] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<'timestamp' | 'priority' | 'category'>('timestamp')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -844,24 +793,23 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
 
   // Generar notificaciones inteligentes iniciales
   useEffect(() => {
-    const smartNotifications = generateSmartNotifications(customers)
-    setNotifications(smartNotifications)
+    const timer = window.setTimeout(() => setNotifications(generateSmartNotifications(customers)), 0)
+    return () => window.clearTimeout(timer)
   }, [customers])
 
-  // Auto-archivo de notificaciones antiguas
-  useEffect(() => {
-    if (notificationSettings.autoArchive) {
-      const cutoffDate = new Date(Date.now() - notificationSettings.autoArchiveDays * 24 * 60 * 60 * 1000)
-      setNotifications(prev => prev.map(n => ({
-        ...n,
-        isArchived: n.isArchived || (new Date(n.timestamp) < cutoffDate && n.isRead)
-      })))
-    }
-  }, [notificationSettings.autoArchive, notificationSettings.autoArchiveDays])
+  const [archiveReferenceTime] = useState(Date.now)
+  const visibleNotifications = useMemo(() => {
+    if (!notificationSettings.autoArchive) return notifications
+    const cutoff = archiveReferenceTime - notificationSettings.autoArchiveDays * 24 * 60 * 60 * 1000
+    return notifications.map(notification => ({
+      ...notification,
+      isArchived: notification.isArchived || (new Date(notification.timestamp).getTime() < cutoff && notification.isRead),
+    }))
+  }, [notifications, notificationSettings.autoArchive, notificationSettings.autoArchiveDays, archiveReferenceTime])
 
   // Filtrado avanzado de notificaciones
   const filteredNotifications = useMemo(() => {
-    const filtered = notifications.filter(notification => {
+    const filtered = visibleNotifications.filter(notification => {
       // Filtro por búsqueda avanzada
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase()
@@ -917,7 +865,7 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
 
     return filtered
   }, [
-    notifications, 
+    visibleNotifications,
     searchTerm, 
     selectedCategory, 
     selectedType, 
@@ -1061,67 +1009,13 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
   }, [])
 
   // Funciones de utilidad mejoradas
-  const getTypeIcon = (type: Notification['type'], size: 'sm' | 'md' | 'lg' = 'md') => {
-    const sizeClass = size === 'sm' ? 'h-3 w-3' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'
-    const config = notificationTypes[type]
-    return config ? React.cloneElement(config.icon, { className: `${sizeClass} ${config.color}` }) : 
-           <Bell className={`${sizeClass} text-gray-500`} />
-  }
 
-  const getCategoryIcon = (category: Notification['category'], size: 'sm' | 'md' | 'lg' = 'md') => {
-    const sizeClass = size === 'sm' ? 'h-3 w-3' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'
-    const config = notificationConfig[category]
-    return config ? React.cloneElement(config.icon, { className: `${sizeClass} text-white` }) : 
-           <Bell className={`${sizeClass} text-white`} />
-  }
 
-  const getPriorityColor = (priority: Notification['priority']) => {
-    switch (priority) {
-      case 'critical': return 'border-l-red-500 bg-red-50 dark:bg-red-950 ring-2 ring-red-200 dark:ring-red-800'
-      case 'high': return 'border-l-orange-500 bg-orange-50 dark:bg-orange-950 ring-1 ring-orange-200 dark:ring-orange-800'
-      case 'medium': return 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950'
-      case 'low': return 'border-l-gray-500 bg-gray-50 dark:bg-gray-950'
-      default: return 'border-l-gray-300'
-    }
-  }
 
-  const getPriorityBadge = (priority: Notification['priority']) => {
-    switch (priority) {
-      case 'critical': return <Badge variant="destructive" className="text-xs">Crítica</Badge>
-      case 'high': return <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800">Alta</Badge>
-      case 'medium': return <Badge variant="outline" className="text-xs">Media</Badge>
-      case 'low': return <Badge variant="outline" className="text-xs text-gray-500">Baja</Badge>
-      default: return null
-    }
-  }
 
-  const formatTimeAgo = (timestamp: string) => {
-    const now = new Date()
-    const time = new Date(timestamp)
-    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60))
-    
-    if (diffInMinutes < 1) return 'Ahora'
-    if (diffInMinutes < 60) return `${diffInMinutes}m`
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`
-    if (diffInMinutes < 10080) return `${Math.floor(diffInMinutes / 1440)}d`
-    return time.toLocaleDateString('es-PY', { month: 'short', day: 'numeric' })
-  }
 
-  const getNotificationAge = (timestamp: string) => {
-    const hours = (Date.now() - new Date(timestamp).getTime()) / (1000 * 60 * 60)
-    if (hours < 1) return 'new'
-    if (hours < 24) return 'recent'
-    if (hours < 168) return 'week'
-    return 'old'
-  }
 
-  const isOverdue = (notification: Notification) => {
-    return notification.dueDate && new Date(notification.dueDate) < new Date()
-  }
 
-  const isSnoozed = (notification: Notification) => {
-    return notification.snoozeUntil && new Date(notification.snoozeUntil) > new Date()
-  }
 
   return (
     <TooltipProvider>
@@ -1359,7 +1253,11 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
                 </SelectContent>
               </Select>
 
-              <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <Select value={sortBy} onValueChange={(value) => {
+                if (value === 'timestamp' || value === 'priority' || value === 'category') {
+                  setSortBy(value)
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>

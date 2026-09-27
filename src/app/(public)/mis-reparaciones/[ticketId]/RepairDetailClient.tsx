@@ -12,7 +12,6 @@ import {
   Loader2,
   CheckCircle2,
   Clock,
-  AlertCircle,
   MessageCircle,
   Copy,
   Banknote,
@@ -27,6 +26,7 @@ import { formatCurrency } from '@/lib/currency'
 import { REPAIR_STATUS_CONFIG, REPAIR_TIMELINE_STEPS, type RepairStatusKey } from '@/lib/constants/repair-status'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { getRepairBalance } from '@/lib/profile/customer-account-summary'
 
 /* ------------------------------------------------------------------ */
 /*  Fetcher                                                            */
@@ -61,7 +61,6 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [qrVerified, setQrVerified] = useState<boolean | null>(verifyHash && initialRepair ? true : null)
   const [sessionExpired, setSessionExpired] = useState(false)
   const hasShownVerifiedToast = useRef(false)
   const pathSegments = pathname.split('/').filter(Boolean)
@@ -96,7 +95,6 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
 
   useEffect(() => {
     if (!verifyHash || !repair || hasShownVerifiedToast.current) return
-    setQrVerified(true)
     toast.success('Comprobante verificado correctamente', {
       description: 'Este es un comprobante autentico',
       duration: 5000,
@@ -184,6 +182,13 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
   const cfg = REPAIR_STATUS_CONFIG[(repair.status as RepairStatusKey)] || REPAIR_STATUS_CONFIG.recibido
   const StatusIcon = cfg.Icon
   const currentStep = cfg.stepIndex
+  const qrVerified = Boolean(verifyHash && repair)
+  const paymentBalance = getRepairBalance({
+    final_cost: repair.finalCost,
+    estimated_cost: repair.estimatedCost,
+    paid_amount: repair.paidAmount,
+    payment_status: repair.paymentStatus,
+  })
 
   return (
     <div className="container max-w-5xl py-8 md:py-12">
@@ -230,10 +235,10 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
             </div>
             <div className="rounded-xl bg-white/60 px-4 py-2.5 text-center shadow-sm dark:bg-black/10 md:text-right">
               <p className="text-[10px] font-bold uppercase opacity-50">
-                {repair.finalCost ? 'Total final' : 'Presupuesto estimado'}
+                {repair.finalCost != null ? 'Total final' : 'Presupuesto estimado'}
               </p>
               <p className={cn('text-lg font-bold', repair.finalCost ? 'text-green-700' : cfg.color)}>
-                {formatCurrency(repair.finalCost || repair.estimatedCost)}
+                {formatCurrency(paymentBalance.cost)}
               </p>
             </div>
           </div>
@@ -381,13 +386,13 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <div>
                   <dt className="text-muted-foreground">Presupuesto</dt>
-                  {!repair.finalCost && (
+                  {repair.finalCost == null && (
                     <Badge variant="outline" className="mt-0.5 h-4 border-blue-200 bg-blue-50/50 px-1 text-[10px] text-blue-700">En evaluacion</Badge>
                   )}
                 </div>
                 <dd className="font-medium">{formatCurrency(repair.estimatedCost)}</dd>
               </div>
-              {repair.finalCost ? (
+              {repair.finalCost != null ? (
                 <div className="flex items-center justify-between rounded-lg bg-green-50 p-3 dark:bg-green-950/30">
                   <div>
                     <dt className="text-sm font-semibold text-green-800 dark:text-green-300">Costo Final</dt>
@@ -397,6 +402,44 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
                 </div>
               ) : (
                 <p className="text-[11px] italic text-muted-foreground">* El costo final se confirma tras el diagnostico.</p>
+              )}
+              {paymentBalance.cost > 0 && (
+                <>
+                  <div className="flex items-center justify-between pt-1">
+                    <dt className="text-muted-foreground">Pagado</dt>
+                    <dd className="font-semibold text-emerald-700 dark:text-emerald-300">
+                      {formatCurrency(paymentBalance.paidAmount)}
+                    </dd>
+                  </div>
+                  <div className={cn(
+                    'flex items-center justify-between rounded-lg p-3',
+                    paymentBalance.isPaid
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30'
+                      : 'bg-amber-50 dark:bg-amber-950/30'
+                  )}>
+                    <div>
+                      <dt className={cn(
+                        'text-sm font-semibold',
+                        paymentBalance.isPaid
+                          ? 'text-emerald-800 dark:text-emerald-300'
+                          : 'text-amber-800 dark:text-amber-300'
+                      )}>
+                        {paymentBalance.isPaid ? 'Reparación pagada' : 'Saldo pendiente'}
+                      </dt>
+                      <p className="text-[11px] text-muted-foreground">
+                        {paymentBalance.isPaid ? 'No quedan pagos pendientes.' : 'Monto restante de esta reparación.'}
+                      </p>
+                    </div>
+                    <dd className={cn(
+                      'text-lg font-bold',
+                      paymentBalance.isPaid
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-amber-700 dark:text-amber-300'
+                    )}>
+                      {formatCurrency(paymentBalance.pendingAmount)}
+                    </dd>
+                  </div>
+                </>
               )}
             </dl>
             {repair.warrantyMonths && (

@@ -1,16 +1,16 @@
 import React from 'react';
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency } from '@/lib/currency';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Package, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Package,
+  TrendingUp,
+  TrendingDown,
   AlertTriangle,
   BarChart3
 } from 'lucide-react';
-import { GSIcon } from '@/components/ui/standardized-components'
+import { GSIcon } from '@/components/ui/standardized-components';
 
 interface ProductStatsData {
   totalProducts: number;
@@ -48,11 +48,11 @@ const ProductStats: React.FC<ProductStatsProps> = ({
     recentTrends
   } = data;
 
-  const stockHealthPercentage = totalProducts > 0 
-    ? ((totalProducts - lowStockItems - outOfStockItems) / totalProducts) * 100 
+  const stockHealthPercentage = totalProducts > 0
+    ? ((totalProducts - lowStockItems - outOfStockItems) / totalProducts) * 100
     : 100;
 
-  
+
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('es-ES').format(num);
@@ -169,7 +169,7 @@ const ProductStats: React.FC<ProductStatsProps> = ({
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {topCategories.slice(0, 5).map((category, index) => (
+            {topCategories.slice(0, 5).map((category, _index) => (
               <div key={category.name} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">{category.name}</span>
@@ -180,7 +180,7 @@ const ProductStats: React.FC<ProductStatsProps> = ({
                 <Progress value={category.percentage} className="h-2" />
               </div>
             ))}
-            
+
             {topCategories.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No hay datos de categorías disponibles

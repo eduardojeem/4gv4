@@ -40,20 +40,20 @@ function sanitizeServerSide(str: string): string {
 /**
  * Sanitiza un objeto recursivamente
  */
-export function sanitizeObject<T extends Record<string, any>>(obj: T): T {
-  const sanitized = {} as T
+export function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
+  const sanitized = {} as Record<string, unknown>
   
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string') {
-      sanitized[key as keyof T] = sanitizeHTML(value) as any
+      sanitized[key] = sanitizeHTML(value)
     } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      sanitized[key as keyof T] = sanitizeObject(value)
+      sanitized[key] = sanitizeObject(value as Record<string, unknown>)
     } else {
-      sanitized[key as keyof T] = value
+      sanitized[key] = value
     }
   }
   
-  return sanitized
+  return sanitized as T
 }
 
 /**
@@ -86,22 +86,27 @@ export function validateJSONFile(file: File, maxSizeMB: number = 1): {
 /**
  * Previene prototype pollution
  */
-export function preventPrototypePollution<T>(obj: any): T {
+export function preventPrototypePollution<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') {
     return obj
   }
   
+  if (Array.isArray(obj)) {
+    return obj.map(item => preventPrototypePollution(item)) as unknown as T
+  }
+
   // Remover propiedades peligrosas
   const dangerous = ['__proto__', 'constructor', 'prototype']
-  const cleaned = Array.isArray(obj) ? [] : {}
+  const objRecord = obj as unknown as Record<string, unknown>
+  const cleaned: Record<string, unknown> = {}
   
-  for (const key in obj) {
+  for (const key in objRecord) {
     if (dangerous.includes(key)) {
       continue
     }
     
-    if (obj.hasOwnProperty(key)) {
-      (cleaned as any)[key] = preventPrototypePollution(obj[key])
+    if (Object.prototype.hasOwnProperty.call(objRecord, key)) {
+      cleaned[key] = preventPrototypePollution(objRecord[key])
     }
   }
   

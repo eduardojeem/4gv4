@@ -1,22 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
-import { resolveProductImageUrl } from '@/lib/images'
+import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
+import { galleryWithVariantImages, variantImageIndex } from '@/lib/public/variant-image'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { usesPortraitMedia } from '@/lib/website/storefront-style'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
+import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
+import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
+import { siteUrl } from '@/lib/site-url'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -50,6 +58,27 @@ export function ProductCard(props: ProductCardProps) {
   const [imageError, setImageError] = useState(false)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
+  const [activeImageIdx, setActiveImageIdx] = useState(0)
+  const [quantity, setQuantity] = useState(1)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
+  const storefrontStyle = useStorefrontStyle()
+
+  // Publicado sin precio: donde iba el precio va un boton que abre WhatsApp.
+  // El precio real no se muestra en ningun lado, ni siquiera en el mensaje.
+  const precioOculto = hidesPublicPrice(product)
+
+  // Para que telefono sirve el repuesto: «Apple - iPhone 13, 13 Pro».
+  const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
+
+  // La galeria incluye las fotos de las variantes: sin eso, elegir un color no
+  // tenia ninguna foto que mostrar.
+  const publicVariants = useMemo(() => (product.variants ?? []).filter((variant) => variant.is_active), [product.variants])
+  const galleryImages = useMemo(() => galleryWithVariantImages(
+    [product.image, ...(Array.isArray(product.images) ? product.images : [])],
+    publicVariants,
+  ), [product.image, product.images, publicVariants])
+  const activeImage = galleryImages[activeImageIdx] ?? null
+  const resolvedActive = resolveProductImageUrl(activeImage)
 
   // The server only includes wholesale_price after validating access for the
   // current organization. Never infer storefront pricing from dashboard roles.
@@ -58,8 +87,8 @@ export function ProductCard(props: ProductCardProps) {
   // ── Price logic ──────────────────────────────────────────────────────────
   const hasOffer =
     !isWholesale &&
-    product.has_offer === true &&
     product.offer_price != null &&
+    product.offer_price > 0 &&
     product.offer_price < product.sale_price
 
   const isWholesaleDiscount =
@@ -67,20 +96,49 @@ export function ProductCard(props: ProductCardProps) {
     product.wholesale_price != null &&
     product.wholesale_price < product.sale_price
 
-  const displayPrice = hasOffer
-    ? product.offer_price!
-    : isWholesale && product.wholesale_price
-    ? product.wholesale_price
-    : product.sale_price
+  // La misma función que usa el checkout: si la vitrina y el cobro calcularan
+  // por separado, vuelven a divergir como pasaba con el precio mayorista.
+  const displayPrice = resolvePublicVariantPrice({ isWholesale, product, variant: null })
+  const hasVariants = Boolean(product.has_variants && publicVariants.length > 0)
+  const selectedVariant = publicVariants.find((variant) => variant.id === selectedVariantId) ?? null
+
+  const handleVariantSelect = (variantId: string) => {
+    setSelectedVariantId(variantId)
+    setQuantity(1)
+    if (variantId === selectedVariantId) return
+    const nextVariant = publicVariants.find((variant) => variant.id === variantId) ?? null
+    const variantImageIdx = variantImageIndex(galleryImages, nextVariant, publicVariants)
+    if (variantImageIdx === -1) return
+    setImageError(false)
+    setActiveImageIdx(variantImageIdx)
+  }
+  const selectedPrice = selectedVariant
+    ? resolvePublicVariantPrice({ isWholesale, product, variant: selectedVariant })
+    : displayPrice
+  const selectedStock = hasVariants
+    ? (selectedVariant ? selectedVariant.stock_quantity : product.stock_quantity)
+    : product.stock_quantity
 
   const originalPrice = hasOffer || isWholesaleDiscount ? product.sale_price : null
   const discountPct = originalPrice
     ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100)
     : 0
+  const selectedOriginalPrice = selectedVariant && hasOffer
+    ? selectedVariant.sale_price
+    : originalPrice
+  const selectedDiscountPct = selectedOriginalPrice && selectedPrice < selectedOriginalPrice
+    ? Math.round(((selectedOriginalPrice - selectedPrice) / selectedOriginalPrice) * 100)
+    : 0
 
-  const isInStock = product.in_stock
-  const isLowStock = isInStock && product.stock_quantity > 0 && product.stock_quantity <= 4
+  const isInStock = hasVariants
+    ? (selectedVariant ? selectedVariant.stock_quantity > 0 : publicVariants.some((variant) => variant.stock_quantity > 0))
+    : Boolean(product.in_stock && (product.stock_quantity ?? 0) > 0 || product.in_stock)
+  const isLowStock = isInStock && (hasVariants ? selectedStock > 0 && selectedStock <= 4 : product.stock_quantity > 0 && product.stock_quantity <= 4)
   const imageSrc = resolveProductImageUrl(product.image)
+  // Moda y deportivo: foto vertical a sangre, como en una tienda de ropa. El
+  // placeholder se sigue mostrando entero para no recortarlo.
+  const portraitMedia = usesPortraitMedia(storefrontStyle)
+  const coverImage = portraitMedia && imageSrc !== '/placeholder-product.svg'
 
   // ── Cuotas / financiación (informativo) ───────────────────────────────────
   const installmentsVisible =
@@ -111,6 +169,7 @@ export function ProductCard(props: ProductCardProps) {
 
   // ── Tenant prefix ────────────────────────────────────────────────────────
   const tenantSlug = getTenantSlugFromPathname(pathname)
+  const favoriteSlug = tenantSlug || websiteSettings?.company_info.slug
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const productHref = `${tenantPrefix}/productos/${product.id}`
@@ -120,27 +179,75 @@ export function ProductCard(props: ProductCardProps) {
     websiteSettings?.company_info.whatsapp?.trim() ||
     websiteSettings?.company_info.phone?.trim() ||
     ''
+
+  const storeName = websiteSettings?.company_info.name || null
+  const fullProductUrl = siteUrl(productHref)
+
   const whatsappHref = contactPhone
     ? getWhatsAppLink({
         phone: contactPhone,
-        message: `Hola, quiero consultar por ${product.name} (${formatPrice(displayPrice)}).`,
+        message: buildProductWhatsAppMessage({
+          storeName,
+          productName: product.name,
+          price: precioOculto ? 0 : displayPrice,
+          originalPrice: !precioOculto && originalPrice && originalPrice > displayPrice ? originalPrice : null,
+          sku: product.sku,
+          inStock: isInStock,
+          stockQuantity: product.stock_quantity,
+          installmentText: !precioOculto && maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
+          productUrl: fullProductUrl,
+          imageUrl: product.image ? resolveProductImageUrl(product.image) : null,
+          intent: precioOculto ? 'price' : 'inquiry',
+        }),
+      })
+    : null
+
+  // Quick view modal WhatsApp message incorporating the exact selected variant, quantity & calculated total
+  const selectedVariantInStock = hasVariants
+    ? Boolean(selectedVariant && selectedVariant.stock_quantity > 0)
+    : isInStock
+
+  const modalWhatsappHref = contactPhone
+    ? getWhatsAppLink({
+        phone: contactPhone,
+        message: buildProductWhatsAppMessage({
+          storeName,
+          productName: product.name,
+          price: precioOculto ? 0 : selectedPrice,
+          originalPrice: !precioOculto && selectedOriginalPrice && selectedOriginalPrice > selectedPrice ? selectedOriginalPrice : null,
+          sku: selectedVariant?.sku || product.sku,
+          variantName: selectedVariant?.variant_name,
+          attributes: selectedVariant?.attributes,
+          quantity,
+          inStock: selectedVariantInStock,
+          stockQuantity: selectedStock,
+          installmentText: !precioOculto && maxInstallment ? `${maxInstallment.count} cuotas de ${formatPrice(maxInstallment.perInstallment)}` : null,
+          productUrl: fullProductUrl,
+          imageUrl: resolvedActive || (product.image ? resolveProductImageUrl(product.image) : null),
+          intent: precioOculto ? 'price' : selectedVariantInStock ? 'order' : 'inquiry',
+        }),
       })
     : null
 
   // ── Handlers ────────────────────────────────────────────────────────────
   function addToCart(closeModal = false) {
     if (commerceMode !== 'cart') return
+    if (hasVariants && (!closeModal || !selectedVariant)) {
+      setQuickViewOpen(true)
+      if (!selectedVariant) toast.info('Elegí una variante para continuar.')
+      return
+    }
     if (!isInStock) {
       toast.error('Producto sin stock')
       return
     }
-    const result = addProduct(product, Number(displayPrice || 0), 1)
+    const result = addProduct(product, Number(selectedPrice || 0), closeModal ? quantity : 1, selectedVariant)
     if (result.limited) {
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
     }
-    toast.success('Agregado al carrito')
-    if (closeModal) setQuickViewOpen(false)
+    toast.success('¡Agregado al carrito!')
+    if (closeModal) { setQuickViewOpen(false); setQuantity(1); setActiveImageIdx(0); setSelectedVariantId(null) }
     setJustAdded(true)
     setTimeout(() => setJustAdded(false), 1500)
   }
@@ -149,28 +256,40 @@ export function ProductCard(props: ProductCardProps) {
     <>
       {/* ── Card ── */}
       <article
-        className="group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
-        onClick={() => setQuickViewOpen(true)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && setQuickViewOpen(true)}
-        aria-label={`Vista rápida de ${product.name}`}
+        className={cn(
+          'group relative flex flex-col overflow-hidden bg-card transition-all duration-300',
+          storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
+          storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
+          storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
+          !isInStock && 'opacity-60 grayscale-[30%]'
+        )}
       >
+        {favoriteSlug && <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} /></div>}
         {/* ── Image area ── */}
-        <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-muted/50 to-muted/20">
+        <button
+          type="button"
+          onClick={() => setQuickViewOpen(true)}
+          className={cn(
+            'relative overflow-hidden bg-muted/30 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
+            portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]'
+          )}
+          aria-label={`Vista rápida de ${product.name}`}
+        >
           {imageSrc && !imageError ? (
             <Image
               src={imageSrc}
               alt={product.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]"
+              className={
+                coverImage
+                  ? 'object-cover transition-transform duration-700 group-hover:scale-[1.03]'
+                  : 'object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]'
+              }
               priority={priority}
               quality={75}
               onError={() => setImageError(true)}
-              unoptimized={
-                imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg'
-              }
+              unoptimized={shouldBypassImageOptimization(imageSrc)}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
@@ -181,13 +300,13 @@ export function ProductCard(props: ProductCardProps) {
           {/* Badges — top left */}
           <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5">
             {discountPct > 0 && (
-              <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-sm">
+              <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-xs">
                 <Tag className="h-2.5 w-2.5" />
                 -{discountPct}%
               </span>
             )}
             {product.featured && !hasOffer && (
-              <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-sm">
+              <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-xs">
                 <Zap className="h-2.5 w-2.5" />
                 Destacado
               </span>
@@ -207,13 +326,20 @@ export function ProductCard(props: ProductCardProps) {
 
           {/* Out-of-stock overlay */}
           {!isInStock && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
-              <span className="rounded-full bg-destructive/90 px-4 py-1.5 text-xs font-semibold text-destructive-foreground shadow">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px] z-10">
+              <span className={cn(
+                'rounded-full px-4 py-1.5 text-[11px] font-black uppercase tracking-widest shadow-md',
+                storefrontStyle === 'fashion'
+                  ? 'bg-foreground text-background'
+                  // Rojo fijo: el `destructive` del tema se aclara en oscuro y
+                  // el blanco encima quedaba en 4,07 (hace falta 4,5).
+                  : 'bg-red-700/95 text-white'
+              )}>
                 Agotado
               </span>
             </div>
           )}
-        </div>
+        </button>
 
         {/* Low-stock strip */}
         {isLowStock && (
@@ -234,12 +360,36 @@ export function ProductCard(props: ProductCardProps) {
             </p>
           )}
 
+          {/* Para que celular sirve: en un repuesto es el dato que decide la compra. */}
+          {deviceCompatibility && (
+            <p className="truncate text-[11px] font-semibold text-primary" title={deviceCompatibility}>
+              Para {deviceCompatibility}
+            </p>
+          )}
+
           {/* Product name */}
-          <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug text-foreground">
+          <h3 className={cn(
+            'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
+            storefrontStyle === 'classic' && 'font-semibold',
+            storefrontStyle === 'fashion' && 'font-bold group-hover:text-primary transition-colors',
+            storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight'
+          )}>
             {product.name}
           </h3>
 
           {/* Price row */}
+          {precioOculto ? (
+            <div
+              className="mt-2 min-w-0"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm font-bold leading-tight text-foreground">Precio a consultar</p>
+              <div className="relative z-20 mt-0.5">
+                <PriceAccessDialog productName={product.name} whatsappHref={whatsappHref} />
+              </div>
+            </div>
+          ) : (
           <div className="mt-2 min-w-0">
             <p
               className={cn(
@@ -263,48 +413,70 @@ export function ProductCard(props: ProductCardProps) {
               </p>
             )}
           </div>
+          )}
 
-          {/* Action buttons — stopPropagation so card click (open modal) doesn't fire */}
+          {/* Action buttons */}
           <div
-            className="mt-3 flex gap-2"
+            className="mt-3 flex items-center gap-2"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
             <Link
               href={productHref}
-              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground transition-all duration-150 hover:bg-muted hover:border-border/80 active:scale-95"
+              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary active:scale-[0.98]"
               aria-label={`Ver detalle de ${product.name}`}
             >
-              <Eye className="h-3.5 w-3.5 shrink-0" />
-              Ver detalle
+              <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span>Ver detalle</span>
             </Link>
 
-            {commerceMode === 'cart' && (
-              <button
-                type="button"
-                onClick={() => addToCart(false)}
-                disabled={!isInStock}
-                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm transition-all duration-150 hover:bg-primary/90 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={`Agregar ${product.name} al carrito`}
-              >
-                {justAdded ? (
-                  <Check className="h-3.5 w-3.5 shrink-0" />
-                ) : (
-                  <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
-                )}
-                {justAdded ? '¡Listo!' : 'Agregar'}
-              </button>
-            )}
-            {commerceMode === 'whatsapp' && whatsappHref && (
+            {/* Sin precio publicado no se puede comprar: se pregunta. */}
+            {precioOculto && whatsappHref && (
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-semibold text-white shadow-sm transition-all duration-150 hover:bg-emerald-700 active:scale-95"
-                aria-label={`Consultar por ${product.name} en WhatsApp`}
+                suppressHydrationWarning
+                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-[0.98] shadow-emerald-600/20"
+                aria-label={`Preguntar el precio de ${product.name} por WhatsApp`}
               >
                 <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                Consultar
+                <span>Preguntar</span>
+              </a>
+            )}
+
+            {!precioOculto && commerceMode === 'cart' && (
+              <button
+                type="button"
+                onClick={() => addToCart(false)}
+                disabled={!isInStock}
+                className={cn(
+                  'relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 shadow-xs disabled:cursor-not-allowed disabled:opacity-40',
+                  justAdded
+                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20'
+                )}
+                aria-label={`Agregar ${product.name} al carrito`}
+                title={`Agregar ${product.name} al carrito`}
+              >
+                {justAdded ? (
+                  <Check className="h-4 w-4 animate-in zoom-in" />
+                ) : (
+                  <ShoppingCart className="h-4 w-4 transition-transform hover:scale-110" />
+                )}
+              </button>
+            )}
+
+            {!precioOculto && commerceMode === 'whatsapp' && whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs transition-all hover:bg-emerald-500 active:scale-95 shadow-emerald-600/20"
+                aria-label={`Consultar por ${product.name} en WhatsApp`}
+                title={`Consultar por ${product.name} en WhatsApp`}
+              >
+                <MessageCircle className="h-4 w-4" />
               </a>
             )}
           </div>
@@ -312,187 +484,354 @@ export function ProductCard(props: ProductCardProps) {
       </article>
 
       {/* ── Quick-view modal ── */}
-      <Dialog open={quickViewOpen} onOpenChange={setQuickViewOpen}>
+      <Dialog open={quickViewOpen} onOpenChange={(open) => { setQuickViewOpen(open); if (!open) { setActiveImageIdx(0); setQuantity(1); setSelectedVariantId(null) } }}>
         <DialogContent
-          className="max-h-[90vh] w-[calc(100%-2rem)] max-w-sm gap-0 overflow-y-auto rounded-2xl p-0"
-          showCloseButton={false}
+          className="flex max-h-[90dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-xl"
+          showCloseButton
         >
           <DialogTitle className="sr-only">{product.name}</DialogTitle>
+          <DialogDescription className="sr-only">Imágenes, precio, disponibilidad y opciones de compra del producto.</DialogDescription>
 
-          {/* Image strip */}
-          <div className="relative h-52 shrink-0 overflow-hidden bg-gradient-to-br from-muted/50 to-muted/20">
-            {imageSrc && !imageError ? (
-              <Image
-                src={imageSrc}
-                alt={product.name}
-                fill
-                sizes="384px"
-                className="object-contain p-6"
-                quality={75}
-                onError={() => setImageError(true)}
-                unoptimized={
-                  imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg'
-                }
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <Package className="h-16 w-16 text-muted-foreground/20" />
-              </div>
-            )}
+          {/* ── Two-column layout ─────────────────────────────────────── */}
+          <div className="min-h-0 overflow-y-auto overscroll-contain">
 
-            {/* Discount / featured badges */}
-            <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-              {discountPct > 0 && (
-                <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow">
-                  <Tag className="h-2.5 w-2.5" />
-                  -{discountPct}%
-                </span>
-              )}
-              {product.featured && !hasOffer && (
-                <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow">
-                  <Zap className="h-2.5 w-2.5" />
-                  Destacado
-                </span>
-              )}
-            </div>
-
-            {/* Close button — top right */}
-            <button
-              type="button"
-              onClick={() => setQuickViewOpen(false)}
-              className="absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 text-foreground backdrop-blur-sm transition-colors hover:bg-background"
-              aria-label="Cerrar"
-            >
-              <XCircle className="h-4 w-4" />
-            </button>
-
-            {!isInStock && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
-                <span className="rounded-full bg-destructive/90 px-4 py-1.5 text-xs font-semibold text-destructive-foreground shadow">
-                  Agotado
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Info panel */}
-          <div className="flex flex-col gap-3 p-4">
-            {/* Brand + name */}
-            <div>
-              {product.brand && (
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {product.brand}
-                </p>
-              )}
-              <h2 className="mt-0.5 text-base font-bold leading-snug text-foreground">
-                {product.name}
-              </h2>
-            </div>
-
-            {/* Status badges */}
-            <div className="flex flex-wrap gap-1.5">
-              <Badge
-                variant={isInStock ? 'secondary' : 'destructive'}
-                className="gap-1 rounded-full text-[11px]"
-              >
-                {isInStock ? (
-                  <><Check className="h-2.5 w-2.5" /> En stock</>
+            {/* ── Left column: image gallery ──────────────────────────── */}
+            <div className="relative bg-muted/30">
+              {/* Main image */}
+              <div className="relative h-40 sm:h-48 overflow-hidden">
+                {resolvedActive && !imageError ? (
+                  <Image
+                    src={resolvedActive}
+                    alt={product.name}
+                    fill
+                    sizes="(max-width: 640px) 100vw, 320px"
+                    className="object-contain p-6 transition-opacity duration-200"
+                    quality={75}
+                    onError={() => setImageError(true)}
+                    unoptimized={shouldBypassImageOptimization(resolvedActive)}
+                  />
                 ) : (
-                  <><XCircle className="h-2.5 w-2.5" /> Agotado</>
+                  <div className="flex h-full items-center justify-center">
+                    <Package className="h-20 w-20 text-muted-foreground/20" />
+                  </div>
                 )}
-              </Badge>
-              {product.category && (
-                <Badge variant="outline" className="rounded-full text-[11px]">
-                  {product.category.name}
-                </Badge>
+
+                {/* Out-of-stock overlay */}
+                {!isInStock && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/65 backdrop-blur-[2px]">
+                    <span className="rounded-full bg-red-700/95 px-5 py-2 text-sm font-bold text-white shadow">
+                      Agotado
+                    </span>
+                  </div>
+                )}
+
+                {/* Prev/Next gallery arrows */}
+                {galleryImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Imagen anterior"
+                      onClick={(e) => { e.stopPropagation(); setImageError(false); setActiveImageIdx((i) => (i - 1 + galleryImages.length) % galleryImages.length) }}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 shadow backdrop-blur-sm transition hover:bg-background"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Imagen siguiente"
+                      onClick={(e) => { e.stopPropagation(); setImageError(false); setActiveImageIdx((i) => (i + 1) % galleryImages.length) }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 shadow backdrop-blur-sm transition hover:bg-background"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Gallery dots */}
+              {galleryImages.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto px-3 py-2">
+                  {galleryImages.map((image, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-label={`Ver imagen ${i + 1}`}
+                      aria-pressed={i === activeImageIdx}
+                      onClick={() => { setImageError(false); setActiveImageIdx(i) }}
+                      className={cn(
+                        'relative h-11 w-11 shrink-0 overflow-hidden rounded-md border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        i === activeImageIdx
+                          ? 'border-primary'
+                          : 'border-transparent'
+                      )}
+                    ><Image src={resolveProductImageUrl(image)} alt="" fill sizes="44px" className="object-contain" /></button>
+                  ))}
+                </div>
               )}
-              {branchLabel && (
-                <Badge variant="outline" title={branchTitle} className="gap-1 rounded-full text-[11px]">
-                  <MapPin className="h-2.5 w-2.5 text-primary" />
-                  {branchLabel}
-                </Badge>
-              )}
-              {isLowStock && (
-                <Badge className="rounded-full bg-amber-500 text-[11px] text-white">
-                  Últimas {product.stock_quantity} uds.
-                </Badge>
-              )}
+
+              {/* Top-left badges */}
+              <div className="absolute left-3 top-3 flex flex-col gap-1.5">
+                {discountPct > 0 && (
+                  <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-md">
+                    <TrendingDown className="h-2.5 w-2.5" />
+                    -{discountPct}%
+                  </span>
+                )}
+                {product.featured && !hasOffer && (
+                  <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-md">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    Destacado
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Price */}
-            <div className="flex items-baseline gap-2">
-              <p
-                className={cn(
-                  'text-2xl font-bold leading-tight',
-                  hasOffer || isWholesaleDiscount
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-foreground'
-                )}
-              >
-                {formatPrice(displayPrice)}
-              </p>
-              {originalPrice && (
-                <p className="text-sm text-muted-foreground line-through">
-                  {formatPrice(originalPrice)}
-                </p>
-              )}
-            </div>
+            {/* ── Right column: info panel ─────────────────────────────── */}
+            <div className="flex flex-col">
 
-            {/* Cuotas / financiación */}
-            {installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
-              <InstallmentSelector
-                price={displayPrice}
-                plans={product.installments_plans ?? []}
-                compact
-              />
-            )}
-
-            {/* Description */}
-            {product.description?.trim() && (
-              <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
-                {product.description.trim().replace(/\n{3,}/g, '\n\n')}
-              </p>
-            )}
-
-            {/* CTA buttons */}
-            <div className="flex flex-col gap-2 pt-1">
-              {commerceMode === 'cart' && (
-                <button
-                  type="button"
-                  onClick={() => addToCart(true)}
-                  disabled={!isInStock}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {justAdded ? (
-                    <><Check className="h-4 w-4" /> ¡Agregado!</>
-                  ) : (
-                    <><ShoppingCart className="h-4 w-4" /> Agregar al carrito</>
+              {/* Header bar */}
+              <div className="flex items-start justify-between gap-2 border-b border-border/60 px-4 py-3">
+                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} />}
+                <div className="min-w-0">
+                  {product.brand && (
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                      {product.brand}
+                    </p>
                   )}
-                </button>
-              )}
-              {commerceMode === 'whatsapp' && whatsappHref && (
-                <a
-                  href={whatsappHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setQuickViewOpen(false)}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Consultar por WhatsApp
-                </a>
-              )}
+                  <h2 className="mt-0.5 text-base font-bold leading-snug text-foreground">
+                    {product.name}
+                  </h2>
+                  {/* SKU */}
+                  {(selectedVariant?.sku || product.sku) && (
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      SKU: {selectedVariant?.sku || product.sku}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-              <Link
-                href={productHref}
-                onClick={() => setQuickViewOpen(false)}
-                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
-              >
-                <Eye className="h-3.5 w-3.5" />
-                Ver detalle completo
-              </Link>
+              {/* Scrollable content */}
+              <div className="flex flex-col gap-3 px-4 py-3">
+
+                {/* Status / Category badges */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold',
+                    isInStock
+                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-800/40'
+                      : 'bg-destructive/10 text-destructive ring-1 ring-destructive/20'
+                  )}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', isInStock ? 'bg-emerald-500 animate-pulse' : 'bg-destructive')} />
+                    {isInStock ? (hasVariants && selectedVariant ? `${selectedVariant.stock_quantity} disponibles` : 'En stock') : 'Sin stock'}
+                  </span>
+                  {product.category && (
+                    <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
+                      {product.category.name}
+                    </span>
+                  )}
+                  {branchLabel && (
+                    <span title={branchTitle} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
+                      <MapPin className="h-2.5 w-2.5 text-primary" />
+                      {branchLabel}
+                    </span>
+                  )}
+                  {isLowStock && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-800/40">
+                      Últimas {selectedStock} uds.
+                    </span>
+                  )}
+                </div>
+
+                {/* ── Price block ── */}
+                {precioOculto ? (
+                  <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
+                    <p className="text-lg font-bold leading-none tracking-tight text-foreground">Precio a consultar</p>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Este producto se cotiza por WhatsApp. Escribinos y te pasamos el precio al instante.
+                    </p>
+                  </div>
+                ) : (
+                <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
+                  <div className="flex items-end gap-3">
+                    <p className={cn(
+                      'text-2xl font-bold leading-none tracking-tight',
+                      hasOffer || isWholesaleDiscount
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-foreground'
+                    )}>
+                      {formatPrice(selectedPrice)}
+                    </p>
+                    {selectedOriginalPrice && selectedPrice < selectedOriginalPrice && (
+                      <p className="mb-0.5 text-sm text-muted-foreground line-through">
+                        {formatPrice(selectedOriginalPrice)}
+                      </p>
+                    )}
+                  </div>
+                  {/* Savings chip */}
+                  {selectedOriginalPrice && selectedDiscountPct > 0 && (
+                    <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <Tag className="h-3 w-3" />
+                      Ahorrás {formatPrice(selectedOriginalPrice - selectedPrice)} · {selectedDiscountPct}% OFF
+                    </p>
+                  )}
+                </div>
+                )}
+
+                {hasVariants && (
+                  <fieldset className="space-y-2.5 rounded-xl border border-border/80 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between">
+                      <legend className="text-xs font-bold text-foreground">
+                        Elegí una variante <span className="text-rose-500">*</span>
+                      </legend>
+                      {selectedVariant && (
+                        <span className="text-[11px] font-semibold text-primary">
+                          {selectedVariant.variant_name}
+                        </span>
+                      )}
+                    </div>
+                    {publicVariants.length > 0 ? (
+                      <div className="grid max-h-40 grid-cols-1 gap-2 sm:grid-cols-2 overflow-y-auto pr-1">
+                        {publicVariants.map((variant) => {
+                          const isSelected = selectedVariantId === variant.id
+                          const hasStock = variant.stock_quantity > 0
+                          const variantPrice = resolvePublicVariantPrice({ isWholesale, product, variant })
+                          const variantOriginalPrice = hasOffer && variantPrice < variant.sale_price
+                            ? variant.sale_price
+                            : null
+                          return (
+                            <button
+                              key={variant.id}
+                              type="button"
+                              onClick={() => handleVariantSelect(variant.id)}
+                              aria-pressed={isSelected}
+                              className={cn(
+                                'flex flex-col justify-between rounded-xl border p-2.5 text-left text-xs transition-all',
+                                isSelected
+                                  ? 'border-primary bg-primary/10 shadow-xs ring-2 ring-primary/20 text-foreground'
+                                  : 'border-border bg-card hover:border-primary/40 hover:bg-muted/40 text-foreground',
+                                !hasStock && 'opacity-60 bg-muted/40'
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="font-semibold leading-tight line-clamp-1">
+                                  {variant.variant_name}
+                                </span>
+                                {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                              </div>
+                              <div className="mt-1.5 flex items-center justify-between gap-1 text-[11px]">
+                                <span className={cn('font-medium', hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
+                                  {hasStock ? `${variant.stock_quantity} disp.` : 'Sin stock'}
+                                </span>
+                                <span className="flex flex-col items-end leading-tight">
+                                  <span className={cn(
+                                    'font-bold',
+                                    variantOriginalPrice
+                                      ? 'text-rose-600 dark:text-rose-400'
+                                      : 'text-foreground'
+                                  )}>
+                                    {formatPrice(variantPrice)}
+                                  </span>
+                                  {variantOriginalPrice && (
+                                    <span className="text-[10px] font-medium text-muted-foreground line-through">
+                                      {formatPrice(variantOriginalPrice)}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-amber-200/70 bg-amber-50/80 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                        Este producto posee variantes configuradas. Podés ver el detalle completo en la página del producto.
+                      </div>
+                    )}
+                    {!selectedVariant && publicVariants.length > 0 && (
+                      <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                        Seleccioná una variante para continuar.
+                      </p>
+                    )}
+                  </fieldset>
+                )}
+
+                {/* Installments */}
+                {!precioOculto && installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
+                  <InstallmentSelector
+                    price={selectedPrice * quantity}
+                    plans={product.installments_plans ?? []}
+                    compact
+                  />
+                )}
+
+                {/* Description */}
+                {product.description?.trim() && (
+                  <details className="rounded-md border p-2 text-sm"><summary className="cursor-pointer font-medium">Descripción y características</summary><p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{product.description.trim().replace(/\n{3,}/g, '\n\n')}</p></details>
+                )}
+
+              </div>
+
             </div>
           </div>
+              {/* Actions stay outside the scrollable product information. */}
+              <div className="shrink-0 flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
+                {precioOculto && (
+                  <PriceAccessDialog
+                    productName={product.name}
+                    whatsappHref={modalWhatsappHref || whatsappHref}
+                    variant="button"
+                  />
+                )}
+                {precioOculto && (modalWhatsappHref || whatsappHref) && (
+                  <a
+                    href={(modalWhatsappHref || whatsappHref)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setQuickViewOpen(false)}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Preguntar el precio por WhatsApp
+                  </a>
+                )}
+                {!precioOculto && commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || (hasVariants && !selectedVariant) || quantity >= selectedStock} onClick={() => setQuantity(q => Math.min(selectedStock, q + 1))}>+</button></div></div>}
+                {!precioOculto && commerceMode === 'cart' && (
+                  <button
+                    type="button"
+                    onClick={() => addToCart(true)}
+                    disabled={!isInStock || (hasVariants && !selectedVariant)}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {justAdded ? (
+                      <><Check className="h-4 w-4" /> ¡Agregado al carrito!</>
+                    ) : hasVariants && !selectedVariant ? (
+                      <><ShoppingCart className="h-4 w-4" /> Elegí una variante para agregar</>
+                    ) : (
+                      <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(selectedPrice * quantity)}</>
+                    )}
+                  </button>
+                )}
+                {!precioOculto && commerceMode === 'whatsapp' && (modalWhatsappHref || whatsappHref) && (
+                  <a
+                    href={(modalWhatsappHref || whatsappHref)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setQuickViewOpen(false)}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {selectedVariantInStock ? 'Pedir por WhatsApp' : 'Consultar por WhatsApp'}
+                  </a>
+                )}
+                <Link
+                  href={productHref}
+                  onClick={() => setQuickViewOpen(false)}
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-2xl border border-border bg-background text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Ver detalle completo
+                </Link>
+              </div>
         </DialogContent>
       </Dialog>
     </>

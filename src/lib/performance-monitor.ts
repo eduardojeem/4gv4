@@ -3,7 +3,7 @@
  * Sistema de monitoreo de rendimiento en tiempo real
  */
 
-import React from 'react'
+import React from 'react';
 
 interface PerformanceMetric {
   name: string;
@@ -45,11 +45,11 @@ class PerformanceMonitor {
           }
         }
       });
-      
+
       try {
         navObserver.observe({ entryTypes: ['navigation'] });
         this.observers.push(navObserver);
-      } catch (e) {
+      } catch (_e) {
         console.warn('Navigation timing observer not supported');
       }
     }
@@ -69,11 +69,11 @@ class PerformanceMonitor {
           }
         }
       });
-      
+
       try {
         resourceObserver.observe({ entryTypes: ['resource'] });
         this.observers.push(resourceObserver);
-      } catch (e) {
+      } catch (_e) {
         console.warn('Resource timing observer not supported');
       }
     }
@@ -85,11 +85,11 @@ class PerformanceMonitor {
         const lastEntry = entries[entries.length - 1];
         this.recordMetric('largest_contentful_paint', lastEntry.startTime, 'timing');
       });
-      
+
       try {
         lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
         this.observers.push(lcpObserver);
-      } catch (e) {
+      } catch (_e) {
         console.warn('LCP observer not supported');
       }
     }
@@ -102,11 +102,11 @@ class PerformanceMonitor {
           this.recordMetric('first_input_delay', fidEntry.processingStart - fidEntry.startTime, 'timing');
         }
       });
-      
+
       try {
         fidObserver.observe({ entryTypes: ['first-input'] });
         this.observers.push(fidObserver);
-      } catch (e) {
+      } catch (_e) {
         console.warn('FID observer not supported');
       }
     }
@@ -116,17 +116,18 @@ class PerformanceMonitor {
       let clsValue = 0;
       const clsObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          if (!(entry as any).hadRecentInput) {
-            clsValue += (entry as any).value;
+          const shiftEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number }
+          if (!shiftEntry.hadRecentInput && typeof shiftEntry.value === 'number') {
+            clsValue += shiftEntry.value;
             this.recordMetric('cumulative_layout_shift', clsValue, 'gauge');
           }
         }
       });
-      
+
       try {
         clsObserver.observe({ entryTypes: ['layout-shift'] });
         this.observers.push(clsObserver);
-      } catch (e) {
+      } catch (_e) {
         console.warn('CLS observer not supported');
       }
     }
@@ -157,7 +158,7 @@ class PerformanceMonitor {
 
     this.metrics.push(metric);
     this.checkThresholds(metric);
-    
+
     // Mantener solo las últimas 1000 métricas
     if (this.metrics.length > 1000) {
       this.metrics = this.metrics.slice(-1000);
@@ -202,7 +203,7 @@ class PerformanceMonitor {
   getAverageMetric(name: string, timeRange?: { start: number; end: number }): number {
     const metrics = this.getMetrics(name, timeRange);
     if (metrics.length === 0) return 0;
-    
+
     return metrics.reduce((sum, m) => sum + m.value, 0) / metrics.length;
   }
 
@@ -230,7 +231,7 @@ class PerformanceMonitor {
 
     // Calcular estadísticas para cada métrica
     const uniqueMetrics = [...new Set(this.metrics.map(m => m.name))];
-    
+
     for (const metricName of uniqueMetrics) {
       const metrics = this.getMetrics(metricName, timeRange);
       if (metrics.length === 0) continue;
@@ -283,7 +284,7 @@ class PerformanceMonitor {
 
   startComponentTiming(componentName: string): () => void {
     const startTime = performance.now();
-    
+
     return () => {
       const endTime = performance.now();
       const duration = endTime - startTime;
@@ -293,7 +294,7 @@ class PerformanceMonitor {
 
   measureApiCall<T>(apiName: string, apiCall: () => Promise<T>): Promise<T> {
     const startTime = performance.now();
-    
+
     return apiCall().finally(() => {
       const endTime = performance.now();
       const duration = endTime - startTime;

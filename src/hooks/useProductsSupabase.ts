@@ -6,8 +6,9 @@ import { config } from '@/lib/config'
 import type { Database } from '@/lib/supabase/types'
 import type { Product, ProductAlert, Category, Supplier, Brand } from '@/types/product-unified'
 import { useBranch } from '@/contexts/branch-context'
+import { toast } from 'sonner'
 import { branchHeaders } from '@/lib/branches/client'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 import { isLowStock, isOutOfStock } from '@/lib/products-dashboard-utils'
 
@@ -16,15 +17,23 @@ interface ProductFilters {
   category?: string
   supplier?: string
   brand?: string
+  /** Marca y modelo del celular al que pertenece el repuesto. */
+  deviceBrand?: string
+  deviceModel?: string
   stockStatus?: 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
   priceMin?: number
   priceMax?: number
   isActive?: boolean
   featured?: boolean
+  /**
+   * Productos fisicos o servicios. El servidor filtra y cuenta: si se filtrara
+   * en el navegador, la pagina mostraria menos filas de las que dice el total.
+   */
+  catalogKind?: 'part' | 'service'
 }
 
 interface ProductSort {
-  field: 'name' | 'sku' | 'category' | 'price' | 'stock' | 'supplier' | 'margin' | 'created_at'
+  field: 'name' | 'sku' | 'category' | 'price' | 'stock' | 'supplier' | 'margin' | 'created_at' | 'device'
   direction: 'asc' | 'desc'
 }
 
@@ -35,6 +44,8 @@ interface PaginationOptions {
 
 interface DashboardStats {
   totalProducts: number
+  physicalProductsCount?: number
+  servicesCount?: number
   activeProducts: number
   totalStockValue: number
   totalCostValue: number
@@ -49,10 +60,11 @@ interface DashboardStats {
 
 interface ProductApiPayload {
   success?: boolean
-  data?: Product
+  data?: Product | { product?: Product; variants?: unknown[] }
   error?: string
   code?: string
   message?: string
+  conflictProductId?: string
   details?: Array<{
     field?: string
     message?: string
@@ -66,6 +78,9 @@ interface ProductsListApiPayload {
     total?: number
     page?: number
     per_page?: number
+    /** El filtro de stock barrio hasta el tope: el listado y el total son parciales. */
+    truncated?: boolean
+    scan_cap?: number
   }
   error?: string
   message?: string
@@ -76,6 +91,12 @@ interface CategoryApiPayload {
   data?: Category
   error?: string
   message?: string
+}
+
+type ProductOperationResult<T = unknown> = {
+  success: boolean
+  data?: T
+  error?: string
 }
 
 function getProductApiError(payload: ProductApiPayload | null, fallback: string) {
@@ -93,6 +114,18 @@ function getProductApiError(payload: ProductApiPayload | null, fallback: string)
   return payload.message || payload.error || fallback
 }
 
+/**
+ * Si la base todavía no tiene las columnas del celular, la API guarda el
+ * producto igual y avisa. Se muestra, porque si no el usuario cree que la
+ * marca y el modelo del celular quedaron guardados.
+ */
+function avisarSiFaltoElCelular(payload: unknown) {
+  const respuesta = payload as { device_fields_skipped?: boolean; message?: string } | null
+  if (respuesta?.device_fields_skipped) {
+    toast.warning(respuesta.message || 'No se guardaron la marca ni el modelo del celular.')
+  }
+}
+
 export function useProductsSupabase(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true
   const [products, setProducts] = useState<Product[]>([])
@@ -104,6 +137,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  // Marca que el resultado quedo incompleto por el tope del barrido de stock.
+  const [resultTruncated, setResultTruncated] = useState(false)
 
   // Estados para filtros, ordenamiento y paginación
   const [filters, setFilters] = useState<ProductFilters>({
@@ -119,8 +154,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   })
   const [pagination, setPagination] = useState<PaginationOptions>({
     page: 1,
-    // 0 = sin límite (traer todos los registros que coincidan con filtros)
-    limit: 0
+    limit: 20
   })
 
   const supabase = createClient()
@@ -131,9 +165,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return items as Array<T & { branch_stock_quantity?: number }>
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
-      supabase,
+    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      supabase as unknown as BranchInventoryClient,
       selectedBranchId,
       items.map((item) => item.id)
     )
@@ -148,7 +181,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Obtener productos para calcular estadísticas
       const { data: products, error: productsError } = await supabase
         .from('products')
-        .select('id, sku, name, purchase_price, sale_price, stock_quantity, min_stock, is_active')
+        .select('id, sku, name, purchase_price, sale_price, stock_quantity, min_stock, is_active, unit_measure, category:categories(name)')
 
       if (productsError) throw productsError
 
@@ -176,16 +209,20 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Calcular estadísticas
       const productList = await applySelectedBranchStock((products || []) as unknown as Product[])
       const totalProducts = productList?.length || 0
+      const servicesCount = productList?.filter(isServiceLikeProduct)?.length || 0
+      const physicalProductsCount = Math.max(0, totalProducts - servicesCount)
       const activeProducts = productList?.filter(p => p.is_active)?.length || 0
-      const totalStockValue = productList?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
-      const totalCostValue = productList?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
+      const totalStockValue = productList?.filter(p => !isServiceLikeProduct(p))?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
+      const totalCostValue = productList?.filter(p => !isServiceLikeProduct(p))?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
       const totalMargin = totalStockValue - totalCostValue
       const avgMarginPercentage = totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
-      const lowStockCount = productList?.filter(isLowStock)?.length || 0
-      const outOfStockCount = productList?.filter(isOutOfStock)?.length || 0
+      const lowStockCount = productList?.filter(p => !isServiceLikeProduct(p) && isLowStock(p))?.length || 0
+      const outOfStockCount = productList?.filter(p => !isServiceLikeProduct(p) && isOutOfStock(p))?.length || 0
 
       setDashboardStats({
         totalProducts,
+        physicalProductsCount,
+        servicesCount,
         activeProducts,
         totalStockValue,
         totalCostValue,
@@ -226,7 +263,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       const params = new URLSearchParams({
         page: String(Math.max(1, activePagination.page)),
-        per_page: String(activePagination.limit > 0 ? activePagination.limit : 50),
+        per_page: String(activePagination.limit > 0 ? activePagination.limit : 20),
         sort: activeSort.field,
         direction: activeSort.direction,
         stock_status: activeFilters.stockStatus || 'all',
@@ -240,6 +277,9 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       if (activeFilters.priceMax !== undefined) params.set('price_max', String(activeFilters.priceMax))
       if (activeFilters.isActive !== undefined) params.set('is_active', String(activeFilters.isActive))
       if (activeFilters.featured !== undefined) params.set('featured', String(activeFilters.featured))
+      if (activeFilters.catalogKind) params.set('catalog_kind', activeFilters.catalogKind)
+      if (activeFilters.deviceBrand) params.set('device_brand', activeFilters.deviceBrand)
+      if (activeFilters.deviceModel) params.set('device_model', activeFilters.deviceModel)
       if (selectedBranchId) params.set('strict_branch_stock', 'true')
 
       const response = await fetch(`/api/products?${params.toString()}`, {
@@ -253,6 +293,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       setProducts(payload.data.products)
       setTotalCount(Number(payload.data.total || 0))
+      setResultTruncated(payload.data.truncated === true)
     } catch (err) {
       console.error('Error fetching products:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -284,11 +325,16 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const fetchBrands = useCallback(async () => {
     if (!enabled) return
     try {
+      // Acotado a proposito: esta consulta no tenia tope y PostgREST corta en
+      // mil filas sin avisar, asi que la pantalla creia tener todas las marcas
+      // cuando no las tenia. El buscador de marcas consulta al servidor cuando
+      // hay muchas (ver BrandPicker), y el filtro usa estas como sugerencias.
       const { data, error } = await supabase
         .from('brands')
         .select('*')
         .eq('is_active', true)
         .order('name')
+        .limit(200)
 
       if (error) throw error
       setBrands((data || []) as unknown as Brand[])
@@ -429,6 +475,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
   // Función para crear producto
   const createProduct = useCallback(async (productData: Database['public']['Tables']['products']['Insert']) => {
+    let payload: ProductApiPayload | null = null
     try {
       const response = await fetch('/api/products', {
         method: 'POST',
@@ -438,7 +485,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         },
         body: JSON.stringify(productData),
       })
-      const payload = await response.json().catch(() => null) as ProductApiPayload | null
+      payload = await response.json().catch(() => null) as ProductApiPayload | null
 
       if (!response.ok || !payload?.success || !payload.data) {
         throw new Error(getProductApiError(payload, 'Error al crear el producto'))
@@ -446,6 +493,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       // Actualizar estado local inmediatamente
       const newProduct = payload.data as Product
+      avisarSiFaltoElCelular(payload)
       
       // Ensure local state update happens with functional update to avoid stale closures
       setProducts(prev => {
@@ -480,7 +528,9 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       
       return { 
         success: false, 
-        error: errorMessage
+        error: errorMessage,
+        code: payload?.code,
+        conflictProductId: payload?.conflictProductId,
       }
     }
   }, [selectedBranchId, fetchDashboardStats, fetchProducts])
@@ -491,23 +541,55 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     productData: Database['public']['Tables']['products']['Update']
   ) => {
     try {
-      const response = await fetch(`/api/products/${id}`, {
+      // La ruta de colección es la implementación canónica que guarda el
+      // producto y sus variantes de forma atómica. La ruta por id conserva el
+      // CRUD simple para otros consumidores, pero no debe usarse desde este
+      // editor porque validaba variantes sin persistirlas.
+      const response = await fetch('/api/products', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           ...branchHeaders(selectedBranchId),
         },
-        body: JSON.stringify(productData),
+        body: JSON.stringify({ ...productData, id }),
       })
       const payload = await response.json().catch(() => null) as ProductApiPayload | null
 
-      if (!response.ok || !payload?.success || !payload.data) {
+      const responseData = payload?.data
+      avisarSiFaltoElCelular(payload)
+      const updatedProduct = responseData && 'product' in responseData
+        ? ({ ...responseData.product, variants: responseData.variants ?? [] } as Product)
+        : responseData as Product | undefined
+
+      if (!response.ok || !payload?.success || !updatedProduct) {
         throw new Error(getProductApiError(payload, 'Error al actualizar el producto'))
       }
 
-      // Actualizar estado local inmediatamente
-      const updatedProduct = payload.data as Product
-      setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p))
+      // Un ajuste de stock que falla no invalida el guardado, pero el usuario
+      // tiene que enterarse: antes se perdia en silencio.
+      for (const warning of (payload as { warnings?: string[] } | null)?.warnings ?? []) {
+        toast.warning(warning)
+      }
+
+      // Actualizar estado local inmediatamente preservando stock y relaciones si la respuesta o payload no los tocó
+      setProducts(prev => prev.map(p => {
+        if (p.id !== id) return p
+        const rawProductData = productData as Record<string, unknown>
+        const isStockTouched = rawProductData.stock_quantity !== undefined || rawProductData.stockQuantity !== undefined
+        const finalStock = isStockTouched
+          ? (updatedProduct.stock_quantity ?? p.stock_quantity)
+          : (p.stock_quantity ?? updatedProduct.stock_quantity)
+        return {
+          ...p,
+          ...updatedProduct,
+          stock_quantity: finalStock,
+          variants: (updatedProduct.variants && updatedProduct.variants.length > 0)
+            ? updatedProduct.variants
+            : (p.variants ?? updatedProduct.variants),
+          category: updatedProduct.category ?? p.category,
+          supplier: updatedProduct.supplier ?? p.supplier,
+        }
+      }))
 
       // Refrescar estadísticas en segundo plano
       fetchDashboardStats().catch(err => console.error('Error refreshing data after update:', err))
@@ -540,10 +622,15 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         method: 'DELETE',
         headers: branchHeaders(selectedBranchId),
       })
-      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string } | null
+      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string; code?: string } | null
 
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || 'Error al eliminar el producto')
+        return {
+          success: false,
+          error: payload?.error || 'Error al eliminar el producto',
+          code: payload?.code,
+          status: response.status,
+        }
       }
 
       // Refrescar datos en segundo plano
@@ -554,13 +641,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       return { success: true }
     } catch (err) {
-      console.error('Error deleting product:', err)
-      if (typeof err === 'object' && err !== null) {
-          console.error('Detalles del error:', JSON.stringify(err, null, 2))
-      }
+      console.error('Error deleting product (network failure):', err)
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
+        error: err instanceof Error ? err.message : 'Error al eliminar el producto'
       }
     }
   }, [selectedBranchId, fetchProducts, fetchDashboardStats])
@@ -573,7 +657,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     reason?: string,
     referenceId?: string,
     referenceType?: string
-  ) => {
+  ): Promise<ProductOperationResult> => {
     try {
       let data = null
       let error = null as { message?: string } | null
@@ -623,8 +707,12 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       ])
 
       return { success: true, data }
-    } catch (err: any) {
-      const errorMsg = err?.message || err?.details || JSON.stringify(err)
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'details' in err
+          ? String(err.details)
+          : JSON.stringify(err)
       console.error('Error updating stock:', errorMsg, err)
       return { 
         success: false, 
@@ -798,9 +886,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       })
 
       if (selectedBranchId && grouped.size > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
-          supabase,
+        const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+          supabase as unknown as BranchInventoryClient,
           selectedBranchId,
           Array.from(grouped.keys())
         )
@@ -847,148 +934,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       }
     }
   }, [fetchAlerts])
-
-  // Función para exportar productos a CSV
-  const exportToCSV = useCallback(async (filters: ProductFilters = {}) => {
-    try {
-      let query = supabase
-        .from('products')
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone, address)
-        `)
-
-      // Aplicar los mismos filtros que en fetchProducts
-      if (filters.search) {
-        query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`)
-      }
-
-      if (filters.category) {
-        query = query.eq('category_id', filters.category)
-      }
-
-      if (filters.supplier) {
-        query = query.eq('supplier_id', filters.supplier)
-      }
-
-      if (filters.brand) {
-        query = query.ilike('brand', filters.brand)
-      }
-
-      if (filters.isActive !== undefined) {
-        query = query.eq('is_active', filters.isActive)
-      }
-
-      if (filters.priceMin !== undefined) {
-        query = query.filter('sale_price', 'gte', filters.priceMin)
-      }
-
-      if (filters.priceMax !== undefined) {
-        query = query.filter('sale_price', 'lte', filters.priceMax)
-      }
-
-      if (filters.stockStatus && filters.stockStatus !== 'all') {
-        if (filters.stockStatus === 'in_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'gt', 0)
-        } else if (filters.stockStatus === 'low_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'gt', 0)
-        } else if (filters.stockStatus === 'out_of_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'eq', 0)
-        }
-      }
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      // Convertir a CSV
-      if (!data || data.length === 0) {
-        return { success: false, error: 'No hay datos para exportar' }
-      }
-
-      const headers = [
-        'SKU', 'Nombre', 'Descripción', 'Categoría', 'Marca', 'Proveedor',
-        'Precio Compra', 'Precio Venta', 'Precio Mayorista', 'Stock', 'Stock Mínimo',
-        'Unidad', 'Estado', 'Margen %', 'Valor Stock', 'Estado Stock'
-      ]
-
-      type CSVProduct = {
-        id: string
-        sku: string
-        name: string
-        description?: string | null
-        brand?: string | null
-        purchase_price: number | null
-        sale_price: number | null
-        wholesale_price?: number | null
-        stock_quantity: number | null
-        min_stock: number | null
-        unit_measure: string
-        is_active: boolean
-        category?: { name?: string } | null
-        supplier?: { name?: string } | null
-      }
-
-      const baseItems = await applySelectedBranchStock(data as unknown as CSVProduct[])
-      let items = baseItems
-
-      if (filters.stockStatus === 'low_stock') {
-        items = baseItems.filter(isLowStock)
-      } else if (filters.stockStatus === 'in_stock') {
-        items = baseItems.filter(p => !isOutOfStock(p))
-      } else if (filters.stockStatus === 'out_of_stock') {
-        items = baseItems.filter(isOutOfStock)
-      }
-
-      const csvContent = [
-        headers.join(','),
-        ...items.map(p => {
-          const margin = (Number(p.sale_price || 0) - Number(p.purchase_price || 0))
-          const marginPct = p.purchase_price ? (margin / Number(p.purchase_price)) * 100 : 0
-          const stockValue = Number(p.sale_price || 0) * Number(p.stock_quantity || 0)
-          const stockStatus = isOutOfStock(p) ? 'Sin Stock' : (isLowStock(p) ? 'Stock Bajo' : 'En Stock')
-          return [
-            p.sku,
-            `"${p.name}"`,
-            `"${p.description || ''}"`,
-            `"${p.category?.name || ''}"`,
-            `"${p.brand || ''}"`,
-            `"${p.supplier?.name || ''}"`,
-            p.purchase_price,
-            p.sale_price,
-            p.wholesale_price || '',
-            p.stock_quantity,
-            p.min_stock,
-            p.unit_measure,
-            p.is_active ? 'Activo' : 'Inactivo',
-            marginPct.toFixed(2),
-            stockValue.toFixed(2),
-            stockStatus
-          ].join(',')
-        })
-      ].join('\n')
-
-      // Crear y descargar archivo
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `productos_${new Date().toISOString().split('T')[0]}.csv`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      return { success: true }
-    } catch (err) {
-      console.error('Error exporting to CSV:', err)
-      return { 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
-      }
-    }
-  }, [applySelectedBranchStock, selectedBranchId, supabase])
 
   const exportInventoryCSV = useCallback(async (filters: ProductFilters = {}) => {
     try {
@@ -1060,12 +1005,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         return /[;"\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
       }
       const formatNumber = (value: number | null | undefined) => Number(value || 0).toFixed(2)
-      const headers = [
-        'SKU', 'Nombre', 'Descripción', 'Categoría', 'Marca', 'Proveedor',
-        'Precio Compra', 'Precio Venta', 'Precio Mayorista', 'Stock', 'Stock Mínimo',
-        'Stock Máximo', 'Unidad', 'Código Barras', 'Ubicación', 'Activo', 'Destacado',
-        'Margen %', 'Valor Stock', 'Estado Stock', 'ID'
-      ]
       const rows = items.map(product => {
         const margin = Number(product.sale_price || 0) - Number(product.purchase_price || 0)
         const marginPct = product.purchase_price ? (margin / Number(product.purchase_price)) * 100 : 0
@@ -1329,6 +1268,22 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     fetchProducts()
   }, [enabled, filters, sort, pagination, fetchProducts])
 
+  // Escuchar eventos de actualización global para sincronizar con /dashboard/repairs/inventory y /dashboard/products
+  useEffect(() => {
+    const handleSync = () => {
+      fetchProducts().catch(err => console.error('Error auto-syncing products:', err))
+      fetchDashboardStats().catch(err => console.error('Error auto-syncing stats:', err))
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('product-updated', handleSync)
+      window.addEventListener('inventory-updated', handleSync)
+      return () => {
+        window.removeEventListener('product-updated', handleSync)
+        window.removeEventListener('inventory-updated', handleSync)
+      }
+    }
+  }, [fetchProducts, fetchDashboardStats])
+
   // Memoizar valores calculados
   const memoizedValues = useMemo(() => ({
     products,
@@ -1340,12 +1295,13 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     loading,
     error,
     totalCount,
+    resultTruncated,
     pagination: {
       totalPages: Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
       hasNextPage: pagination.page < Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
       hasPreviousPage: pagination.page > 1
     }
-  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount, pagination.page, pagination.limit])
+  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount, resultTruncated, pagination.page, pagination.limit])
 
   return {
     ...memoizedValues,

@@ -1,24 +1,33 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Search, SlidersHorizontal } from 'lucide-react'
+import type { DashboardSearchType } from '@/lib/navigation/dashboard-navigation'
+
+interface SearchFilters {
+  type: DashboardSearchType | 'todos'
+  status: string
+  from?: string
+  to?: string
+}
 
 interface GlobalSearchProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSearch?: (input: { query: string; filters: any }) => Promise<Array<{ title: string; subtitle?: string; href: string }>> | Array<{ title: string; subtitle?: string; href: string }>
+  onSearch?: (input: { query: string; filters: SearchFilters }) => Promise<Array<{ title: string; subtitle?: string; href: string }>> | Array<{ title: string; subtitle?: string; href: string }>
+  availableTypes?: readonly DashboardSearchType[]
 }
 
-export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps) {
+export function GlobalSearch({ open, onOpenChange, onSearch, availableTypes }: GlobalSearchProps) {
   const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState<any>({ type: 'todos', status: 'todos' })
+  const [filters, setFilters] = useState<SearchFilters>({ type: 'todos', status: 'todos' })
   const [results, setResults] = useState<Array<{ title: string; subtitle?: string; href: string }>>([])
   const [resultsCount, setResultsCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(false)
+  const [_isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -30,7 +39,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
           const r = await onSearch({ query: normalized, filters })
           setResults(r)
           setResultsCount(r.length)
-        } catch (e) {
+        } catch (_e) {
           setResults([])
           setResultsCount(0)
         } finally {
@@ -45,6 +54,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
   }, [query, open, onSearch, filters])
 
   const activeFilters = useMemo(() => Object.entries(filters).filter(([, v]) => !!v), [filters])
+  const showsType = (type: DashboardSearchType) => !availableTypes || availableTypes.includes(type)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,7 +71,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
         <div className="space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Buscar en todo el sistema (Ctrl+K)"
+              placeholder="Buscar sección, ajuste o reporte..."
               value={query}
               onChange={e => setQuery(e.target.value)}
               aria-label="Buscar"
@@ -99,14 +109,14 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
               Tipo
               <select
                 className="border rounded px-2 py-1 text-sm bg-background"
-                value={filters.type ?? 'todos'}
-                onChange={e => setFilters(f => ({ ...f, type: e.target.value as any }))}
+                value={showsType(filters.type as DashboardSearchType) ? (filters.type ?? 'todos') : 'todos'}
+                onChange={e => setFilters(f => ({ ...f, type: e.target.value as DashboardSearchType | 'todos' }))}
                 aria-label="Filtrar por tipo"
               >
                 <option value="todos">Todos</option>
-                <option value="productos">Productos</option>
-                <option value="clientes">Clientes</option>
-                <option value="reparaciones">Reparaciones</option>
+                {showsType('productos') && <option value="productos">Productos</option>}
+                {showsType('clientes') && <option value="clientes">Clientes</option>}
+                {showsType('reparaciones') && <option value="reparaciones">Reparaciones</option>}
                 <option value="usuarios">Usuarios</option>
                 <option value="seguridad">Seguridad</option>
               </select>
@@ -116,7 +126,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
               <select
                 className="border rounded px-2 py-1 text-sm bg-background"
                 value={filters.status ?? 'todos'}
-                onChange={e => setFilters(f => ({ ...f, status: e.target.value as any }))}
+                onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
                 aria-label="Filtrar por estado de usuario"
               >
                 <option value="todos">Todos</option>

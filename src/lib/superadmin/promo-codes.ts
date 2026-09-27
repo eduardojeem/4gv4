@@ -69,6 +69,14 @@ export const promoCodeCreateSchema = z.object({
   }
 })
 
+export const promoCodeUpdateSchema = z.object({
+  name: z.string().trim().min(3).max(120).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  maxRedemptions: optionalPositiveInteger,
+  expiresAt: z.iso.datetime().nullable().optional(),
+  isActive: z.boolean().optional(),
+})
+
 // Suma meses calendario manteniendo el día (con clamp para meses más cortos:
 // 31 ene + 1 mes → 28/29 feb, no se desborda a marzo).
 function addMonths(base: Date, months: number): Date {
@@ -137,5 +145,101 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
       payment_status: 'paid',
     },
     requiresBillingAction: false,
+  }
+}
+
+export type PromoCodeStatusMeta = {
+  label: string
+  variant: 'default' | 'secondary' | 'destructive' | 'outline'
+  tone: 'active' | 'inactive' | 'expired' | 'exhausted' | 'scheduled'
+}
+
+export function codeStatus(code: {
+  is_active: boolean
+  expires_at?: string | null
+  starts_at?: string | null
+  max_redemptions?: number | null
+  redemption_count: number
+}): PromoCodeStatusMeta {
+  const now = Date.now()
+  if (!code.is_active) return { label: 'Inactivo', variant: 'secondary', tone: 'inactive' }
+  if (code.expires_at && new Date(code.expires_at).getTime() < now) {
+    return { label: 'Vencido', variant: 'destructive', tone: 'expired' }
+  }
+  if (code.max_redemptions && code.redemption_count >= code.max_redemptions) {
+    return { label: 'Agotado', variant: 'destructive', tone: 'exhausted' }
+  }
+  if (code.starts_at && new Date(code.starts_at).getTime() > now) {
+    return { label: 'Programado', variant: 'outline', tone: 'scheduled' }
+  }
+  return { label: 'Vigente', variant: 'default', tone: 'active' }
+}
+
+export function benefitSummary(code: {
+  benefit_type: string
+  discount_percent?: number | null
+  discount_amount?: number | null
+  target_plan?: string | null
+  duration_days?: number | null
+  duration_unit?: string | null
+}): string {
+  if (code.benefit_type === 'discount_percent') return `${code.discount_percent ?? 0}% de descuento`
+  if (code.benefit_type === 'discount_fixed') {
+    return `${Number(code.discount_amount ?? 0).toLocaleString('es-PY')} Gs. de descuento`
+  }
+  const unit = code.duration_unit === 'months' ? 'mes(es)' : 'días'
+  if (code.benefit_type === 'activate_plan') {
+    return `Plan ${code.target_plan ?? 'PRO'} por ${code.duration_days ?? 30} ${unit}`
+  }
+  if (code.benefit_type === 'extend_trial') {
+    return `Prueba extendida por ${code.duration_days ?? 15} ${unit}`
+  }
+  return `${code.duration_days ?? 30} ${unit} adicionales`
+}
+
+export type ExpirationNotice = {
+  isExpired: boolean
+  isExpiringSoon: boolean
+  label: string
+  sublabel?: string
+  daysDiff: number | null
+}
+
+export function getExpirationNotice(expiresAt: string | null | undefined): ExpirationNotice {
+  if (!expiresAt) {
+    return { isExpired: false, isExpiringSoon: false, label: 'Sin vencimiento', daysDiff: null }
+  }
+  const exp = new Date(expiresAt).getTime()
+  const now = Date.now()
+  const diffMs = exp - now
+  const diffDays = Math.ceil(diffMs / 86_400_000)
+
+  if (diffMs < 0) {
+    const overdue = Math.abs(diffDays)
+    return {
+      isExpired: true,
+      isExpiringSoon: false,
+      label: overdue === 0 ? 'Venció hoy' : `Venció hace ${overdue} día${overdue === 1 ? '' : 's'}`,
+      sublabel: new Date(expiresAt).toLocaleDateString('es-PY'),
+      daysDiff: diffDays,
+    }
+  }
+
+  if (diffDays <= 7) {
+    return {
+      isExpired: false,
+      isExpiringSoon: true,
+      label: diffDays === 0 ? 'Vence hoy' : `Vence en ${diffDays} día${diffDays === 1 ? '' : 's'}`,
+      sublabel: new Date(expiresAt).toLocaleDateString('es-PY'),
+      daysDiff: diffDays,
+    }
+  }
+
+  return {
+    isExpired: false,
+    isExpiringSoon: false,
+    label: new Date(expiresAt).toLocaleDateString('es-PY'),
+    sublabel: `Quedan ${diffDays} días`,
+    daysDiff: diffDays,
   }
 }

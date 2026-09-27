@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 // Create a client instance for use in this service

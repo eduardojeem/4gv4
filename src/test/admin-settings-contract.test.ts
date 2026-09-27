@@ -45,7 +45,10 @@ describe('admin settings contract', () => {
   it('keeps platform defaults out of the organization settings screen', () => {
     const page = read('src/app/admin/settings/page.tsx')
 
-    expect(page).toContain("router.replace('/superadmin/settings')")
-    expect(page).toContain('isSuperAdmin')
+    // Antes esto se lograba redirigiendo a todo superadmin a la configuracion
+    // global, incluso dentro de su propia organizacion. Ahora la carga dice de
+    // donde salen los datos y la pantalla solo se niega cuando son globales.
+    expect(page).not.toContain("router.replace('/superadmin/settings')")
+    expect(page).toContain("if (scope === 'platform')")
   })
 })

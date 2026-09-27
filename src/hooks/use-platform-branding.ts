@@ -7,8 +7,8 @@ import {
   normalizePlatformBranding,
 } from '@/lib/platform/branding'
 
-export function usePlatformBranding() {
-  const [branding, setBranding] = useState<PlatformBranding>(DEFAULT_PLATFORM_BRANDING)
+export function usePlatformBranding(initialBranding?: PlatformBranding) {
+  const [branding, setBranding] = useState<PlatformBranding>(initialBranding ?? DEFAULT_PLATFORM_BRANDING)
 
   useEffect(() => {
     let cancelled = false
@@ -21,7 +21,7 @@ export function usePlatformBranding() {
           setBranding(normalizePlatformBranding(payload.branding))
         }
       } catch {
-        if (!cancelled) setBranding(DEFAULT_PLATFORM_BRANDING)
+        // Keep the server-provided identity (or neutral placeholder) when offline.
       }
     }
 

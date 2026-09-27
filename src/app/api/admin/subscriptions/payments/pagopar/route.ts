@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import {
@@ -8,6 +9,10 @@ import {
 import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
 
 export async function POST(request: Request) {
+  const requestedCorrelationId = request.headers.get('x-correlation-id')
+  const correlationId = requestedCorrelationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedCorrelationId)
+    ? requestedCorrelationId
+    : randomUUID()
   const auth = await resolveRequestAuthUser()
 
   if ('reason' in auth) {
@@ -38,6 +43,7 @@ export async function POST(request: Request) {
       targetPlanCode,
       canChangePlan: organization.role === 'owner' || auth.user.role === 'super_admin',
       paymentMethod,
+      correlationId,
     })
 
     return NextResponse.json(checkout)
@@ -47,13 +53,17 @@ export async function POST(request: Request) {
         {
           error: error.message,
           conflictingResources: error.conflictingResources,
+          correlationId: error.correlationId || correlationId,
         },
         { status: error.status },
       )
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'No se pudo iniciar el pago con Pagopar.' },
+      {
+        error: `No se pudo iniciar el pago. Código: ${correlationId}`,
+        correlationId,
+      },
       { status: 500 },
     )
   }

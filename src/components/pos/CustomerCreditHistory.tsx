@@ -3,7 +3,7 @@
  * Integrado con el sistema POS
  */
 
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,20 +22,10 @@ import {
 } from '@/components/ui/table'
 import {
   CreditCard,
-  DollarSign,
-  Calendar,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  Wrench,
+  DollarSign, AlertTriangle, Wrench,
   ShoppingBag,
-  TrendingUp,
-  TrendingDown,
-  Plus,
-  Eye,
-  Receipt,
-  Search,
-  Filter
+  TrendingUp, Receipt,
+  Search
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCreditSystem } from '@/hooks/use-credit-system'

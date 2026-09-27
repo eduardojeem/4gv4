@@ -7,18 +7,15 @@ import type { Database } from '@/lib/supabase/types'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
-import { 
-  usePerformanceMetrics, 
-  useAdvancedMemoization, 
-  useOptimizedDebounce,
-  PerformanceUtils,
-  DEFAULT_PERFORMANCE_CONFIG,
+import {
+  usePerformanceMetrics,
+  useAdvancedMemoization, DEFAULT_PERFORMANCE_CONFIG,
   type PerformanceConfig
 } from '@/lib/performance-optimization'
-import type { 
-  Product, 
-  ProductMovement, 
-  ProductAlert, 
+import type {
+  Product,
+  ProductMovement,
+  ProductAlert,
   DashboardStats,
   AnalyticsConfig
 } from './types'
@@ -98,13 +95,19 @@ export function useProductAnalytics(
   const { handleProductError } = useProductErrorHandler()
   const { selectedBranchId } = useBranch()
 
+  const includeMovements = config.includeMovements
+  const includeAlerts = config.includeAlerts
+  const dateRangeStart = config.dateRange?.start?.getTime()
+  const dateRangeEnd = config.dateRange?.end?.getTime()
+
   // Stabilize config to prevent infinite loops
-  const stableConfig = useMemo(() => config, [
-    config.includeMovements,
-    config.includeAlerts,
-    config.dateRange?.start?.getTime(),
-    config.dateRange?.end?.getTime()
-  ])
+  const stableConfig = useMemo<AnalyticsConfig>(() => ({
+    includeMovements,
+    includeAlerts,
+    dateRange: dateRangeStart !== undefined && dateRangeEnd !== undefined
+      ? { start: new Date(dateRangeStart), end: new Date(dateRangeEnd) }
+      : undefined,
+  }), [dateRangeEnd, dateRangeStart, includeAlerts, includeMovements])
 
   // Validar configuración de análisis
   const validateAnalyticsConfig = useCallback((config: AnalyticsConfig): boolean => {
@@ -215,7 +218,7 @@ export function useProductAnalytics(
 
       // Cargar alertas si está habilitado
       if (stableConfig.includeAlerts) {
-        const generatedAlerts: ProductAlert[] = ((products as any[]).flatMap((product: any): any[] => {
+        const generatedAlerts: ProductAlert[] = products.flatMap((product: Product): ProductAlert[] => {
           const currentStock = Number(product.stock_quantity || 0)
           const minStock = Number(product.min_stock || 0)
           const createdAt = new Date().toISOString()
@@ -263,7 +266,7 @@ export function useProductAnalytics(
           }
 
           return []
-        }) as ProductAlert[])
+        })
 
         promises.push(
           Promise.resolve({ type: 'alerts' as const, data: generatedAlerts })

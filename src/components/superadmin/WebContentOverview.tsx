@@ -22,6 +22,7 @@ import {
   Search,
   Sparkles,
   Store,
+  Megaphone,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -155,9 +156,10 @@ function SubsectionsRow() {
     { href: '/superadmin/web-content/brand', icon: Sparkles, label: 'Marca SaaS', sub: 'Logo, textos globales y CTAs', tone: 'border-cyan-200 bg-cyan-50 dark:border-cyan-900/50 dark:bg-cyan-950/20' },
     { href: '/superadmin/web-content/landing', icon: LayoutTemplate, label: 'Landing principal', sub: 'Contenido editorial del SaaS', tone: 'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20' },
     { href: '/superadmin/web-content/marketplace', icon: Store, label: 'Marketplace público', sub: 'Categorías y empresas destacadas', tone: 'border-violet-200 bg-violet-50 dark:border-violet-900/50 dark:bg-violet-950/20' },
+    { href: '/superadmin/web-content/anuncio', icon: Megaphone, label: 'Aviso del marketplace', sub: 'Cartel al entrar, con fechas', tone: 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20' },
   ]
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {subs.map((s) => {
         const Icon = s.icon
         return (

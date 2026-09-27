@@ -1,11 +1,43 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { fetchCustomerActivity } from './actions'
 import { headers } from 'next/headers'
 import { getPublicTenantPathPrefix } from '@/lib/public/tenant-path'
 import { ProfileClient } from './profile-client'
+import { EMPTY_CUSTOMER_ACCOUNT_SUMMARY } from '@/lib/profile/customer-account-summary'
+import type { ProfileOrder } from '@/components/profile/profile-orders'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
-export default async function CustomerProfilePage() {
+interface RecentProfileRepair {
+  id: string
+  ticket_number?: string | null
+  brand?: string
+  model?: string
+  status: string
+  created_at: string
+  final_cost?: number | null
+  estimated_cost?: number | null
+  paid_amount?: number | null
+  payment_status?: string | null
+  organization?: {
+    id: string
+    name: string
+    slug: string
+    logo_url?: string | null
+  } | null
+}
+
+/**
+ * `basePath` es el prefijo de los enlaces, y no siempre coincide con el del
+ * tenant. En el marketplace no hay tenant —los datos son de todas las tiendas—
+ * pero las pantallas del cliente cuelgan de `/marketplace`: sin distinguir los
+ * dos, cada enlace del perfil sacaba a la persona del marketplace y la dejaba
+ * en la vidriera de la tienda por defecto.
+ */
+export default async function CustomerProfilePage({ basePath }: { basePath?: string } = {}) {
   const supabase = await createClient()
   const { data: authData } = await supabase.auth.getUser()
   const user = authData?.user
@@ -13,57 +45,62 @@ export default async function CustomerProfilePage() {
   const headerStore = await headers()
   const tenantSlug = headerStore.get('x-tenant-slug')
   const tenantPrefix = await getPublicTenantPathPrefix()
+  const linkPrefix = basePath ?? tenantPrefix
   
   if (!user) {
-    const profilePath = tenantPrefix ? `${tenantPrefix}/perfil` : '/perfil'
+    const profilePath = `${linkPrefix}/perfil`
     const loginPath = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
     redirect(`${loginPath}?next=${encodeURIComponent(profilePath)}`)
   }
 
   let organizationId: string | null = null
   if (tenantSlug) {
-    const { data: organization } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', tenantSlug)
-      .maybeSingle()
-    organizationId = organization?.id ?? null
+    const organization = await resolvePublicOrganizationBySlug(tenantSlug, createAdminSupabase())
+    if (!organization) notFound()
+    organizationId = organization.id
   }
+  // «Rastrear equipo» solo si la tienda tiene taller. En el marketplace no hay
+  // una tienda puntual y se mantiene.
+  const repairsAvailable = organizationId ? await isOrganizationModuleEnabled(organizationId, 'repairs') : true
 
   const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', user.id).single()
 
-  let customerQuery = supabase.from('customers').select('id').eq('profile_id', user.id)
-  if (organizationId) customerQuery = customerQuery.eq('organization_id', organizationId)
-  const { data: customerData } = await customerQuery
+  let stats = { totalRepairs: 0, activeRepairs: 0, readyRepairs: 0, deliveredRepairs: 0, totalOrders: 0 }
+  let accountSummary = EMPTY_CUSTOMER_ACCOUNT_SUMMARY
+  let recentRepairs: RecentProfileRepair[] = []
+  let recentOrders: ProfileOrder[] = []
 
-  const customerIds = (customerData || []).map(r => r.id).filter((id): id is string => typeof id === 'string' && id.length > 0)
-
-  let stats = { totalRepairs: 0, activeRepairs: 0, completedRepairs: 0, totalOrders: 0 }
-  let recentRepairs: any[] = []
-  let recentOrders: any[] = []
-
-  if (customerIds.length > 0) {
-    const { repairs, history, orders, ordersCount } = await fetchCustomerActivity(customerIds, organizationId)
-    const activeStatuses = ['recibido', 'diagnostico', 'reparacion', 'listo', 'pausado']
-    stats = {
-      totalRepairs: repairs?.length || 0,
-      activeRepairs: repairs?.filter(r => activeStatuses.includes(r.status)).length || 0,
-      completedRepairs: repairs?.filter(r => r.status === 'entregado').length || 0,
-      totalOrders: ordersCount || 0,
-    }
-    recentRepairs = history || []
-    recentOrders = (orders || []).map((order: any) => ({
-      id: order.id,
-      order_number: order.order_number,
-      status: order.status,
-      payment_status: order.payment_status,
-      fulfillment_type: order.fulfillment_type,
-      customer_address: order.customer_address,
-      estimated_delivery_date: order.estimated_delivery_date,
-      total: Number(order.total || 0),
-      created_at: order.created_at,
-    }))
+  const [activity, userOrganization] = await Promise.all([
+    fetchCustomerActivity(organizationId),
+    getCurrentOrganizationContext(user.id).catch(() => null),
+  ])
+  const { history, orders, ordersCount, storeCreditsByOrganization, stores } = activity
+  accountSummary = activity.accountSummary
+  stats = {
+    totalRepairs: accountSummary.equipment.total,
+    activeRepairs: accountSummary.equipment.active,
+    readyRepairs: accountSummary.equipment.ready,
+    deliveredRepairs: accountSummary.equipment.delivered,
+    totalOrders: ordersCount || 0,
   }
+  recentRepairs = history || []
+  recentOrders = (orders || []).map((order) => ({
+    id: order.id,
+    order_number: order.order_number,
+    status: order.status,
+    payment_status: order.payment_status,
+    fulfillment_type: order.fulfillment_type,
+    customer_address: order.customer_address,
+    estimated_delivery_date: order.estimated_delivery_date,
+    total: Number(order.total || 0),
+    store_credit_reserved: Number(order.store_credit_reserved || 0),
+    store_credit_applied: Number(order.store_credit_applied || 0),
+    amount_due: String(order.payment_status).toUpperCase() === 'PAID'
+      ? 0
+      : Math.max(0, Number(order.total || 0) - Number(order.store_credit_reserved || 0) - Number(order.store_credit_applied || 0)),
+    created_at: order.created_at,
+    organization: order.organization || null,
+  }))
 
   const profileData = {
     name: profileRow?.full_name || user.user_metadata?.full_name || '',
@@ -72,17 +109,40 @@ export default async function CustomerProfilePage() {
     avatarUrl: profileRow?.avatar_url || user.user_metadata?.avatar_url || '',
     location: profileRow?.location || '',
     createdAt: user.created_at || '',
-    role: profileRow?.role || 'cliente'
+    role: userOrganization?.role || profileRow?.role || 'cliente',
+    organization: userOrganization
+      ? {
+          id: userOrganization.id,
+          name: userOrganization.name,
+          slug: userOrganization.slug,
+          role: userOrganization.role,
+          plan: userOrganization.plan,
+          logoUrl: userOrganization.logoUrl,
+        }
+      : null,
   }
 
   return (
     <ProfileClient 
       initialData={profileData} 
       userId={user.id} 
-      tenantPrefix={tenantPrefix} 
+      tenantPrefix={tenantPrefix}
+      linkPrefix={linkPrefix}
       stats={stats}
+      accountSummary={accountSummary}
+      storeCredits={storeCreditsByOrganization}
+      stores={stores}
       recentRepairs={recentRepairs}
       recentOrders={recentOrders}
+      repairsAvailable={repairsAvailable}
+      organization={userOrganization ? {
+        id: userOrganization.id,
+        name: userOrganization.name,
+        slug: userOrganization.slug,
+        role: userOrganization.role,
+        plan: userOrganization.plan,
+        logoUrl: userOrganization.logoUrl,
+      } : null}
     />
   )
 }

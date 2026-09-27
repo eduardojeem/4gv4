@@ -142,7 +142,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
   try {
     const validation = supplierSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const payload = {
@@ -169,7 +169,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
   try {
     const validation = supplierUpdateSchema.safeParse(await request.json())
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Error de validación', details: validation.error.issues }, { status: 400 })
     }
 
     const { id, ...updates } = validation.data

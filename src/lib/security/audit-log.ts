@@ -5,16 +5,16 @@ export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical'
 export interface AuditLogEntry {
   action: 'update' | 'import' | 'export' | 'system_action'
   fieldName?: string
-  oldValue?: any
-  newValue?: any
+  oldValue?: unknown
+  newValue?: unknown
   severity?: AuditSeverity
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 }
 
 export interface FieldChange {
   field: string
-  oldValue: any
-  newValue: any
+  oldValue: unknown
+  newValue: unknown
 }
 
 /**
@@ -50,7 +50,7 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
 /**
  * Obtiene los campos que cambiaron entre dos objetos
  */
-export function getChangedFields<T extends Record<string, any>>(
+export function getChangedFields<T extends Record<string, unknown>>(
   oldObj: T,
   newObj: Partial<T>
 ): FieldChange[] {

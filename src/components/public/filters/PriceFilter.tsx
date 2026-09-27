@@ -18,15 +18,15 @@ interface PriceFilterProps {
 
 export function PriceFilter({ priceRange, localRange, onChange, onCommit }: PriceFilterProps) {
   return (
-    <AccordionItem value="price" className="border-0 px-3">
-      <AccordionTrigger className="hover:no-underline py-4 text-sm font-medium">
-        <span className="flex items-center gap-2">
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
-          Rango de Precio
+    <AccordionItem value="price" className="border-0 px-2.5">
+      <AccordionTrigger className="hover:no-underline py-2.5 text-xs font-semibold">
+        <span className="flex items-center gap-1.5">
+          <DollarSign className="h-3.5 w-3.5 text-primary" />
+          <span className="text-foreground font-semibold">Rango de Precio</span>
         </span>
       </AccordionTrigger>
-      <AccordionContent className="pb-4">
-        <div className="space-y-4 px-2">
+      <AccordionContent className="pb-2.5">
+        <div className="space-y-3 px-1">
           <Slider
             min={priceRange.min}
             max={priceRange.max}
@@ -34,17 +34,17 @@ export function PriceFilter({ priceRange, localRange, onChange, onCommit }: Pric
             value={localRange}
             onValueChange={onChange}
             onValueCommit={onCommit}
-            className="w-full"
+            className="w-full py-1"
           />
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex-1 rounded-lg bg-muted/30 px-3 py-2 text-center">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Mínimo</div>
-              <div className="text-sm font-semibold">{formatPrice(localRange[0]!)}</div>
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex-1 rounded-lg bg-muted/40 px-2 py-1.5 text-center">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-wide">Mín</div>
+              <div className="text-xs font-bold">{formatPrice(localRange[0]!)}</div>
             </div>
-            <div className="text-muted-foreground">—</div>
-            <div className="flex-1 rounded-lg bg-muted/30 px-3 py-2 text-center">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Máximo</div>
-              <div className="text-sm font-semibold">{formatPrice(localRange[1]!)}</div>
+            <div className="text-muted-foreground text-xs">—</div>
+            <div className="flex-1 rounded-lg bg-muted/40 px-2 py-1.5 text-center">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-wide">Máx</div>
+              <div className="text-xs font-bold">{formatPrice(localRange[1]!)}</div>
             </div>
           </div>
         </div>

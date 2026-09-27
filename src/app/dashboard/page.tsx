@@ -53,6 +53,10 @@ import { Label } from '@/components/ui/label'
 import { HelpButton } from '@/components/help/HelpButton'
 import { useAuth } from '@/contexts/auth-context'
 import { useCashRegister } from '@/hooks/useCashRegister'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { StoreSetupAlert } from '@/components/dashboard/StoreSetupAlert'
+import { CashStatusBanner } from '@/components/dashboard/CashStatusBanner'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -98,6 +102,12 @@ function MiniSparkline({ data, color = '#6366f1' }: { data: number[]; color?: st
 
 type Tone = 'indigo' | 'emerald' | 'violet' | 'amber' | 'red' | 'cyan'
 
+interface KpiBreakdownItem {
+  label: string
+  count: number | string
+  icon?: LucideIcon
+}
+
 interface KpiStat {
   title: string
   value: string | number
@@ -107,6 +117,7 @@ interface KpiStat {
   href: string
   trend?: number[]
   badge?: string
+  breakdown?: KpiBreakdownItem[]
 }
 
 const toneClasses: Record<Tone, { wrap: string; iconBg: string; sparkColor: string }> = {
@@ -161,6 +172,20 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
             <MiniSparkline data={stat.trend} color={t.sparkColor} />
           </div>
         )}
+        {stat.breakdown && stat.breakdown.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+            {stat.breakdown.map((item, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-white/70 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/70 shadow-2xs"
+              >
+                {item.icon && <item.icon className="h-3 w-3 text-slate-500 dark:text-slate-400" />}
+                <strong className="font-bold text-slate-900 dark:text-slate-100">{item.count}</strong>
+                <span className="text-slate-500 dark:text-slate-400">{item.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
         <ArrowUpRight className="absolute right-3 top-3 h-3.5 w-3.5 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
       </div>
     </Link>
@@ -172,20 +197,24 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
+  const { effectiveModules } = useSubscriptionStatus()
+  const hasRepairs = effectiveModules.includes('repairs')
+  const hasOrders = effectiveModules.includes('orders')
+  const hasServices = effectiveModules.includes('services')
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
   const [loadingStats, setLoadingStats] = useState(true)
   const [canRefresh, setCanRefresh] = useState(true)
   const refreshCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
-    { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
-    { title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo', href: '/dashboard/orders' },
+    { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/admin/reports' },
+    ...(hasOrders ? [{ title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders' }] : []),
     { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
     { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
     { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
-    { title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red', href: '/dashboard/repairs' },
+    ...(hasRepairs ? [{ title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red' as const, href: '/dashboard/repairs' }] : []),
   ])
 
   const [repairStats, setRepairStats] = useState<{
@@ -229,9 +258,14 @@ export default function DashboardPage() {
     setActiveRegisterId(saved)
   }, [selectedBranchId])
 
+  // Hasta que la primera consulta conteste no se sabe nada: sin esto, el panel
+  // abría siempre anunciando «caja cerrada», incluso con el turno abierto.
+  const [cajaVerificada, setCajaVerificada] = useState(false)
+
   // Check open session
   useEffect(() => {
     checkOpenSession(activeRegisterId || undefined)
+      .finally(() => setCajaVerificada(true))
   }, [activeRegisterId, selectedBranchId, checkOpenSession])
 
   const parsedOpeningAmount = useMemo(() => {
@@ -259,7 +293,7 @@ export default function DashboardPage() {
   }, [currentSession])
 
   const fetchDashboardStats = useCallback(async () => {
-    if (!config.supabase.isConfigured) return
+    if (!config.supabase.isConfigured || !organization?.id) return
     setLoadingStats(true)
     try {
       const now = new Date()
@@ -278,8 +312,8 @@ export default function DashboardPage() {
         { data: salesToday },
         { count: activeOrdersCount },
         { data: customersWeek },
-        { count: totalProductsCount },
-        { data: productsStock },
+        { data: productsData },
+        { data: categoriesData },
         { count: repairsActiveCount },
         { data: salesWeek },
         { data: repairsTodayData },
@@ -287,49 +321,50 @@ export default function DashboardPage() {
         { data: repairsReadyData },
       ] = await Promise.all([
         withBranchFilter(
-          supabase.from('sales').select('total:total_amount,status,created_at')
+          supabase.from('sales').select('total:total_amount,status,created_at').eq('organization_id', organization.id)
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
           selectedBranchId,
         ),
-        withBranchFilter(
+        hasOrders ? withBranchFilter(
           supabase
             .from('customer_orders')
             .select('id', { count: 'exact', head: true })
+            .eq('organization_id', organization.id)
             .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
           selectedBranchId,
-        ),
-        supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
-        supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true),
-        withBranchFilter(
+        ) : Promise.resolve({ count: 0, data: [] }),
+        supabase.from('customers').select('created_at').eq('organization_id', organization.id).gte('created_at', startOfWeek.toISOString()),
+        supabase.from('products').select('id, stock_quantity, min_stock, unit_measure, category_id').eq('organization_id', organization.id).eq('is_active', true),
+        supabase.from('categories').select('id, name').eq('organization_id', organization.id).eq('is_active', true),
+        hasRepairs ? withBranchFilter(
           // Fuente única de "en proceso": incluye pausado y excluye listo
           // (listo = reparación terminada, esperando retiro).
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES]),
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', [...ACTIVE_REPAIR_STATUSES]),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ count: 0, data: [] }),
         withBranchFilter(
-          supabase.from('sales').select('total_amount,created_at,status')
+          supabase.from('sales').select('total_amount,created_at,status').eq('organization_id', organization.id)
             .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
           selectedBranchId,
         ),
         // Reparaciones ingresadas hoy
-        withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at')
+        hasRepairs ? withBranchFilter(
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, created_at').eq('organization_id', organization.id)
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ data: [] }),
         // Reparaciones entregadas hoy
-        withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at')
+        hasRepairs ? withBranchFilter(
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount, status, delivered_at').eq('organization_id', organization.id)
             .or(`delivered_at.gte.${startOfDay.toISOString()},status.eq.entregado`),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ data: [] }),
         // Reparaciones listas para retiro
-        withBranchFilter(
-          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount')
+        hasRepairs ? withBranchFilter(
+          supabase.from('repairs').select('final_cost, estimated_cost, paid_amount').eq('organization_id', organization.id)
             .eq('status', 'listo'),
           selectedBranchId,
-        ),
+        ) : Promise.resolve({ data: [] }),
       ])
 
       type RepairItem = { final_cost?: number | null; estimated_cost?: number | null; paid_amount?: number | null; status?: string; delivered_at?: string | null; created_at?: string }
@@ -370,11 +405,39 @@ export default function DashboardPage() {
       const activeOrders = activeOrdersCount || 0
       const customerRows = (customersWeek || []) as unknown as Array<{ created_at: string }>
       const newCustomers = customerRows.length
-      const totalProducts = totalProductsCount || 0
+
+      // Diferenciación de Productos físicos vs Servicios
+      type ProductRow = { id: string; stock_quantity?: number | null; min_stock?: number | null; unit_measure?: string | null; category_id?: string | null }
+      type CategoryRow = { id: string; name: string }
+
+      const productRows = (productsData || []) as unknown as ProductRow[]
+      const categoryList = (categoriesData || []) as unknown as CategoryRow[]
+
+      const serviceCategoryIds = new Set(
+        categoryList
+          .filter(c => (c.name || '').toLowerCase().includes('servicio'))
+          .map(c => c.id)
+      )
+
+      const servicesList = hasServices ? productRows.filter(p => {
+        const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+        const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
+        return isServiceUnit || isServiceCat
+      }) : []
+      const servicesCount = servicesList.length
+
+      const physicalProducts = productRows.filter(p => {
+        const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+        const isServiceCat = Boolean(p.category_id && serviceCategoryIds.has(p.category_id))
+        return !isServiceUnit && !isServiceCat
+      })
+      const physicalProductsCount = physicalProducts.length
+      const totalCatalogCount = hasServices ? productRows.length : physicalProductsCount
+
       const repairsActive = repairsActiveCount || 0
 
-      // Incluye agotados (stock 0): también requieren reposición.
-      const lowStockCount = (productsStock || []).filter(p => {
+      // Stock bajo aplica exclusivamente a productos físicos con control de inventario
+      const lowStockCount = physicalProducts.filter(p => {
         const sq = Number(p.stock_quantity ?? 0)
         const ms = Number(p.min_stock ?? 5)
         return sq <= ms
@@ -400,48 +463,55 @@ export default function DashboardPage() {
         }).length
       })
 
-      setStats([
+      const nextStats: KpiStat[] = [
         {
           title: 'Ventas del día',
           value: formatCurrency(totalRevenueToday),
           subtitle: `${completedToday} venta${completedToday !== 1 ? 's' : ''} completada${completedToday !== 1 ? 's' : ''}`,
-          icon: Banknote, tone: 'emerald', href: '/dashboard/reports',
+          icon: Banknote, tone: 'emerald' as const, href: '/admin/reports',
           trend: trendData,
         },
-        {
+        ...(hasOrders ? [{
           title: 'Órdenes activas',
           value: String(activeOrders),
           subtitle: 'pedidos por completar',
-          icon: ShoppingCart, tone: 'indigo', href: '/dashboard/orders',
+          icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders',
           badge: activeOrders > 0 ? 'Atender' : undefined,
-        },
+        }] : []),
         {
           title: 'Clientes nuevos',
           value: String(newCustomers),
           subtitle: 'últimos 7 días',
-          icon: Users, tone: 'violet', href: '/dashboard/customers',
+          icon: Users, tone: 'violet' as const, href: '/dashboard/customers',
           trend: customerTrend,
         },
         {
-          title: 'Productos',
-          value: String(totalProducts),
-          subtitle: 'en catálogo activo',
-          icon: Package, tone: 'cyan', href: '/dashboard/products',
+          title: 'Catálogo / Inventario',
+          value: String(totalCatalogCount),
+          subtitle: hasServices
+            ? `${physicalProductsCount} productos · ${servicesCount} servicios`
+            : `${physicalProductsCount} productos`,
+          icon: Package, tone: 'cyan' as const, href: '/dashboard/products',
+          breakdown: [
+            { label: 'Productos', count: physicalProductsCount, icon: Package },
+            ...(hasServices ? [{ label: 'Servicios', count: servicesCount, icon: Wrench }] : []),
+          ],
         },
         {
           title: 'Stock bajo',
           value: String(lowStockCount),
           subtitle: lowStockCount > 0 ? 'requiere reposición' : 'inventario OK',
-          icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' : 'emerald', href: '/dashboard/products?filter=low_stock',
+          icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' as const : 'emerald' as const, href: '/dashboard/products?filter=low_stock',
           badge: lowStockCount > 0 ? '⚠' : undefined,
         },
-        {
+        ...(hasRepairs ? [{
           title: 'Reparaciones',
           value: String(repairsActive),
           subtitle: 'en proceso',
-          icon: Wrench, tone: 'red', href: '/dashboard/repairs',
-        },
-      ])
+          icon: Wrench, tone: 'red' as const, href: '/dashboard/repairs',
+        }] : []),
+      ]
+      setStats(nextStats)
       // Cooldown de 30s: el timeout re-habilita el botón sin depender de otro render.
       setCanRefresh(false)
       if (refreshCooldownRef.current) clearTimeout(refreshCooldownRef.current)
@@ -451,44 +521,24 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [hasOrders, hasRepairs, hasServices, organization?.id, selectedBranchId, supabase])
 
   useEffect(() => {
-    if (config.supabase.isConfigured) {
+    if (config.supabase.isConfigured && organization?.id) {
       startTransition(() => fetchDashboardStats())
     } else {
       setLoadingStats(false)
     }
-  }, [fetchDashboardStats])
-
-  // Load organization slug for store link
-  useEffect(() => {
-    if (!config.supabase.isConfigured) return
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('organization_members')
-        .select('organizations!inner(slug)')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => {
-          const org = data?.organizations as { slug?: string } | { slug?: string }[] | null
-          const slug = Array.isArray(org) ? org[0]?.slug : org?.slug
-          if (slug) setOrgSlug(slug)
-        })
-    })
-  }, [supabase])
+  }, [fetchDashboardStats, organization?.id])
 
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
-    { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const },
+    ...(hasRepairs ? [{ title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const }] : []),
     { title: 'Nueva devolución', icon: RotateCcw, href: '/dashboard/after-sales?new=true', tone: 'violet' as const },
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
-    { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
-    { title: 'Mi tienda pública', icon: Store, href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
+    { title: 'Ver reportes', icon: BarChart3, href: '/admin/reports', tone: 'cyan' as const },
+    { title: 'Mi tienda pública', icon: Store, href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
     { title: 'Marketplace', icon: Globe, href: '/marketplace', tone: 'cyan' as const },
   ]
 
@@ -529,48 +579,15 @@ export default function DashboardPage() {
           <p className="text-sm capitalize text-slate-500 dark:text-slate-400">{today}</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Botón dinámico de Caja (Llamativo y cambia de color) */}
-          {currentSession ? (
-            <Button
-              onClick={() => {
-                setClosingCountedAmount('')
-                setIsCloseDialogOpen(true)
-              }}
-              disabled={registerLoading}
-              type="button"
-              className="gap-2 h-10 px-5 text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20 border-0 transition-all duration-300 transform hover:scale-[1.02]"
-            >
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300"></span>
-              </span>
-              Caja Abierta (Cerrar)
-            </Button>
-          ) : (
-            <Button
-              onClick={() => {
-                setOpeningAmount('')
-                setOpeningNote('')
-                setIsOpenRegisterDialogOpen(true)
-              }}
-              disabled={registerLoading}
-              type="button"
-              className="gap-2 h-10 px-5 text-sm font-bold bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20 border-0 transition-all duration-300 transform hover:scale-[1.02] animate-pulse"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-200"></span>
-              </span>
-              Abrir Caja
-            </Button>
-          )}
-
+          {/* La caja ya no es un botón más acá arriba: es el primer bloque de
+              la pantalla, con su estado y lo que pasa si está cerrada. */}
           <Button asChild size="sm" className="gap-2">
             <Link href="/dashboard/pos">
               <Plus className="h-3.5 w-3.5" />
               Nueva venta
             </Link>
           </Button>
-          <Button
+          {hasRepairs ? <Button
             asChild
             size="sm"
             className="gap-2 bg-amber-500 text-slate-950 hover:bg-amber-400"
@@ -579,7 +596,7 @@ export default function DashboardPage() {
               <Wrench className="h-3.5 w-3.5" />
               Nueva reparación
             </Link>
-          </Button>
+          </Button> : null}
           <Button
             asChild
             size="sm"
@@ -613,6 +630,30 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {/* Estado de la caja: es el primer paso del día y va antes que todo lo
+          demás. Sin caja abierta el POS no confirma ventas. */}
+      <CashStatusBanner
+        status={!cajaVerificada ? 'verificando' : currentSession ? 'abierta' : 'cerrada'}
+        // La sesión vive en `cash_closures`, que no tiene `opened_at`: la
+        // apertura es su `created_at`.
+        openedAt={currentSession?.opened_at ?? (currentSession as { created_at?: string } | null)?.created_at}
+        expectedBalance={expectedBalance}
+        movementsCount={currentSession?.movements?.length ?? 0}
+        busy={registerLoading}
+        onOpen={() => {
+          setOpeningAmount('')
+          setOpeningNote('')
+          setIsOpenRegisterDialogOpen(true)
+        }}
+        onClose={() => {
+          setClosingCountedAmount('')
+          setIsCloseDialogOpen(true)
+        }}
+      />
+
+      {/* Alerta de tienda pública no configurada o sin publicar */}
+      <StoreSetupAlert />
+
       {/* KPI grid */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map((stat) => (
@@ -621,7 +662,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Resumen Financiero de Reparaciones del Día */}
-      <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-5 shadow-sm dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
+      {hasRepairs ? <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-5 shadow-sm dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/60 pb-3.5 dark:border-amber-900/40">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm dark:bg-amber-600">
@@ -710,7 +751,7 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
-      </section>
+      </section> : null}
 
       {/* Actions + Activity */}
       <section className="grid gap-4 lg:grid-cols-[0.4fr_0.6fr]">
@@ -765,7 +806,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <Button asChild variant="ghost" size="sm" className="h-7 gap-1 text-xs">
-                <Link href="/dashboard/reports">
+                <Link href="/admin/reports">
                   Ver todo
                   <ArrowRight className="h-3 w-3" />
                 </Link>
@@ -789,11 +830,11 @@ export default function DashboardPage() {
         {[
           { href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' },
           { href: '/dashboard/products', icon: Boxes, label: 'Inventario', sub: 'Catálogo y stock' },
-          { href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' },
+          ...(hasOrders ? [{ href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' }] : []),
           { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
           { href: '/dashboard/after-sales', icon: RotateCcw, label: 'Posventa y Devoluciones', sub: 'Garantías y reclamos' },
           { href: '/marketplace', icon: Globe, label: 'Marketplace', sub: 'Explorar empresas y productos' },
-          { href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
+          { href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
         ].map(({ href, icon: Icon, label, sub }) => (
           <Link
             key={href}

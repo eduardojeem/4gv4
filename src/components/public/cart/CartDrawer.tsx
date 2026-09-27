@@ -142,7 +142,7 @@ export function CartDrawer() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeItem(item.productId)}
+                          onClick={() => removeItem(item.cartItemId)}
                           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
                           aria-label={`Quitar ${item.name}`}
                         >
@@ -155,7 +155,7 @@ export function CartDrawer() {
                         <div className="flex h-8 items-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
                           <button
                             type="button"
-                            onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                            onClick={() => setQuantity(item.cartItemId, item.quantity - 1)}
                             className="flex h-8 w-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground"
                             aria-label={`Quitar una unidad de ${item.name}`}
                           >
@@ -166,7 +166,7 @@ export function CartDrawer() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                            onClick={() => setQuantity(item.cartItemId, item.quantity + 1)}
                             className="flex h-8 w-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground"
                             disabled={item.availableStock != null && item.quantity >= item.availableStock}
                             aria-label={`Agregar una unidad de ${item.name}`}

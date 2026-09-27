@@ -1,30 +1,29 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import {
-    Tag, Edit, Trash2, MoreVertical, Package,
-    ChevronRight, ToggleLeft, ToggleRight, ArrowUpDown,
-    Calendar, User, Eye, EyeOff, Plus
+  Tag, Edit, Trash2, MoreVertical, Package,
+  ChevronRight, ToggleLeft, ToggleRight, ArrowUpDown, Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table'
 import type { Category as BaseCategory } from '@/hooks/useCategories'
 
@@ -46,6 +45,24 @@ interface CategoryListViewProps {
 
 type SortField = 'name' | 'created_at' | 'products_count' | 'is_active'
 type SortDirection = 'asc' | 'desc'
+
+function SortButton({ field, children, onSort }: {
+    field: SortField
+    children: React.ReactNode
+    onSort: (field: SortField) => void
+}) {
+    return (
+        <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 font-medium"
+            onClick={() => onSort(field)}
+        >
+            {children}
+            <ArrowUpDown className="ml-2 h-3 w-3" />
+        </Button>
+    )
+}
 
 export function CategoryListView({
     categories,
@@ -73,8 +90,8 @@ export function CategoryListView({
 
     const sortedCategories = React.useMemo(() => {
         return [...categories].sort((a, b) => {
-            let aValue: any = a[sortField]
-            let bValue: any = b[sortField]
+            let aValue: string | number = 0
+            let bValue: string | number = 0
 
             // Handle special cases
             if (sortField === 'products_count') {
@@ -86,9 +103,9 @@ export function CategoryListView({
             } else if (sortField === 'is_active') {
                 aValue = a.is_active ? 1 : 0
                 bValue = b.is_active ? 1 : 0
-            } else if (typeof aValue === 'string') {
-                aValue = aValue.toLowerCase()
-                bValue = bValue.toLowerCase()
+            } else {
+                aValue = (a.name || '').toLowerCase()
+                bValue = (b.name || '').toLowerCase()
             }
 
             if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
@@ -117,18 +134,6 @@ export function CategoryListView({
         }
     }
 
-    const SortButton = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-        <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 font-medium"
-            onClick={() => handleSort(field)}
-        >
-            {children}
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-        </Button>
-    )
-
     return (
         <div className={cn("rounded-lg border bg-card", className)}>
             <Table>
@@ -143,18 +148,18 @@ export function CategoryListView({
                             </TableHead>
                         )}
                         <TableHead>
-                            <SortButton field="name">Nombre</SortButton>
+                            <SortButton field="name" onSort={handleSort}>Nombre</SortButton>
                         </TableHead>
                         <TableHead>Descripción</TableHead>
                         <TableHead>Categoría Padre</TableHead>
                         <TableHead>
-                            <SortButton field="is_active">Estado</SortButton>
+                            <SortButton field="is_active" onSort={handleSort}>Estado</SortButton>
                         </TableHead>
                         <TableHead>
-                            <SortButton field="products_count">Productos</SortButton>
+                            <SortButton field="products_count" onSort={handleSort}>Productos</SortButton>
                         </TableHead>
                         <TableHead>
-                            <SortButton field="created_at">Creado</SortButton>
+                            <SortButton field="created_at" onSort={handleSort}>Creado</SortButton>
                         </TableHead>
                         {hasActions && <TableHead className="w-12">Acciones</TableHead>}
                     </TableRow>
@@ -214,12 +219,14 @@ export function CategoryListView({
 
                             <TableCell>
                                 {category.parent_id && getCategoryName ? (
-                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300">
-                                        <ChevronRight className="h-3 w-3 mr-1" />
+                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold gap-1">
+                                        <ChevronRight className="h-3 w-3" />
                                         {getCategoryName(category.parent_id)}
                                     </Badge>
                                 ) : (
-                                    <span className="text-muted-foreground text-sm">Raíz</span>
+                                    <span className="text-muted-foreground text-xs font-medium bg-muted/50 px-2 py-0.5 rounded-md border border-border/40">
+                                        Raíz
+                                    </span>
                                 )}
                             </TableCell>
 
@@ -227,19 +234,20 @@ export function CategoryListView({
                                 <Badge
                                     variant="outline"
                                     className={cn(
+                                        "text-xs px-2.5 py-0.5 font-semibold transition-colors",
                                         category.is_active
-                                            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300"
-                                            : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950 dark:text-gray-300"
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60"
+                                            : "bg-muted text-muted-foreground border-border/80"
                                     )}
                                 >
                                     {category.is_active ? (
                                         <>
-                                            <Eye className="h-3 w-3 mr-1" />
+                                            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" />
                                             Activa
                                         </>
                                     ) : (
                                         <>
-                                            <EyeOff className="h-3 w-3 mr-1" />
+                                            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
                                             Inactiva
                                         </>
                                     )}

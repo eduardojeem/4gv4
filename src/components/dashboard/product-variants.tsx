@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Trash2, Plus, Edit2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 
@@ -26,11 +25,11 @@ interface ProductVariantsProps {
   readonly?: boolean
 }
 
-export function ProductVariants({ 
-  productId, 
-  variants = [], 
-  onVariantsChange, 
-  readonly = false 
+export function ProductVariants({
+  productId: _productId,
+  variants = [],
+  onVariantsChange,
+  readonly = false
 }: ProductVariantsProps) {
   const [localVariants, setLocalVariants] = useState<ProductVariant[]>(variants)
   const [isAddingVariant, setIsAddingVariant] = useState(false)
@@ -50,8 +49,8 @@ export function ProductVariants({
   const handleEditVariant = (updatedVariant: ProductVariant | Omit<ProductVariant, 'id'>) => {
     // Si viene sin ID (lo cual no debería pasar en edición, pero por tipos...), lo ignoramos o manejamos
     if (!('id' in updatedVariant)) return;
-    
-    const updatedVariants = localVariants.map(v => 
+
+    const updatedVariants = localVariants.map(v =>
       v.id === updatedVariant.id ? updatedVariant : v
     )
     setLocalVariants(updatedVariants)
@@ -192,7 +191,7 @@ function VariantForm({ variant, onSubmit, onCancel }: VariantFormProps) {
           Configura los detalles de la variante del producto
         </DialogDescription>
       </DialogHeader>
-      
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>

@@ -18,13 +18,15 @@ describe('organization dashboard permissions', () => {
     expect(permissions).toContain('reports.read')
   })
 
-  it('limits cashiers to POS and customer reading', () => {
+  it('lets cashiers read repairs and confirm delivery without technical management', () => {
     const permissions = getDashboardPermissionsForOrganizationRole('cashier')
 
     expect(permissions).toContain('pos.read')
     expect(permissions).toContain('pos.manage')
     expect(permissions).toContain('customers.read')
     expect(permissions).not.toContain('reports.read')
-    expect(permissions).not.toContain('repairs.read')
+    expect(permissions).toContain('repairs.read')
+    expect(permissions).toContain('repairs.deliver')
+    expect(permissions).not.toContain('repairs.manage')
   })
 })

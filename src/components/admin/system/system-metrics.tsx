@@ -3,15 +3,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Users, 
-  ShoppingCart, 
-  Package, 
-  Activity, 
-  Database, 
-  Clock, 
-  Shield, 
-  Zap,
+import {
+  Users, Package,
+  Activity,
+  Database,
+  Clock, Zap,
   TrendingUp,
   TrendingDown,
   Minus,

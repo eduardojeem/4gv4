@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
-import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
+import { CONTACT_REVEAL_ACTION, isCustomerRole, maskCustomerContact } from '@/lib/admin/contact-privacy'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
+import { firstUserEditIssue, userEditSchema } from '@/lib/admin/user-edit-validation'
+import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { normalizeOrderStatus } from '@/lib/orders/flow'
 import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/wholesale-access'
+import {
+  canAssignRoleFromUserManagement,
+  isProtectedOrganizationOwner,
+  normalizeManagedUserRole,
+  type ManagedUserRole,
+} from '@/lib/auth/organization-owner-policy'
 
-type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+type CanonicalRole = ManagedUserRole
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
 type ProfileRow = {
@@ -51,30 +61,10 @@ type UserOrganizationSummary = {
   status?: string | null
 }
 
-const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
 
 function normalizeRole(role: unknown): CanonicalRole {
-  if (typeof role !== 'string') return DEFAULT_ROLE
-  const mapped = mapUiRoleToDbRole(role)
-  if (mapped === 'super_admin' || mapped === 'admin' || mapped === 'vendedor' || mapped === 'tecnico' || mapped === 'cliente') {
-    return mapped
-  }
-
-  switch (role.toLowerCase().trim()) {
-    case 'owner':
-      return 'admin'
-    case 'seller':
-    case 'cashier':
-    case 'manager':
-      return 'vendedor'
-    case 'technician':
-      return 'tecnico'
-    case 'customer':
-      return 'cliente'
-    default:
-      return DEFAULT_ROLE
-  }
+  return normalizeManagedUserRole(role)
 }
 
 function normalizeStatus(status: unknown): ProfileStatus {
@@ -107,7 +97,8 @@ function normalizeScope(value: unknown): UserScope {
 
 // Roles tal como se guardan en organization_members, agrupados por rol canonico.
 const ORG_ROLE_GROUPS: Record<Exclude<CanonicalRole, 'super_admin'>, string[]> = {
-  admin: ['owner', 'admin'],
+  owner: ['owner'],
+  admin: ['admin'],
   vendedor: ['seller'],
   tecnico: ['technician'],
   cliente: ['customer'],
@@ -115,6 +106,8 @@ const ORG_ROLE_GROUPS: Record<Exclude<CanonicalRole, 'super_admin'>, string[]> =
 
 function mapAppRoleToOrgRole(role: CanonicalRole): string {
   switch (role) {
+    case 'owner':
+      return 'owner'
     case 'admin':
       return 'admin'
     case 'vendedor':
@@ -154,7 +147,10 @@ function mapProfile(
     is_wholesale: resolvedPermissions.includes(WHOLESALE_PRICE_PERMISSION),
     organizations,
     branches,
-    last_sign_in_at: lastSignInAt ?? profile.updated_at ?? null,
+    // Solo el acceso real. Antes caía a `updated_at`, así que alguien que nunca
+    // inició sesión aparecía con la fecha en que se editó su perfil, como si
+    // hubiera entrado ese día.
+    last_sign_in_at: lastSignInAt ?? null,
     updated_at: profile.updated_at,
     created_at: profile.created_at,
   }
@@ -200,6 +196,58 @@ async function fetchUserBranchAssignments(
   return map
 }
 
+/**
+ * La última compra de cada cliente en esta organización: mostrador o pedido web.
+ * Es lo que la tienda quiere saber de un cliente; el acceso a la cuenta dice
+ * otra cosa.
+ */
+async function fetchLastPurchases(
+  supabaseAdmin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  profileIds: string[]
+) {
+  const map = new Map<string, string | null>()
+  if (profileIds.length === 0) return map
+
+  const { data: customers, error } = await supabaseAdmin
+    .from('customers')
+    .select('id, profile_id')
+    .eq('organization_id', organizationId)
+    .in('profile_id', profileIds)
+
+  if (error || !customers?.length) {
+    if (error) logger.warn('Could not load customer records for last purchase', { error: error.message })
+    return map
+  }
+
+  const profileByCustomer = new Map<string, string>()
+  for (const row of customers as Array<{ id: string; profile_id: string }>) {
+    profileByCustomer.set(row.id, row.profile_id)
+  }
+  const customerIds = [...profileByCustomer.keys()]
+
+  const [sales, orders] = await Promise.all([
+    supabaseAdmin.from('sales').select('customer_id, created_at, status').in('customer_id', customerIds),
+    supabaseAdmin.from('customer_orders').select('customer_id, created_at, status').in('customer_id', customerIds),
+  ])
+
+  const consider = (rows: Array<{ customer_id: string | null; created_at: string | null; status: string | null }> | null, cancelled: (status: string | null) => boolean) => {
+    for (const row of rows ?? []) {
+      if (!row.customer_id || !row.created_at || cancelled(row.status)) continue
+      const profileId = profileByCustomer.get(row.customer_id)
+      if (!profileId) continue
+      const current = map.get(profileId)
+      if (!current || row.created_at > current) map.set(profileId, row.created_at)
+    }
+  }
+
+  // Una venta anulada o un pedido cancelado no son una compra.
+  consider(sales.data, (status) => !isCompletedSaleStatus(status))
+  consider(orders.data, (status) => normalizeOrderStatus(status) === 'CANCELLED')
+
+  return map
+}
+
 async function fetchUserLastSignIns(
   supabaseAdmin: ReturnType<typeof createAdminSupabase>,
   profileIds: string[]
@@ -233,7 +281,7 @@ function buildOrganizationMemberStats(members: MemberRow[]) {
     total: members.length,
     active: members.filter((m) => normalizeStatus(m.status) === 'active').length,
     inactive: members.filter((m) => normalizeStatus(m.status) !== 'active').length,
-    admins: members.filter((m) => normalizeRole(m.role) === 'admin').length,
+    admins: members.filter((m) => ['owner', 'admin'].includes(normalizeRole(m.role))).length,
     newThisMonth: members.filter((m) => {
       const t = m.created_at ? new Date(m.created_at).getTime() : 0
       return Number.isFinite(t) && t >= startOfMonth
@@ -334,6 +382,9 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
   const idParam = params.get('id')
   const scope = normalizeScope(params.get('scope'))
   const wholesaleOnly = params.get('wholesale') === 'true'
+  // El contacto de un cliente se muestra solo cuando alguien lo pide para ese
+  // cliente, y esa consulta queda registrada.
+  const revealId = params.get('reveal')
 
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -435,28 +486,38 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
       }
     }
 
-    const [branchesByUserId, lastSignInsByUserId] = await Promise.all([
+    const [branchesByUserId, lastSignInsByUserId, lastPurchasesByUserId] = await Promise.all([
       fetchUserBranchAssignments(supabaseAdmin, profileIds),
       fetchUserLastSignIns(supabaseAdmin, profileIds),
+      // La última compra solo hace falta para los clientes de la tienda.
+      scope === 'customers'
+        ? fetchLastPurchases(supabaseAdmin, context.organizationId, profileIds)
+        : Promise.resolve(new Map<string, string | null>()),
     ])
 
-    const mappedUsers = profileRows.map((p) =>
-      mapProfile(
+    const mappedUsers = profileRows.map((p) => ({
+      ...mapProfile(
         p,
         membersByUserId.get(p.id),
         permissionsByUserId.get(p.id),
         [],
         branchesByUserId.get(p.id) ?? [],
         lastSignInsByUserId.get(p.id)
-      )
-    )
+      ),
+      last_purchase_at: lastPurchasesByUserId.get(p.id) ?? null,
+    }))
 
     const stats = {
       ...buildOrganizationMemberStats(allMembers),
       byRole: await countMembersByRole(supabaseAdmin, context.organizationId),
     }
 
-    return NextResponse.json({ success: true, data: mappedUsers, count: totalCount, stats })
+    return NextResponse.json({
+      success: true,
+      data: await applyContactPrivacy(mappedUsers, revealId, context, supabaseAdmin),
+      count: totalCount,
+      stats,
+    })
   }
 
   // ── Super-admin / global path ─────────────────────────────────────────────
@@ -603,17 +664,61 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
     },
   }
 
-  return NextResponse.json({ success: true, data: mappedUsers, count: totalCount, stats })
+  return NextResponse.json({
+    success: true,
+    data: await applyContactPrivacy(mappedUsers, revealId, context, supabaseAdmin),
+    count: totalCount,
+    stats,
+  })
+}
+
+/**
+ * Tapa el contacto de los clientes. El que se pidió expresamente vuelve
+ * completo y se registra quién lo miró.
+ */
+async function applyContactPrivacy<T extends { id: string; role?: string | null; email?: string | null; phone?: string | null }>(
+  users: T[],
+  revealId: string | null,
+  context: AdminAuthContext,
+  supabaseAdmin: ReturnType<typeof createAdminSupabase>,
+) {
+  const revealed = revealId ? users.find((user) => user.id === revealId && isCustomerRole(user.role)) : null
+
+  if (revealed) {
+    const { error } = await supabaseAdmin.from('audit_log').insert({
+      user_id: context.user.id,
+      action: CONTACT_REVEAL_ACTION,
+      resource: 'users',
+      resource_id: revealed.id,
+      organization_id: context.organizationId,
+      severity: 'medium',
+      new_values: { viewed_by: context.user.id, organization_id: context.organizationId },
+    })
+    if (error) {
+      logger.warn('Could not log customer contact reveal', { error: error.message, userId: revealed.id })
+    }
+  }
+
+  return users.map((user) => (revealed && user.id === revealed.id ? user : maskCustomerContact(user)))
 }
 
 async function updateUser(request: NextRequest, context: AdminAuthContext) {
   const supabaseAdmin = createAdminSupabase()
-  const body = await request.json().catch(() => ({}))
-  const userId = typeof body?.id === 'string' ? body.id : ''
+  const rawBody = await request.json().catch(() => ({}))
+  const userId = typeof rawBody?.id === 'string' ? rawBody.id : ''
 
   if (!userId) {
     return NextResponse.json({ success: false, error: 'Missing user id' }, { status: 400 })
   }
+
+  // Nombre, teléfono, área, rol, estado y permisos se validan acá: se guardaban
+  // tal como llegaban, y un rol desconocido caía en «cliente» sin avisar.
+  const parsed = userEditSchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: firstUserEditIssue(parsed.error) }, { status: 400 })
+  }
+  // Lo validado pisa lo que vino: el resto del cuerpo (branches, mayorista) sigue igual.
+  const body = { ...rawBody, ...parsed.data }
 
   const canAccessUser = await assertUserInOrganization(supabaseAdmin, userId, context)
   if (!canAccessUser) {
@@ -634,11 +739,27 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   ])
 
   const currentRole = normalizeRole(membershipRow?.role ?? roleRow?.role ?? profile?.role)
+  if (isProtectedOrganizationOwner(membershipRow?.role)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'El propietario no se puede editar, degradar ni desactivar desde la gestión de usuarios. Usá una transferencia de propiedad.',
+        code: 'OWNER_PROTECTED',
+      },
+      { status: 403 }
+    )
+  }
   if (currentRole === 'super_admin' && context.user.role !== 'super_admin') {
     return NextResponse.json({ success: false, error: 'No puedes modificar un super administrador' }, { status: 403 })
   }
 
   const nextRole = typeof body?.role === 'string' ? normalizeRole(body.role) : currentRole
+  if (typeof body?.role === 'string' && !canAssignRoleFromUserManagement(body.role)) {
+    return NextResponse.json(
+      { success: false, error: 'El rol Propietario solo puede asignarse mediante una transferencia de propiedad.', code: 'OWNER_TRANSFER_REQUIRED' },
+      { status: 400 }
+    )
+  }
   const nextStatus =
     typeof body?.status === 'string'
       ? normalizeStatus(body.status)
@@ -648,8 +769,8 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
     return NextResponse.json({ success: false, error: 'Solo un super admin puede asignar super_admin' }, { status: 403 })
   }
 
-  const isAdminRole = currentRole === 'admin' || currentRole === 'super_admin'
-  const nextIsAdminRole = nextRole === 'admin' || nextRole === 'super_admin'
+  const isAdminRole = currentRole === 'owner' || currentRole === 'admin' || currentRole === 'super_admin'
+  const nextIsAdminRole = nextRole === 'owner' || nextRole === 'admin' || nextRole === 'super_admin'
   const isBeingDeactivated = typeof body?.status === 'string' && nextStatus !== 'active'
   // A role change away from admin removes administrative access just as much as
   // a deactivation does, so both paths must go through the same guards.

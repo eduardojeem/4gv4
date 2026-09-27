@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RotateCcw, Check, Smartphone } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -24,7 +23,7 @@ interface Point {
 export function PatternDrawer({ value, onChange, disabled, minimal = false }: PatternDrawerProps) {
   const [isDrawing, setIsDrawing] = useState(false)
   const [selectedPoints, setSelectedPoints] = useState<Point[]>([])
-  const [currentPath, setCurrentPath] = useState<string>('')
+  const [_currentPath, setCurrentPath] = useState<string>('')
   const [incompleteHint, setIncompleteHint] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,7 +62,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
 
     // Draw grid dots
-    points.forEach((point, index) => {
+    points.forEach((point, _index) => {
       const selectedIndex = selectedPoints.findIndex(p => p.row === point.row && p.col === point.col)
       const isSelected = selectedIndex !== -1
       const isStart = isSelected && selectedIndex === 0
@@ -118,7 +117,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
           ctx.lineTo(point.x, point.y)
         }
       })
-      
+
       ctx.stroke()
     }
   }, [points, selectedPoints, DOT_RADIUS, CANVAS_SIZE])
@@ -161,11 +160,11 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   // Handle mouse/touch start
   const handleStart = useCallback((event: MouseEvent | TouchEvent) => {
     if (disabled) return
-    
+
     event.preventDefault()
     const { x, y } = getCanvasCoordinates(event)
     const point = getPointAt(x, y)
-    
+
     if (point) {
       setIsDrawing(true)
       setSelectedPoints([point])
@@ -175,43 +174,20 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   // Handle mouse/touch move
   const handleMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!isDrawing || disabled) return
-    
+
     event.preventDefault()
     const { x, y } = getCanvasCoordinates(event)
     const point = getPointAt(x, y)
-    
+
     if (point && !selectedPoints.some(p => p.row === point.row && p.col === point.col)) {
       setSelectedPoints(prev => [...prev, point])
     }
   }, [isDrawing, disabled, getCanvasCoordinates, getPointAt, selectedPoints])
 
-  // Handle mouse/touch end
-  const handleEnd = useCallback(() => {
-    if (!isDrawing) return
-
-    setIsDrawing(false)
-
-    // Generate pattern string
-    if (selectedPoints.length >= 2) {
-      setIncompleteHint(false)
-      const patternString = selectedPoints
-        .map(p => `${p.row + 1}${p.col + 1}`)
-        .join('-')
-
-      const description = generatePatternDescription(selectedPoints)
-      onChange(`${description} (${patternString})`)
-    } else if (selectedPoints.length === 1) {
-      // Un solo punto no es un patrón válido: descartarlo y avisar,
-      // antes quedaba el punto marcado sin guardarse nada.
-      setSelectedPoints([])
-      setIncompleteHint(true)
-    }
-  }, [isDrawing, selectedPoints, onChange])
-
   // Generate human-readable pattern description
-  const generatePatternDescription = (points: Point[]): string => {
+  function generatePatternDescription(points: Point[]): string {
     if (points.length < 2) return 'Patrón incompleto'
-    
+
     const patterns = [
       { points: [[0,0], [0,1], [0,2]], name: 'Línea horizontal superior' },
       { points: [[1,0], [1,1], [1,2]], name: 'Línea horizontal media' },
@@ -228,13 +204,13 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     ]
 
     const pointsStr = points.map(p => [p.row, p.col])
-    
+
     // Check for known patterns
     for (const pattern of patterns) {
       if (pattern.points.length === points.length) {
-        const matches = pattern.points.every((patternPoint, index) => 
-          pointsStr[index] && 
-          patternPoint[0] === pointsStr[index][0] && 
+        const matches = pattern.points.every((patternPoint, index) =>
+          pointsStr[index] &&
+          patternPoint[0] === pointsStr[index][0] &&
           patternPoint[1] === pointsStr[index][1]
         )
         if (matches) return pattern.name
@@ -246,9 +222,30 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     if (points.length === 3) return 'Patrón de 3 puntos'
     if (points.length === 4) return 'Patrón de 4 puntos'
     if (points.length >= 5) return `Patrón complejo de ${points.length} puntos`
-    
+
     return 'Patrón personalizado'
   }
+
+  // Handle mouse/touch end
+  const handleEnd = useCallback(() => {
+    if (!isDrawing) return
+
+    setIsDrawing(false)
+
+    if (selectedPoints.length >= 2) {
+      setIncompleteHint(false)
+      const patternString = selectedPoints
+        .map(p => `${p.row + 1}${p.col + 1}`)
+        .join('-')
+
+      const description = generatePatternDescription(selectedPoints)
+      onChange(`${description} (${patternString})`)
+    } else if (selectedPoints.length === 1) {
+      // Un solo punto no es un patrón válido: descartarlo y avisar.
+      setSelectedPoints([])
+      setIncompleteHint(true)
+    }
+  }, [isDrawing, selectedPoints, onChange])
 
   // Clear pattern
   const clearPattern = useCallback(() => {
@@ -291,8 +288,12 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   }, [drawCanvas])
 
   // Parse existing value
-  useEffect(() => {
-    if (!value) return
+  const [parsedValue, setParsedValue] = useState(value)
+  if (parsedValue !== value) {
+    setParsedValue(value)
+    if (!value) {
+      setSelectedPoints([])
+    } else {
 
     const parsedPoints: Point[] = []
 
@@ -304,7 +305,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     if (parenMatch) {
       const patternString = parenMatch[1]
       const pointCodes = patternString.split(/[-\s,]+/) // split by - or space or comma
-      
+
       pointCodes.forEach(code => {
         if (code.length === 2) {
           // Format RowCol (1-based)
@@ -314,16 +315,16 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
           if (point) parsedPoints.push(point)
         }
       })
-    } 
+    }
     // 2. Try simple numeric sequence format: "1235789" or "1-2-3"
     else {
         // Clean string: remove spaces, dashes, commas
         const cleanVal = value.replace(/[^0-9]/g, '')
         const nums = value.match(/\d+/g)
-        
+
         // Strategy A: If contains numbers > 9, assume RowCol format (e.g. "11 12 13")
         const hasDoubleDigits = nums?.some(n => parseInt(n) > 9)
-        
+
         if (hasDoubleDigits && nums) {
              nums.forEach(n => {
                  const num = parseInt(n)
@@ -351,10 +352,9 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
         }
     }
 
-    if (parsedPoints.length > 0) {
-      setSelectedPoints(parsedPoints)
+    setSelectedPoints(parsedPoints)
     }
-  }, [value, points])
+  }
 
   // Secuencia numérica estilo teclado (1-9) del patrón dibujado
   const sequenceNumbers = selectedPoints.map(p => p.row * GRID_SIZE + p.col + 1)
@@ -412,8 +412,8 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
         <div className="text-xs text-muted-foreground">
           Dibuja el patrón conectando los puntos en el orden correcto
         </div>
-        
-        <div 
+
+        <div
           ref={containerRef}
           className="flex justify-center"
         >
@@ -427,13 +427,13 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
                 disabled && "opacity-50 cursor-not-allowed",
                 isDrawing && "border-purple-400 bg-purple-50"
               )}
-              style={{ 
-                width: '200px', 
+              style={{
+                width: '200px',
                 height: '200px',
                 touchAction: 'none'
               }}
             />
-            
+
             {selectedPoints.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-xs text-muted-foreground text-center">
@@ -501,7 +501,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
             <RotateCcw className="h-3 w-3" />
             Limpiar
           </Button>
-          
+
           {selectedPoints.length >= 2 && (
             <Button
               type="button"

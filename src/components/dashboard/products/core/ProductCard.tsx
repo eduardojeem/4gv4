@@ -1,3 +1,4 @@
+import { AppImage } from '@/components/ui/app-image'
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -78,7 +79,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <div className="space-y-3">
           {product.image && (
             <div className="aspect-square w-full bg-gray-100 rounded-md overflow-hidden">
-              <img
+              <AppImage
                 src={product.image}
                 alt={product.name}
                 className="w-full h-full object-cover"

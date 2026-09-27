@@ -1,14 +1,24 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Button } from '@/components/ui/button'
 import { useCustomers } from '@/contexts/CustomerContext'
+import type { Customer } from '@/hooks/use-customer-state'
 import { toast } from 'sonner'
 
+export interface RefreshedCustomer {
+  id: string
+  name: string
+  email: string
+  phone: string
+  type: string
+  updated_at?: string
+}
+
 interface CustomerRefreshButtonProps {
-  onUpdated: (rows: any[]) => void
+  onUpdated: (rows: RefreshedCustomer[]) => void
   setCustomersSourceSupabase: (value: boolean) => void
   setLastCustomerRefreshCount: (value: number) => void
   lastCustomerRefreshCount: number | null
-  setCustomers: (customers: any[]) => void
+  setCustomers: (customers: RefreshedCustomer[]) => void
 }
 
 export const CustomerRefreshButton: React.FC<CustomerRefreshButtonProps> = ({ 
@@ -27,7 +37,7 @@ export const CustomerRefreshButton: React.FC<CustomerRefreshButtonProps> = ({
       onClick={async () => {
         try {
           const updated = await refreshCustomers()
-          const mapped = (updated || []).map((c: any) => ({
+          const mapped: RefreshedCustomer[] = (updated || []).map((c: Customer) => ({
             id: c.id,
             name: c.name || '',
             email: c.email || '',

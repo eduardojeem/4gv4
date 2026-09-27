@@ -1,4 +1,24 @@
+import { getCurrencyFractionDigits, getLocaleConfig } from '@/lib/currency'
+
 export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
+export type FirstInstallmentTiming = 'at_start' | 'next_cycle'
+
+export function creditBusinessDate(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Asuncion', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-')
+}
+
+export const FIRST_INSTALLMENT_LABELS: Record<FirstInstallmentTiming, string> = {
+  at_start: 'Desde el inicio del crédito',
+  next_cycle: 'Desde el próximo ciclo',
+}
+
+export function isCreditInstallmentOverdue(dueDate: string, now: Date = new Date()): boolean {
+  const date = new Date(dueDate)
+  if (!Number.isFinite(date.getTime())) return false
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : creditBusinessDate(date)
+  return day < creditBusinessDate(now)
+}
 
 export type CreditInstallmentDraft = {
   installmentNumber: number
@@ -18,16 +38,31 @@ export type CreditInstallmentPlan = {
   installments: CreditInstallmentDraft[]
 }
 
-function roundMoney(value: number) {
-  return Number(value.toFixed(2))
+/**
+ * Unidad minima de la moneda configurada.
+ *
+ * Se reparte en la unidad real —guaranies enteros en PYG, centavos en USD— y no
+ * siempre en centesimos. Con dos decimales fijos, Gs. 100.000 en 3 cuotas daba
+ * 33.333,33 cada una y en pantalla se veian tres cuotas de 33.333: el cliente
+ * sumaba 99.999 y no le cerraba con el total del contrato.
+ */
+function moneyStep(fractionDigits: number) {
+  return 10 ** fractionDigits
 }
 
-function splitAmount(total: number, count: number) {
-  const baseAmount = Math.floor((total / count) * 100) / 100
-  const remainder = roundMoney(total - (baseAmount * count))
+function roundMoney(value: number, fractionDigits = 2) {
+  return Number(value.toFixed(fractionDigits))
+}
 
+function splitAmount(total: number, count: number, fractionDigits: number) {
+  const step = moneyStep(fractionDigits)
+  const baseAmount = Math.floor((total / count) * step) / step
+  const remainder = roundMoney(total - (baseAmount * count), fractionDigits)
+
+  // El sobrante entero va completo a la ultima cuota, para que la suma cierre
+  // exactamente contra el total financiado.
   return Array.from({ length: count }, (_, index) =>
-    roundMoney(index === count - 1 ? baseAmount + remainder : baseAmount)
+    roundMoney(index === count - 1 ? baseAmount + remainder : baseAmount, fractionDigits)
   )
 }
 
@@ -43,6 +78,11 @@ export function normalizeCreditFrequency(value: unknown): CreditFrequency {
     : 'monthly'
 }
 
+/** Ultimo dia del mes indicado. El dia 0 del mes siguiente es el ultimo de este. */
+function lastDayOfMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0).getDate()
+}
+
 export function buildCreditDueDate(baseDate: Date, index: number, frequency: CreditFrequency, useProvidedBase: boolean) {
   const dueDate = new Date(baseDate)
   const step = useProvidedBase ? index : index + 1
@@ -53,11 +93,25 @@ export function buildCreditDueDate(baseDate: Date, index: number, frequency: Cre
   }
 
   if (frequency === 'biweekly') {
-    dueDate.setDate(dueDate.getDate() + (14 * step))
+    dueDate.setDate(dueDate.getDate() + (15 * step))
     return dueDate
   }
 
+  // Mensual: se conserva el dia pactado y solo se recorta cuando el mes destino
+  // no lo tiene. Antes se avanzaba con setMonth() sobre la fecha completa, y eso
+  // desborda: un credito firmado el 31 de enero vencia el 3 de marzo (porque el
+  // 31 de febrero no existe y JavaScript lo pasa al mes siguiente), salteando
+  // febrero por completo. Afectaba a todo credito iniciado los dias 29, 30 o 31.
+  const agreedDay = baseDate.getDate()
+
+  // Primero se lleva el dia al 1: con la fecha completa, setMonth volveria a
+  // desbordar antes de poder recortar nada.
+  dueDate.setDate(1)
   dueDate.setMonth(dueDate.getMonth() + step)
+
+  // El dia se recorta contra ESTE mes, no contra el anterior: asi el 31 de enero
+  // da 28 de febrero pero vuelve al 31 en marzo, en vez de quedarse en 28.
+  dueDate.setDate(Math.min(agreedDay, lastDayOfMonth(dueDate.getFullYear(), dueDate.getMonth())))
   return dueDate
 }
 
@@ -67,19 +121,25 @@ export function buildCreditInstallmentPlan(input: {
   installmentCount?: number
   frequency?: CreditFrequency
   firstDueDate?: Date | null
+  firstInstallmentTiming?: FirstInstallmentTiming
   startInstallmentNumber?: number
   now?: Date
+  /** Decimales de la moneda. Por defecto, los de la moneda configurada. */
+  fractionDigits?: number
 }): CreditInstallmentPlan {
-  const principalAmount = roundMoney(Math.max(0, Number(input.principalAmount) || 0))
+  const fractionDigits = Number.isFinite(input.fractionDigits)
+    ? Math.max(0, Math.min(2, Math.floor(input.fractionDigits as number)))
+    : getCurrencyFractionDigits(getLocaleConfig().currency)
+  const principalAmount = roundMoney(Math.max(0, Number(input.principalAmount) || 0), fractionDigits)
   const interestRate = Math.max(0, Number(input.interestRate) || 0)
   const installmentCount = normalizeInstallmentCount(input.installmentCount)
   const frequency = normalizeCreditFrequency(input.frequency)
-  const interestAmount = roundMoney(principalAmount * (interestRate / 100))
-  const financedTotal = roundMoney(principalAmount + interestAmount)
-  const principalParts = splitAmount(principalAmount, installmentCount)
-  const interestParts = splitAmount(interestAmount, installmentCount)
+  const interestAmount = roundMoney(principalAmount * (interestRate / 100), fractionDigits)
+  const financedTotal = roundMoney(principalAmount + interestAmount, fractionDigits)
+  const principalParts = splitAmount(principalAmount, installmentCount, fractionDigits)
+  const interestParts = splitAmount(interestAmount, installmentCount, fractionDigits)
   const dueDateBase = input.firstDueDate ?? input.now ?? new Date()
-  const useProvidedBase = Boolean(input.firstDueDate)
+  const useProvidedBase = Boolean(input.firstDueDate) || input.firstInstallmentTiming !== 'next_cycle'
   const startInstallmentNumber = Math.max(1, Math.floor(Number(input.startInstallmentNumber) || 1))
 
   return {
@@ -96,7 +156,7 @@ export function buildCreditInstallmentPlan(input: {
       return {
         installmentNumber: startInstallmentNumber + index,
         dueDate: buildCreditDueDate(dueDateBase, index, frequency, useProvidedBase),
-        amount: roundMoney(principalComponent + interestComponent),
+        amount: roundMoney(principalComponent + interestComponent, fractionDigits),
         principalComponent,
         interestComponent,
       }

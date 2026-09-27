@@ -60,6 +60,14 @@ export const useIntervalManager = (
     }
   }, [onError])
 
+  const stop = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    setState(prev => ({ ...prev, isRunning: false }))
+  }, [])
+
   const start = useCallback(() => {
     if (intervalRef.current || !enabled) return
 
@@ -79,15 +87,7 @@ export const useIntervalManager = (
 
       executeCallback()
     }, interval)
-  }, [interval, immediate, enabled, maxExecutions, executeCallback, state.executionCount])
-
-  const stop = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-    setState(prev => ({ ...prev, isRunning: false }))
-  }, [])
+  }, [enabled, executeCallback, immediate, interval, maxExecutions, state.executionCount, stop])
 
   const restart = useCallback(() => {
     stop()
@@ -211,6 +211,16 @@ export const useDataPolling = (
 // Hook for managing multiple intervals
 export const useMultipleIntervals = () => {
   const intervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const [activeCount, setActiveCount] = useState(0)
+
+  const removeInterval = useCallback((key: string) => {
+    const intervalId = intervalsRef.current.get(key)
+    if (intervalId) {
+      clearInterval(intervalId)
+      intervalsRef.current.delete(key)
+      setActiveCount(intervalsRef.current.size)
+    }
+  }, [])
 
   const addInterval = useCallback((
     key: string,
@@ -227,23 +237,17 @@ export const useMultipleIntervals = () => {
 
     const intervalId = setInterval(callback, interval)
     intervalsRef.current.set(key, intervalId)
+    setActiveCount(intervalsRef.current.size)
 
     return () => removeInterval(key)
-  }, [])
-
-  const removeInterval = useCallback((key: string) => {
-    const intervalId = intervalsRef.current.get(key)
-    if (intervalId) {
-      clearInterval(intervalId)
-      intervalsRef.current.delete(key)
-    }
-  }, [])
+  }, [removeInterval])
 
   const clearAllIntervals = useCallback(() => {
     intervalsRef.current.forEach((intervalId) => {
       clearInterval(intervalId)
     })
     intervalsRef.current.clear()
+    setActiveCount(0)
   }, [])
 
   const getActiveIntervals = useCallback(() => {
@@ -262,7 +266,7 @@ export const useMultipleIntervals = () => {
     removeInterval,
     clearAllIntervals,
     getActiveIntervals,
-    activeCount: intervalsRef.current.size
+    activeCount
   }
 }
 

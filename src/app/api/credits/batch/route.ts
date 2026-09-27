@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
+import { summarizeRepairDebts } from '@/lib/customers/repair-debt-summary'
+import { z } from 'zod'
+
+const batchSchema = z.object({
+  customerIds: z.array(z.string().uuid()).max(500).default([]),
+})
 
 type CreditRow = {
   id: string
@@ -41,44 +46,40 @@ type PaymentRow = {
  *
  * Body: { customerIds: string[] }
  */
-export async function POST(request: Request) {
+export const POST = withTenantAuth({ permission: 'crm.customers.read', module: 'crm' }, async (request, { organization }) => {
   try {
-    const auth = await requireStaff()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-
-    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-    if (staffAuth.role === 'tecnico') {
-      return NextResponse.json(
-        { error: 'Permisos insuficientes para consultar créditos.' },
-        { status: 403 }
-      )
+    const validation = batchSchema.safeParse(await request.json().catch(() => ({})))
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Lista de clientes inválida.' }, { status: 400 })
     }
-    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
-    if (!organization) {
-      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
-    }
+    const customerIds = [...new Set(validation.data.customerIds)]
 
-    const body = await request.json() as { customerIds?: unknown }
-    const { customerIds } = body
-
-    if (!Array.isArray(customerIds) || customerIds.length === 0) {
-      return NextResponse.json({ credits: [], installments: [], payments: [] })
+    if (customerIds.length === 0) {
+      return NextResponse.json({ credits: [], installments: [], payments: [], repairDebts: {} })
     }
 
     const supabase = createAdminSupabase()
 
-    // 1. Fetch credits for the requested customers
-    const { data: credits, error: creditsError } = await supabase
-      .from('customer_credits')
-      .select('id, customer_id, principal, interest_rate, term_months, start_date, status')
-      .eq('organization_id', organization.id)
-      .in('customer_id', customerIds as string[])
+    // Créditos y reparaciones se leen una sola vez para toda la lista. El
+    // cliente administrativo exige organization_id en ambas consultas.
+    const [creditsResult, repairsResult] = await Promise.all([
+      supabase
+        .from('customer_credits')
+        .select('id, customer_id, principal, interest_rate, term_months, start_date, status')
+        .eq('organization_id', organization.id)
+        .in('customer_id', customerIds),
+      supabase
+        .from('repairs')
+        .select('customer_id, status, delivered_at, pricing_mode, labor_cost, final_cost, estimated_cost, discount_amount, paid_amount, parts:repair_parts(unit_price, unit_cost, quantity, line_type)')
+        .eq('organization_id', organization.id)
+        .in('customer_id', customerIds)
+        .is('deleted_at', null),
+    ])
 
-    if (creditsError) {
-      console.error('[credits/batch] Error fetching credits:', creditsError)
-      throw creditsError
-    }
+    if (creditsResult.error) throw creditsResult.error
+    if (repairsResult.error) throw repairsResult.error
+
+    const credits = creditsResult.data
 
     const creditIds = (credits as CreditRow[] | null)?.map(c => c.id) ?? []
 
@@ -114,10 +115,15 @@ export async function POST(request: Request) {
       payments = (paymentsResult.data as PaymentRow[]) ?? []
     }
 
-    return NextResponse.json({ credits: credits ?? [], installments, payments })
+    return NextResponse.json({
+      credits: credits ?? [],
+      installments,
+      payments,
+      repairDebts: summarizeRepairDebts(repairsResult.data ?? []),
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno del servidor.'
     console.error('[credits/batch] Unhandled error:', error)
     return NextResponse.json({ error: message }, { status: 500 })
   }
-}
+})

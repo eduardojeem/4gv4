@@ -1,7 +1,7 @@
 'use client'
 
 import React, { forwardRef, useState, useCallback } from 'react'
-import { Loader2, Check, AlertTriangle, Info } from 'lucide-react'
+import { Loader2, Check, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useButtonNotifications, NotificationOptions } from '@/hooks/use-optimized-notifications'
@@ -12,38 +12,38 @@ export interface OptimizedButtonProps extends Omit<ButtonProps, 'onClick'> {
   // Configuración de notificaciones
   notificationMessages?: {
     loading?: string
-    success?: string | ((data: any) => string)
-    error?: string | ((error: any) => string)
+    success?: string | ((data: unknown) => string)
+    error?: string | ((error: Error) => string)
   }
   notificationOptions?: NotificationOptions
-  
+
   // Configuración de comportamiento
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>
-  onAsyncClick?: () => Promise<any>
+  onAsyncClick?: () => Promise<unknown>
   preventDoubleClick?: boolean
   showLoadingState?: boolean
   showSuccessState?: boolean
   showErrorState?: boolean
   successStateDuration?: number
   notificationDuration?: number
-  
+
   // Configuración de caché y rendimiento
   enableCache?: boolean
   cacheDuration?: number
   optimizePerformance?: boolean
-  
+
   // Configuración visual
   loadingIcon?: React.ReactNode
   successIcon?: React.ReactNode
   errorIcon?: React.ReactNode
-  
+
   // Estados personalizados
   isProcessing?: boolean
   processingText?: string
-  
+
   // Identificador único para el botón
   buttonId?: string
-  
+
   // Configuración de accesibilidad
   ariaLabel?: string
   ariaDescription?: string
@@ -61,15 +61,15 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     onClick,
     onAsyncClick,
     notificationMessages,
-    notificationOptions,
+    notificationOptions: _notificationOptions,
     preventDoubleClick = true,
-    showLoadingState = true,
-    showSuccessState = true,
-    successStateDuration = 2000,
-    notificationDuration = 3000,
-    enableCache = false,
-    cacheDuration = 5000,
-    optimizePerformance = true,
+    showLoadingState: _showLoadingState = true,
+    showSuccessState: _showSuccessState = true,
+    successStateDuration: _successStateDuration = 2000,
+    notificationDuration: _notificationDuration = 3000,
+    enableCache: _enableCache = false,
+    cacheDuration: _cacheDuration = 5000,
+    optimizePerformance: _optimizePerformance = true,
     loadingIcon,
     successIcon,
     errorIcon,
@@ -80,45 +80,40 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     ariaDescription,
     ...props
   }, ref) => {
-    const [buttonState, setButtonState] = useState<ButtonState>('idle')
+    const [buttonState, _setButtonState] = useState<ButtonState>('idle')
     const [isClicked, setIsClicked] = useState(false)
-    
+
     const {
-      buttonState: hookButtonState,
+      buttonState: _hookButtonState,
       executeAction,
       quickNotify,
-      clearButtonCache,
-      getPerformanceStats,
+      clearButtonCache: _clearButtonCache,
+      getPerformanceStats: _getPerformanceStats,
       isLoading: hookIsLoading,
-      status,
-      message
+      status: _status,
+      message: _message
     } = useButtonNotifications(buttonId || 'optimized-button')
-
-    // Iconos por defecto
-    const defaultLoadingIcon = <Loader2 className="h-4 w-4 animate-spin" />
-    const defaultSuccessIcon = <Check className="h-4 w-4" />
-    const defaultErrorIcon = <AlertTriangle className="h-4 w-4" />
 
     // Determinar el icono actual
     const getCurrentIcon = useCallback(() => {
       switch (buttonState) {
         case 'loading':
-          return loadingIcon || defaultLoadingIcon
+          return loadingIcon || <Loader2 className="h-4 w-4 animate-spin" />
         case 'success':
-          return successIcon || defaultSuccessIcon
+          return successIcon || <Check className="h-4 w-4" />
         case 'error':
-          return errorIcon || defaultErrorIcon
+          return errorIcon || <AlertTriangle className="h-4 w-4" />
         default:
           return null
       }
-    }, [buttonState, loadingIcon, successIcon, errorIcon])
+    }, [buttonState, errorIcon, loadingIcon, successIcon])
 
     // Determinar el texto actual
     const getCurrentText = useCallback(() => {
       if (isProcessing && processingText) {
         return processingText
       }
-      
+
       switch (buttonState) {
         case 'loading':
           return notificationMessages?.loading || 'Procesando...'
@@ -134,14 +129,14 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     // Manejar click del botón
     const handleClick = useCallback(async (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault()
-      
+
       // Prevenir doble click
       if (hookIsLoading || isClicked) {
         return
       }
 
       setIsClicked(true)
-      
+
       try {
         if (onAsyncClick) {
           await executeAction(
@@ -252,10 +247,10 @@ export interface ConfirmationButtonProps extends OptimizedButtonProps {
 export const ConfirmationButton = forwardRef<HTMLButtonElement, ConfirmationButtonProps>(
   ({
     confirmationMessage = '¿Estás seguro de que quieres realizar esta acción?',
-    confirmationTitle = 'Confirmar acci�n',
+    confirmationTitle: _confirmationTitle = 'Confirmar acci�n',
     confirmationDescription,
-    confirmButtonText,
-    cancelButtonText,
+    confirmButtonText: _confirmButtonText,
+    cancelButtonText: _cancelButtonText,
     requireConfirmation = true,
     onAsyncClick,
     onClick,

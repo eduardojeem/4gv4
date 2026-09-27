@@ -9,35 +9,21 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   MessageSquare,
   Mail,
   Phone,
-  Send,
-  Calendar,
-  Clock,
-  Users,
-  Target,
-  Zap,
-  Bell,
-  Settings,
-  Plus,
-  Filter,
-  Search,
+  Send, Clock, Target,
+  Zap, Plus, Search,
   MoreVertical,
   CheckCircle2,
   AlertCircle,
   XCircle,
   Eye,
-  Edit,
-  Trash2,
-  Download,
-  Upload
+  Edit
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerCommunications } from '@/hooks/use-customer-communications'
 import { format } from 'date-fns'
@@ -76,20 +62,10 @@ interface Campaign {
   createdAt: string
 }
 
-interface CommunicationHistory {
-  id: string
-  customerId: string | null
-  customerName: string
-  type: string
-  subject: string
-  status: string
-  sentAt: string
-  toEmail?: string
-}
 
 export function CustomerCommunications({ customers }: CustomerCommunicationsProps) {
   const [activeTab, setActiveTab] = useState('campaigns')
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [_selectedTemplate, _setSelectedTemplate] = useState<string | null>(null)
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -242,7 +218,7 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
   )
 
   const CampaignCard = ({ campaign }: { campaign: Campaign }) => {
-    const template = templates.find(t => t.id === campaign.templateId)
+    void (templates.find(t => t.id === campaign.templateId));
     
     return (
       <Card className="hover:shadow-lg transition-shadow">

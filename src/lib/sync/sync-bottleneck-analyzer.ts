@@ -105,10 +105,10 @@ export class SyncBottleneckAnalyzer {
   async analyzeBottlenecks(timeWindow: number = 3600000): Promise<SystemBottlenecks> {
     const endTime = new Date()
     const startTime = new Date(endTime.getTime() - timeWindow)
-    
-    const report = await this.performanceMonitor.generatePerformanceReport(startTime, endTime)
+
+    await this.performanceMonitor.generatePerformanceReport(startTime, endTime);
     const recentMetrics = this.performanceMonitor.getRecentMetrics(100)
-    
+
     const bottlenecks = await this.identifyBottlenecks(recentMetrics)
     const trends = this.analyzeTrends(bottlenecks)
     const actionPlan = this.createActionPlan(bottlenecks)
@@ -166,7 +166,7 @@ export class SyncBottleneckAnalyzer {
 
   private groupMetricsByOperation(metrics: SyncMetrics[]): Map<string, SyncMetrics[]> {
     const groups = new Map<string, SyncMetrics[]>()
-    
+
     metrics.forEach(metric => {
       if (!groups.has(metric.operation)) {
         groups.set(metric.operation, [])
@@ -178,21 +178,21 @@ export class SyncBottleneckAnalyzer {
   }
 
   private analyzeLatency(
-    operation: string, 
-    metrics: SyncMetrics[], 
+    operation: string,
+    metrics: SyncMetrics[],
     baseline: PerformanceBaseline
   ): BottleneckAnalysis | null {
     if (metrics.length === 0) return null
 
     const averageLatency = metrics.reduce((sum, m) => sum + m.latency, 0) / metrics.length
-    const p95Latency = this.calculatePercentile(metrics.map(m => m.latency), 95)
-    
+    void (this.calculatePercentile(metrics.map(m => m.latency), 95));
+
     const threshold = baseline.expectedLatency * 1.5 // 50% sobre la línea base
-    
+
     if (averageLatency <= threshold) return null
 
     const severity = this.calculateSeverity(averageLatency, baseline.expectedLatency, threshold)
-    
+
     return {
       type: 'latency',
       severity,
@@ -212,19 +212,19 @@ export class SyncBottleneckAnalyzer {
   }
 
   private analyzeThroughput(
-    operation: string, 
-    metrics: SyncMetrics[], 
+    operation: string,
+    metrics: SyncMetrics[],
     baseline: PerformanceBaseline
   ): BottleneckAnalysis | null {
     if (metrics.length === 0) return null
 
     const averageThroughput = metrics.reduce((sum, m) => sum + m.throughput, 0) / metrics.length
     const threshold = baseline.expectedThroughput * 0.7 // 30% bajo la línea base
-    
+
     if (averageThroughput >= threshold) return null
 
     const severity = this.calculateSeverity(baseline.expectedThroughput, averageThroughput, threshold)
-    
+
     return {
       type: 'throughput',
       severity,
@@ -244,19 +244,19 @@ export class SyncBottleneckAnalyzer {
   }
 
   private analyzeErrorRate(
-    operation: string, 
-    metrics: SyncMetrics[], 
+    operation: string,
+    metrics: SyncMetrics[],
     baseline: PerformanceBaseline
   ): BottleneckAnalysis | null {
     if (metrics.length === 0) return null
 
     const averageErrorRate = metrics.reduce((sum, m) => sum + m.errorRate, 0) / metrics.length
     const threshold = baseline.expectedErrorRate * 2 // Doble de la línea base
-    
+
     if (averageErrorRate <= threshold) return null
 
     const severity = this.calculateSeverity(averageErrorRate, baseline.expectedErrorRate, threshold)
-    
+
     return {
       type: 'error_rate',
       severity,
@@ -276,8 +276,8 @@ export class SyncBottleneckAnalyzer {
   }
 
   private analyzeMemoryUsage(
-    operation: string, 
-    metrics: SyncMetrics[], 
+    operation: string,
+    metrics: SyncMetrics[],
     baseline: PerformanceBaseline
   ): BottleneckAnalysis | null {
     const metricsWithMemory = metrics.filter(m => m.memoryUsage !== undefined)
@@ -285,11 +285,11 @@ export class SyncBottleneckAnalyzer {
 
     const averageMemory = metricsWithMemory.reduce((sum, m) => sum + (m.memoryUsage || 0), 0) / metricsWithMemory.length
     const threshold = baseline.expectedMemoryUsage * 2 // Doble de la línea base
-    
+
     if (averageMemory <= threshold) return null
 
     const severity = this.calculateSeverity(averageMemory, baseline.expectedMemoryUsage, threshold)
-    
+
     return {
       type: 'memory',
       severity,
@@ -329,7 +329,7 @@ export class SyncBottleneckAnalyzer {
   private analyzeConcurrencyPatterns(metrics: SyncMetrics[]): BottleneckAnalysis | null {
     // Analizar si hay operaciones concurrentes que se bloquean entre sí
     const timeWindows = this.groupMetricsByTimeWindow(metrics, 1000) // ventanas de 1 segundo
-    
+
     let maxConcurrentOps = 0
     let avgConcurrentOps = 0
     let totalWindows = 0
@@ -407,13 +407,13 @@ export class SyncBottleneckAnalyzer {
 
   private async analyzeDatabasePatterns(metrics: SyncMetrics[]): Promise<BottleneckAnalysis | null> {
     // Analizar patrones que sugieren problemas de base de datos
-    const dbOperations = metrics.filter(m => 
+    const dbOperations = metrics.filter(m =>
       m.operation.includes('sync') && m.recordsProcessed > 0
     )
 
     if (dbOperations.length === 0) return null
 
-    const avgRecordsPerOp = dbOperations.reduce((sum, m) => sum + m.recordsProcessed, 0) / dbOperations.length
+    void (dbOperations.reduce((sum, m) => sum + m.recordsProcessed, 0) / dbOperations.length);
     const avgDurationPerRecord = dbOperations.reduce((sum, m) => sum + (m.duration / m.recordsProcessed), 0) / dbOperations.length
 
     // Si toma más de 100ms por registro, puede indicar problemas de DB
@@ -446,7 +446,7 @@ export class SyncBottleneckAnalyzer {
 
   private groupMetricsByTimeWindow(metrics: SyncMetrics[], windowMs: number): SyncMetrics[][] {
     const windows = new Map<number, SyncMetrics[]>()
-    
+
     metrics.forEach(metric => {
       const windowStart = Math.floor(metric.startTime / windowMs) * windowMs
       if (!windows.has(windowStart)) {
@@ -464,9 +464,9 @@ export class SyncBottleneckAnalyzer {
     return sorted[Math.max(0, index)]
   }
 
-  private calculateSeverity(current: number, baseline: number, threshold: number): BottleneckAnalysis['severity'] {
+  private calculateSeverity(current: number, baseline: number, _threshold: number): BottleneckAnalysis['severity'] {
     const ratio = current / baseline
-    
+
     if (ratio >= 3) return 'critical'
     if (ratio >= 2) return 'high'
     if (ratio >= 1.5) return 'medium'
@@ -495,28 +495,28 @@ export class SyncBottleneckAnalyzer {
 
   private getLatencyRecommendations(operation: string, current: number, baseline: number): string[] {
     const recommendations = []
-    
+
     if (current > baseline * 3) {
       recommendations.push('Revisar algoritmos y estructuras de datos utilizadas')
       recommendations.push('Implementar caché para operaciones repetitivas')
     }
-    
+
     if (operation.includes('sync')) {
       recommendations.push('Implementar procesamiento en lotes para reducir overhead')
       recommendations.push('Usar índices apropiados en consultas de base de datos')
     }
-    
+
     if (operation.includes('realtime')) {
       recommendations.push('Optimizar manejo de eventos WebSocket')
       recommendations.push('Implementar debouncing para eventos frecuentes')
     }
 
     recommendations.push('Perfilar código para identificar operaciones costosas')
-    
+
     return recommendations
   }
 
-  private getThroughputRecommendations(operation: string, current: number, baseline: number): string[] {
+  private getThroughputRecommendations(_operation: string, _current: number, _baseline: number): string[] {
     return [
       'Implementar procesamiento paralelo donde sea posible',
       'Optimizar consultas de base de datos',
@@ -527,7 +527,7 @@ export class SyncBottleneckAnalyzer {
     ]
   }
 
-  private getErrorRateRecommendations(operation: string, current: number, baseline: number): string[] {
+  private getErrorRateRecommendations(_operation: string, _current: number, _baseline: number): string[] {
     return [
       'Implementar retry logic con backoff exponencial',
       'Mejorar validación de datos de entrada',
@@ -538,7 +538,7 @@ export class SyncBottleneckAnalyzer {
     ]
   }
 
-  private getMemoryRecommendations(operation: string, current: number, baseline: number): string[] {
+  private getMemoryRecommendations(_operation: string, _current: number, _baseline: number): string[] {
     return [
       'Implementar streaming para datasets grandes',
       'Revisar y optimizar estructuras de datos en memoria',
@@ -581,7 +581,7 @@ export class SyncBottleneckAnalyzer {
 
   private createActionPlan(bottlenecks: BottleneckAnalysis[]): SystemBottlenecks['actionPlan'] {
     const sortedBottlenecks = bottlenecks.sort((a, b) => b.priority - a.priority)
-    
+
     return {
       immediate: sortedBottlenecks.filter(b => b.severity === 'critical').slice(0, 3),
       shortTerm: sortedBottlenecks.filter(b => b.severity === 'high').slice(0, 5),
@@ -621,7 +621,7 @@ export class SyncBottleneckAnalyzer {
     const avgThroughput = metrics.reduce((sum, m) => sum + m.throughput, 0) / metrics.length
     const avgErrorRate = metrics.reduce((sum, m) => sum + m.errorRate, 0) / metrics.length
     const metricsWithMemory = metrics.filter(m => m.memoryUsage !== undefined)
-    const avgMemory = metricsWithMemory.length > 0 
+    const avgMemory = metricsWithMemory.length > 0
       ? metricsWithMemory.reduce((sum, m) => sum + (m.memoryUsage || 0), 0) / metricsWithMemory.length
       : 0
 

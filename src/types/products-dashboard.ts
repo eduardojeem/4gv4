@@ -7,21 +7,37 @@ import { Product, ProductFilters as BaseProductFilters, ProductAlert, Category, 
 
 // Extended filter interface for dashboard
 export interface DashboardFilters extends BaseProductFilters {
-  quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | null
+  quick_filter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | 'inactive' | 'products' | 'services' | 'variants' | null
+  item_type?: 'all' | 'products' | 'services'
+  /**
+   * El alcance de la pantalla: productos fisicos o servicios. Va aparte de
+   * `quick_filter` porque el tipo tiene que sobrevivir a un filtro de stock:
+   * antes, pedir «bajo stock» volvia a mezclar los servicios en la lista.
+   */
+  catalog_kind?: 'part' | 'service'
+  /** Marca del celular al que pertenece el repuesto (Apple, Samsung). */
+  device_brand?: string
+  /** Un modelo de celular: trae todo lo que sirve para él. */
+  device_model?: string
 }
 
 // Sort configuration
 export interface SortConfig {
-  field: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at'
+  field: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at' | 'device_model'
   direction: 'asc' | 'desc'
 }
 
 // View modes
 export type ViewMode = 'grid' | 'table' | 'compact'
 
+// Group by modes for section breakdown
+export type GroupByMode = 'none' | 'type' | 'category'
+
 // Dashboard metrics
 export interface DashboardMetrics {
   total_products: number
+  physical_products_count?: number
+  services_count?: number
   low_stock_count: number
   out_of_stock_count: number
   inventory_value: number

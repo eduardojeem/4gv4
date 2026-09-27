@@ -66,7 +66,7 @@ export function PrioritizationSettings({ sampleRepairs, initialConfig, onSave }:
           <Button
             onClick={() => {
               const id = `${Date.now()}`;
-              const newRule = { id, name: ruleName || `Regla ${id}`, condition: { stage: ruleStage as any, issueIncludes: ruleIssue }, effect: { priorityBonus: ruleBonus } };
+              const newRule = { id, name: ruleName || `Regla ${id}`, condition: { stage: ruleStage, issueIncludes: ruleIssue }, effect: { priorityBonus: ruleBonus } };
               setConfig({ ...config, rules: [...config.rules, newRule] });
               setRuleName("");
               setRuleStage("");

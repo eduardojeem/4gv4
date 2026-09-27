@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useBranch } from '@/contexts/branch-context'
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useTechnicians } from '@/hooks/use-technicians'
 import { withBranchFilter } from '@/lib/branches/client'
 import type { Repair, RepairPriority } from '@/types/repairs'
@@ -398,6 +399,7 @@ export default function TechnicianSchedulePage() {
   const { repairs, refreshRepairs, updateStatus } = useRepairs()
   const { user } = useAuth()
   const { selectedBranchId } = useBranch()
+  const { organization } = useActiveOrganization()
   const { technicians } = useTechnicians()
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
@@ -525,6 +527,10 @@ export default function TechnicianSchedulePage() {
   // tres son la misma operación (setear o limpiar `estimated_completion`),
   // solo cambia el valor. Antes esto vivía duplicado en cada handler.
   const updateEstimatedCompletion = async (repairId: string, iso: string | null) => {
+    if (!organization?.id) {
+      toast.error('Organización activa no disponible')
+      return false
+    }
     setIsSaving(true)
     try {
       const supabase = createClient()
@@ -532,6 +538,7 @@ export default function TechnicianSchedulePage() {
         .from('repairs')
         .update({ estimated_completion: iso })
         .eq('id', repairId)
+        .eq('organization_id', organization.id)
       updateQuery = withBranchFilter(updateQuery, selectedBranchId)
       const { error } = await updateQuery
 

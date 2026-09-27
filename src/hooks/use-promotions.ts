@@ -5,9 +5,23 @@ import { toast } from 'sonner'
 import { parseISO, isAfter, isBefore, differenceInDays } from 'date-fns'
 import type { Promotion, PromotionFilters, PromotionStats } from '@/types/promotion'
 
+/**
+ * Guardar tiene que verse en la pantalla, no en la próxima consulta.
+ *
+ * Cada alta, edición o cambio de estado guardaba y después pedía la lista
+ * entera de nuevo; hasta que esa segunda consulta volvía, la pantalla seguía
+ * mostrando lo viejo, y como además se ponía en «cargando», la lista
+ * desaparecía y volvía. Si la consulta tardaba o la respondía una copia
+ * guardada, el cambio no aparecía nunca y había que recargar la página.
+ *
+ * La API devuelve la promoción ya guardada en el cuerpo de la respuesta: con
+ * eso alcanza para actualizar la lista en el acto. La consulta de fondo queda,
+ * pero solo para reconciliar, y sin vaciar nada.
+ */
 export function usePromotions() {
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [filters, setFilters] = useState<PromotionFilters>({
     search: '',
     status: 'all',
@@ -15,9 +29,13 @@ export function usePromotions() {
     alert: 'all'
   })
 
-  // Fetch promotions with caching
-  const fetchPromotions = useCallback(async () => {
-    setLoading(true)
+  /**
+   * `silencioso` se usa después de guardar: la lista ya muestra el cambio, así
+   * que no se la vacía ni se avisa del error con un toast encima del de éxito.
+   */
+  const fetchPromotions = useCallback(async ({ silencioso = false } = {}) => {
+    if (silencioso) setIsRefreshing(true)
+    else setLoading(true)
     try {
       const response = await fetch('/api/promotions?limit=100', { cache: 'no-store' })
       const result = await response.json()
@@ -26,9 +44,10 @@ export function usePromotions() {
       setPromotions(result.promotions || [])
     } catch (error) {
       console.error('Error fetching promotions:', error)
-      toast.error('Error al cargar promociones')
+      if (!silencioso) toast.error('Error al cargar promociones')
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
     }
   }, [])
 
@@ -163,9 +182,14 @@ export function usePromotions() {
       const result = await response.json()
 
       if (!response.ok) throw new Error(result.error || 'No se pudo crear la promocion')
-      
+
+      // La API devuelve la promoción creada: se agrega arriba, que es donde la
+      // deja el orden por fecha. Pedir la lista de nuevo sería otra vuelta a la
+      // red para enterarse de algo que ya está en la respuesta — y si esa
+      // consulta llega vieja, borra lo recién guardado de la pantalla.
+      if (result?.id) setPromotions(prev => [result as Promotion, ...prev])
+      else void fetchPromotions({ silencioso: true })
       toast.success('Promoción creada exitosamente')
-      await fetchPromotions()
       return true
     } catch (error) {
       console.error('Error creating promotion:', error)
@@ -186,9 +210,15 @@ export function usePromotions() {
       const result = await response.json()
 
       if (!response.ok) throw new Error(result.error || 'No se pudo actualizar la promocion')
-      
+
+      // Lo que quedó guardado reemplaza a la fila vieja en el acto. Sólo si la
+      // respuesta no trae la promoción se vuelve a pedir la lista.
+      if (result?.id) {
+        setPromotions(prev => prev.map(promo => (promo.id === id ? { ...promo, ...(result as Promotion) } : promo)))
+      } else {
+        void fetchPromotions({ silencioso: true })
+      }
       toast.success('Promoción actualizada exitosamente')
-      await fetchPromotions()
       return true
     } catch (error) {
       console.error('Error updating promotion:', error)
@@ -205,16 +235,16 @@ export function usePromotions() {
       const result = await response.json()
 
       if (!response.ok) throw new Error(result.error || 'No se pudo eliminar la promocion')
-      
+
+      setPromotions(prev => prev.filter(promo => promo.id !== id))
       toast.success('Promoción eliminada exitosamente')
-      await fetchPromotions()
       return true
     } catch (error) {
       console.error('Error deleting promotion:', error)
       toast.error('Error al eliminar la promoción')
       return false
     }
-  }, [fetchPromotions])
+  }, [])
 
   const togglePromotionStatus = useCallback(async (id: string, isActive: boolean) => {
     return updatePromotion(id, { is_active: !isActive })
@@ -275,10 +305,10 @@ export function usePromotions() {
   // The real duplicate flow goes through PromotionDialog (handleDuplicate in page.tsx),
   // which opens the modal so the user can review/edit before saving.
   // Exporting this function would create a second, silent path that bypasses the modal.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _duplicatePromotion = useCallback(async (promotion: Promotion) => {
+    const { id: _id, created_at: _created_at, updated_at: _updated_at, ...rest } = promotion
     const duplicatedData = {
-      ...promotion,
+      ...rest,
       name: `${promotion.name} (Copia)`,
       code: `PROMO${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       is_active: false,
@@ -286,12 +316,6 @@ export function usePromotions() {
       start_date: null,
       end_date: null
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (duplicatedData as any).id
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (duplicatedData as any).created_at
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (duplicatedData as any).updated_at
     return createPromotion(duplicatedData)
   }, [createPromotion])
 
@@ -307,15 +331,16 @@ export function usePromotions() {
         if (!response.ok) throw new Error(result.error || 'No se pudo actualizar una promocion')
       }))
       
+      const elegidas = new Set(promotionIds)
+      setPromotions(prev => prev.map(promo => (elegidas.has(promo.id) ? { ...promo, is_active: isActive } : promo)))
       toast.success(`${promotionIds.length} promociones ${isActive ? 'activadas' : 'desactivadas'}`)
-      await fetchPromotions()
       return true
     } catch (error) {
       console.error('Error bulk updating promotions:', error)
       toast.error('Error al actualizar promociones')
       return false
     }
-  }, [fetchPromotions])
+  }, [])
 
   const bulkDeletePromotions = useCallback(async (promotionIds: string[]) => {
     if (promotionIds.length === 0) return false
@@ -328,15 +353,16 @@ export function usePromotions() {
         }
       }))
 
+      const borradas = new Set(promotionIds)
+      setPromotions(prev => prev.filter(promo => !borradas.has(promo.id)))
       toast.success(`${promotionIds.length} promociones eliminadas`)
-      await fetchPromotions()
       return true
     } catch (error) {
       console.error('Error bulk deleting promotions:', error)
       toast.error('Error al eliminar promociones')
       return false
     }
-  }, [fetchPromotions])
+  }, [])
 
   // Validation functions
   const validatePromotionCode = useCallback(async (code: string, excludeId?: string) => {
@@ -459,6 +485,8 @@ export function usePromotions() {
     promotions: filteredPromotions,
     allPromotions: promotions,
     loading,
+    /** Hay una consulta de reconciliación en curso, con datos ya en pantalla. */
+    isRefreshing,
     stats,
     filters,
     expiringSoonArray,    // derivado del único pass de stats

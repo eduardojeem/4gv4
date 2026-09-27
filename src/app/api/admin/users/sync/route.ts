@@ -158,13 +158,14 @@ async function handler(_request: Request, context: { user: { id: string; email?:
         if (roleError) throw roleError
 
         results.updated++
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const errMessage = err instanceof Error ? err.message : 'Unknown error'
         logger.error('Error syncing user', {
           userId: user.id,
           email: user.email,
-          error: err?.message,
+          error: errMessage,
         })
-        results.errors.push(`User ${user.email}: ${err?.message || 'Unknown error'}`)
+        results.errors.push(`User ${user.email}: ${errMessage}`)
       }
     }
 
@@ -173,6 +174,8 @@ async function handler(_request: Request, context: { user: { id: string; email?:
       action: 'user_sync',
       resource: 'users',
       resource_id: 'bulk',
+      organization_id: context.organizationId,
+      severity: 'low',
       new_values: {
         total: results.total,
         updated: results.updated,
@@ -197,10 +200,11 @@ async function handler(_request: Request, context: { user: { id: string; email?:
       message: `Sincronizacion completada. ${results.updated}/${results.total} usuarios procesados.`,
       details: results,
     })
-  } catch (error: any) {
-    logger.error('Sync error', { error: error?.message || String(error) })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unexpected error'
+    logger.error('Sync error', { error: message })
     return NextResponse.json(
-      { success: false, error: error?.message || 'Unexpected error' },
+      { success: false, error: message },
       { status: 500 }
     )
   }

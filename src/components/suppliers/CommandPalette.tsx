@@ -1,14 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence  } from '../ui/motion'
+import React, { useState, useEffect } from 'react'
+import { motion } from '../ui/motion'
 import {
-    Command, Search, Building2, Plus, Download, Filter,
-    Settings, Users, Package, TrendingUp, FileText, X
+  Command, Search
 } from 'lucide-react'
 import {
-    Dialog,
-    DialogContent,
+  Dialog,
+  DialogContent,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'

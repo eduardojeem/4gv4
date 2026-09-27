@@ -5,6 +5,7 @@ import { Camera, CameraOff, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import type { Html5Qrcode } from 'html5-qrcode'
 
 interface BarcodeScannerProps {
   /** Se llama cuando se detecta un código */
@@ -35,7 +36,7 @@ export function BarcodeScanner({
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastCode, setLastCode] = useState<string | null>(null)
-  const scannerRef = useRef<any>(null)
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const stopScanner = useCallback(async () => {

@@ -13,6 +13,8 @@ type UpdateSubscriptionBody = {
   current_period_starts_at?: unknown
   current_period_ends_at?: unknown
   cancel_at_period_end?: unknown
+  storefront_public?: unknown
+  marketplace_public?: unknown
 }
 
 function normalizeDate(value: unknown) {
@@ -47,6 +49,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const periodStartsAt = normalizeDate(body.current_period_starts_at)
   const periodEndsAt = normalizeDate(body.current_period_ends_at)
   const cancelAtPeriodEnd = typeof body.cancel_at_period_end === 'boolean' ? body.cancel_at_period_end : undefined
+  const storefrontPublic = typeof body.storefront_public === 'boolean' ? body.storefront_public : undefined
+  const marketplacePublic = typeof body.marketplace_public === 'boolean' ? body.marketplace_public : undefined
 
   if (!plan) {
     return NextResponse.json({ error: 'Subscription plan is required' }, { status: 400 })
@@ -112,6 +116,33 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (!subscription) {
     return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
+  }
+
+  if (storefrontPublic !== undefined || marketplacePublic !== undefined) {
+    const orgUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (storefrontPublic !== undefined) orgUpdates.storefront_public = storefrontPublic
+    if (marketplacePublic !== undefined) orgUpdates.marketplace_public = marketplacePublic
+
+    await admin.from('organizations').update(orgUpdates).eq('id', previous.organization_id)
+
+    const { data: currentSettings } = await admin
+      .from('website_settings')
+      .select('id, value')
+      .eq('organization_id', previous.organization_id)
+      .eq('key', 'company_info')
+      .maybeSingle()
+
+    if (currentSettings?.value && typeof currentSettings.value === 'object') {
+      const updatedValue = {
+        ...currentSettings.value,
+        ...(storefrontPublic !== undefined ? { storefrontPublic } : {}),
+        ...(marketplacePublic !== undefined ? { marketplacePublic } : {}),
+      }
+      await admin
+        .from('website_settings')
+        .update({ value: updatedValue, updated_at: new Date().toISOString() })
+        .eq('id', currentSettings.id)
+    }
   }
 
   await admin.from('tenant_audit_log').insert({

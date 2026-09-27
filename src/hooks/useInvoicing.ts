@@ -52,18 +52,6 @@ export function useInvoicing() {
 
             if (saleError) throw saleError
 
-            // Get customer data if exists
-            let customerData = null
-            if (sale.customer_id) {
-                const { data: customer } = await supabase
-                    .from('customers')
-                    .select('*')
-                    .eq('id', sale.customer_id)
-                    .single()
-
-                customerData = customer
-            }
-
             const invoiceNumber = generateInvoiceNumber()
 
             // Create invoice record

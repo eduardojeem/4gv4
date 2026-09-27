@@ -8,13 +8,12 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   History, Search, Download, Eye, Calendar,
-  TrendingUp, TrendingDown, AlertTriangle, BarChart3,
-  ArrowLeft, Receipt, CreditCard, Wallet, Banknote, User
+  TrendingUp, AlertTriangle, ArrowLeft, Receipt, CreditCard, Wallet, Banknote, User
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext, ZClosureRecord } from '../contexts/CashRegisterContext'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { formatRegisterName } from '@/app/dashboard/pos/lib/formatters'
 
 interface ZClosureHistoryModalProps {
   isOpen: boolean
@@ -22,10 +21,10 @@ interface ZClosureHistoryModalProps {
   onViewDetails: (closure: ZClosureRecord) => void
 }
 
-export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosureHistoryModalProps) {
-  const { zClosureHistory, checkPermission } = useCashRegisterContext()
+export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails: _onViewDetails }: ZClosureHistoryModalProps) {
+  const { zClosureHistory, checkPermission, registers } = useCashRegisterContext()
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'week' | 'month'>('all')
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('week')
   const [selectedClosure, setSelectedClosure] = useState<ZClosureRecord | null>(null)
 
   const filteredHistory = useMemo(() => {
@@ -45,10 +44,14 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
       const now = new Date()
       const cutoffDate = new Date()
 
-      if (selectedPeriod === 'week') {
+      if (selectedPeriod === 'today') {
+        cutoffDate.setHours(0, 0, 0, 0)
+      } else if (selectedPeriod === 'week') {
         cutoffDate.setDate(now.getDate() - 7)
       } else if (selectedPeriod === 'month') {
         cutoffDate.setMonth(now.getMonth() - 1)
+      } else if (selectedPeriod === 'year') {
+        cutoffDate.setFullYear(now.getFullYear() - 1)
       }
 
       filtered = filtered.filter(closure =>
@@ -58,17 +61,17 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
 
     return filtered.sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime())
   }, [zClosureHistory, searchTerm, selectedPeriod])
-  
+
   // Reset selection when modal closes
   React.useEffect(() => {
       if (!isOpen) setSelectedClosure(null)
   }, [isOpen])
-  
+
   // Also, if onViewDetails prop is called from parent (legacy), select that closure
   // This is a bit of a hack to support both internal and external selection
   // But for the new "Client Detail" style, we might want to default to list if no selection
   // or allow passing an initial selection.
-  
+
   // IMPORTANT: If we want to mimic Client Detail exactly, we might want to start with a closure selected if provided?
   // But usually it starts as a list.
 
@@ -77,13 +80,13 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
   }
 
   // Prepare chart data (last 7 closures from filtered list)
-  const chartData = useMemo(() => {
+  void (useMemo(() => {
     return filteredHistory.slice(0, 7).reverse().map(closure => ({
       date: new Date(closure.date).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit' }),
       sales: closure.totalSales,
       discrepancy: Math.abs(closure.discrepancy)
     }))
-  }, [filteredHistory])
+  }, [filteredHistory]));
 
   const exportHistoryCSV = () => {
     if (!checkPermission('canExportData')) {
@@ -147,7 +150,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 bg-gray-50 dark:bg-gray-950">
-        
+
         {selectedClosure ? (
            // --- DETAIL VIEW ---
            <div className="flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-300">
@@ -176,7 +179,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
               {/* Scrollable Content */}
               <ScrollArea className="flex-1">
                   <div className="p-6 space-y-6">
-                      
+
                       {/* Top KPI Cards */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <Card className="shadow-sm border-l-4 border-l-emerald-500">
@@ -189,7 +192,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                   <p className="text-xs text-muted-foreground mt-1">{selectedClosure.movementsCount} movimientos registrados</p>
                               </CardContent>
                           </Card>
-                          
+
                           <Card className="shadow-sm border-l-4 border-l-blue-500">
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                   <CardTitle className="text-sm font-medium text-muted-foreground">Saldo Final en Caja</CardTitle>
@@ -237,7 +240,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                           </div>
                                           <span className="font-bold">{formatCurrency(selectedClosure.salesByCash)}</span>
                                       </div>
-                                      
+
                                       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                                           <div className="flex items-center gap-3">
                                               <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
@@ -257,7 +260,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                           </div>
                                           <span className="font-bold">{formatCurrency(selectedClosure.salesByTransfer)}</span>
                                       </div>
-                                      
+
                                       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                                           <div className="flex items-center gap-3">
                                               <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">
@@ -351,27 +354,46 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
             <div className="space-y-4 p-6 bg-white dark:bg-gray-900 shrink-0">
               {/* Filters and Search */}
               <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 flex-wrap">
                   <Button
-                    variant={selectedPeriod === 'all' ? 'default' : 'outline'}
+                    variant={selectedPeriod === 'today' ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => setSelectedPeriod('all')}
+                    onClick={() => setSelectedPeriod('today')}
+                    className="h-8 text-xs rounded-xl"
                   >
-                    Todos
+                    Hoy
                   </Button>
                   <Button
                     variant={selectedPeriod === 'week' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setSelectedPeriod('week')}
+                    className="h-8 text-xs rounded-xl"
                   >
-                    Última semana
+                    Esta semana
                   </Button>
                   <Button
                     variant={selectedPeriod === 'month' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setSelectedPeriod('month')}
+                    className="h-8 text-xs rounded-xl"
                   >
-                    Último mes
+                    Este mes
+                  </Button>
+                  <Button
+                    variant={selectedPeriod === 'year' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedPeriod('year')}
+                    className="h-8 text-xs rounded-xl"
+                  >
+                    Este año
+                  </Button>
+                  <Button
+                    variant={selectedPeriod === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedPeriod('all')}
+                    className="h-8 text-xs rounded-xl"
+                  >
+                    Todos
                   </Button>
                 </div>
 
@@ -454,7 +476,7 @@ export function ZClosureHistoryModal({ isOpen, onClose, onViewDetails }: ZClosur
                                 {new Date(closure.date).toLocaleDateString('es-PY', { weekday: 'long', year: 'numeric' })}
                               </p>
                               <p className="text-xs text-muted-foreground capitalize">
-                                {new Date(closure.closedAt).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })} • {closure.registerId}
+                                {new Date(closure.closedAt).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })} • {formatRegisterName(closure.registerId, registers)}
                               </p>
                             </div>
                           </div>

@@ -13,6 +13,7 @@ type CreateCreditSaleBody = {
   amount?: unknown
   interestRate?: unknown
   dueDate?: unknown
+  firstInstallmentTiming?: unknown
   saleId?: unknown
   installments?: {
     count?: unknown
@@ -71,6 +72,13 @@ export async function POST(request: Request) {
     }
 
     let providedDueDate: Date | null = null
+    const timing = body.firstInstallmentTiming ?? 'at_start'
+    if (timing !== 'at_start' && timing !== 'next_cycle') {
+      return NextResponse.json({ error: 'La opción de inicio de cuotas no es válida.' }, { status: 400 })
+    }
+    if (body.dueDate && body.firstInstallmentTiming !== undefined) {
+      return NextResponse.json({ error: 'Elegí una modalidad de inicio o una fecha personalizada, no ambas.' }, { status: 400 })
+    }
     if (typeof body.dueDate === 'string' && body.dueDate.trim()) {
       const parsedDate = new Date(body.dueDate)
       if (Number.isNaN(parsedDate.getTime())) {
@@ -152,6 +160,7 @@ export async function POST(request: Request) {
       installmentCount,
       frequency,
       dueDate: providedDueDate,
+      firstInstallmentTiming: timing,
       saleId,
       label: saleRow?.code ? `Venta ${saleRow.code}` : 'Credito manual',
       creditType: saleId ? 'product_financing' : 'manual',

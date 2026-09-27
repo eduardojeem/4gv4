@@ -106,7 +106,7 @@ function generateSimpleHash(invoice: InvoiceData): string {
  */
 export function formatReceiptWithQR(invoice: InvoiceData): string {
     const basicReceipt = formatReceiptText(invoice)
-    const qrData = generateQRCodeData(invoice)
+    void (generateQRCodeData(invoice));
     const width = 32
     const line = '='.repeat(width)
     
@@ -431,7 +431,7 @@ export function formatThermalReceipt(invoice: InvoiceData): string {
     const LEFT = ESC + 'a' + '\x00'           // Alinear izquierda
     const RIGHT = ESC + 'a' + '\x02'          // Alinear derecha
     const DOUBLE_HEIGHT = GS + '!' + '\x01'   // Doble altura
-    const DOUBLE_WIDTH = GS + '!' + '\x10'    // Doble ancho
+    // Doble ancho
     const DOUBLE_SIZE = GS + '!' + '\x11'     // Doble altura + ancho
     const TRIPLE_SIZE = GS + '!' + '\x22'     // Triple tamaño
     const NORMAL_SIZE = GS + '!' + '\x00'     // Tamaño normal
@@ -588,28 +588,28 @@ export const THERMAL_CONFIGS: Record<string, ThermalPrinterConfig> = {
         width: 24,         // Reducido para letras más grandes
         paperSize: '48mm',
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     },
     '48mm-small': {
         width: 32,         // Versión con letras más pequeñas
         paperSize: '48mm',
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     },
     '58mm': {
         width: 32,         // Letras grandes para 58mm
         paperSize: '58mm', 
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     },
     '80mm': {
         width: 40,         // Letras grandes para 80mm
         paperSize: '80mm',
         escCommands: true,
-        qrCode: true,
+        qrCode: false,
         logo: true
     }
 }
@@ -642,7 +642,6 @@ function formatThermalReceiptWithConfig(invoice: InvoiceData, config: ThermalPri
     const LEFT = ESC + 'a' + '\x00'
     const RIGHT = ESC + 'a' + '\x02'
     const DOUBLE_HEIGHT = GS + '!' + '\x01'
-    const DOUBLE_WIDTH = GS + '!' + '\x10'
     const DOUBLE_SIZE = GS + '!' + '\x11'     // Doble altura + ancho
     const TRIPLE_SIZE = GS + '!' + '\x22'     // Triple tamaño
     const LARGE_TEXT = GS + '!' + '\x01'      // Texto grande
@@ -1019,7 +1018,6 @@ export function formatThermalReceiptXL(invoice: InvoiceData): string {
     const BOLD_OFF = ESC + 'E' + '\x00'
     const CENTER = ESC + 'a' + '\x01'
     const LEFT = ESC + 'a' + '\x00'
-    const RIGHT = ESC + 'a' + '\x02'
     const MEGA_SIZE = GS + '!' + '\x33'      // Tamaño máximo
     const TRIPLE_SIZE = GS + '!' + '\x22'    // Triple tamaño
     const DOUBLE_SIZE = GS + '!' + '\x11'    // Doble tamaño

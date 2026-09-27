@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react';
 import { BarChart } from 'recharts/es6/chart/BarChart';
 import { Bar } from 'recharts/es6/cartesian/Bar';
 import { LineChart } from 'recharts/es6/chart/LineChart';
@@ -17,56 +17,43 @@ import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { Area } from 'recharts/es6/cartesian/Area';
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
 import { ComposedChart } from 'recharts';
-import { Scatter } from 'recharts';
-import { ScatterChart } from 'recharts';
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
-  TrendingUp, 
-  TrendingDown, 
-  Package, 
-  Users, 
-  Activity,
-  Filter,
-  RefreshCw,
-  Eye,
-  Settings,
-  Share,
-  Printer,
-  Mail,
-  FileSpreadsheet,
-  FileImage,
-  PieChart as PieChartIcon,
-  BarChart3,
-  LineChart as LineChartIcon,
-  Target,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Zap
-} from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DatePickerWithRange } from '@/components/ui/date-range-picker'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
-import { toast } from 'sonner'
-import { addDays, subDays, format, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns'
+import {
+  FileText,
+  Download, TrendingUp,
+  TrendingDown,
+  Package,
+  Users, RefreshCw, Settings, FileSpreadsheet,
+  FileImage, BarChart3, Target, Zap
+} from 'lucide-react';
+import { GSIcon } from '@/components/ui/standardized-components';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
+import { subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 
 // Tipos para reportes
+export interface ReportProductInput {
+  id?: string
+  name?: string
+  stock_quantity?: number | null
+  min_stock?: number | null
+  price?: number | null
+  sale_price?: number | null
+  [key: string]: unknown
+}
+
 export interface ReportData {
   id: string
   name: string
   description: string
   type: 'sales' | 'inventory' | 'financial' | 'performance' | 'custom'
-  data: any[]
+  data: Record<string, unknown>[]
   generatedAt: Date
   period: {
     start: Date
@@ -137,7 +124,7 @@ const reportConfigs: ReportConfig[] = [
 ]
 
 // Hook para generar datos de reportes
-export function useReportsData(products: any[] = []) {
+export function useReportsData(products: ReportProductInput[] = []) {
   const generateSalesData = useCallback(() => {
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
     return months.map(month => ({
@@ -202,14 +189,14 @@ export function useReportsData(products: any[] = []) {
 }
 
 // Componente de gráfico dinámico
-function DynamicChart({ 
-  config, 
-  data, 
-  height = 300 
-}: { 
+function DynamicChart({
+  config,
+  data,
+  height = 300
+}: {
   config: ReportConfig
-  data: any[]
-  height?: number 
+  data: Record<string, unknown>[]
+  height?: number
 }) {
   const renderChart = () => {
     const commonProps = {
@@ -226,8 +213,8 @@ function DynamicChart({
             <YAxis />
             <Tooltip />
             {config.showLegend && <Legend />}
-            <Bar 
-              dataKey={config.dataKey} 
+            <Bar
+              dataKey={config.dataKey}
               fill={config.colors[0]}
               animationDuration={config.animated ? 1000 : 0}
             />
@@ -242,9 +229,9 @@ function DynamicChart({
             <YAxis />
             <Tooltip />
             {config.showLegend && <Legend />}
-            <Line 
-              type="monotone" 
-              dataKey={config.dataKey} 
+            <Line
+              type="monotone"
+              dataKey={config.dataKey}
               stroke={config.colors[0]}
               strokeWidth={2}
               animationDuration={config.animated ? 1000 : 0}
@@ -260,9 +247,9 @@ function DynamicChart({
             <YAxis />
             <Tooltip />
             {config.showLegend && <Legend />}
-            <Area 
-              type="monotone" 
-              dataKey={config.dataKey} 
+            <Area
+              type="monotone"
+              dataKey={config.dataKey}
               stroke={config.colors[0]}
               fill={config.colors[0]}
               fillOpacity={0.6}
@@ -320,7 +307,7 @@ function DynamicChart({
 }
 
 // Componente de métricas clave
-function KeyMetrics({ data }: { data: any }) {
+function KeyMetrics({ data: _data }: { data?: unknown }) {
   const metrics = [
     {
       title: 'Ingresos Totales',
@@ -424,8 +411,8 @@ function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
                 <p className="text-sm text-gray-500">{format.description}</p>
               </div>
             </div>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => handleExport(format.id)}
             >
@@ -439,9 +426,9 @@ function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
 }
 
 // Componente principal del módulo de reportes
-export default function ReportsModule({ products = [] }: { products?: any[] }) {
+export default function ReportsModule({ products = [] }: { products?: ReportProductInput[] }) {
   const [selectedPeriod, setSelectedPeriod] = useState('month')
-  const [dateRange, setDateRange] = useState({
+  const [_dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date())
   })
@@ -459,7 +446,7 @@ export default function ReportsModule({ products = [] }: { products?: any[] }) {
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period)
     const now = new Date()
-    
+
     switch (period) {
       case 'week':
         setDateRange({
@@ -594,7 +581,7 @@ export default function ReportsModule({ products = [] }: { products?: any[] }) {
 
             <div className="space-y-6">
               <ExportOptions onExport={handleExport} />
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle>Resumen del Período</CardTitle>

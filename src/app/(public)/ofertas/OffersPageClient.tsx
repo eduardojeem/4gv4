@@ -1,60 +1,98 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  Tag,
-  Package,
   ArrowRight,
-  Zap,
-  ShoppingCart,
-  MessageCircle,
-  Search,
-  Sparkles,
-  TrendingDown,
-  Star,
+  ArrowUpDown,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Flame,
+  MessageCircle,
+  Package,
+  Search,
+  ShoppingCart,
+  Sparkles,
+  Tag,
   X,
-  SlidersHorizontal,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import useSWR from 'swr'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
+import {
+  OFFER_ACCENTS as CAROUSEL_ACCENTS,
+  OffersCarouselDeck,
+  type OfferSlide,
+} from '@/components/public/offers/OffersCarouselDeck'
+import { PromotionalCarousel } from '@/components/public/inicio/PromotionalCarousel'
+import { StoreBrandTicker } from '@/components/public/inicio/StoreBrandTicker'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { usePublicCart } from '@/hooks/use-public-cart'
+import { formatCurrency } from '@/lib/currency'
 import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
-import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
-import { usePublicCart } from '@/hooks/use-public-cart'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { usesPortraitMedia } from '@/lib/website/storefront-style'
+import { getWhatsAppLink, buildProductWhatsAppMessage } from '@/lib/whatsapp'
+import { siteUrl } from '@/lib/site-url'
+import { resolveProductImageUrl } from '@/lib/images'
+import { OfferDetailModal, type OfferDetailProduct } from '@/components/public/offers/OfferDetailModal'
 import type { PublicProduct } from '@/types/public'
-import { toast } from 'sonner'
-import useSWR from 'swr'
-
-import { formatCurrency } from '@/lib/currency'
-import { getWhatsAppLink } from '@/lib/whatsapp'
+import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface OfferProduct {
-  id: string
-  name: string
-  brand: string | null
-  description: string | null
-  sale_price: number
-  offer_price: number
-  has_offer: boolean
-  in_stock: boolean
-  stock_quantity: number
-  featured: boolean
-  image: string | null
-  images: string[] | null
-  category?: { id: string; name: string }
-}
+
+/** El detalle vive en el modal compartido; la pagina usa la misma forma. */
+type OfferProduct = OfferDetailProduct
 
 interface OffersPageClientProps {
   initialSettings: WebsiteSettings
   initialOffers: OfferProduct[]
+}
+
+type SortKey = 'discount' | 'price_asc' | 'price_desc' | 'newest'
+type OfferTier = 'all' | '30' | '20' | 'featured' | 'stock'
+type QuickTier = Exclude<OfferTier, 'all'>
+
+const PAGE_SIZE = 24
+
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: 'discount', label: 'Mayor descuento' },
+  { value: 'price_asc', label: 'Menor precio' },
+  { value: 'price_desc', label: 'Mayor precio' },
+  { value: 'newest', label: 'Más recientes' },
+]
+
+const TIER_LABELS: Record<QuickTier, string> = {
+  '30': '30% o más',
+  '20': '20% o más',
+  featured: 'Destacadas',
+  stock: 'Con stock',
+}
+
+/**
+ * Colores del acento que elige el dueño. La etiqueta de descuento lleva texto
+ * chico, por eso los fondos son lo bastante oscuros para contraste AA.
+ */
+const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], { text: string; badge: string }> = {
+  brand: { text: 'text-primary', badge: 'bg-primary text-primary-foreground' },
+  rose: { text: 'text-rose-600 dark:text-rose-400', badge: 'bg-rose-600 text-white' },
+  amber: { text: 'text-amber-700 dark:text-amber-400', badge: 'bg-amber-400 text-amber-950' },
+  orange: { text: 'text-orange-700 dark:text-orange-400', badge: 'bg-orange-700 text-white' },
+  emerald: { text: 'text-emerald-700 dark:text-emerald-400', badge: 'bg-emerald-700 text-white' },
+  blue: { text: 'text-blue-600 dark:text-blue-400', badge: 'bg-blue-600 text-white' },
+  sky: { text: 'text-sky-700 dark:text-sky-400', badge: 'bg-sky-700 text-white' },
+  violet: { text: 'text-violet-600 dark:text-violet-400', badge: 'bg-violet-600 text-white' },
+  fuchsia: { text: 'text-fuchsia-700 dark:text-fuchsia-400', badge: 'bg-fuchsia-700 text-white' },
+  red: { text: 'text-red-600 dark:text-red-400', badge: 'bg-red-600 text-white' },
+  teal: { text: 'text-teal-700 dark:text-teal-400', badge: 'bg-teal-700 text-white' },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,25 +105,68 @@ function calcDiscount(sale: number, offer: number): number {
   return Math.round(((sale - offer) / sale) * 100)
 }
 
-const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], {
-  hero: string
-  text: string
-  solid: string
-  soft: string
-  border: string
-  bottom: string
-}> = {
-  brand: { hero: 'bg-gradient-to-br from-primary via-primary/95 to-primary/80', text: 'text-primary', solid: 'bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-primary', soft: 'bg-primary/10 text-primary hover:bg-primary/15', border: 'border-primary/30 text-primary hover:bg-primary/10', bottom: 'bg-gradient-to-r from-primary/10 to-primary/5' },
-  rose: { hero: 'bg-gradient-to-br from-rose-950 via-rose-900 to-orange-950', text: 'text-rose-600 dark:text-rose-450', solid: 'bg-rose-600 text-white hover:bg-rose-700 focus-visible:ring-rose-500', soft: 'bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400', border: 'border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-800/40 dark:text-rose-400 dark:hover:bg-rose-950/20', bottom: 'bg-gradient-to-r from-rose-50/50 to-orange-50/50 dark:from-rose-950/10 dark:to-orange-950/10' },
-  amber: { hero: 'bg-gradient-to-br from-amber-950 via-amber-900 to-orange-950', text: 'text-amber-600 dark:text-amber-450', solid: 'bg-amber-600 text-white hover:bg-amber-700 focus-visible:ring-amber-500', soft: 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400', border: 'border-amber-200 text-amber-800 hover:bg-amber-50 dark:border-amber-800/40 dark:text-amber-400 dark:hover:bg-amber-950/20', bottom: 'bg-gradient-to-r from-amber-50/50 to-orange-50/50 dark:from-amber-950/10 dark:to-orange-950/10' },
-  orange: { hero: 'bg-gradient-to-br from-orange-950 via-orange-900 to-amber-950', text: 'text-orange-600 dark:text-orange-450', solid: 'bg-orange-600 text-white hover:bg-orange-700 focus-visible:ring-orange-500', soft: 'bg-orange-50 text-orange-800 hover:bg-orange-100 dark:bg-orange-950/30 dark:text-orange-400', border: 'border-orange-200 text-orange-800 hover:bg-orange-50 dark:border-orange-800/40 dark:text-orange-400 dark:hover:bg-orange-950/20', bottom: 'bg-gradient-to-r from-orange-50/50 to-amber-50/50 dark:from-orange-950/10 dark:to-amber-950/10' },
-  emerald: { hero: 'bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950', text: 'text-emerald-600 dark:text-emerald-450', solid: 'bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500', soft: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400', border: 'border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800/40 dark:text-emerald-400 dark:hover:bg-emerald-950/20', bottom: 'bg-gradient-to-r from-emerald-50/50 to-teal-50/50 dark:from-emerald-950/10 dark:to-teal-950/10' },
-  blue: { hero: 'bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950', text: 'text-blue-600 dark:text-blue-450', solid: 'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500', soft: 'bg-blue-50 text-blue-800 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400', border: 'border-blue-200 text-blue-800 hover:bg-blue-50 dark:border-blue-800/40 dark:text-blue-400 dark:hover:bg-blue-950/20', bottom: 'bg-gradient-to-r from-blue-50/50 to-indigo-50/50 dark:from-blue-950/10 dark:to-indigo-950/10' },
-  sky: { hero: 'bg-gradient-to-br from-sky-950 via-sky-900 to-cyan-950', text: 'text-sky-600 dark:text-sky-450', solid: 'bg-sky-600 text-white hover:bg-sky-700 focus-visible:ring-sky-500', soft: 'bg-sky-50 text-sky-800 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-400', border: 'border-sky-200 text-sky-800 hover:bg-sky-50 dark:border-sky-800/40 dark:text-sky-450 dark:hover:bg-sky-950/20', bottom: 'bg-gradient-to-r from-sky-50/50 to-cyan-50/50 dark:from-sky-950/10 dark:to-cyan-950/10' },
-  violet: { hero: 'bg-gradient-to-br from-violet-950 via-violet-900 to-purple-950', text: 'text-violet-600 dark:text-violet-450', solid: 'bg-violet-600 text-white hover:bg-violet-700 focus-visible:ring-violet-500', soft: 'bg-violet-50 text-violet-850 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-400', border: 'border-violet-200 text-violet-850 hover:bg-violet-50 dark:border-violet-800/40 dark:text-violet-400 dark:hover:bg-violet-950/20', bottom: 'bg-gradient-to-r from-violet-50/50 to-purple-50/50 dark:from-violet-950/10 dark:to-purple-950/10' },
-  fuchsia: { hero: 'bg-gradient-to-br from-fuchsia-950 via-fuchsia-900 to-pink-950', text: 'text-fuchsia-600 dark:text-fuchsia-450', solid: 'bg-fuchsia-600 text-white hover:bg-fuchsia-700 focus-visible:ring-fuchsia-500', soft: 'bg-fuchsia-50 text-fuchsia-850 hover:bg-fuchsia-100 dark:bg-fuchsia-950/30 dark:text-fuchsia-400', border: 'border-fuchsia-200 text-fuchsia-850 hover:bg-fuchsia-50 dark:border-fuchsia-800/40 dark:text-fuchsia-400 dark:hover:bg-fuchsia-950/20', bottom: 'bg-gradient-to-r from-fuchsia-50/50 to-pink-50/50 dark:from-fuchsia-950/10 dark:to-pink-950/10' },
-  red: { hero: 'bg-gradient-to-br from-red-950 via-red-900 to-rose-950', text: 'text-red-600 dark:text-red-450', solid: 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500', soft: 'bg-red-50 text-red-800 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400', border: 'border-red-200 text-red-800 hover:bg-red-50 dark:border-red-800/40 dark:text-red-400 dark:hover:bg-red-950/20', bottom: 'bg-gradient-to-r from-red-50/50 to-rose-50/50 dark:from-red-950/10 dark:to-rose-950/10' },
-  teal: { hero: 'bg-gradient-to-br from-teal-950 via-teal-900 to-cyan-950', text: 'text-teal-600 dark:text-teal-450', solid: 'bg-teal-600 text-white hover:bg-teal-700 focus-visible:ring-teal-500', soft: 'bg-teal-50 text-teal-850 hover:bg-teal-100 dark:bg-teal-950/30 dark:text-teal-400', border: 'border-teal-200 text-teal-850 hover:bg-teal-50 dark:border-teal-800/40 dark:text-teal-400 dark:hover:bg-teal-950/20', bottom: 'bg-gradient-to-r from-teal-50/50 to-cyan-50/50 dark:from-teal-950/10 dark:to-cyan-950/10' },
+function matchesTier(offer: OfferProduct, tier: OfferTier) {
+  if (tier === '30') return calcDiscount(offer.sale_price, offer.offer_price) >= 30
+  if (tier === '20') return calcDiscount(offer.sale_price, offer.offer_price) >= 20
+  if (tier === 'featured') return offer.featured
+  if (tier === 'stock') return offer.in_stock
+  return true
+}
+
+/**
+ * Filtros rapidos que vale la pena ofrecer: los que dejan algo y no dejan todo.
+ * Un chip que da cero resultados, o el mismo listado que «Todas» o que el tramo
+ * anterior, solo agrega ruido.
+ */
+export function availableOfferTiers(offers: OfferProduct[]): QuickTier[] {
+  const total = offers.length
+  const count = (tier: OfferTier) => offers.filter((offer) => matchesTier(offer, tier)).length
+  const useful = (n: number) => n > 0 && n < total
+  const over30 = count('30')
+  const over20 = count('20')
+  const tiers: QuickTier[] = []
+  if (useful(over30)) tiers.push('30')
+  if (useful(over20) && over20 !== over30) tiers.push('20')
+  if (useful(count('featured'))) tiers.push('featured')
+  if (useful(count('stock'))) tiers.push('stock')
+  return tiers
+}
+
+/** Numeros de pagina con «…» cuando hay muchas: 1 … 5 6 7 … 12. */
+export function paginationItems(current: number, total: number): Array<number | 'gap'> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
+  const items: Array<number | 'gap'> = [1]
+  if (start > 2) items.push('gap')
+  for (let p = start; p <= end; p++) items.push(p)
+  if (end < total - 1) items.push('gap')
+  items.push(total)
+  return items
+}
+
+function toOfferSlides(offers: OfferProduct[], limit: number): OfferSlide[] {
+  return [...offers]
+    .sort((a, b) => calcDiscount(b.sale_price, b.offer_price) - calcDiscount(a.sale_price, a.offer_price))
+    .slice(0, Math.max(1, limit))
+    .map((offer) => {
+      const discount = calcDiscount(offer.sale_price, offer.offer_price)
+      return {
+        id: offer.id,
+        title: offer.name,
+        description: offer.description || 'Disponible para entrega inmediata y retiro en tienda.',
+        priceLabel: formatPrice(offer.offer_price),
+        originalPriceLabel: offer.sale_price > offer.offer_price ? formatPrice(offer.sale_price) : undefined,
+        tag: discount > 0 ? `-${discount}% OFF` : 'Oferta activa',
+        ctaHref: `/productos/${offer.id}`,
+        image: offer.image || (Array.isArray(offer.images) && offer.images.length > 0 ? offer.images[0] : null),
+        brand: offer.brand,
+        inStock: offer.in_stock,
+        offerPrice: offer.offer_price,
+        salePrice: offer.sale_price,
+        product: offer,
+      }
+    })
 }
 
 // ─── Fetcher ──────────────────────────────────────────────────────────────────
@@ -117,10 +198,51 @@ async function fetchOffers(url: string): Promise<OfferProduct[]> {
       category: p.category && typeof p.category === 'object'
         ? { id: String((p.category as Record<string, unknown>).id), name: String((p.category as Record<string, unknown>).name) }
         : undefined,
+      created_at: p.created_at ? String(p.created_at) : null,
+      // Variantes
+      has_variants: Boolean(p.has_variants),
+      variant_attribute_config: Array.isArray(p.variant_attribute_config) ? p.variant_attribute_config : undefined,
+      variants: Array.isArray(p.variants)
+        ? (p.variants as Array<Record<string, unknown>>)
+            .filter((v) => Boolean(v.is_active))
+            .map((v) => ({
+              id: String(v.id),
+              product_id: String(v.product_id),
+              variant_name: String(v.variant_name ?? ''),
+              attributes: (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes))
+                ? (v.attributes as Record<string, string>)
+                : {},
+              sku: v.sku ? String(v.sku) : null,
+              sale_price: Number(v.sale_price ?? 0),
+              offer_price: v.offer_price == null ? null : Number(v.offer_price),
+              stock_quantity: Number(v.stock_quantity ?? 0),
+              is_active: Boolean(v.is_active),
+            }))
+        : undefined,
     }))
 }
 
-// ─── Offer Card ───────────────────────────────────────────────────────────────
+// ─── Filter chip ──────────────────────────────────────────────────────────────
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-8 shrink-0 items-center rounded-full border px-3.5 text-sm font-medium transition-all duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        active
+          ? 'border-amber-500 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/25'
+          : 'border-border/70 bg-background text-foreground/75 hover:border-amber-500/40 hover:bg-amber-500/5 hover:text-foreground'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ─── Offer card ───────────────────────────────────────────────────────────────
 function OfferCard({
   offer,
   tenantPrefix,
@@ -128,6 +250,9 @@ function OfferCard({
   priority,
   commerceMode,
   contactPhone,
+  storeName,
+  portrait,
+  onOpenDetail,
 }: {
   offer: OfferProduct
   tenantPrefix: string
@@ -135,21 +260,56 @@ function OfferCard({
   priority?: boolean
   commerceMode: PublicCommerceMode
   contactPhone: string
+  /** Para que el saludo diga a quién se le escribe, como en el resto de la tienda. */
+  storeName: string | null
+  portrait: boolean
+  onOpenDetail?: (offer: OfferProduct) => void
 }) {
   const { addProduct } = usePublicCart()
   const [addedToCart, setAddedToCart] = useState(false)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
   const discount = calcDiscount(offer.sale_price, offer.offer_price)
+  const savings = Math.max(0, offer.sale_price - offer.offer_price)
   const href = `${tenantPrefix}/productos/${offer.id}`
-  const whatsappHref = contactPhone
-    ? getWhatsAppLink({
-        phone: contactPhone,
-        message: `Hola, quiero consultar por ${offer.name} (${formatPrice(offer.offer_price)}).`,
-      })
-    : null
+  // En Moda y Deportivo la foto va vertical y a sangre; sin foto, el icono entero.
+  const coverImage = portrait && Boolean(offer.image)
+
+  const openDetail = () => {
+    if (onOpenDetail) {
+      onOpenDetail(offer)
+    } else {
+      setDetailModalOpen(true)
+    }
+  }
+
+  const whatsappHref =
+    commerceMode === 'whatsapp' && contactPhone
+      ? getWhatsAppLink({
+          phone: contactPhone,
+          message: buildProductWhatsAppMessage({
+            storeName,
+            productName: offer.name,
+            price: offer.offer_price,
+            originalPrice: offer.sale_price > offer.offer_price ? offer.sale_price : null,
+            inStock: offer.in_stock,
+            stockQuantity: offer.stock_quantity,
+            productUrl: siteUrl(href),
+            imageUrl: offer.image ? resolveProductImageUrl(offer.image) : null,
+            intent: 'order',
+          }),
+        })
+      : null
 
   const handleCart = (e: React.MouseEvent) => {
-    e.preventDefault()
-    if (commerceMode !== 'cart') return
+    e.stopPropagation()
+    if (!offer.in_stock) return
+    // Con variantes hay que elegir cual: agregar a ciegas dejaba una linea que
+    // el pedido rechazaba al confirmar.
+    if (offer.has_variants) {
+      openDetail()
+      toast.info('Elegí una variante para continuar.')
+      return
+    }
     const product: PublicProduct = {
       ...offer,
       sku: '',
@@ -163,143 +323,196 @@ function OfferCard({
       toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
       return
     }
-    toast.success('Agregado al carrito')
+    toast.success('¡Agregado al carrito!')
     setAddedToCart(true)
     setTimeout(() => setAddedToCart(false), 2000)
   }
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200/50 bg-white/70 dark:border-slate-800/40 dark:bg-slate-950/60 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-500/30 hover:shadow-xl hover:shadow-cyan-500/5">
-      {/* Image */}
-      <Link
-        href={href}
-        className="relative block aspect-[4/3] overflow-hidden bg-gradient-to-br from-slate-50/50 to-slate-100/50 dark:from-slate-900/40 dark:to-slate-850/30"
+    <>
+      <article
+        className={cn(
+          'group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300',
+          'bg-card p-2.5 sm:p-3',
+          'border-amber-500/25 dark:border-amber-400/20 shadow-xs',
+          'hover:-translate-y-1 hover:border-amber-500/55 hover:shadow-lg hover:shadow-amber-500/10 dark:hover:border-amber-400/45 dark:hover:shadow-amber-500/5',
+          !offer.in_stock && 'opacity-60 grayscale-[25%]'
+        )}
       >
-        {offer.image ? (
-          <Image
-            src={offer.image}
-            alt={offer.name || 'Imagen de producto en oferta'}
-            fill
-            className="object-contain p-4 transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            priority={priority}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <Package className="h-14 w-14 text-slate-350 dark:text-slate-650" />
-          </div>
-        )}
-
-        {/* Discount badge */}
-        {discount > 0 && (
-          <div className={cn('absolute left-3.5 top-3.5 flex items-center gap-1 rounded-full px-3 py-1 shadow-lg shadow-rose-600/10', accent.solid)}>
-            <Zap className="h-3.5 w-3.5 text-white" />
-            <span className="text-xs font-black text-white">-{discount}%</span>
-          </div>
-        )}
-
-        {/* Featured badge */}
-        {offer.featured && (
-          <div className="absolute right-3.5 top-3.5 flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 shadow-md shadow-amber-500/15">
-            <Star className="h-3 w-3 fill-white text-white" />
-            <span className="text-[10px] font-bold text-white">Destacado</span>
-          </div>
-        )}
-
-        {/* Stock badge */}
-        {!offer.in_stock && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[1.5px] dark:bg-slate-950/40">
-            <span className="rounded-full bg-slate-900/90 px-3.5 py-1.5 text-xs font-bold text-white">Sin stock</span>
-          </div>
-        )}
-      </Link>
-
-      {/* Content */}
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        {/* Category + Brand */}
-        <div className="flex items-center gap-2">
-          {offer.category && (
-            <Badge variant="secondary" className="rounded-full bg-slate-100/80 text-[10px] font-bold dark:bg-slate-900 dark:text-slate-450 border-0">
-              {offer.category.name}
-            </Badge>
-          )}
-          {offer.brand && (
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{offer.brand}</span>
-          )}
-        </div>
-
-        {/* Name */}
-        <Link href={href} className="flex-1">
-          <h3 className="line-clamp-2 text-sm font-bold leading-snug text-slate-800 dark:text-slate-100 transition-colors group-hover:text-cyan-600 dark:group-hover:text-cyan-400">
-            {offer.name}
-          </h3>
-        </Link>
-
-        {/* Price block */}
-        <div className="mt-auto flex items-end justify-between gap-2 pt-1 border-t border-slate-200/20 dark:border-slate-800/20">
-          <div>
-            <p className="text-[11px] font-semibold text-slate-400 line-through dark:text-slate-500">{formatPrice(offer.sale_price)}</p>
-            <p className={cn('text-lg font-black tracking-tight leading-none mt-0.5', accent.text)}>{formatPrice(offer.offer_price)}</p>
-          </div>
-          {offer.in_stock && (
-            <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-              <CheckCircle className="h-3.5 w-3.5" />
-              <span className="font-bold">Disponible</span>
-            </div>
-          )}
-        </div>
-
-        {/* CTA */}
-        <div className="flex gap-2 mt-1">
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className={cn('flex-1 rounded-xl text-xs font-bold border-slate-200/80 bg-white/50 dark:border-slate-800 dark:bg-slate-900/40', accent.border)}
+        {/* Imagen del producto — clic abre el modal de detalle */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={openDetail}
+            aria-label={`Ver detalle de ${offer.name}`}
+            className={cn(
+              'relative block w-full overflow-hidden rounded-xl bg-muted/40 cursor-pointer',
+              coverImage ? 'aspect-[3/4]' : 'aspect-square'
+            )}
           >
-            <Link href={href}>Ver detalle</Link>
-          </Button>
-          {commerceMode === 'cart' && (
-            <Button
-              size="sm"
-              onClick={handleCart}
-              disabled={!offer.in_stock}
-              aria-label={`Agregar ${offer.name} al carrito`}
-              className={cn(
-                "rounded-xl transition-all shadow-sm focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-95",
-                addedToCart
-                  ? "bg-emerald-600 hover:bg-emerald-600 text-white shadow-emerald-600/10 focus-visible:ring-emerald-500"
-                  : accent.solid
+            {offer.image ? (
+              <Image
+                src={offer.image}
+                alt={offer.name}
+                fill
+                unoptimized
+                priority={priority}
+                sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                className={cn(
+                  'motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.04]',
+                  coverImage ? 'object-cover' : 'object-contain p-3',
+                  !offer.in_stock && 'opacity-60 grayscale'
+                )}
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center">
+                <Package className="h-10 w-10 text-muted-foreground/40" />
+              </span>
+            )}
+
+            {/* Badges superiores sobre imagen */}
+            <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1 pointer-events-none">
+              {discount > 0 && (
+                <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-extrabold shadow-sm tabular-nums', accent.badge)}>
+                  <Flame className="h-3 w-3 fill-white animate-pulse" />
+                  -{discount}%
+                </span>
               )}
-            >
-              {addedToCart ? <CheckCircle className="h-4.5 w-4.5" /> : <ShoppingCart className="h-4.5 w-4.5" />}
-            </Button>
-          )}
-          {commerceMode === 'whatsapp' && whatsappHref && (
-            <Button asChild size="sm" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Consultar por ${offer.name} en WhatsApp`}
-              >
-                <MessageCircle className="h-4 w-4" />
-              </a>
-            </Button>
-          )}
+              {offer.featured && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                  <Sparkles className="h-2.5 w-2.5 fill-white" />
+                  Top
+                </span>
+              )}
+            </div>
+
+            {!offer.in_stock && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px] z-10">
+                <span className="rounded-full bg-destructive/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-destructive-foreground shadow-xs">
+                  Agotado
+                </span>
+              </div>
+            )}
+
+            {/* Hover overlay hint */}
+            <span className="absolute inset-0 flex items-end justify-center pb-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1.5 text-[11px] font-semibold text-foreground shadow backdrop-blur-sm border border-border/60">
+                <Eye className="h-3 w-3" />
+                Ver detalle
+              </span>
+            </span>
+          </button>
         </div>
-      </div>
-    </article>
+
+        {/* Información y precios */}
+        <div className="mt-2.5 flex flex-1 flex-col">
+          {offer.brand && (
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {offer.brand}
+            </p>
+          )}
+
+          <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+            <Link
+              href={href}
+              className="rounded-sm hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {offer.name}
+            </Link>
+          </h3>
+
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+            <span className="text-base font-bold tabular-nums text-foreground sm:text-lg">
+              {formatPrice(offer.offer_price)}
+            </span>
+            {offer.sale_price > offer.offer_price && (
+              <del className="text-xs tabular-nums text-muted-foreground font-medium">
+                {formatPrice(offer.sale_price)}
+              </del>
+            )}
+          </div>
+
+          <p className={cn('mt-0.5 text-xs font-semibold', offer.in_stock ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground')}>
+            {offer.in_stock ? `Ahorrás ${formatPrice(savings)}` : 'Sin stock'}
+            {discount > 0 && <span className="sr-only"> · {discount}% de descuento</span>}
+          </p>
+
+          <div className="mt-auto pt-3 flex items-center gap-1.5">
+            {commerceMode === 'cart' ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCart}
+                disabled={!offer.in_stock}
+                aria-label={`Agregar ${offer.name} al carrito`}
+                className="h-9 flex-1 gap-2 rounded-xl border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/5 font-semibold text-xs"
+              >
+                {addedToCart ? (
+                  <CheckCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <ShoppingCart aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                )}
+                {addedToCart ? 'Agregado' : 'Agregar'}
+              </Button>
+            ) : whatsappHref ? (
+              <Button asChild variant="outline" size="sm" className="h-9 flex-1 gap-2 rounded-xl border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-500/5 font-semibold text-xs">
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  suppressHydrationWarning
+                  aria-label={`Consultar por ${offer.name} en WhatsApp`}
+                >
+                  <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Consultar
+                </a>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openDetail}
+                className="h-9 flex-1 rounded-xl font-semibold text-xs"
+                aria-label={`Ver detalle de ${offer.name}`}
+              >
+                Ver detalle
+              </Button>
+            )}
+
+            {/* Ver detalle completo — enlace a la página del producto */}
+            <Button asChild variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground" title="Ver página completa del producto">
+              <Link href={href} aria-label={`Ver página completa de ${offer.name}`}>
+                <Eye className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </article>
+
+      {/* Modal individual en caso de no usar handler compartido */}
+      {!onOpenDetail && (
+        <OfferDetailModal
+          offer={offer}
+          isOpen={detailModalOpen}
+          onClose={() => setDetailModalOpen(false)}
+          tenantPrefix={tenantPrefix}
+          commerceMode={commerceMode}
+          contactPhone={contactPhone}
+        />
+      )}
+    </>
   )
 }
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Offers Component ────────────────────────────────────────────────────
 export function OffersPageClient({ initialSettings, initialOffers }: OffersPageClientProps) {
   const { settings: liveSettings } = useWebsiteSettings()
   const { tenantPrefix } = usePublicTenantPrefix()
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
+  const portrait = usesPortraitMedia(useStorefrontStyle())
   const settings = liveSettings ?? initialSettings
   const offersSettings = settings.offers_section
   const commerceMode = settings.checkout.commerceMode ?? 'cart'
@@ -308,66 +521,110 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
     settings.company_info.phone?.trim() ||
     ''
   const accent = OFFER_ACCENTS[offersSettings.accentColor] ?? OFFER_ACCENTS.rose
+  const resultsRef = useRef<HTMLDivElement>(null)
 
-  // Fetch offers
-  const { data: allOffers = initialOffers } = useSWR<OfferProduct[]>(
-    withOrgQuery('/api/public/products?per_page=50&sort=newest&has_offer=true', tenantSlug),
+  const { data: allOffers = initialOffers, error: offersError, isLoading, mutate: retryOffers } = useSWR<OfferProduct[]>(
+    withOrgQuery('/api/public/products?per_page=100&sort=newest&has_offer=true', tenantSlug),
     fetchOffers,
     { fallbackData: initialOffers, revalidateOnFocus: false, dedupingInterval: 60_000 }
   )
 
-  // Filters
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState<'discount' | 'price_asc' | 'price_desc' | 'newest'>('discount')
+  const [selectedTier, setSelectedTier] = useState<OfferTier>('all')
+  const [sortBy, setSortBy] = useState<SortKey>('discount')
+  const [page, setPage] = useState(1)
 
-  // Derived categories
-  const categories = Array.from(
+  const categories = useMemo(() => Array.from(
     new Map(
       allOffers
-        .filter((o) => o.category)
-        .map((o) => [o.category!.id, o.category!])
+        .filter((offer) => offer.category)
+        .map((offer) => [offer.category!.id, offer.category!])
     ).values()
+  ), [allOffers])
+
+  const quickTiers = useMemo(() => availableOfferTiers(allOffers), [allOffers])
+
+  const filteredOffers = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+
+    return allOffers
+      .filter((offer) => {
+        const matchesSearch = !normalizedSearch
+          || offer.name.toLowerCase().includes(normalizedSearch)
+          || (offer.brand?.toLowerCase().includes(normalizedSearch) ?? false)
+        const matchesCategory = !selectedCategory || offer.category?.id === selectedCategory
+        return matchesSearch && matchesCategory && matchesTier(offer, selectedTier)
+      })
+      .sort((a, b) => {
+        // Agotados siempre al final, cualquiera sea el criterio de orden
+        const stockDiff = (a.in_stock ? 0 : 1) - (b.in_stock ? 0 : 1)
+        if (stockDiff !== 0) return stockDiff
+
+        if (sortBy === 'discount') {
+          return calcDiscount(b.sale_price, b.offer_price) - calcDiscount(a.sale_price, a.offer_price)
+        }
+        if (sortBy === 'price_asc') return a.offer_price - b.offer_price
+        if (sortBy === 'price_desc') return b.offer_price - a.offer_price
+        return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+      })
+  }, [allOffers, search, selectedCategory, selectedTier, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(filteredOffers.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * PAGE_SIZE
+  const paginatedOffers = filteredOffers.slice(pageStart, pageStart + PAGE_SIZE)
+
+  const maxSavings = allOffers.reduce((maximum, offer) => Math.max(maximum, offer.sale_price - offer.offer_price), 0)
+  const maxDiscountPercent = allOffers.reduce(
+    (maximum, offer) => Math.max(maximum, calcDiscount(offer.sale_price, offer.offer_price)),
+    0,
   )
 
-  // Filtered + sorted offers
-  const displayedOffers = allOffers
-    .filter((o) => {
-      const matchSearch =
-        !search ||
-        o.name.toLowerCase().includes(search.toLowerCase()) ||
-        (o.brand?.toLowerCase().includes(search.toLowerCase()) ?? false)
-      const matchCat = !selectedCategory || o.category?.id === selectedCategory
-      return matchSearch && matchCat
-    })
-    .sort((a, b) => {
-      if (sortBy === 'discount')
-        return calcDiscount(b.sale_price, b.offer_price) - calcDiscount(a.sale_price, a.offer_price)
-      if (sortBy === 'price_asc') return a.offer_price - b.offer_price
-      if (sortBy === 'price_desc') return b.offer_price - a.offer_price
-      return 0
-    })
+  const carouselSettings = offersSettings.carousel ?? getWebsiteSettingsDefaults().offers_section.carousel
+  const carouselAccent = CAROUSEL_ACCENTS[offersSettings.accentColor] ?? CAROUSEL_ACCENTS.rose
+  const carouselSlides = toOfferSlides(allOffers, carouselSettings.maxItems)
 
-  const totalSavings = displayedOffers.reduce(
-    (sum, o) => sum + Math.max(0, o.sale_price - o.offer_price),
-    0
-  )
+  const hasActiveFilters = Boolean(search || selectedCategory || selectedTier !== 'all')
+  const showInitialSkeleton = isLoading && initialOffers.length === 0
+  const resultSummary = [
+    filteredOffers.length === 1 ? '1 oferta' : `${filteredOffers.length} ofertas`,
+    hasActiveFilters && filteredOffers.length !== allOffers.length ? ` de ${allOffers.length}` : '',
+    totalPages > 1 ? ` · página ${safePage} de ${totalPages}` : '',
+  ].join('')
 
-  // ── Not enabled ─────────────────────────────────────────────────────────────
+  const updateFilters = (apply: () => void) => {
+    apply()
+    setPage(1)
+  }
+
+  const resetAllFilters = () => {
+    setSearch('')
+    setSelectedCategory(null)
+    setSelectedTier('all')
+    setPage(1)
+  }
+
+  const goToPage = (next: number) => {
+    setPage(Math.min(Math.max(1, next), totalPages))
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    resultsRef.current?.scrollIntoView?.({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  }
+
+  // ── Section Disabled ────────────────────────────────────────────────────────
   if (!offersSettings.enabled) {
     return (
-      <div className="container flex min-h-[60vh] items-center justify-center py-16 text-center">
-        <div className="max-w-md rounded-3xl border border-dashed border-slate-200/80 bg-slate-50/20 px-8 py-16 dark:border-slate-800 dark:bg-slate-900/10">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
-            <Tag className="h-8 w-8 text-slate-400 dark:text-slate-500" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-850 dark:text-slate-150">Ofertas no disponibles</h1>
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+      <div className="container mx-auto flex min-h-[60vh] items-center justify-center px-4 py-16 text-center">
+        <div className="max-w-sm">
+          <Tag aria-hidden="true" className="mx-auto h-8 w-8 text-muted-foreground" />
+          <h1 className="mt-4 text-xl font-semibold text-foreground">Ofertas no disponibles</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Esta tienda no tiene activa su sección de ofertas en este momento.
           </p>
-          <Button asChild className="mt-6 rounded-xl">
+          <Button asChild className="mt-6 gap-2">
             <Link href={`${tenantPrefix}/productos`}>
-              Ver todos los productos <ArrowRight className="ml-2 h-4 w-4" />
+              Ver todos los productos
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </Link>
           </Button>
         </div>
@@ -376,226 +633,232 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
   }
 
   return (
-    <div className="min-h-screen">
-      {/* ── Hero Banner ──────────────────────────────────────────────────────── */}
-      <section className={cn('relative overflow-hidden py-16 md:py-24', accent.hero)}>
-        {/* Background pattern */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-20 -top-20 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-black/15 blur-3xl" />
-          <svg className="absolute inset-0 h-full w-full opacity-5" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-                <circle cx="4" cy="4" r="2" fill="white" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#dots)" />
-          </svg>
-        </div>
+    <div className="min-h-screen bg-background">
+      {/* ── Banners de campaña configurados en Sitio Web ── */}
+      <PromotionalCarousel settings={settings.offers_carousel} />
 
-        <div className="container relative">
-          {/* Eyebrow */}
-          <div className="mb-4 flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 backdrop-blur-sm">
-              <Sparkles className="h-4 w-4 text-amber-400" />
-              <span className="text-xs font-bold uppercase tracking-widest text-white/90">
-                {offersSettings.eyebrow || 'Ofertas Especiales'}
-              </span>
-            </div>
+      {/* ── Encabezado ── */}
+      <section className="border-b border-border/70">
+        <div className="container mx-auto flex flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10 lg:flex-row lg:items-end lg:justify-between lg:px-8">
+          <div className="max-w-2xl">
+            <p className={cn('text-sm font-medium', accent.text)}>{offersSettings.eyebrow || 'Ofertas'}</p>
+            <h1 className="mt-1.5 text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              {offersSettings.title || 'Precios especiales'}
+            </h1>
+            {offersSettings.subtitle && (
+              <p className="mt-2 text-pretty text-sm text-muted-foreground sm:text-base">{offersSettings.subtitle}</p>
+            )}
           </div>
 
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-2xl">
-              <h1 className="text-4xl font-black leading-tight tracking-tight text-white md:text-6xl">
-                {offersSettings.title || 'Ofertas Imperdibles'}
-              </h1>
-              <p className="mt-4 text-lg text-white/80">
-                {offersSettings.subtitle || 'Los mejores descuentos seleccionados para vos.'}
-              </p>
+          {allOffers.length > 0 && (
+            <dl className="grid shrink-0 grid-cols-3 divide-x divide-border/70 rounded-xl border border-border/70 text-center">
+              <div className="px-4 py-3 sm:px-5">
+                <dt className="text-xs text-muted-foreground">En oferta</dt>
+                <dd className="mt-0.5 text-base font-semibold tabular-nums text-foreground sm:text-lg">{allOffers.length}</dd>
+              </div>
+              <div className="px-4 py-3 sm:px-5">
+                <dt className="text-xs text-muted-foreground">Descuento</dt>
+                <dd className={cn('mt-0.5 text-base font-semibold tabular-nums sm:text-lg', accent.text)}>
+                  hasta -{maxDiscountPercent}%
+                </dd>
+              </div>
+              <div className="px-4 py-3 sm:px-5">
+                <dt className="text-xs text-muted-foreground">Ahorro</dt>
+                <dd className="mt-0.5 text-base font-semibold tabular-nums text-foreground sm:text-lg">
+                  hasta {formatPrice(maxSavings)}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </div>
+      </section>
 
-              {/* Stats */}
-              {allOffers.length > 0 && (
-                <div className="mt-6 flex flex-wrap gap-4">
-                  <div className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 backdrop-blur-sm">
-                    <TrendingDown className="h-5 w-5 text-emerald-400" />
-                    <span className="text-sm font-semibold text-white">
-                      {allOffers.length} productos en oferta
-                    </span>
-                  </div>
-                  {totalSavings > 0 && (
-                    <div className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 backdrop-blur-sm">
-                      <Tag className="h-5 w-5 text-amber-400" />
-                      <span className="text-sm font-semibold text-white">
-                        Ahorrá hasta{' '}
-                        {formatPrice(
-                          Math.max(...allOffers.map((o) => o.sale_price - o.offer_price))
-                        )}
-                      </span>
-                    </div>
+      {/* ── Marquesina Opcional de Marcas en Ofertas ── */}
+      {Boolean(settings.brands_section?.enabled) && Boolean(settings.brands_section?.showOnOffers) && (
+        <StoreBrandTicker settings={settings.brands_section} />
+      )}
+
+      {/* ── Destacados ── */}
+      {carouselSettings.enabled && carouselSlides.length > 0 && (
+        <section className={cn('border-b border-border/70 bg-muted/30 py-8 sm:py-10', carouselAccent.section)}>
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="mb-5">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                {carouselSettings.title || 'Destacados de la semana'}
+              </h2>
+              {carouselSettings.subtitle && (
+                <p className="mt-1 text-sm text-muted-foreground">{carouselSettings.subtitle}</p>
+              )}
+            </div>
+
+            <OffersCarouselDeck
+              offers={carouselSlides}
+              accent={carouselAccent}
+              fallbackBrand={settings.company_info.name || 'Tienda'}
+              tenantPrefix={tenantPrefix}
+              autoplay={carouselSettings.autoplay}
+              intervalSeconds={carouselSettings.intervalSeconds}
+              ariaLabel="Carrusel de ofertas destacadas"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ── Listado ── */}
+      <div ref={resultsRef} className="container mx-auto scroll-mt-32 px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {allOffers.length > 0 && (
+          <>
+            {/* ── Panel de filtros ── */}
+            <div className="rounded-2xl border border-amber-500/20 bg-card/80 p-3.5 shadow-sm backdrop-blur-sm sm:p-4">
+              {/* Fila superior: búsqueda + orden */}
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+                {/* Buscador */}
+                <div className="relative flex-1 sm:max-w-sm">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-500/70" />
+                  <Input
+                    aria-label="Buscar en ofertas"
+                    placeholder="Buscar por producto o marca…"
+                    enterKeyHint="search"
+                    value={search}
+                    onChange={(e) => updateFilters(() => setSearch(e.target.value))}
+                    className="h-10 rounded-xl border-amber-500/25 pl-9 pr-9 focus-visible:border-amber-500/60 focus-visible:ring-amber-500/20"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => updateFilters(() => setSearch(''))}
+                      aria-label="Limpiar búsqueda"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <X aria-hidden="true" className="h-3.5 w-3.5" />
+                    </button>
                   )}
+                </div>
+
+                {/* Ordenar */}
+                <div className="flex items-center gap-2 sm:ml-auto">
+                  <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="shrink-0 text-xs font-medium text-foreground/70">Ordenar</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => updateFilters(() => setSortBy(e.target.value as SortKey))}
+                      className="h-9 min-w-0 flex-1 cursor-pointer rounded-xl border border-amber-500/25 bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 sm:flex-none"
+                    >
+                      {SORT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              {/* Chips de filtro */}
+              {(quickTiers.length > 0 || categories.length > 1) && (
+                <div role="group" aria-label="Filtros" className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap">
+                  <FilterChip
+                    active={selectedTier === 'all' && !selectedCategory}
+                    onClick={() => updateFilters(() => {
+                      setSelectedTier('all')
+                      setSelectedCategory(null)
+                    })}
+                  >
+                    ✦ Todas
+                  </FilterChip>
+                  {quickTiers.map((tier) => (
+                    <FilterChip
+                      key={tier}
+                      active={selectedTier === tier}
+                      onClick={() => updateFilters(() => setSelectedTier(selectedTier === tier ? 'all' : tier))}
+                    >
+                      {TIER_LABELS[tier]}
+                    </FilterChip>
+                  ))}
+                  {quickTiers.length > 0 && categories.length > 1 && (
+                    <span aria-hidden="true" className="mx-1 w-px shrink-0 self-stretch bg-border" />
+                  )}
+                  {categories.length > 1 && categories.map((category) => (
+                    <FilterChip
+                      key={category.id}
+                      active={selectedCategory === category.id}
+                      onClick={() => updateFilters(() => setSelectedCategory(selectedCategory === category.id ? null : category.id))}
+                    >
+                      {category.name}
+                    </FilterChip>
+                  ))}
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col items-start gap-4 md:items-end">
-              <p className="max-w-xs text-sm font-medium text-white/80 md:text-right">
-                Los precios mostrados corresponden a ofertas activas del catálogo.
-              </p>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="rounded-2xl border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 active:scale-98"
-              >
-                <Link href={`${tenantPrefix}/productos`}>
-                  Ver catálogo completo
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Filters & Search (Premium Glassmorphism) ─────────────────────────── */}
-      <div className="sticky top-0 z-20 border-b border-slate-250/20 bg-background/80 backdrop-blur-md dark:border-slate-800/40 shadow-sm">
-        <div className="container py-3.5">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-              <Input
-                placeholder="Buscar en ofertas..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 pr-9 rounded-xl border-slate-200/80 bg-white/80 dark:border-slate-800 dark:bg-slate-900/60 focus-visible:ring-cyan-500"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Categories */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-hide flex-1">
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className={cn(
-                  'flex-shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200',
-                  !selectedCategory
-                    ? accent.solid
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
-                )}
-              >
-                Todas
-              </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
-                  className={cn(
-                    'flex-shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200',
-                    selectedCategory === cat.id
-                      ? accent.solid
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
-                  )}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Sort */}
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200/60 bg-white/80 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900/60 shadow-sm">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-300 outline-none cursor-pointer pr-1"
-              >
-                <option value="discount" className="dark:bg-slate-900">Mayor descuento</option>
-                <option value="price_asc" className="dark:bg-slate-900">Menor precio</option>
-                <option value="price_desc" className="dark:bg-slate-900">Mayor precio</option>
-                <option value="newest" className="dark:bg-slate-900">Más nuevo</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Products Grid ─────────────────────────────────────────────────────── */}
-      <div className="container py-10">
-        {/* Results count */}
-        <div className="mb-6 flex items-center justify-between">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {displayedOffers.length === 0 ? (
-              'Sin resultados'
-            ) : (
-              <>
-                <span className="font-extrabold text-slate-800 dark:text-slate-200 tabular-nums">
-                  {displayedOffers.length}
-                </span>{' '}
-                oferta{displayedOffers.length !== 1 ? 's' : ''} encontrada{displayedOffers.length !== 1 ? 's' : ''}
-              </>
-            )}
-            {selectedCategory && (
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className={cn(
-                  'ml-2.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold transition-all',
-                  accent.soft
-                )}
-              >
-                <X className="h-3 w-3" /> Limpiar filtro
-              </button>
-            )}
-          </p>
-        </div>
-
-        {/* Empty state */}
-        {displayedOffers.length === 0 && (
-          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/10 py-20 text-center dark:border-slate-800">
-            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
-              <Tag className="h-10 w-10 text-slate-400 dark:text-slate-500" />
-            </div>
-            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-250">
-              {search || selectedCategory ? 'Sin coincidencias' : 'Sin ofertas activas'}
-            </h2>
-            <p className="mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-              {search || selectedCategory
-                ? 'Probá con otros filtros o explorá todo el catálogo.'
-                : 'Cuando activemos productos con oferta, aparecerán acá automáticamente.'}
-            </p>
-            <div className="mt-6 flex gap-3">
-              {(search || selectedCategory) && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearch('')
-                    setSelectedCategory(null)
-                  }}
-                  className="rounded-xl font-bold"
-                >
+            {/* Barra de resultados */}
+            <div className="mt-4 flex min-h-8 items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground" aria-live="polite">{resultSummary}</p>
+              {hasActiveFilters && (
+                <Button type="button" variant="ghost" size="sm" onClick={resetAllFilters} className="h-8 gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:text-amber-300">
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
                   Limpiar filtros
                 </Button>
               )}
-              <Button asChild className={cn('rounded-xl font-bold', accent.solid)}>
+            </div>
+          </>
+        )}
+
+        {offersError && (
+          <div
+            role="alert"
+            className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+          >
+            <p>No pudimos actualizar las ofertas. Te mostramos las últimas que cargamos.</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => retryOffers()} className="shrink-0">
+              Reintentar
+            </Button>
+          </div>
+        )}
+
+        {showInitialSkeleton && (
+          <div aria-busy="true" aria-label="Cargando ofertas" className="mt-4 grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, item) => (
+              <div key={item} className="space-y-3">
+                <div className="aspect-square animate-pulse rounded-xl bg-muted" />
+                <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+                <div className="h-5 w-1/2 animate-pulse rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!showInitialSkeleton && filteredOffers.length === 0 && (
+          <div role="status" className="mx-auto mt-6 flex max-w-md flex-col items-center rounded-xl border border-dashed border-border px-6 py-12 text-center">
+            <Tag aria-hidden="true" className="h-8 w-8 text-muted-foreground" />
+            <h2 className="mt-3 text-base font-semibold text-foreground">
+              {hasActiveFilters ? 'Ninguna oferta coincide' : 'No hay ofertas activas'}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {hasActiveFilters
+                ? 'Probá con otra búsqueda o quitá algún filtro.'
+                : 'Volvé pronto o mirá el catálogo completo.'}
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              {hasActiveFilters && (
+                <Button type="button" variant="outline" onClick={resetAllFilters}>
+                  Limpiar filtros
+                </Button>
+              )}
+              <Button asChild className="gap-2">
                 <Link href={`${tenantPrefix}/productos`}>
-                  Ver catálogo <ArrowRight className="ml-2 h-4 w-4" />
+                  Ver catálogo
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
           </div>
         )}
 
-        {/* Grid */}
-        {displayedOffers.length > 0 && (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {displayedOffers.map((offer, i) => (
+        {paginatedOffers.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 xl:grid-cols-4">
+            {paginatedOffers.map((offer, i) => (
               <OfferCard
                 key={offer.id}
                 offer={offer}
@@ -604,27 +867,98 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
                 priority={i < 4}
                 commerceMode={commerceMode}
                 contactPhone={contactPhone}
+                storeName={settings.company_info.name?.trim() || null}
+                portrait={portrait}
               />
             ))}
           </div>
         )}
+
+        {totalPages > 1 && (
+          <nav aria-label="Páginas de ofertas" className="mt-12 flex items-center justify-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => goToPage(safePage - 1)}
+              disabled={safePage === 1}
+              aria-label="Página anterior"
+              className="h-9 gap-1 px-2.5"
+            >
+              <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Anterior</span>
+            </Button>
+
+            {paginationItems(safePage, totalPages).map((item, index) =>
+              item === 'gap' ? (
+                <span key={`gap-${index}`} aria-hidden="true" className="px-1.5 text-sm text-muted-foreground">
+                  …
+                </span>
+              ) : (
+                <Button
+                  key={item}
+                  type="button"
+                  variant={item === safePage ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => goToPage(item)}
+                  aria-label={`Página ${item}`}
+                  aria-current={item === safePage ? 'page' : undefined}
+                  className="h-9 min-w-9 px-2 tabular-nums"
+                >
+                  {item}
+                </Button>
+              )
+            )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => goToPage(safePage + 1)}
+              disabled={safePage === totalPages}
+              aria-label="Página siguiente"
+              className="h-9 gap-1 px-2.5"
+            >
+              <span className="hidden sm:inline">Siguiente</span>
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          </nav>
+        )}
       </div>
 
-      {/* ── Bottom CTA ────────────────────────────────────────────────────────── */}
-      {displayedOffers.length > 0 && (
-        <section className={cn('border-t border-slate-200/10 py-16', accent.bottom)}>
-          <div className="container text-center max-w-lg">
-            <Sparkles className={cn('mx-auto mb-3.5 h-8 w-8', accent.text)} />
-            <h2 className="text-2xl font-extrabold text-slate-850 dark:text-slate-100">¿No encontraste lo que buscabas?</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Explorá nuestro catálogo completo de productos.
-            </p>
-            <Button asChild size="lg" className={cn('mt-6 rounded-2xl font-bold shadow-lg shadow-cyan-500/5 hover:-translate-y-0.5 transition-transform duration-200', accent.solid)}>
-              <Link href={`${tenantPrefix}/productos`}>
-                Ver todos los productos
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+      {/* ── Cierre ── */}
+      {allOffers.length > 0 && (
+        <section className="border-t border-border/70 bg-muted/30">
+          <div className="container mx-auto flex flex-col gap-4 px-4 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">¿No encontraste lo que buscabas?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                En el catálogo están todos los productos de {settings.company_info.name || 'la tienda'}.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild className="gap-2">
+                <Link href={`${tenantPrefix}/productos`}>
+                  Ver catálogo completo
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </Link>
+              </Button>
+              {contactPhone && (
+                <Button asChild variant="outline" className="gap-2">
+                  <a
+                    href={getWhatsAppLink({
+                      phone: contactPhone,
+                      message: 'Hola, estoy viendo las ofertas y quiero consultar por otros productos.',
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Consultar por WhatsApp
+                  </a>
+                </Button>
+              )}
+            </div>
           </div>
         </section>
       )}
