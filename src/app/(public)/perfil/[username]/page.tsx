@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { PublicProfileClient, ProfileError, type PublicProfileData as PublicData } from '@/components/public/PublicProfileClient'
+import { PublicProfileClient, type PublicProfileData as PublicData } from '@/components/public/PublicProfileClient'
 
 export const revalidate = 60
 
@@ -14,7 +14,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select(
-      `username, display_name, title, bio, location, avatar_url, updated_at, user_id,
+      `id, username, display_name, title, bio, location, avatar_url, updated_at,
        social_links(id, user_id, platform, url, is_verified, username),
        user_stats(id, user_id, followers_count, following_count, posts_count, projects_count)`
     )
@@ -23,7 +23,14 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     .maybeSingle()
 
   if (profileError) {
-    return <ProfileError message="No se pudo cargar el perfil." />
+    // `social_links` y `user_stats` -consultadas acá como relaciones
+    // embebidas de `profiles`- no existen en la base: es una funcion de
+    // perfil de creador que se armo en el frontend pero nunca llego a
+    // crear sus tablas, y nada en la app enlaza a esta ruta. Antes esto
+    // devolvia un componente de error generico -y probablemente HTTP 200-
+    // que nadie iba a monitorear. notFound() la deja fallar como una ruta
+    // que no existe, en vez de una que "existe pero esta rota" en silencio.
+    notFound()
   }
 
   if (!profile) {
@@ -33,7 +40,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   const { data: content, error: contentError } = await supabase
     .from('content')
     .select('id, user_id, title, description, image_url, category, type, date, views, likes, comments, link, tags')
-    .eq('user_id', profile.user_id)
+    .eq('user_id', profile.id)
     .eq('is_public', true)
     .order('date', { ascending: false })
     .limit(20)
@@ -79,7 +86,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     content: publicContent,
   }
 
-  const isOwnProfile = sessionUserId && sessionUserId === profile.user_id
+  const isOwnProfile = sessionUserId && sessionUserId === profile.id
 
   return <PublicProfileClient data={data} isOwnProfile={!!isOwnProfile} />
 }
