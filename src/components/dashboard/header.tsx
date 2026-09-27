@@ -116,6 +116,10 @@ export const Header = memo(function Header() {
     if (!shouldTrackStock || !config.supabase.isConfigured) return
     try {
       const supabase = createClient()
+      // Sin sesión la consulta sale como anon y falla por RLS
+      // (permission denied for function has_org_permission).
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
       const { data } = await supabase
         .from('products')
         .select('id, name, stock_quantity, min_stock')

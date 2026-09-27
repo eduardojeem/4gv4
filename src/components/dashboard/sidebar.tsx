@@ -146,6 +146,10 @@ export const Sidebar = memo(function Sidebar() {
     const fetchBadges = async () => {
       try {
         const supabase = createClient()
+        // Sin sesión las consultas salen como anon y fallan por RLS
+        // (permission denied for function has_org_permission).
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
         const repairsQuery = effectiveModules.includes('repairs')
           ? supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES])
           : Promise.resolve({ count: 0 })
