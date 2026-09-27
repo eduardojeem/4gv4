@@ -1,7 +1,7 @@
 // Force HMR rebuild
 'use client'
 
-import { memo, useMemo, useState, useEffect } from 'react'
+import { memo, useCallback, useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -11,82 +11,29 @@ import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
-import type { OrganizationModule } from '@/lib/organization/business-profile'
-import { isNavigationModuleAvailable } from '@/lib/navigation/dashboard-navigation'
 import { usePermissions } from '@/hooks/use-permissions'
-import type { UserRole } from '@/lib/auth/roles-permissions'
-import { canRoleAccessSection } from '@/lib/auth/section-access'
-import { fetchOnboardingStatus } from '@/lib/onboarding/status-cache'
+import { filterDashboardNavGroups, getDashboardNavItemByPath } from '@/config/dashboard-navigation'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
-import type { LucideIcon } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  LayoutDashboard,
-  Users,
-  Package,
-  Truck,
-  ShoppingCart,
-  ShoppingBag,
-  Wrench,
-  RotateCcw, Settings,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Archive,
-  Activity,
-  CreditCard,
-  Tag,
-  Percent,
-  Building2,
   Smartphone,
-  LogOut,
-  Rocket
+  LogOut
 } from 'lucide-react'
 
-type NavItem = { name: string; href: string; icon: LucideIcon; roles?: UserRole[]; permission?: string; description?: string; requiredModule?: OrganizationModule }
+const DASHBOARD_NAV_STORAGE_KEY = 'dashboard-nav-expanded-groups'
 
-const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
-  {
-    label: 'Principal',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
-      // La pagina exige ser dueño o administrador de la organizacion y devuelve
-      // al panel a cualquier otro con un redirect mudo. Ofrecersela a vendedores
-      // y tecnicos era una puerta que no abre.
-      //
-      // Mientras falta configurar es una TAREA y vive aca. Una vez completa es
-      // una CONFIGURACION: se filtra de este menu y queda en Administración,
-      // junto a «Sitio Web».
-      { name: 'Configuración del negocio', href: '/dashboard/onboarding', icon: Rocket, roles: ['super_admin', 'admin'], description: 'Datos, rubro y tienda pública' },
-      { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read', requiredModule: 'pos' },
-      { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read', requiredModule: 'pos' },
-      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin'], description: 'Analíticas y ganancias', requiredModule: 'pos' },
-    ],
-  },
-  {
-    label: 'Operaciones',
-    items: [
-      { name: 'Clientes', href: '/dashboard/customers', icon: Users, permission: 'customers.read' },
-      { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, permission: 'credits.read', requiredModule: 'credits' },
-      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read', requiredModule: 'orders' },
-      { name: 'Productos', href: '/dashboard/products', icon: Package, permission: 'products.read', requiredModule: 'inventory' },
-      { name: 'Marcas', href: '/dashboard/brands', icon: Building2, permission: 'products.manage' },
-      { name: 'Categorías', href: '/dashboard/categories', icon: Tag, permission: 'products.read' },
-      { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read', requiredModule: 'promotions' },
-      { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['super_admin', 'admin'] },
-      { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read', requiredModule: 'repairs' },
-      { name: 'Posventa', href: '/dashboard/after-sales', icon: RotateCcw, permission: 'customers.read', description: 'Garantias, cambios y devoluciones' },
-      { name: 'Inv. Taller', href: '/dashboard/repairs/inventory', icon: Archive, permission: 'repairs.read', requiredModule: 'repairs' },
-      { name: 'Panel Técnico', href: '/dashboard/technician', icon: Activity, roles: ['admin', 'tecnico'], description: 'Operativo para técnicos', requiredModule: 'repairs' },
-    ],
-  },
-  {
-    label: 'Análisis',
-    items: [
-      { name: 'Administración', href: '/admin', icon: Settings, roles: ['super_admin', 'admin'] },
-    ],
-  },
-]
+function persistExpandedGroups(groups: string[]) {
+  try {
+    window.localStorage.setItem(DASHBOARD_NAV_STORAGE_KEY, JSON.stringify(groups))
+  } catch {
+    // La navegación sigue funcionando si el almacenamiento está bloqueado.
+  }
+}
 
 export function SidebarToggleButton({
   collapsed,
@@ -124,21 +71,11 @@ export const Sidebar = memo(function Sidebar() {
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
-  const [onboardingDone, setOnboardingDone] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([])
   const { hasPermission } = usePermissions()
 
   // Read role directly from auth context — single source of truth
-  const userRole = (user?.role ?? 'vendedor') as UserRole
-
-  // Una vez completa, la configuracion inicial deja de ser una tarea del dia a
-  // dia y sale de este menu: sigue disponible desde Administración. La consulta
-  // comparte cache con DashboardGuard, asi que no agrega un pedido.
-  useEffect(() => {
-    if (!config.supabase.isConfigured) return
-    fetchOnboardingStatus().then((data) => {
-      if (data?.completed) setOnboardingDone(true)
-    })
-  }, [])
+  const userRole = user?.role ?? 'vendedor'
 
   // Load dynamic badge counts
   useEffect(() => {
@@ -186,30 +123,42 @@ export const Sidebar = memo(function Sidebar() {
   // Development mode check
   const isDev = process.env.NODE_ENV === 'development'
 
-  const filteredGroups = useMemo(() => {
-    const filterFn = (item: NavItem) => {
-      // Completa, deja de ser una tarea diaria: sale del menu del dia a dia y
-      // sigue disponible desde Administración, que es donde se busca una
-      // configuracion. Esconderla en los dos lados dejaba el modo «revisita»
-      // inalcanzable; dejarla en «Principal» para siempre era ruido.
-      if (item.href === '/dashboard/onboarding' && onboardingDone) return false
+  const filteredGroups = useMemo(
+    () => filterDashboardNavGroups({ role: userRole, effectiveModules, hasPermission }),
+    [userRole, hasPermission, effectiveModules],
+  )
+  const activeItem = useMemo(() => getDashboardNavItemByPath(pathname), [pathname])
+  const activeGroup = useMemo(
+    () => filteredGroups.find((group) => group.items.some((item) => item.key === activeItem?.key)),
+    [activeItem, filteredGroups],
+  )
 
+  const toggleGroup = useCallback((groupId: string) => {
+    setExpandedGroups((previous) => {
+      const next = previous.includes(groupId)
+        ? previous.filter((id) => id !== groupId)
+        : [...previous, groupId]
+      persistExpandedGroups(next)
+      return next
+    })
+  }, [])
 
-      if (!isNavigationModuleAvailable(item.requiredModule, effectiveModules)) return false
-
-      // Fuente única: acceso por sección según el rol (vendedor/tecnico restringidos).
-      if (!canRoleAccessSection(userRole, item.href)) return false
-
-      // Refinamiento opcional por permiso granular (p.ej. esconder una sub-acción).
-      if (item.permission) return hasPermission(item.permission)
-
-      return true
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(DASHBOARD_NAV_STORAGE_KEY) ?? '[]')
+      const visibleIds = new Set(filteredGroups.map((group) => group.id))
+      const remembered = Array.isArray(stored)
+        ? stored.filter((id): id is string => typeof id === 'string' && visibleIds.has(id))
+        : []
+      const next = activeGroup
+        ? Array.from(new Set([...remembered, activeGroup.id]))
+        : remembered
+      setExpandedGroups(next)
+      persistExpandedGroups(next)
+    } catch {
+      setExpandedGroups(activeGroup ? [activeGroup.id] : [])
     }
-    return NAV_GROUPS.map(group => ({
-      label: group.label,
-      items: group.items.filter(filterFn)
-    })).filter(group => group.items.length > 0)
-  }, [userRole, onboardingDone, hasPermission, effectiveModules])
+  }, [activeGroup, filteredGroups])
 
   return (
     <>
@@ -231,7 +180,7 @@ export const Sidebar = memo(function Sidebar() {
       <div className={cn(
         "bg-background border-r border-border flex flex-col transition-all duration-300 z-50",
         "fixed lg:relative inset-y-0 left-0 shadow-2xl lg:shadow-none h-dvh",
-        collapsed ? "w-16 -translate-x-full lg:translate-x-0" : "w-72 sm:w-80 translate-x-0"
+        collapsed ? 'w-20 -translate-x-full lg:translate-x-0' : 'w-72 translate-x-0'
       )}>
         {/* Logo */}
         <div className={cn(
@@ -264,55 +213,76 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-4 overflow-y-auto scroll-smooth">
-          {filteredGroups.map(group => (
-            <div key={group.label} className="space-y-2">
+        <nav className="flex-1 space-y-5 overflow-y-auto px-4 py-5 scroll-smooth">
+          {filteredGroups.map(group => {
+            const isExpanded = expandedGroups.includes(group.id)
+            return (
+            <div key={group.id} className="space-y-2">
               {!collapsed && (
-                <div className="px-3 text-xs uppercase tracking-wide text-muted-foreground/70">
-                  {group.label}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className="flex w-full items-center justify-between px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+                  aria-expanded={isExpanded}
+                >
+                  <span>{group.label}</span>
+                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                </button>
               )}
+              {collapsed && <div className="mx-2 h-px bg-border" />}
+              {(collapsed || isExpanded) && (
               <div className="space-y-1">
                 {group.items.map(item => {
-                  const isActive = pathname === item.href ||
-                    (item.href !== '/dashboard' && pathname.startsWith(item.href + '/'))
+                  const isActive = activeItem?.key === item.key
+                  const badge = item.key === 'repairs'
+                    ? sidebarBadges.repairs
+                    : item.key === 'products'
+                      ? sidebarBadges.lowStock
+                      : 0
                   return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      onMouseEnter={() => router.prefetch(item.href)}
-                      className={cn(
-                        "group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative",
-                        isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                      )}
-                      title={collapsed ? `${item.name}${item.description ? ': ' + item.description : ''}` : undefined}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {/* Active indicator */}
-                      {isActive && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-primary rounded-r" />
-                      )}
-                      <item.icon className="h-5 w-5 shrink-0" />
-                      {!collapsed && (
-                        <div className="flex items-center gap-2 flex-1">
-                          <span>{item.name}</span>
-                          {item.href === '/dashboard/pos' && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">POS</span>
+                    <Tooltip key={item.key}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={item.href}
+                          onMouseEnter={() => router.prefetch(item.href)}
+                          className={cn(
+                            'group relative flex items-center rounded-lg text-sm font-medium transition-colors',
+                            collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
+                            isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                           )}
-                        </div>
+                          aria-current={isActive ? 'page' : undefined}
+                          aria-label={badge > 0 ? `${item.label}: ${badge} pendientes` : item.label}
+                        >
+                          <span className="relative shrink-0">
+                            <item.icon className={cn('h-5 w-5', isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground')} aria-hidden />
+                            {collapsed && badge > 0 && (
+                              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-background bg-rose-500" aria-hidden />
+                            )}
+                          </span>
+                          {!collapsed && <span className="truncate">{item.label}</span>}
+                          {!collapsed && badge > 0 && (
+                            <span className="ml-auto min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums text-white">
+                              {badge > 99 ? '99+' : badge}
+                            </span>
+                          )}
+                          {!collapsed && badge === 0 && isActive && (
+                            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                          )}
+                        </Link>
+                      </TooltipTrigger>
+                      {collapsed && (
+                        <TooltipContent side="right" className="max-w-64">
+                          <p className="font-medium">{item.label}</p>
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        </TooltipContent>
                       )}
-                      {!collapsed && item.href === '/dashboard/repairs' && sidebarBadges.repairs > 0 && (
-                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{sidebarBadges.repairs}</span>
-                      )}
-                      {!collapsed && item.href === '/dashboard/products' && sidebarBadges.lowStock > 0 && (
-                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{sidebarBadges.lowStock}</span>
-                      )}
-                    </Link>
+                    </Tooltip>
                   )
                 })}
               </div>
+              )}
             </div>
-          ))}
+          )})}
         </nav>
 
         {/* User info */}

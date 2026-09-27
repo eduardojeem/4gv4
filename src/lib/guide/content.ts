@@ -1011,7 +1011,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     title: 'Configuración del negocio',
     summary: 'El rubro, el modelo de operación y los módulos activos. Es lo primero que se completa y lo que ordena el resto.',
     group: 'administration',
-    href: '/dashboard/onboarding',
+    href: '/admin/onboarding',
     permissions: ['settings.read'],
     keywords: ['onboarding', 'rubro', 'primeros pasos', 'configuracion inicial', 'modelo', 'modulos', 'moneda'],
     steps: [

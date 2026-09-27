@@ -5,7 +5,7 @@ import type { UISupplier } from '@/lib/types/supplier-ui'
 
 // Mock heavy sub-components
 vi.mock('@/components/suppliers/SupplierProductsList', () => ({
-  SupplierProductsList: ({ onOrderProduct }: { onOrderProduct?: (p: any) => void }) => (
+  SupplierProductsList: ({ onOrderProduct }: { onOrderProduct?: (p: { id: string; name: string }) => void }) => (
     <div data-testid="supplier-products-list">
       <button onClick={() => onOrderProduct?.({ id: 'p-1', name: 'Pantalla OLED' })}>
         Pedir Producto

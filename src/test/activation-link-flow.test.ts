@@ -25,15 +25,15 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 describe('el enlace para activar la cuenta', () => {
   it('lleva a la página pública que sabe leer la sesión del enlace', () => {
     const provisioning = leer('src/app/api/auth/register-company/provisioning.ts')
-    expect(provisioning).toContain("'/auth/confirm?next=/dashboard/onboarding'")
-    expect(provisioning).not.toContain("'/auth/callback?next=/dashboard/onboarding'")
+    expect(provisioning).toContain("'/auth/confirm?next=/admin/onboarding'")
+    expect(provisioning).not.toContain("'/auth/callback?next=/admin/onboarding'")
   })
 
   it('sin token en la URL, el callback no manda a una ruta protegida', async () => {
-    const response = await GET(new NextRequest('https://app.test/auth/callback?next=/dashboard/onboarding'))
+    const response = await GET(new NextRequest('https://app.test/auth/callback?next=/admin/onboarding'))
 
     expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe('https://app.test/auth/confirm?next=%2Fdashboard%2Fonboarding')
+    expect(response.headers.get('location')).toBe('https://app.test/auth/confirm?next=%2Fadmin%2Fonboarding')
   })
 
   it('un destino externo no se respeta', async () => {

@@ -131,7 +131,7 @@ describe('el propietario', () => {
 
     expect(estado.invite).toHaveBeenCalledTimes(1)
     expect(estado.invite.mock.calls[0][1]).toMatchObject({
-      redirectTo: 'https://app.test/auth/confirm?next=/dashboard/onboarding',
+      redirectTo: 'https://app.test/auth/confirm?next=/admin/onboarding',
     })
     expect(llamadasA('assign_superadmin_organization_owner')[0][1]).toMatchObject({ p_user_id: 'nuevo-1' })
     expect(body.owner).toEqual({ status: 'invited', email: 'nuevo@hca.com.py' })

@@ -301,7 +301,7 @@ describe('recomendaciones estratégicas por rubro', () => {
     expect(clothing.title).toContain('Indumentaria')
     expect(clothing.startingSteps.length).toBe(4)
 
-    const fallback = getVerticalRecommendation('inexistente' as any)
+    const fallback = getVerticalRecommendation('inexistente' as unknown as Parameters<typeof getVerticalRecommendation>[0])
     expect(fallback.title).toContain('Comercio General')
   })
 })

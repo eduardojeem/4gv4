@@ -29,7 +29,7 @@ describe('onboarding and admin settings synchronization', () => {
   })
 
   it('uses the active organization in both onboarding reads and writes', () => {
-    const page = read('src/app/dashboard/onboarding/page.tsx')
+    const page = read('src/app/admin/onboarding/page.tsx')
     const route = read('src/app/api/onboarding/complete/route.ts')
     const status = read('src/app/api/onboarding/status/route.ts')
 
@@ -61,7 +61,7 @@ describe('onboarding and admin settings synchronization', () => {
   })
 
   it('captures the canonical business vertical and operating model during onboarding', () => {
-    const page = read('src/app/dashboard/onboarding/page.tsx')
+    const page = read('src/app/admin/onboarding/page.tsx')
     const route = read('src/app/api/onboarding/complete/route.ts')
     const client = read('src/components/dashboard/onboarding/OnboardingClient.tsx')
 

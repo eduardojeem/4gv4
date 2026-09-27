@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 import { BRAND_COLORS, isKnownBrandColor } from '@/lib/website/brand-colors'
 
-const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
+const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8').replaceAll('\r\n', '\n')
 const MIGRACION = leer('supabase/migrations_legacy/20260908140000_onboarding_preserves_website_settings.sql')
 const RUTA = leer('src/app/api/onboarding/complete/route.ts')
-const PAGINA = leer('src/app/dashboard/onboarding/page.tsx')
+const PAGINA = leer('src/app/admin/onboarding/page.tsx')
 const CLIENTE = leer('src/components/dashboard/onboarding/OnboardingClient.tsx')
 const MENU = leer('src/components/dashboard/sidebar.tsx')
 const FORM_WEB = leer('src/components/admin/website/CompanyInfoForm.tsx')
@@ -150,55 +150,22 @@ describe('el color de marca es el mismo conjunto en las dos pantallas', () => {
   })
 })
 
-describe('el menu ofrece la pantalla a quien puede entrar', () => {
-  it('mismos roles que exige la pagina', () => {
-    // Se la ofrecia a vendedor y tecnico, y la pagina los devolvia al panel.
-    const item = MENU.slice(MENU.indexOf("href: '/dashboard/onboarding'") - 200, MENU.indexOf("href: '/dashboard/onboarding'") + 200)
-    expect(item).toContain("roles: ['super_admin', 'admin']")
-    expect(item).not.toContain("'vendedor'")
-  })
-
-  it('con nombre en castellano, como el resto del menu', () => {
+describe('la configuración inicial vive en Administración', () => {
+  it('ya no duplica la entrada en el menú operativo', () => {
     expect(MENU).not.toContain("name: 'Onboarding'")
-    expect(MENU).toContain("name: 'Configuración del negocio'")
+    expect(MENU).not.toContain("name: 'Configuración del negocio'")
+    expect(MENU).not.toContain("href: '/dashboard/onboarding'")
+    const NAVEGACION = leer('src/config/dashboard-navigation.ts')
+    expect(MENU).toContain('filterDashboardNavGroups')
+    expect(NAVEGACION).toContain('canRoleAccessSection(role, item.href)')
   })
 
-  it('mientras falta configurar es una tarea del dia a dia', () => {
-    const principal = MENU.slice(MENU.indexOf("label: 'Principal'"), MENU.indexOf("label: 'Operaciones'"))
-    expect(principal).toContain("href: '/dashboard/onboarding'")
-  })
-
-  it('la cadena que esconde el item esta completa', () => {
-    // Se habia quedado a medias: la variable existia y el filtro la leia, pero
-    // nada la ponia en `true`, asi que el item no se escondia nunca. Un test
-    // que solo mirara el filtro no lo habria detectado.
-    expect(MENU).toContain('const [onboardingDone, setOnboardingDone] = useState(false)')
-    expect(MENU).toContain('fetchOnboardingStatus().then((data) => {')
-    expect(MENU).toContain('if (data?.completed) setOnboardingDone(true)')
-    expect(MENU).toContain("if (item.href === '/dashboard/onboarding' && onboardingDone) return false")
-    // Sin la dependencia, el menu no se recalcula cuando llega la respuesta.
-    expect(MENU).toContain('onboardingDone, hasPermission')
-  })
-
-  it('el rol se filtra donde el menu de verdad lo consulta', () => {
-    // `item.roles` no lo lee nadie en la barra lateral: el filtro real es
-    // `canRoleAccessSection`. Cambiar solo el primero no hacia nada.
-    const ACCESO = leer('src/lib/auth/section-access.ts')
-    expect(ACCESO).not.toContain("'/dashboard/onboarding'")
-    expect(MENU).toContain('canRoleAccessSection(userRole, item.href)')
-  })
-
-  it('completa, sale del menu diario y queda con el resto de los ajustes', () => {
-    // Esconderla en los dos lados dejaba el modo «revisita» inalcanzable;
-    // dejarla en «Principal» para siempre era ruido permanente.
-    expect(MENU).toContain("if (item.href === '/dashboard/onboarding' && onboardingDone) return false")
-
+  it('queda junto a los ajustes relacionados', () => {
     const NAV_ADMIN = leer('src/config/admin-navigation.ts')
-    const administracion = NAV_ADMIN.slice(NAV_ADMIN.indexOf("id: 'administration'"))
+    const administracion = NAV_ADMIN.slice(NAV_ADMIN.indexOf("id: 'system'"))
     expect(administracion).toContain("key: 'business-profile'")
-    expect(administracion).toContain("href: '/dashboard/onboarding'")
-    // Junto a «Sitio Web», que es la otra mitad de lo mismo.
-    expect(administracion).toContain("label: 'Sitio Web'")
+    expect(administracion).toContain("href: '/admin/onboarding'")
+    expect(NAV_ADMIN).toContain("label: 'Sitio Web'")
   })
 
   it('el mismo permiso que sus vecinos de Administración', () => {
@@ -244,12 +211,12 @@ describe('salir de la pantalla no cuesta lo que cargaste', () => {
   it('y los pasos que llevan a otras secciones también', () => {
     // Antes solo la tienda publica abria pestaña nueva; «Productos» y «Equipo»
     // navegaban encima del formulario.
-    expect(CLIENTE).toContain("const leavesOnboarding = !pendingStorefront && !href.startsWith('/dashboard/onboarding')")
+    expect(CLIENTE).toContain("const leavesOnboarding = !pendingStorefront && !href.startsWith('/admin/onboarding')")
     expect(CLIENTE).toContain("target={leavesOnboarding ? '_blank' : undefined}")
   })
 
   it('el enlace que vuelve a esta misma pantalla no abre pestaña', () => {
-    expect(CLIENTE).toContain("!href.startsWith('/dashboard/onboarding')")
+    expect(CLIENTE).toContain("!href.startsWith('/admin/onboarding')")
   })
 })
 

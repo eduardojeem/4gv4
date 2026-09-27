@@ -405,7 +405,7 @@ describe('RepairDetailDialog new features', () => {
           qualityCheck: {
             id: 'qc-failed',
             result: 'unrepairable',
-            checklist: {} as any,
+            checklist: {} as unknown,
             checkedBy: { id: 'tech-1', name: 'Laura' },
             checkedAt: '2026-09-13T20:00:00Z',
           },
@@ -427,7 +427,7 @@ describe('RepairDetailDialog new features', () => {
           qualityCheck: {
             id: 'qc-passed',
             result: 'passed',
-            checklist: {} as any,
+            checklist: {} as unknown,
             checkedBy: { id: 'tech-1', name: 'Laura' },
             checkedAt: '2026-09-13T20:00:00Z',
           },

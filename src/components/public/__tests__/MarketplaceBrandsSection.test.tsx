@@ -15,8 +15,8 @@ import type { MarketplaceBrand } from '@/lib/public/marketplace'
 
 vi.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href, ...rest }: any) => (
-    <a href={typeof href === 'string' ? href : '#'} {...rest}>
+  default: ({ children, href, ...rest }: { children?: React.ReactNode; href?: string; [key: string]: unknown }) => (
+    <a href={typeof href === 'string' ? href : '#'} {...(rest as Record<string, unknown>)}>
       {children}
     </a>
   ),

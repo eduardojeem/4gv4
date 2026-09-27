@@ -330,7 +330,7 @@ function RegisterForm() {
           : 'Empresa creada correctamente. Ya puedes iniciar sesion.'
       )
       setTimeout(() => {
-        const redirectTarget = encodeURIComponent('/dashboard/onboarding')
+        const redirectTarget = encodeURIComponent('/admin/onboarding')
         const registeredCompany = encodeURIComponent(previewSlug)
         // Con confirmación pendiente el ingreso rechaza igual: la pantalla de
         // login lo dice en vez de invitar a intentarlo.

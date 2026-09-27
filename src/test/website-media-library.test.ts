@@ -121,7 +121,7 @@ describe('addWebsiteMediaItem quota enforcement', () => {
         }),
         upsert: vi.fn().mockResolvedValue({ error: null }),
       }),
-    } as any
+    } as unknown
 
     const result = await addWebsiteMediaItem(
       'org-test',
@@ -160,7 +160,7 @@ describe('addWebsiteMediaItem quota enforcement', () => {
           }),
         }),
       }),
-    } as any
+    } as unknown
 
     const result = await addWebsiteMediaItem(
       'org-test',
@@ -217,7 +217,7 @@ describe('deleteWebsiteMediaItem', () => {
           remove: removeStorageMock,
         }),
       },
-    } as any
+    } as unknown
 
     const result = await deleteWebsiteMediaItem(
       'org-test',
