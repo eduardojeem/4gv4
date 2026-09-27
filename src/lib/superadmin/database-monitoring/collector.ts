@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import type {
   ConnectionStats,
   DatabaseAlert,
@@ -73,7 +73,7 @@ interface SourceResult<T> {
   data: T | null
 }
 
-type MonitoringSupabaseClient = Awaited<ReturnType<typeof createClient>>
+type MonitoringSupabaseClient = ReturnType<typeof createAdminSupabase>
 
 function createSource(
   id: MonitoringSourceId,
@@ -496,7 +496,7 @@ function buildAlerts(metrics: {
 
 export async function collectDatabaseMonitoringSnapshot(): Promise<DatabaseMetrics> {
   const collectedAt = new Date().toISOString()
-  const supabase = await createClient()
+  const supabase = createAdminSupabase()
   const [
     databaseSizeResult,
     tableSizesResult,
