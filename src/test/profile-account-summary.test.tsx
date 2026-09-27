@@ -32,4 +32,60 @@ describe('ProfileAccountSummary', () => {
       '/4g-celulares/perfil/creditos'
     )
   })
+
+  const RESUMEN_VACIO = {
+    equipment: { total: 0, active: 0, ready: 0, delivered: 0 },
+    repairs: { pendingCount: 0, paidCount: 0, pendingAmount: 0 },
+    orders: { pendingCount: 0, paidCount: 0, pendingAmount: 0 },
+    financing: { pendingAmount: 0, overdueAmount: 0, overdueCount: 0 },
+    storeCredit: 0,
+    totalDue: 0,
+    netBalance: 0,
+  }
+
+  // #tiendas solo existe en la pagina cuando hay mas de una tienda
+  // (ProfileStores no se pinta con 0 o 1). El boton de creditos en
+  // marketplace apuntaba ahi siempre, sin importar cuantas tiendas hubiera:
+  // con una sola tienda el link no llevaba a ningun lado.
+  it('en marketplace con una sola tienda va directo a sus creditos, no a #tiendas', () => {
+    render(
+      <ProfileAccountSummary
+        tenantPrefix="/marketplace"
+        summary={RESUMEN_VACIO}
+        stores={[{
+          organizationId: 'a',
+          organization: { id: 'a', name: 'Tienda A', slug: 'tienda-a' },
+          summary: RESUMEN_VACIO,
+          needsAttention: false,
+        }]}
+      />
+    )
+
+    expect(screen.getByRole('link', { name: /Ver créditos y cuotas/i })).toHaveAttribute(
+      'href',
+      '/tienda-a/perfil/creditos'
+    )
+  })
+
+  it('en marketplace con varias tiendas manda al selector #tiendas', () => {
+    render(
+      <ProfileAccountSummary
+        tenantPrefix="/marketplace"
+        summary={RESUMEN_VACIO}
+        stores={[
+          { organizationId: 'a', organization: { id: 'a', name: 'Tienda A', slug: 'tienda-a' }, summary: RESUMEN_VACIO, needsAttention: false },
+          { organizationId: 'b', organization: { id: 'b', name: 'Tienda B', slug: 'tienda-b' }, summary: RESUMEN_VACIO, needsAttention: false },
+        ]}
+      />
+    )
+
+    expect(screen.getByRole('link', { name: /Elegir tienda para ver cuotas/i })).toHaveAttribute('href', '#tiendas')
+  })
+
+  it('en marketplace sin tiendas no ofrece un link roto', () => {
+    render(<ProfileAccountSummary tenantPrefix="/marketplace" summary={RESUMEN_VACIO} stores={[]} />)
+
+    expect(screen.queryByText(/creditos y cuotas/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/elegir tienda/i)).not.toBeInTheDocument()
+  })
 })

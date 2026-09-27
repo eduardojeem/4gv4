@@ -104,6 +104,15 @@ describe('el perfil del marketplace vive dentro del marketplace', () => {
     expect(NAV).toContain('href="/marketplace/perfil"')
     expect(NAV).toContain('href="/marketplace/mis-reparaciones"')
   })
+
+  // El perfil publico de creador (/perfil/[username]) no pertenece a ninguna
+  // tienda: su boton "Configurar" tenia el mismo bug que el menu principal ya
+  // tiene resuelto arriba.
+  it('el perfil publico de creador tampoco manda afuera', () => {
+    const PUBLIC_PROFILE = leer('src/components/public/PublicProfileClient.tsx')
+    expect(PUBLIC_PROFILE).not.toContain('href="/perfil"')
+    expect(PUBLIC_PROFILE).toContain('href="/marketplace/perfil')
+  })
 })
 
 /**

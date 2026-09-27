@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -19,7 +19,11 @@ import {
   Smartphone,
   Clock,
   Check,
-  Sparkles
+  Sparkles,
+  LayoutGrid,
+  Save,
+  RefreshCw,
+  SlidersHorizontal
 } from 'lucide-react'
 import type { ProfilePreferences, UserProfile, NotificationKey } from '@/app/dashboard/profile/page'
 import type { ColorScheme } from '@/contexts/theme-context'
@@ -30,9 +34,20 @@ export interface DashboardPreferencesFormProps {
   setPrefs: React.Dispatch<React.SetStateAction<ProfilePreferences>>
   profile: UserProfile
   setProfile: React.Dispatch<React.SetStateAction<UserProfile>>
+  onSave?: () => void
+  isSaving?: boolean
+  isDirty?: boolean
 }
 
-export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile }: DashboardPreferencesFormProps) {
+export function DashboardPreferencesForm({
+  prefs,
+  setPrefs,
+  profile,
+  setProfile,
+  onSave,
+  isSaving = false,
+  isDirty = false
+}: DashboardPreferencesFormProps) {
   const { theme, colorScheme, setTheme, setColorScheme } = useTheme()
 
   const notificationItems: {
@@ -175,12 +190,82 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Define el tinte de los botones principales, estados activos y acentos del panel.
-              </p>
+              
+              {/* Mini Preview del Color Seleccionado */}
+              <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                <span className="text-muted-foreground font-medium">Vista previa de acento:</span>
+                <Button size="sm" className="h-6 text-[11px] px-2.5 pointer-events-none shadow-sm">
+                  Botón
+                </Button>
+                <Badge variant="default" className="text-[10px] pointer-events-none">
+                  Activo
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Opciones de Fluidez y Pantalla */}
+          <div className="space-y-3 pt-4 border-t border-border/60">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              <Label className="text-sm font-semibold">Opciones de Espaciado y Automatización</Label>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* Modo Compacto */}
+              <div className="rounded-xl border border-border/50 p-3.5 transition-colors hover:border-border hover:bg-muted/30 flex items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg p-2 mt-0.5 text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40">
+                    <LayoutGrid className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <Label className="cursor-pointer text-sm font-medium" htmlFor="pref-compactMode">
+                      Modo compacto
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Reduce el espaciado en tablas para visualizar más datos.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="pref-compactMode"
+                  checked={prefs.compactMode}
+                  onCheckedChange={(c) => setPrefs((p) => ({ ...p, compactMode: c }))}
+                />
+              </div>
+
+              {/* Guardado Automático */}
+              <div className="rounded-xl border border-border/50 p-3.5 transition-colors hover:border-border hover:bg-muted/30 flex items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg p-2 mt-0.5 text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40">
+                    <Save className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <Label className="cursor-pointer text-sm font-medium" htmlFor="pref-autoSave">
+                      Guardado automático
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Guarda borradores y cambios sin requerir confirmación.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="pref-autoSave"
+                  checked={prefs.autoSave}
+                  onCheckedChange={(c) => setPrefs((p) => ({ ...p, autoSave: c }))}
+                />
+              </div>
             </div>
           </div>
         </CardContent>
+        {isDirty && onSave && (
+          <CardFooter className="flex justify-end border-t border-border/50 py-3 bg-muted/20">
+            <Button size="sm" onClick={onSave} disabled={isSaving} className="gap-1.5 text-xs shadow-sm">
+              {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Guardar preferencias
+            </Button>
+          </CardFooter>
+        )}
       </Card>
 
       {/* Notificaciones */}
@@ -195,7 +280,7 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
                 <CardTitle className="text-xl">Notificaciones y Alertas</CardTitle>
                 <Badge variant="outline" className="text-[10px] font-medium gap-1 border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30">
                   <Check className="h-3 w-3" />
-                  Se guarda en tu cuenta
+                  Sincronizado en la nube
                 </Badge>
               </div>
               <CardDescription>Configura los canales y la frecuencia de comunicaciones que deseas recibir.</CardDescription>
@@ -236,6 +321,14 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
             </div>
           ))}
         </CardContent>
+        {isDirty && onSave && (
+          <CardFooter className="flex justify-end border-t border-border/50 py-3 bg-muted/20">
+            <Button size="sm" onClick={onSave} disabled={isSaving} className="gap-1.5 text-xs shadow-sm">
+              {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Guardar preferencias
+            </Button>
+          </CardFooter>
+        )}
       </Card>
 
       {/* Configuracion Regional */}
@@ -246,7 +339,7 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
               <Globe className="h-5 w-5" />
             </div>
             <div>
-              <CardTitle className="text-xl">Configuracion Regional e Idioma</CardTitle>
+              <CardTitle className="text-xl">Configuración Regional e Idioma</CardTitle>
               <CardDescription>Ajusta formatos de hora, calendario y localización geográfica.</CardDescription>
             </div>
           </div>
@@ -314,6 +407,14 @@ export function DashboardPreferencesForm({ prefs, setPrefs, profile, setProfile 
             </p>
           </div>
         </CardContent>
+        {isDirty && onSave && (
+          <CardFooter className="flex justify-end border-t border-border/50 py-3 bg-muted/20">
+            <Button size="sm" onClick={onSave} disabled={isSaving} className="gap-1.5 text-xs shadow-sm">
+              {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Guardar preferencias
+            </Button>
+          </CardFooter>
+        )}
       </Card>
     </div>
   )

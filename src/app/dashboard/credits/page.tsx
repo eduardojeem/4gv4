@@ -22,6 +22,7 @@ import { RouteGuard } from '@/components/auth/permission-guard'
 import { PlanGate } from '@/components/admin/PlanGate'
 import { formatDateInputLocal, formatDateOnlyDisplay, isSameLocalDate, startOfLocalDay } from '@/lib/date-only'
 import { getCreditDisplayInfo, getInstallmentDisplayInfo } from '@/lib/credits/display'
+import { CreditExportModal } from '@/components/dashboard/credits/CreditExportModal'
 
 export default function CreditsDashboardPage() {
   return (
@@ -65,6 +66,7 @@ function CreditsDashboardContent() {
   const [sortDirection] = useState<'asc' | 'desc'>('asc')
   const [activeTab, setActiveTab] = useState('overview')
   const [creditViewMode, setCreditViewMode] = useState<'cards' | 'list' | 'table'>('cards')
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
 
   // Sort y paginación de cuotas (memoizado para evitar computation en cada render)
   const sortedAndPagedInstallments = useMemo(() => {
@@ -465,8 +467,8 @@ function CreditsDashboardContent() {
           <Button 
             variant="outline" 
             size="sm" 
-            className="h-9 gap-1.5" 
-            onClick={exportInstallmentsCsv}
+            className="h-9 gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/20 font-semibold" 
+            onClick={() => setIsExportModalOpen(true)}
           >
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Exportar</span>
@@ -840,8 +842,14 @@ function CreditsDashboardContent() {
               <span className="text-xs text-muted-foreground tabular-nums">
                 {filteredInstallments.length} cuota{filteredInstallments.length !== 1 ? 's' : ''}
               </span>
-              <Button variant="outline" size="sm" className="h-8" onClick={exportInstallmentsCsv}>
-                Exportar CSV
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs font-semibold border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30"
+                onClick={() => setIsExportModalOpen(true)}
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Exportar (Excel / PDF / CSV)</span>
               </Button>
             </div>
           </div>
@@ -1185,6 +1193,16 @@ function CreditsDashboardContent() {
           setIsDetailDialogOpen(false)
           handleMarkInstallmentPaidDirectly(installmentId)
         }}
+      />
+
+      {/* Export Modal */}
+      <CreditExportModal
+        open={isExportModalOpen}
+        onOpenChange={setIsExportModalOpen}
+        credits={credits}
+        installments={installments}
+        payments={payments}
+        creditById={creditById}
       />
 
       </div>

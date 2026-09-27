@@ -24,8 +24,6 @@ export function ProfileSettingsPanel({ hasStore }: { hasStore: boolean }) {
           <div><strong className="block text-sm">Seguridad</strong><span className="mb-2 block text-xs text-muted-foreground">Actualizá tu contraseña de acceso.</span><ChangePasswordDialog /></div>
         </div>
         <div className="border-t border-border pt-4">
-          <strong className="mb-1 block text-sm">Avisos y privacidad</strong>
-          <p className="mb-3 text-xs text-muted-foreground">Elegí qué avisos querés recibir y controlá tu visibilidad personal.</p>
           <MarketplacePreferencesForm />
         </div>
         {hasStore && <div className="flex items-start gap-3 border-t border-border pt-4 text-xs text-muted-foreground"><Store className="h-4 w-4 shrink-0" aria-hidden="true" /><p>La configuración de tu negocio se administra desde el panel de la tienda, no desde este perfil personal.</p></div>}

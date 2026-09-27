@@ -39,6 +39,13 @@ import { es } from 'date-fns/locale'
 import { logAndTranslateError } from '@/lib/error-translator'
 import { logger } from '@/lib/logger'
 
+export const socialLinksSchema = z.object({
+  linkedin: z.string().nullish().or(z.literal('')),
+  twitter: z.string().nullish().or(z.literal('')),
+  github: z.string().nullish().or(z.literal('')),
+  instagram: z.string().nullish().or(z.literal(''))
+}).nullish()
+
 export const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   email: z.string().email('Email invalido').refine((email) => {
@@ -52,7 +59,8 @@ export const profileSchema = z.object({
   location: z.string().nullish().or(z.literal('')),
   bio: z.string().max(500, 'Maximo 500 caracteres').nullish().or(z.literal('')),
   website: z.union([z.string().url('URL invalida'), z.literal(''), z.null(), z.undefined()]).optional(),
-  timezone: z.string().nullish().or(z.literal(''))
+  timezone: z.string().nullish().or(z.literal('')),
+  socialLinks: socialLinksSchema
 })
 
 export type UserProfile = z.infer<typeof profileSchema>
@@ -87,7 +95,13 @@ const DEFAULT_PROFILE: UserProfile = {
   location: '',
   bio: '',
   website: '',
-  timezone: 'America/Asuncion'
+  timezone: 'America/Asuncion',
+  socialLinks: {
+    linkedin: '',
+    twitter: '',
+    github: '',
+    instagram: ''
+  }
 }
 
 const DEFAULT_PREFS: ProfilePreferences = {
@@ -150,23 +164,45 @@ export default function UserProfilePage() {
   const isDirtyPrefs = useMemo(() => JSON.stringify(prefs) !== JSON.stringify(initialPrefs), [prefs, initialPrefs])
   const hasPendingChanges = isDirty || isDirtyPrefs
 
-  const profileCompletion = useMemo(() => {
-    const fields: (keyof UserProfile)[] = [
-      'name',
-      'email',
-      'phone',
-      'avatarUrl',
-      'department',
-      'jobTitle',
-      'location',
-      'bio'
+  const profileCompletionDetails = useMemo(() => {
+    const fields: { key: keyof UserProfile; label: string; elementId: string }[] = [
+      { key: 'name', label: 'Nombre completo', elementId: 'profile-name' },
+      { key: 'email', label: 'Email', elementId: 'profile-email' },
+      { key: 'phone', label: 'Teléfono / WhatsApp', elementId: 'profile-phone' },
+      { key: 'avatarUrl', label: 'Foto de perfil', elementId: 'profile-avatar' },
+      { key: 'department', label: 'Departamento', elementId: 'profile-department' },
+      { key: 'jobTitle', label: 'Cargo', elementId: 'profile-jobTitle' },
+      { key: 'location', label: 'Ubicación', elementId: 'profile-location' },
+      { key: 'bio', label: 'Biografía', elementId: 'profile-bio' }
     ]
-    const filled = fields.filter((f) => {
-      const val = profile[f]
-      return typeof val === 'string' && val.trim().length > 0
-    }).length
-    return Math.round((filled / fields.length) * 100)
+    const missing: { key: keyof UserProfile; label: string; elementId: string }[] = []
+    let filled = 0
+
+    fields.forEach((f) => {
+      const val = profile[f.key]
+      if (typeof val === 'string' && val.trim().length > 0) {
+        filled++
+      } else {
+        missing.push(f)
+      }
+    })
+
+    const percentage = Math.round((filled / fields.length) * 100)
+    return { percentage, missing, total: fields.length, filled }
   }, [profile])
+
+  const profileCompletion = profileCompletionDetails.percentage
+
+  const handleJumpToMissingField = useCallback((elementId: string) => {
+    setActiveSection('profile')
+    setTimeout(() => {
+      const el = document.getElementById(elementId)
+      if (el) {
+        el.focus()
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 100)
+  }, [])
 
   const copyUserId = useCallback(() => {
     if (userId) {
@@ -198,7 +234,13 @@ export default function UserProfilePage() {
           email: user.email || '',
           phone: (user.user_metadata?.phone as string) || '',
           avatarUrl: (user.user_metadata?.avatar_url as string) || '',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_PROFILE.timezone
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_PROFILE.timezone,
+          socialLinks: {
+            linkedin: '',
+            twitter: '',
+            github: '',
+            instagram: ''
+          }
         }
 
         if (!config.supabase.isConfigured) {
@@ -207,58 +249,92 @@ export default function UserProfilePage() {
           return null
         }
 
+        let summaryData: Record<string, unknown> | null = null
+        let profileRow: Record<string, unknown> | null = null
+        let detectedRole: string | null = (user.user_metadata?.role as string) ?? (user.app_metadata?.role as string) ?? null
+
         try {
           const { data: summary, error } = await supabase.rpc('get_profile_summary', { p_user_id: user.id })
-
-          if (error || !summary) {
-            setProfile(baseProfile)
-            setInitialProfile(baseProfile)
-            return null
+          if (!error && summary) {
+            summaryData = summary as Record<string, unknown>
+            if (summary.role) detectedRole = summary.role
+            if (summary.profile) profileRow = summary.profile as Record<string, unknown>
           }
+        } catch (rpcError) {
+          logger.warn('RPC get_profile_summary no disponible o falló:', rpcError)
+        }
 
-          if (summary.role) setRole(summary.role)
+        // Resiliencia: si la RPC falló o no devolvió profileRow, consultar directamente la tabla profiles
+        if (!profileRow) {
+          try {
+            const { data: directRow, error: directErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .maybeSingle()
 
-          const profileRow = summary.profile
-          const mergedProfile: UserProfile = profileRow ? {
-            ...baseProfile,
-            name: profileRow.full_name ?? profileRow.name ?? baseProfile.name,
-            avatarUrl: profileRow.avatar_url ?? baseProfile.avatarUrl,
-            phone: profileRow.phone ?? baseProfile.phone,
-            department: profileRow.department ?? baseProfile.department,
-            jobTitle: profileRow.job_title ?? baseProfile.jobTitle,
-            location: profileRow.location ?? baseProfile.location,
-            bio: profileRow.bio ?? baseProfile.bio,
-            website: profileRow.website ?? baseProfile.website,
-            timezone: profileRow.timezone ?? baseProfile.timezone
-          } : baseProfile
+            if (!directErr && directRow) {
+              profileRow = directRow as unknown as Record<string, unknown>
+              if (directRow.role && !detectedRole) detectedRole = directRow.role
+            }
+          } catch (directQueryErr) {
+            logger.error('Error fetching direct profile:', { error: directQueryErr })
+          }
+        }
 
-          setProfile(mergedProfile)
-          setInitialProfile(mergedProfile)
+        if (detectedRole) setRole(detectedRole)
 
-          const statsData = summary.stats
+        // Parsear redes sociales guardadas en JSONB social_links
+        let parsedSocialLinks = { ...DEFAULT_PROFILE.socialLinks }
+        const rawSocial = profileRow?.social_links
+        if (rawSocial && typeof rawSocial === 'object') {
+          const socialObj = rawSocial as Record<string, unknown>
+          parsedSocialLinks = {
+            linkedin: typeof socialObj.linkedin === 'string' ? socialObj.linkedin : '',
+            twitter: typeof socialObj.twitter === 'string' ? socialObj.twitter : '',
+            github: typeof socialObj.github === 'string' ? socialObj.github : '',
+            instagram: typeof socialObj.instagram === 'string' ? socialObj.instagram : ''
+          }
+        }
+
+        const mergedProfile: UserProfile = profileRow ? {
+          ...baseProfile,
+          name: (profileRow.full_name as string) ?? (profileRow.name as string) ?? baseProfile.name,
+          avatarUrl: (profileRow.avatar_url as string) ?? baseProfile.avatarUrl,
+          phone: (profileRow.phone as string) ?? baseProfile.phone,
+          department: (profileRow.department as string) ?? baseProfile.department,
+          jobTitle: (profileRow.job_title as string) ?? baseProfile.jobTitle,
+          location: (profileRow.location as string) ?? baseProfile.location,
+          bio: (profileRow.bio as string) ?? baseProfile.bio,
+          website: (profileRow.website as string) ?? baseProfile.website,
+          timezone: (profileRow.timezone as string) ?? baseProfile.timezone,
+          socialLinks: parsedSocialLinks
+        } : baseProfile
+
+        setProfile(mergedProfile)
+        setInitialProfile(mergedProfile)
+
+        // Cargar estadísticas
+        if (summaryData?.stats) {
+          const statsData = summaryData.stats as Record<string, unknown>
           let lastActivityLabel = 'Sin actividad reciente'
           if (statsData.lastActivity) {
-            const lastDate = new Date(statsData.lastActivity)
+            const lastDate = new Date(statsData.lastActivity as string)
             if (!isNaN(lastDate.getTime())) {
               lastActivityLabel = `Hace ${formatDistanceToNow(lastDate, { addSuffix: false, locale: es })}`
             }
           }
 
           setStats({
-            totalSales: statsData.totalSales || 0,
-            completedTasks: statsData.completedTasks || 0,
-            loginStreak: statsData.loginStreak || 0,
+            totalSales: Number(statsData.totalSales) || 0,
+            completedTasks: Number(statsData.completedTasks) || 0,
+            loginStreak: Number(statsData.loginStreak) || 0,
             lastActivity: lastActivityLabel
           })
-
-          // Retornar profileRow para que loadPrefsFromRow pueda leer preferences
-          return (profileRow as Record<string, unknown>) ?? null
-        } catch (rpcError) {
-          logger.error('Error fetching profile summary', { error: rpcError })
-          setProfile(baseProfile)
-          setInitialProfile(baseProfile)
-          return null
         }
+
+        // Retornar profileRow para que loadPrefsFromRow pueda leer preferences
+        return profileRow
       } catch (e) {
         logger.error('Error loading user', { error: e })
         return null
@@ -345,7 +421,7 @@ export default function UserProfilePage() {
     }
     if (!validate()) return false
 
-    const normalizedProfile = {
+    const normalizedProfile: UserProfile = {
       ...profile,
       name: profile.name.trim(),
       phone: profile.phone?.trim() || '',
@@ -353,7 +429,13 @@ export default function UserProfilePage() {
       department: profile.department?.trim() || '',
       jobTitle: profile.jobTitle?.trim() || '',
       location: profile.location?.trim() || '',
-      bio: profile.bio?.trim() || ''
+      bio: profile.bio?.trim() || '',
+      socialLinks: {
+        linkedin: profile.socialLinks?.linkedin?.trim() || '',
+        twitter: profile.socialLinks?.twitter?.trim() || '',
+        github: profile.socialLinks?.github?.trim() || '',
+        instagram: profile.socialLinks?.instagram?.trim() || ''
+      }
     }
 
     try {
@@ -368,6 +450,7 @@ export default function UserProfilePage() {
         bio: normalizedProfile.bio,
         website: normalizedProfile.website,
         timezone: normalizedProfile.timezone,
+        social_links: normalizedProfile.socialLinks,
         updated_at: new Date().toISOString()
       }
 
@@ -616,6 +699,27 @@ export default function UserProfilePage() {
                   ? '¡Tu perfil está completo con todos los datos clave!'
                   : 'Completa tu información para optimizar la interacción con tu equipo y clientes.'}
               </p>
+
+              {profileCompletionDetails.missing.length > 0 && (
+                <div className="pt-2 border-t border-border/50 space-y-1.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                    Por completar ({profileCompletionDetails.missing.length}):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {profileCompletionDetails.missing.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => handleJumpToMissingField(item.elementId)}
+                        className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-muted-foreground font-medium"
+                        title={`Ir al campo ${item.label}`}
+                      >
+                        + {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -675,6 +779,9 @@ export default function UserProfilePage() {
                 setInitialProfile((p) => ({ ...p, avatarUrl: url }))
                 refreshUser().catch(err => console.warn('Error refreshing auth user:', err))
               }}
+              onSave={saveAll}
+              isSaving={loading}
+              isDirty={isDirty}
             />
           )}
 
@@ -684,6 +791,9 @@ export default function UserProfilePage() {
               setPrefs={setPrefs}
               profile={profile}
               setProfile={setProfile}
+              onSave={saveAll}
+              isSaving={loading}
+              isDirty={isDirtyPrefs}
             />
           )}
 

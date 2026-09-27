@@ -7,8 +7,10 @@ import {
   ChevronRight,
   CircleDollarSign,
   CreditCard,
+  PackageCheck,
   ShoppingBag,
   Store,
+  TrendingUp,
   WalletCards,
   Wrench,
 } from 'lucide-react'
@@ -17,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import type { CustomerAccountSummary } from '@/lib/profile/customer-account-summary'
+import type { CustomerStoreSummary } from '@/lib/profile/customer-stores'
 
 export interface StoreCreditByOrganization {
   organization: { id: string; name: string; slug: string; logo_url?: string | null } | null
@@ -32,21 +35,37 @@ interface ProfileAccountSummaryProps {
    * el desglose para que se vea de quien es cada parte.
    */
   storeCredits?: StoreCreditByOrganization[]
+  /** Conteos por estado de equipo, no de pago: no los tiene el resumen de saldos. */
+  statusCounts?: { activeRepairs: number; readyRepairs: number }
+  /**
+   * Para armar el link de "ver creditos" correcto en el marketplace: con una
+   * sola tienda va directo a ella, con varias al selector (#tiendas, que
+   * ProfileStores solo pinta con mas de una). Sin esto el boton apuntaba
+   * siempre a #tiendas aunque esa seccion no existiera en la pagina.
+   */
+  stores?: CustomerStoreSummary[]
 }
 
 export function ProfileAccountSummary({
   summary,
   tenantPrefix = '',
   storeCredits = [],
+  statusCounts,
+  stores = [],
 }: ProfileAccountSummaryProps) {
   const creditStores = storeCredits.filter((row) => row.amount > 0)
   const splitAcrossStores = creditStores.length > 1
   const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
-  const creditsHref = tenantPrefix === '/marketplace'
-    ? '#tiendas'
-    : tenantPrefix
-      ? `${tenantPrefix}/perfil/creditos`
-      : '/perfil/creditos'
+  const isMarketplace = tenantPrefix === '/marketplace'
+  const singleStoreSlug = stores.length === 1 ? stores[0]?.organization?.slug ?? null : null
+  const creditsHref = !isMarketplace
+    ? (tenantPrefix ? `${tenantPrefix}/perfil/creditos` : '/perfil/creditos')
+    : stores.length > 1
+      ? '#tiendas'
+      : singleStoreSlug
+        ? `/${singleStoreSlug}/perfil/creditos`
+        : null
+  const creditsLabel = isMarketplace && stores.length > 1 ? 'Elegir tienda para ver cuotas' : 'Ver créditos y cuotas'
   const netState = summary.netBalance > 0
     ? { label: 'Saldo neto a favor', amount: summary.netBalance, tone: 'text-emerald-700 dark:text-emerald-300', icon: WalletCards }
     : summary.netBalance < 0
@@ -54,6 +73,8 @@ export function ProfileAccountSummary({
       : { label: 'Cuenta al día', amount: 0, tone: 'text-emerald-700 dark:text-emerald-300', icon: CheckCircle2 }
   const NetIcon = netState.icon
 
+  // Vencido primero, despues lo demas pendiente, al final lo que ya esta al
+  // dia: el subtitulo promete mostrar primero lo que requiere atencion.
   const details = [
     {
       label: 'Cuotas de crédito',
@@ -66,6 +87,7 @@ export function ProfileAccountSummary({
         : null,
       icon: CreditCard,
       emphasis: summary.financing.overdueCount > 0,
+      urgency: summary.financing.overdueCount > 0 ? 2 : summary.financing.pendingAmount > 0 ? 1 : 0,
     },
     {
       label: 'Reparaciones por pagar',
@@ -74,6 +96,7 @@ export function ProfileAccountSummary({
       overdue: null,
       icon: Wrench,
       emphasis: summary.repairs.pendingAmount > 0,
+      urgency: summary.repairs.pendingAmount > 0 ? 1 : 0,
     },
     {
       label: 'Pedidos por pagar',
@@ -82,6 +105,7 @@ export function ProfileAccountSummary({
       overdue: null,
       icon: ShoppingBag,
       emphasis: summary.orders.pendingAmount > 0,
+      urgency: summary.orders.pendingAmount > 0 ? 1 : 0,
     },
     {
       label: splitAcrossStores ? 'Saldo a favor en tiendas' : 'Saldo disponible a favor',
@@ -92,8 +116,9 @@ export function ProfileAccountSummary({
       overdue: null,
       icon: CircleDollarSign,
       emphasis: false,
+      urgency: 0,
     },
-  ]
+  ].sort((left, right) => right.urgency - left.urgency)
 
   return (
     <section aria-labelledby="account-summary-title" className="overflow-hidden rounded-xl border border-border bg-card">
@@ -104,6 +129,22 @@ export function ProfileAccountSummary({
             Resumen de pagos y saldos
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">Primero te mostramos lo que requiere atención.</p>
+          {statusCounts && (statusCounts.activeRepairs > 0 || statusCounts.readyRepairs > 0) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {statusCounts.activeRepairs > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-info/10 px-2.5 py-1 text-[11px] font-semibold text-info">
+                  <TrendingUp className="h-3 w-3" aria-hidden="true" />
+                  {statusCounts.activeRepairs} en proceso
+                </span>
+              )}
+              {statusCounts.readyRepairs > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                  <PackageCheck className="h-3 w-3" aria-hidden="true" />
+                  {statusCounts.readyRepairs} {statusCounts.readyRepairs === 1 ? 'listo' : 'listos'} para retirar
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className={cn(
           'flex items-center gap-3 rounded-lg border px-4 py-3 sm:min-w-60',
@@ -176,12 +217,14 @@ export function ProfileAccountSummary({
             Ver reparaciones <ChevronRight className="ml-1 h-4 w-4" />
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm" className="justify-between sm:justify-center">
-          <Link href={creditsHref}>
-            {tenantPrefix === '/marketplace' ? 'Elegir tienda para ver cuotas' : 'Ver créditos y cuotas'}
-            <ChevronRight className="ml-1 h-4 w-4" />
-          </Link>
-        </Button>
+        {creditsHref && (
+          <Button asChild variant="outline" size="sm" className="justify-between sm:justify-center">
+            <Link href={creditsHref}>
+              {creditsLabel}
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        )}
       </div>
     </section>
   )

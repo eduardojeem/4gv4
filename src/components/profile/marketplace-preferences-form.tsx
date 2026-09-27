@@ -98,46 +98,56 @@ export function MarketplacePreferencesForm() {
     }
   }
 
-  return <div className="space-y-3">
-    {values && labels.map(({ key, title, detail }) => <div key={key} className="flex items-start justify-between gap-3 rounded-lg border border-border/60 p-3">
-      <label htmlFor={`preference-${key}`} className="cursor-pointer pr-2">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block text-xs text-muted-foreground">{detail}</span>
-      </label>
-      <Switch id={`preference-${key}`} checked={values[key]} onCheckedChange={(checked) => void update(key, checked)} aria-label={title} />
-    </div>)}
+  return <div className="space-y-4">
+    {values && (
+      <div>
+        <p className="mb-2 text-xs font-semibold text-foreground">Perfil público</p>
+        <div className="rounded-lg border border-border/60 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <label htmlFor="preference-publicProfile" className="cursor-pointer pr-2">
+              <span className="block text-sm font-medium">Mostrar mi perfil a otros</span>
+              <span className="block text-xs text-muted-foreground">
+                Permitir que otros vean tu perfil en {username ? `mitiendapy.com/perfil/${username}` : 'una URL propia, una vez que elijas tu nombre de usuario'}.
+              </span>
+            </label>
+            <Switch
+              id="preference-publicProfile"
+              checked={values.publicProfile}
+              onCheckedChange={(checked) => void update('publicProfile', checked)}
+              aria-label="Perfil público"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <Input
+              value={usernameInput}
+              onChange={(event) => setUsernameInput(event.target.value.toLowerCase())}
+              placeholder="tu_nombre_de_usuario"
+              className="h-9 text-sm"
+              maxLength={30}
+              disabled={usernameSaving}
+            />
+            <Button type="button" size="sm" variant="outline" disabled={usernameSaving || usernameInput.trim() === (username ?? '')} onClick={() => void saveUsername()}>
+              {usernameSaving ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
+          {usernameMessage && <p className="mt-1.5 text-xs text-muted-foreground" aria-live="polite">{usernameMessage}</p>}
+        </div>
+      </div>
+    )}
 
     {values && (
-      <div className="rounded-lg border border-border/60 p-3">
-        <div className="flex items-start justify-between gap-3">
-          <label htmlFor="preference-publicProfile" className="cursor-pointer pr-2">
-            <span className="block text-sm font-medium">Perfil público</span>
-            <span className="block text-xs text-muted-foreground">
-              Permitir que otros vean tu perfil en {username ? `mitiendapy.com/perfil/${username}` : 'una URL propia, una vez que elijas tu nombre de usuario'}.
-            </span>
-          </label>
-          <Switch
-            id="preference-publicProfile"
-            checked={values.publicProfile}
-            onCheckedChange={(checked) => void update('publicProfile', checked)}
-            aria-label="Perfil público"
-          />
+      <div>
+        <p className="mb-2 text-xs font-semibold text-foreground">Avisos</p>
+        <div className="space-y-3">
+          {labels.map(({ key, title, detail }) => <div key={key} className="flex items-start justify-between gap-3 rounded-lg border border-border/60 p-3">
+            <label htmlFor={`preference-${key}`} className="cursor-pointer pr-2">
+              <span className="block text-sm font-medium">{title}</span>
+              <span className="block text-xs text-muted-foreground">{detail}</span>
+            </label>
+            <Switch id={`preference-${key}`} checked={values[key]} onCheckedChange={(checked) => void update(key, checked)} aria-label={title} />
+          </div>)}
         </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <Input
-            value={usernameInput}
-            onChange={(event) => setUsernameInput(event.target.value.toLowerCase())}
-            placeholder="tu_nombre_de_usuario"
-            className="h-9 text-sm"
-            maxLength={30}
-            disabled={usernameSaving}
-          />
-          <Button type="button" size="sm" variant="outline" disabled={usernameSaving || usernameInput.trim() === (username ?? '')} onClick={() => void saveUsername()}>
-            {usernameSaving ? 'Guardando…' : 'Guardar'}
-          </Button>
-        </div>
-        {usernameMessage && <p className="mt-1.5 text-xs text-muted-foreground" aria-live="polite">{usernameMessage}</p>}
       </div>
     )}
 

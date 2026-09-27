@@ -128,7 +128,11 @@ export function PublicProfileClient({ data, isOwnProfile }: { data: PublicProfil
 
                 {isOwnProfile && (
                   <Button asChild size="sm">
-                    <Link href="/perfil">
+                    {/* Bare /perfil hereda la vidriera de una tienda cualquiera
+                        por defecto: este perfil publico no pertenece a ninguna
+                        tienda, asi que el link tiene que quedarse en el
+                        marketplace, igual que el resto de la nav. */}
+                    <Link href="/marketplace/perfil#datos-personales">
                       <Settings className="mr-2 h-4 w-4" />
                       Configurar
                     </Link>

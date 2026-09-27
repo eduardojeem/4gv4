@@ -215,17 +215,14 @@ export function ProfileClient({
                 <p className="mt-1 text-sm text-muted-foreground">Compras, favoritos, carritos, créditos y reparaciones de todas las tiendas.</p>
               </div>
 
-              <ProfileQuickActions
-                role={profile.role || 'cliente'}
+              <ProfileAccountSummary
+                summary={accountSummary}
                 tenantPrefix={linkPrefix}
-                variant="marketplace"
-                showAuthorizedPersons={false}
+                storeCredits={storeCredits}
+                statusCounts={{ activeRepairs: stats.activeRepairs, readyRepairs: stats.readyRepairs }}
+                stores={stores}
               />
-              <div className="mt-4"><ProfileStats {...stats} variant="activity" /></div>
-              <div className="mt-6">
-                <ProfileAccountSummary summary={accountSummary} tenantPrefix={linkPrefix} storeCredits={storeCredits} />
-              </div>
-              {stores.length > 0 && <div className="mt-6"><ProfileStores stores={stores} /></div>}
+              {stores.length > 1 && <div className="mt-6"><ProfileStores stores={stores} /></div>}
 
               <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="flex min-w-0 flex-col gap-6">

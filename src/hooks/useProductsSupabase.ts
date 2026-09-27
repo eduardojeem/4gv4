@@ -307,6 +307,16 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const fetchCategories = useCallback(async () => {
     if (!enabled) return
     try {
+      // 1. Intentar a través de la API tenant-authenticated (respeta organización y RLS)
+      const response = await fetch('/api/categories?is_active=true', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
+
+      if (response.ok && payload?.success && Array.isArray(payload.data)) {
+        setCategories(payload.data as unknown as Category[])
+        return
+      }
+
+      // 2. Fallback a cliente Supabase si la API no estuviera disponible
       const { data, error } = await supabase
         .from('categories')
         .select('*')
@@ -316,7 +326,13 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       if (error) throw error
       setCategories((data || []) as unknown as Category[])
     } catch (err) {
-      console.error('Error fetching categories:', err)
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : JSON.stringify(err)
+      console.warn('Error fetching categories:', msg)
       setCategories([])
     }
   }, [supabase, enabled])
@@ -348,7 +364,16 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const fetchSuppliers = useCallback(async () => {
     if (!enabled) return
     try {
-      // La tabla suppliers no tiene columna is_active — traer todos y filtrar si es necesario
+      // 1. Intentar a través de la API tenant-authenticated
+      const response = await fetch('/api/suppliers?limit=100', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
+
+      if (response.ok && payload?.success && Array.isArray(payload.data)) {
+        setSuppliers(payload.data as unknown as Supplier[])
+        return
+      }
+
+      // 2. Fallback a Supabase directo
       const { data, error } = await supabase
         .from('suppliers')
         .select('*')
@@ -358,7 +383,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       setSuppliers((data || []) as unknown as Supplier[])
     } catch (err) {
       const msg = err instanceof Error ? err.message : JSON.stringify(err)
-      console.error('Error fetching suppliers:', msg)
+      console.warn('Error fetching suppliers:', msg)
       setSuppliers([])
     }
   }, [supabase, enabled])
