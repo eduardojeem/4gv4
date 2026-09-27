@@ -33,4 +33,19 @@ describe('Dashboard Profile Enhanced Design and Functionality', () => {
     expect(prefsSource).toContain('Detectar automáticamente')
     expect(prefsSource).toContain('Color de énfasis')
   })
+
+  it('keeps persistence authoritative and unsupported preferences honest', () => {
+    expect(pageSource).toContain('saveDashboardProfile')
+    expect(pageSource).toContain('beforeunload')
+    expect(pageSource).not.toContain("localStorage.setItem('profile-preferences'")
+    expect(prefsSource).toContain('isSynced &&')
+    expect(prefsSource).toContain('Próximamente')
+    expect(prefsSource).toContain('disabled')
+  })
+
+  it('makes the avatar completion shortcut focusable and avoids duplicate mobile save actions', () => {
+    expect(formSource).toContain('id="profile-avatar" tabIndex={-1}')
+    expect(pageSource).toContain('md:hidden')
+    expect(pageSource).toContain('hidden items-center gap-2.5 self-start md:flex')
+  })
 })
