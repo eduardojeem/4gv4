@@ -39,7 +39,7 @@ export function useAdminOverviewMetrics() {
       // 1. Ventas del día (monto y cantidad de tickets completados)
       let salesQuery = supabase
         .from('sales')
-        .select('total_amount, total, subtotal, status, branch_id, created_at')
+        .select('total_amount, status, branch_id, created_at')
         .gte('created_at', today.toISOString())
 
       if (organization?.id) {
@@ -103,7 +103,7 @@ export function useAdminOverviewMetrics() {
         )
         todaySalesCount = completedSales.length
         todaySalesTotal = completedSales.reduce((sum: number, sale) => {
-          const amount = Number(sale.total_amount ?? sale.total ?? sale.subtotal ?? 0)
+          const amount = Number(sale.total_amount ?? 0)
           return sum + (Number.isFinite(amount) ? amount : 0)
         }, 0)
       }

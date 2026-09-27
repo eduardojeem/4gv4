@@ -123,9 +123,9 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage', modul
     if (includeStats) {
       // Day boundaries must resolve in the organization's zone, not the host's.
       const { data: orgRow, error: orgError } = await supabase
-        .from('organizations')
+        .from('organization_settings')
         .select('timezone')
-        .eq('id', organization.id)
+        .eq('organization_id', organization.id)
         .maybeSingle()
 
       if (orgError) {

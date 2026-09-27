@@ -261,9 +261,9 @@ async function resolveMonthStartIso(organizationId: string | null) {
 
   if (organizationId) {
     const { data } = await supabase
-      .from('organizations')
+      .from('organization_settings')
       .select('timezone')
-      .eq('id', organizationId)
+      .eq('organization_id', organizationId)
       .maybeSingle()
     timeZone = (data?.timezone as string | undefined) ?? undefined
   }
