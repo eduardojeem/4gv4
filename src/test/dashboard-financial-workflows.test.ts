@@ -150,7 +150,7 @@ describe('dashboard financial workflow contracts', () => {
     expect(cashRegisterMigration).toContain('function public.record_cash_movement_atomic')
     expect(cashRegisterMigration).toContain('drop policy if exists "cash managers can create cash movements"')
     expect(movementRoute).toContain("permission: 'pos.cash.manage'")
-    expect(movementRoute).toContain("'record_cash_movement_atomic'")
+    expect(movementRoute).toContain("'server_record_cash_movement_atomic'")
     expect(cashHook).toContain("fetch('/api/pos/cash-movements'")
     expect(cashHook).not.toContain(".from('cash_movements')\n                .insert")
   })
@@ -186,7 +186,7 @@ describe('dashboard financial workflow contracts', () => {
     const cashPage = readFileSync(resolve(workspace, 'src/app/dashboard/pos/caja/page.tsx'), 'utf8')
 
     expect(route).toContain("permission: 'pos.cash.manage'")
-    expect(route).toContain("'reconcile_sale_payment_atomic'")
+    expect(route).toContain("'server_reconcile_sale_payment_atomic'")
     expect(panel).toContain("fetch('/api/pos/electronic-payments")
     expect(cashPage).toContain('ElectronicPaymentsPanel')
   })

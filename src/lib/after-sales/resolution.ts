@@ -1,4 +1,5 @@
 import type { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 
 /**
@@ -228,7 +229,9 @@ export async function applyRefund(params: {
     )
   }
 
-  const { error: movementError } = await supabase.rpc('record_cash_movement_atomic', {
+  const cashAdmin = createAdminSupabase()
+  const { error: movementError } = await cashAdmin.rpc('server_record_cash_movement_atomic', {
+    p_actor_user_id: userId,
     p_organization_id: organizationId,
     p_branch_id: branchId,
     p_session_id: targetSession.id,

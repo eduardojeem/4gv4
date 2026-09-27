@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
 
 type ReconciliationBody = {
@@ -113,8 +114,9 @@ export const PATCH = withTenantAuth(
         return NextResponse.json({ success: false, error: 'Selecciona una sucursal.' }, { status: 400 })
       }
 
-      const supabase = await createClient()
-      const { data, error } = await supabase.rpc('reconcile_sale_payment_atomic', {
+      const supabase = createAdminSupabase()
+      const { data, error } = await supabase.rpc('server_reconcile_sale_payment_atomic', {
+        p_actor_user_id: user.id,
         p_organization_id: organization.id,
         p_branch_id: branch.branchId,
         p_payment_id: paymentId,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 
 type CashCountBody = {
@@ -35,8 +35,9 @@ export const POST = withTenantAuth(
         return NextResponse.json({ success: false, error: 'Selecciona una sucursal para registrar el arqueo.' }, { status: 400 })
       }
 
-      const supabase = await createClient()
-      const { data, error } = await supabase.rpc('record_cash_count_atomic', {
+      const supabase = createAdminSupabase()
+      const { data, error } = await supabase.rpc('server_record_cash_count_atomic', {
+        p_actor_user_id: user.id,
         p_organization_id: organization.id,
         p_branch_id: branch.branchId,
         p_session_id: sessionId,
