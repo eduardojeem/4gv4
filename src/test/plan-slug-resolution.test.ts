@@ -6,7 +6,7 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 
 const PAGINA = leer('src/app/register/page.tsx')
 const RUTA = leer('src/app/api/auth/register-company/route.ts')
-const MIGRACION = leer('supabase/migrations/20260902160000_fix_plan_public_slugs.sql')
+const MIGRACION = leer('supabase/migrations_legacy/20260902160000_fix_plan_public_slugs.sql')
 
 /**
  * Los dos espacios de nombres se cruzan: el slug público de un plan puede ser el

@@ -23,7 +23,7 @@ describe('contrato de variantes en ventas POS', () => {
     expect(variantsRoute).toContain('has_variants: true')
     expect(variantsRoute).toContain('variant_attribute_config:')
     const route = readFileSync(resolve(root, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
-    const migration = readFileSync(resolve(root, 'supabase/migrations/20260908010913_pos_variant_sales_atomic.sql'), 'utf8')
+    const migration = readFileSync(resolve(root, 'supabase/migrations_legacy/20260908010913_pos_variant_sales_atomic.sql'), 'utf8')
     expect(route).toContain("rpc('process_pos_sale_atomic_v5'")
     expect(migration).toContain('adjust_variant_stock_atomic')
     expect(migration).toContain('variant_id,variant_name,variant_sku,variant_attributes')

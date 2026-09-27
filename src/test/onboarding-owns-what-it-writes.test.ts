@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { BRAND_COLORS, isKnownBrandColor } from '@/lib/website/brand-colors'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
-const MIGRACION = leer('supabase/migrations/20260908140000_onboarding_preserves_website_settings.sql')
+const MIGRACION = leer('supabase/migrations_legacy/20260908140000_onboarding_preserves_website_settings.sql')
 const RUTA = leer('src/app/api/onboarding/complete/route.ts')
 const PAGINA = leer('src/app/dashboard/onboarding/page.tsx')
 const CLIENTE = leer('src/components/dashboard/onboarding/OnboardingClient.tsx')

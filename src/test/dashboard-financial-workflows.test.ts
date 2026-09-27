@@ -4,31 +4,31 @@ import { describe, expect, it } from 'vitest'
 
 const workspace = process.cwd()
 const migration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260728213000_harden_dashboard_financial_workflows.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260728213000_harden_dashboard_financial_workflows.sql'),
   'utf8'
 )
 const posAtomicMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260731215500_make_pos_sale_atomic.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260731215500_make_pos_sale_atomic.sql'),
   'utf8'
 )
 const cashRegisterMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260802004403_harden_pos_cash_register.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260802004403_harden_pos_cash_register.sql'),
   'utf8'
 )
 const paymentReconciliationMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260802013141_add_pos_payment_reconciliation.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260802013141_add_pos_payment_reconciliation.sql'),
   'utf8'
 )
 const cashRegisterActiveContractMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260802180000_fix_cash_register_active_contract.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260802180000_fix_cash_register_active_contract.sql'),
   'utf8'
 )
 const cashMovementEnumCastMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260802193000_fix_cash_movement_enum_cast.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260802193000_fix_cash_movement_enum_cast.sql'),
   'utf8'
 )
 const repairBalanceDueMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260805090000_charge_repair_balance_due.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260805090000_charge_repair_balance_due.sql'),
   'utf8'
 )
 
@@ -256,11 +256,11 @@ describe('dashboard financial workflow contracts', () => {
   it('commits payment metadata and paid-repair protection in the POS transaction', () => {
     const route = readFileSync(resolve(workspace, 'src/app/api/pos/process-sale/route.ts'), 'utf8')
     const atomicCheckoutMigration = readFileSync(
-      resolve(workspace, 'supabase/migrations/20260802133000_finalize_pos_checkout_atomic.sql'),
+      resolve(workspace, 'supabase/migrations_legacy/20260802133000_finalize_pos_checkout_atomic.sql'),
       'utf8'
     )
     const atomicStoreCreditMigration = readFileSync(
-      resolve(workspace, 'supabase/migrations/20260816153000_atomic_pos_store_credit.sql'),
+      resolve(workspace, 'supabase/migrations_legacy/20260816153000_atomic_pos_store_credit.sql'),
       'utf8'
     )
 

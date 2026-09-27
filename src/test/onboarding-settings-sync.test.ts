@@ -52,7 +52,7 @@ describe('onboarding and admin settings synchronization', () => {
 
   it('persists onboarding through the atomic database function', () => {
     const route = read('src/app/api/onboarding/complete/route.ts')
-    const migration = read('supabase/migrations/20260801183000_complete_onboarding_atomic.sql')
+    const migration = read('supabase/migrations_legacy/20260801183000_complete_onboarding_atomic.sql')
 
     expect(route).toContain("'complete_organization_onboarding'")
     expect(migration).toContain('create or replace function public.complete_organization_onboarding')

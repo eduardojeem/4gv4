@@ -2,11 +2,11 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const migrationName = readdirSync(resolve(process.cwd(), 'supabase/migrations'))
+const migrationName = readdirSync(resolve(process.cwd(), 'supabase/migrations_legacy'))
   .find((name) => name.endsWith('_harden_pos_repair_payment_ledger.sql'))
 
 const sql = migrationName
-  ? readFileSync(resolve(process.cwd(), 'supabase/migrations', migrationName), 'utf8')
+  ? readFileSync(resolve(process.cwd(), 'supabase/migrations_legacy', migrationName), 'utf8')
   : ''
 
 describe('POS repair payment ledger migration', () => {

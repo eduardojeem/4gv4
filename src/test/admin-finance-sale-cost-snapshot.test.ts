@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const workspace = process.cwd()
 const migration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260812103000_capture_immutable_pos_sale_costs.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260812103000_capture_immutable_pos_sale_costs.sql'),
   'utf8',
 ).toLowerCase()
 const financeServer = readFileSync(resolve(workspace, 'src/lib/finance/server.ts'), 'utf8')

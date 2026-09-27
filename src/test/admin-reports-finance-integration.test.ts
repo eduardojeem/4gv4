@@ -11,7 +11,7 @@ const reportsDashboard = readFileSync(
   'utf8',
 )
 const financeMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260811190000_create_finance_foundation.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260811190000_create_finance_foundation.sql'),
   'utf8',
 ).toLowerCase()
 

@@ -8,7 +8,7 @@ describe('admin inventory integration contracts', () => {
   it('synchronizes edited commercial features into technical plan modules', () => {
     const route = read('src/app/api/superadmin/subscription-plans/[id]/route.ts')
     const migration = read(
-      'supabase/migrations/20260802212650_sync_inventory_admin_plan_module.sql'
+      'supabase/migrations_legacy/20260802212650_sync_inventory_admin_plan_module.sql'
     )
 
     expect(route).toContain('deriveTechnicalModules')

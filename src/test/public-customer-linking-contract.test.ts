@@ -19,7 +19,7 @@ describe('public customer linking contract', () => {
   })
 
   it('keeps customer profiles unique per organization and repairs incomplete links', () => {
-    const migration = read('supabase/migrations/20260802161753_link_public_customers_atomically.sql')
+    const migration = read('supabase/migrations_legacy/20260802161753_link_public_customers_atomically.sql')
 
     expect(migration).toContain('idx_customers_org_profile_id')
     expect(migration).toContain('organization_id, profile_id')

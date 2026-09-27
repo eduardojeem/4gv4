@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260913200735_add_repair_quality_check_fk_indexes.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260913200735_add_repair_quality_check_fk_indexes.sql'),
   'utf8',
 )
 

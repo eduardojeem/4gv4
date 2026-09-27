@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('repair loyalty permission migration', () => {
   const migration = readFileSync(join(
-    process.cwd(), 'supabase', 'migrations',
+    process.cwd(), 'supabase', 'migrations_legacy',
     '20260905215553_allow_repair_loyalty_awards.sql',
   ), 'utf8')
 

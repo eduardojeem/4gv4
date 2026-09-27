@@ -23,7 +23,7 @@ describe('product credit defaults consolidation', () => {
   })
 
   it('keeps existing new plans and migrates only missing legacy installment counts', () => {
-    const migration = read('supabase/migrations/20260825222525_consolidate_product_credit_defaults.sql')
+    const migration = read('supabase/migrations_legacy/20260825222525_consolidate_product_credit_defaults.sql')
 
     expect(migration).toContain("modules #> '{admin_settings,defaultInstallmentRates}'")
     expect(migration).toContain("ws.key = 'product_credit_defaults'")

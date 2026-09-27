@@ -139,7 +139,7 @@ async function verifyConnection() {
       console.log('')
       console.log('💡 Sugerencia: Ejecuta la migración de seed para poblar datos de ejemplo:')
       console.log('   1. Abre el SQL Editor en Supabase')
-      console.log('   2. Ejecuta: supabase/migrations/02_simple_seed.sql')
+      console.log('   2. Ejecuta: supabase/migrations_legacy/02_simple_seed.sql')
       console.log('')
     } else {
       console.log('🎉 ¡Todo está listo! Tu aplicación está conectada a Supabase')
@@ -173,7 +173,7 @@ async function verifyConnection() {
         }
       } else {
         console.log('⚠️ No se puede insertar clientes automáticamente: falta SUPABASE_SERVICE_ROLE_KEY')
-        console.log('   Opcional: Ejecuta supabase/migrations/20241214_verify_customers_table.sql en el SQL Editor')
+        console.log('   Opcional: Ejecuta supabase/migrations_legacy/20241214_verify_customers_table.sql en el SQL Editor')
       }
       console.log('')
     } else {
@@ -188,10 +188,10 @@ async function verifyConnection() {
     console.log('Opción 1 - Desde el Dashboard:')
     console.log('   1. Abre: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql')
     console.log('   2. Ejecuta en orden:')
-    console.log('      - supabase/migrations/01_initial_schema.sql')
-    console.log('      - supabase/migrations/03_functions.sql')
-    console.log('      - supabase/migrations/04_ver_productos.sql')
-    console.log('      - supabase/migrations/02_simple_seed.sql (opcional)')
+    console.log('      - supabase/migrations_legacy/01_initial_schema.sql')
+    console.log('      - supabase/migrations_legacy/03_functions.sql')
+    console.log('      - supabase/migrations_legacy/04_ver_productos.sql')
+    console.log('      - supabase/migrations_legacy/02_simple_seed.sql (opcional)')
     console.log('')
     console.log('Opción 2 - Usando Supabase CLI:')
     console.log('   supabase link --project-ref YOUR_PROJECT_ID')

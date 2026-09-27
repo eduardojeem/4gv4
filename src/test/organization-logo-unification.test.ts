@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
 const ENDPOINT = 'src/app/api/admin/website/sync-company/route.ts'
-const MIGRACION = 'supabase/migrations/20260902140000_unify_organization_logo.sql'
+const MIGRACION = 'supabase/migrations_legacy/20260902140000_unify_organization_logo.sql'
 
 /**
  * El logo se cargaba en dos pantallas que guardaban en campos distintos. El

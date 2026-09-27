@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20260903033245_storefront_publication_opt_in.sql'), 'utf8')
+const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations_legacy/20260903033245_storefront_publication_opt_in.sql'), 'utf8')
 const onboarding = readFileSync(resolve(process.cwd(), 'src/app/api/onboarding/complete/route.ts'), 'utf8')
 
 describe('storefront publication migration', () => {

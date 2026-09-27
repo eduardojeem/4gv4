@@ -27,7 +27,7 @@ describe('public order product variants', () => {
   })
 
   it('reserves and restores variant stock atomically', () => {
-    const migration = read('supabase/migrations/20260903235322_public_order_variant_inventory.sql')
+    const migration = read('supabase/migrations_legacy/20260903235322_public_order_variant_inventory.sql')
     expect(migration).toContain('variant_id')
     expect(migration).toContain('update public.product_variants')
     expect(migration).toContain('STOCK_CHANGED_VARIANT')

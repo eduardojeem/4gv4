@@ -186,7 +186,7 @@ describe('los planes que se ofrecen muestran los topes reales', () => {
  */
 describe('asignar un propietario no le quita el rol en la plataforma', () => {
   const sql = readFileSync(
-    resolve(process.cwd(), 'supabase/migrations/20260910120000_superadmin_owner_keeps_platform_role.sql'),
+    resolve(process.cwd(), 'supabase/migrations_legacy/20260910120000_superadmin_owner_keeps_platform_role.sql'),
     'utf8'
   )
   // Solo el cuerpo de la funcion: el comentario de arriba cita el codigo viejo

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
-const MIGRACION = 'supabase/migrations/20260902120000_cash_monitor_tenant_isolation.sql'
+const MIGRACION = 'supabase/migrations_legacy/20260902120000_cash_monitor_tenant_isolation.sql'
 const HOOK = 'src/app/admin/cash-monitor/hooks/useCashMonitor.ts'
 
 describe('aislamiento por tienda en el monitor de caja', () => {

@@ -52,7 +52,7 @@ describe('repair creation idempotency', () => {
   it('adds a tenant-scoped partial unique creation key', () => {
     const sql = readFileSync(resolve(
       process.cwd(),
-      'supabase/migrations/20260821032117_add_repair_creation_idempotency.sql'
+      'supabase/migrations_legacy/20260821032117_add_repair_creation_idempotency.sql'
     ), 'utf8').toLowerCase()
 
     expect(sql).toContain('creation_idempotency_key text')

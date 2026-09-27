@@ -93,7 +93,7 @@ describe('el intento de acceso no autorizado queda atribuido', () => {
 })
 
 describe('la migración y el catálogo no se separan', () => {
-  const sql = leer('supabase/migrations/20260903120000_backfill_audit_log_severity.sql')
+  const sql = leer('supabase/migrations_legacy/20260903120000_backfill_audit_log_severity.sql')
 
   it('asigna a cada acción la misma gravedad que el código', () => {
     // El mapa está escrito dos veces —en TypeScript y en SQL— porque el backfill

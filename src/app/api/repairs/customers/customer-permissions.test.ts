@@ -5,7 +5,7 @@ import { join } from 'node:path'
 describe('repair customer database permissions', () => {
   it('allows repair-order creators to insert and read customers through RLS', () => {
     const customerPolicies = readFileSync(
-      join(process.cwd(), 'supabase', 'migrations', '20260821001119_align_repair_customer_rls_permissions.sql'),
+      join(process.cwd(), 'supabase', 'migrations_legacy', '20260821001119_align_repair_customer_rls_permissions.sql'),
       'utf8'
     ).toLowerCase()
 

@@ -61,7 +61,7 @@ function repairTicket(repair: PosChargeableRepair): string {
  * El RPC `process_pos_sale_atomic_v2` recalcula el mismo saldo en el
  * servidor y rechaza la venta si el total de pagos no coincide exactamente,
  * así que esta fórmula debe mantenerse igual a la de la migración
- * `supabase/migrations/20260805090000_charge_repair_balance_due.sql`.
+ * `supabase/migrations_legacy/20260805090000_charge_repair_balance_due.sql`.
  */
 export function getRepairBalanceDue(repair: ChargeableRepair): number {
   const total = finiteMoney(repair.final_cost) ?? finiteMoney(repair.estimated_cost) ?? 0

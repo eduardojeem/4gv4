@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const sql = readFileSync(resolve(
   process.cwd(),
-  'supabase/migrations/20260821043722_add_repair_line_types.sql',
+  'supabase/migrations_legacy/20260821043722_add_repair_line_types.sql',
 ), 'utf8')
 
 describe('classified repair pricing migration', () => {

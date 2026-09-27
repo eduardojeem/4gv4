@@ -32,7 +32,7 @@ try {
     insert into organizations (id,name,marketplace_public) values ('${a}','Existing public',true), ('${b}','Existing private',false);
     insert into website_settings values ('${b}','checkout','{"commerceMode":"catalog"}',null,null);
   `)
-  const migration = readFileSync(resolve('supabase/migrations/20260903033245_storefront_publication_opt_in.sql'), 'utf8')
+  const migration = readFileSync(resolve('supabase/migrations_legacy/20260903033245_storefront_publication_opt_in.sql'), 'utf8')
   await db.exec(migration)
   assert.deepEqual((await db.query('select storefront_public from organizations order by id')).rows, [{ storefront_public: true }, { storefront_public: false }])
   assert.equal((await db.query('select value from website_settings where organization_id=$1 and key=$2', [a,'checkout'])).rows[0].value.commerceMode, 'cart')

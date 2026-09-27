@@ -166,14 +166,14 @@ describe('un solo registro de visitas', () => {
 
   it('solo el servidor lee los eventos y los contadores', () => {
     for (const archivo of [
-      'supabase/migrations/20260925120000_site_analytics.sql',
-      'supabase/migrations/20260926100000_storefront_visits_from_site_analytics.sql',
+      'supabase/migrations_legacy/20260925120000_site_analytics.sql',
+      'supabase/migrations_legacy/20260926100000_storefront_visits_from_site_analytics.sql',
     ]) {
       const sql = leer(archivo)
       expect(sql).not.toMatch(/create policy/i)
       expect(sql).not.toMatch(/ip_address|user_agent/i)
     }
-    expect(leer('supabase/migrations/20260926100000_storefront_visits_from_site_analytics.sql'))
+    expect(leer('supabase/migrations_legacy/20260926100000_storefront_visits_from_site_analytics.sql'))
       .toContain('grant execute on function public.get_storefront_daily_visits(date, date, text) to service_role')
   })
 })

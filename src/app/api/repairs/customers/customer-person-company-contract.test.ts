@@ -13,7 +13,7 @@ describe('repair customer person and company contract', () => {
   })
 
   it('adds the optional company column without replacing existing customer data', () => {
-    const migrationsDirectory = join(process.cwd(), 'supabase', 'migrations')
+    const migrationsDirectory = join(process.cwd(), 'supabase', 'migrations_legacy')
     const migrationName = readdirSync(migrationsDirectory)
       .find((name) => name.endsWith('_add_customer_company_name.sql'))
 

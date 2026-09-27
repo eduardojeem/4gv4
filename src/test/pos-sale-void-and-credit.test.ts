@@ -13,7 +13,7 @@ import { customerIdsWithOutstandingDebt } from '@/lib/credits/customers-with-deb
  */
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
-const MIGRACION = leer('supabase/migrations/20260924090000_void_pos_sale.sql')
+const MIGRACION = leer('supabase/migrations_legacy/20260924090000_void_pos_sale.sql')
 const API_VENTAS = leer('src/app/api/sales/route.ts')
 const API_CLIENTES = leer('src/app/api/customers/route.ts')
 const POS = leer('src/app/dashboard/pos/page.tsx')
@@ -139,7 +139,7 @@ describe('el estado «late» queda documentado', () => {
 })
 
 describe('el POS pudo dejar de vender sin decir por qué', () => {
-  const MIGRACION_PERMISOS = leer('supabase/migrations/20260924120000_grant_pos_sale_to_service_role.sql')
+  const MIGRACION_PERMISOS = leer('supabase/migrations_legacy/20260924120000_grant_pos_sale_to_service_role.sql')
   const API_VENTA = leer('src/app/api/pos/process-sale/route.ts')
 
   it('la función de venta se ejecuta con la clave de servicio, y ahora tiene permiso', () => {
@@ -163,8 +163,8 @@ describe('el POS pudo dejar de vender sin decir por qué', () => {
 })
 
 describe('vender una variante', () => {
-  const V5 = leer('supabase/migrations/20260908010913_pos_variant_sales_atomic.sql')
-  const ARREGLO = leer('supabase/migrations/20260924130000_fix_pos_variant_name_column.sql')
+  const V5 = leer('supabase/migrations_legacy/20260908010913_pos_variant_sales_atomic.sql')
+  const ARREGLO = leer('supabase/migrations_legacy/20260924130000_fix_pos_variant_name_column.sql')
 
   it('copia el nombre desde la columna que existe', () => {
     // `product_variants` no tiene `name`: tiene `variant_name`. Con `v.name`
@@ -181,7 +181,7 @@ describe('vender una variante', () => {
 
   it('las dos funciones nacen con permiso para el servidor', () => {
     // Instalar desde cero no puede repetir el POS sin permisos.
-    const V4 = leer('supabase/migrations/20260816153000_atomic_pos_store_credit.sql')
+    const V4 = leer('supabase/migrations_legacy/20260816153000_atomic_pos_store_credit.sql')
     expect(V4).toContain('to authenticated, service_role;')
     expect(V5).toContain('to authenticated, service_role;')
   })

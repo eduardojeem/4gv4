@@ -11,7 +11,7 @@ const HOOK = leer('src/hooks/use-inventory.ts')
 const PROVEEDORES = leer('src/components/admin/inventory/supplier-management.tsx')
 const CONTROL = leer('src/components/admin/inventory/stock-control.tsx')
 const MOVIMIENTOS = leer('src/components/admin/inventory/stock-movements.tsx')
-const DROP_RPCS = leer('supabase/migrations/20260907140000_drop_unscoped_inventory_rpcs.sql')
+const DROP_RPCS = leer('supabase/migrations_legacy/20260907140000_drop_unscoped_inventory_rpcs.sql')
 
 /**
  * `movement_type` llega con nombres distintos segun quien escriba: `in`/`out`

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('delivery without payment migration', () => {
   it('routes a null payment method through the non-credit closure path', () => {
     const migration = readFileSync(
-      join(process.cwd(), 'supabase', 'migrations', '20260821002838_fix_delivery_without_payment_credit_branch.sql'),
+      join(process.cwd(), 'supabase', 'migrations_legacy', '20260821002838_fix_delivery_without_payment_credit_branch.sql'),
       'utf8'
     ).toLowerCase()
 

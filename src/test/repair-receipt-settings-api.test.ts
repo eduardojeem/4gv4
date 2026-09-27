@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const route = readFileSync(resolve(process.cwd(), 'src/app/api/repairs/receipt-settings/route.ts'), 'utf8')
-const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/20260905120000_repair_receipt_settings.sql'), 'utf8')
+const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations_legacy/20260905120000_repair_receipt_settings.sql'), 'utf8')
 
 describe('repair receipt settings persistence', () => {
   it('scopes reads and writes to the authenticated organization', () => {

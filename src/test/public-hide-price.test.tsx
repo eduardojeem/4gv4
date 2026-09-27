@@ -24,7 +24,7 @@ const CATALOGO = leer('src/lib/api/products-server.ts')
 const FORMULARIO = leer('src/components/dashboard/product-modal.tsx')
 const MODAL_PRECIO = leer('src/components/public/PriceAccessDialog.tsx')
 const AYUDA = leer('src/components/dashboard/products/VisibilityHelpDialog.tsx')
-const MIGRACION = leer('supabase/migrations/20260923090000_products_hide_price.sql')
+const MIGRACION = leer('supabase/migrations_legacy/20260923090000_products_hide_price.sql')
 const API_PUBLICA = leer('src/app/api/public/products/route.ts')
 const INICIO_OFERTAS = leer('src/components/public/inicio/OffersCarousel.tsx')
 

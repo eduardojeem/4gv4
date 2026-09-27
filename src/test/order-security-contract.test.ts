@@ -30,7 +30,7 @@ describe('order security contracts', () => {
   })
 
   it('keeps collections auditable and idempotent in SQL', () => {
-    const migration = read('supabase/migrations/20260903232904_record_customer_order_collections.sql')
+    const migration = read('supabase/migrations_legacy/20260903232904_record_customer_order_collections.sql')
     expect(migration).toContain('payment_reference')
     expect(migration).toContain('idempotency_key')
     expect(migration).toContain('record_customer_order_collection_atomic')

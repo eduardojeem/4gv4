@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(resolve(workspace, path), 'utf8')
 
 describe('admin reviews API contract & security', () => {
   it('limits direct public review reads to non-sensitive columns', () => {
-    const migration = read('supabase/migrations/20260913090000_verified_organization_reviews.sql')
+    const migration = read('supabase/migrations_legacy/20260913090000_verified_organization_reviews.sql')
 
     expect(migration).toContain('REVOKE ALL ON public.organization_reviews FROM anon, authenticated')
     expect(migration).toContain('GRANT SELECT (')

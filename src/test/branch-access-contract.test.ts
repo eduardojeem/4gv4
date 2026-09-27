@@ -62,7 +62,7 @@ describe('user branch access contract', () => {
   })
 
   it('normalizes defaults and backfills operational staff without assignments', () => {
-    const migration = read('supabase/migrations/20260801164000_normalize_user_branch_access.sql')
+    const migration = read('supabase/migrations_legacy/20260801164000_normalize_user_branch_access.sql')
 
     expect(migration).toContain('organizations_without_default')
     expect(migration).toContain("membership.role in ('manager', 'cashier', 'technician', 'seller')")

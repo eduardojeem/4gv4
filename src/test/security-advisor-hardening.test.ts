@@ -6,7 +6,7 @@ const workspace = process.cwd()
 const migration = readFileSync(
   resolve(
     workspace,
-    'supabase/migrations/20260728220234_reconcile_security_advisor_warnings.sql'
+    'supabase/migrations_legacy/20260728220234_reconcile_security_advisor_warnings.sql'
   ),
   'utf8'
 )

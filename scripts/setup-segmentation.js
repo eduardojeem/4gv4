@@ -31,7 +31,7 @@ async function executeMigration() {
     console.log('🚀 Iniciando configuración del sistema de segmentación...')
     
     // Leer el archivo de migración
-    const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', '20241213_customer_segmentation_setup.sql')
+    const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations_legacy', '20241213_customer_segmentation_setup.sql')
     
     if (!fs.existsSync(migrationPath)) {
       throw new Error(`Archivo de migración no encontrado: ${migrationPath}`)

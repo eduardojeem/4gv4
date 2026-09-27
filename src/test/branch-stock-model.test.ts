@@ -6,7 +6,7 @@ import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/l
 import { resolveStockLevel } from '@/lib/inventory/stock-status'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
-const MIGRACION = leer('supabase/migrations/20260907130000_branch_stock_thresholds_and_totals.sql')
+const MIGRACION = leer('supabase/migrations_legacy/20260907130000_branch_stock_thresholds_and_totals.sql')
 const NAV = leer('src/config/admin-navigation.ts')
 const PANTALLA = leer('src/components/admin/inventory/inventory-management.tsx')
 

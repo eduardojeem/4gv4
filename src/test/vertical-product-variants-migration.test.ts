@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations')
+const migrationsDirectory = resolve(process.cwd(), 'supabase/migrations_legacy')
 const migrationName = readdirSync(migrationsDirectory).find((name) =>
   name.endsWith('_vertical_product_variants.sql'),
 )

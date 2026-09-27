@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const migrationPath = resolve(
   process.cwd(),
-  'supabase/migrations/20260811190000_create_finance_foundation.sql',
+  'supabase/migrations_legacy/20260811190000_create_finance_foundation.sql',
 )
 const sql = readFileSync(migrationPath, 'utf8').toLowerCase()
 const normalizedSql = sql.replace(/\s+/g, ' ')

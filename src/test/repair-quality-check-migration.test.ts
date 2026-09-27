@@ -3,12 +3,12 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260913153000_repair_quality_checks.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260913153000_repair_quality_checks.sql'),
   'utf8',
 )
 
 const enumFixMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260913213000_fix_repair_quality_check_status_enum.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260913213000_fix_repair_quality_check_status_enum.sql'),
   'utf8',
 ).toLowerCase()
 

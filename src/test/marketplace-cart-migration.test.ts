@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20260906201031_marketplace_customer_carts.sql'), 'utf8')
+const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations_legacy/20260906201031_marketplace_customer_carts.sql'), 'utf8')
 
 describe('marketplace customer cart migration', () => {
   it('creates the three persistent resources with RLS', () => {

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('customer type database contract', () => {
   it('accepts the wholesale value emitted by customer forms', () => {
     const migration = readFileSync(
-      join(process.cwd(), 'supabase', 'migrations', '20260821002346_allow_wholesale_customer_type.sql'),
+      join(process.cwd(), 'supabase', 'migrations_legacy', '20260821002346_allow_wholesale_customer_type.sql'),
       'utf8'
     ).toLowerCase()
 

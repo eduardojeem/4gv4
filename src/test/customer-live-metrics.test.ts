@@ -29,7 +29,7 @@ describe('nadie mantiene las columnas de métricas del cliente', () => {
         if (entrada.name.endsWith('.sql')) encontrados.push(ruta)
       }
     }
-    recorrer('supabase/migrations')
+    recorrer('supabase/migrations_legacy')
     return encontrados
   }
 

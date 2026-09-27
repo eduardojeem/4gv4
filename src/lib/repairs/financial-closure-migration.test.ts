@@ -3,19 +3,19 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const baseMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260814235814_repair_financial_closure.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260814235814_repair_financial_closure.sql'),
   'utf8',
 )
 const atomicCreditMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260815213000_atomic_repair_credit_payment.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260815213000_atomic_repair_credit_payment.sql'),
   'utf8',
 )
 const legacyBalanceMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260815230000_reconcile_legacy_repair_balances.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260815230000_reconcile_legacy_repair_balances.sql'),
   'utf8',
 )
 const unambiguousRpcMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260815233000_disambiguate_repair_financial_rpc.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260815233000_disambiguate_repair_financial_rpc.sql'),
   'utf8',
 )
 const migration = `${baseMigration}\n${atomicCreditMigration}`

@@ -35,13 +35,13 @@ try {
     alter table customer_store_credits add constraint customer_store_credits_source_type_check check(source_type in ('after_sales','sale','repair','order','manual'));
     create function create_public_order_with_store_credit_atomic(uuid,uuid,jsonb,jsonb,jsonb,uuid,uuid,text,text,text,numeric) returns jsonb language sql as $$ select jsonb_build_object('order_id', gen_random_uuid(), 'customer_id', $2) $$;
   `)
-  const migration = readFileSync(resolve('supabase/migrations/20260903223832_harden_customer_order_lifecycle.sql'), 'utf8')
+  const migration = readFileSync(resolve('supabase/migrations_legacy/20260903223832_harden_customer_order_lifecycle.sql'), 'utf8')
   await db.exec(migration)
   await db.exec(migration)
-  const collectionsMigration = readFileSync(resolve('supabase/migrations/20260903232904_record_customer_order_collections.sql'), 'utf8')
+  const collectionsMigration = readFileSync(resolve('supabase/migrations_legacy/20260903232904_record_customer_order_collections.sql'), 'utf8')
   await db.exec(collectionsMigration)
   await db.exec(collectionsMigration)
-  const variantsMigration = readFileSync(resolve('supabase/migrations/20260903235322_public_order_variant_inventory.sql'), 'utf8')
+  const variantsMigration = readFileSync(resolve('supabase/migrations_legacy/20260903235322_public_order_variant_inventory.sql'), 'utf8')
   await db.exec(variantsMigration)
   await db.exec(variantsMigration)
   const org = '00000000-0000-4000-8000-000000000001'

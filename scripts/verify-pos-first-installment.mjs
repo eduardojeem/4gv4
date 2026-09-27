@@ -21,14 +21,14 @@ create table cash_movements(session_id uuid,type text,amount numeric,reason text
 insert into organization_members values('${org}','${actor}','active','cashier');
 insert into cash_closures values('${session}','${org}','${branch}',null);
 `)
-const original = readFileSync('supabase/migrations/20260805090000_charge_repair_balance_due.sql','utf8')
+const original = readFileSync('supabase/migrations_legacy/20260805090000_charge_repair_balance_due.sql','utf8')
 const functionStart = original.indexOf('create or replace function public.process_pos_sale_atomic_v2(')
 await db.exec(original.slice(functionStart, original.indexOf('$$;', functionStart) + 3))
-await db.exec(readFileSync('supabase/migrations/20260902010235_credit_first_installment_timing.sql','utf8'))
-const paymentMigration = readFileSync('supabase/migrations/20260902014150_pos_collect_first_installment.sql','utf8')
+await db.exec(readFileSync('supabase/migrations_legacy/20260902010235_credit_first_installment_timing.sql','utf8'))
+const paymentMigration = readFileSync('supabase/migrations_legacy/20260902014150_pos_collect_first_installment.sql','utf8')
 await db.exec(paymentMigration)
 await db.exec(paymentMigration)
-const triggerSource = readFileSync('supabase/migrations/20260308010000_harden_credits_rls_and_payments.sql','utf8')
+const triggerSource = readFileSync('supabase/migrations_legacy/20260308010000_harden_credits_rls_and_payments.sql','utf8')
 const triggerStart = triggerSource.indexOf('CREATE OR REPLACE FUNCTION public.apply_installment_payment()')
 await db.exec(triggerSource.slice(triggerStart, triggerSource.indexOf('$$;',triggerStart)+3))
 await db.exec('create trigger apply_payment after insert or update or delete on credit_payments for each row execute function apply_installment_payment();')

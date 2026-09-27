@@ -17,7 +17,7 @@ describe('atomic POS store-credit contract', () => {
 
   it('keeps the sale and ledger debit in one database transaction', () => {
     const migration = readFileSync(
-      resolve(workspace, 'supabase/migrations/20260816153000_atomic_pos_store_credit.sql'),
+      resolve(workspace, 'supabase/migrations_legacy/20260816153000_atomic_pos_store_credit.sql'),
       'utf8'
     )
 

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
  * todo— que no borre filas.
  */
 const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260818120000_plan_downgrade_product_grace.sql'),
+  resolve(process.cwd(), 'supabase/migrations_legacy/20260818120000_plan_downgrade_product_grace.sql'),
   'utf8'
 )
 

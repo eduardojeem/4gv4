@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('POS biweekly installment migration', () => {
   it('updates the persisted POS schedule from 14 to 15 calendar days', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/20260822004143_align_pos_biweekly_credit_to_fifteen_days.sql'),
+      resolve(process.cwd(), 'supabase/migrations_legacy/20260822004143_align_pos_biweekly_credit_to_fifteen_days.sql'),
       'utf8',
     )
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const workspace = process.cwd()
 const migrationPath = resolve(
   workspace,
-  'supabase/migrations/20260811193000_create_payroll_commissions.sql',
+  'supabase/migrations_legacy/20260811193000_create_payroll_commissions.sql',
 )
 const sql = readFileSync(migrationPath, 'utf8').toLowerCase()
 const normalizedSql = sql.replace(/\s+/g, ' ')

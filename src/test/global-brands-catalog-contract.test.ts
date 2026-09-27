@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
-const MIGRACION = leer('supabase/migrations/20260915120000_global_brands_catalog.sql')
+const MIGRACION = leer('supabase/migrations_legacy/20260915120000_global_brands_catalog.sql')
 const API_EMPRESA = leer('src/app/api/brands/route.ts')
 const API_CATALOGO = leer('src/app/api/brands/catalog/route.ts')
 const API_SUPERADMIN = leer('src/app/api/superadmin/global-brands/route.ts')

@@ -12,15 +12,15 @@ const statusRoute = readFileSync(
   'utf8'
 )
 const migration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260729220332_harden_public_order_inventory.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260729220332_harden_public_order_inventory.sql'),
   'utf8'
 )
 const customerLinkMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260802161753_link_public_customers_atomically.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260802161753_link_public_customers_atomically.sql'),
   'utf8'
 )
 const lifecycleMigration = readFileSync(
-  resolve(workspace, 'supabase/migrations/20260903223832_harden_customer_order_lifecycle.sql'),
+  resolve(workspace, 'supabase/migrations_legacy/20260903223832_harden_customer_order_lifecycle.sql'),
   'utf8'
 )
 

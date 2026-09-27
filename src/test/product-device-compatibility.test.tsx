@@ -112,7 +112,7 @@ describe('mostrar y ordenar por celular', () => {
   })
 
   it('la base ordena con la misma regla que la pantalla', () => {
-    const sql = leer('supabase/migrations/20260922120000_products_device_compatibility.sql')
+    const sql = leer('supabase/migrations_legacy/20260922120000_products_device_compatibility.sql')
     expect(sql).toContain("lpad(t.parte[1], 6, '0')")
     expect(leer('src/lib/products/device-compatibility.ts')).toContain("padStart(6, '0')")
   })

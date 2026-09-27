@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Database, Copy, Check } from 'lucide-react'
 
 const MIGRATIONS = [
-  'supabase/migrations/20260827090000_create_loyalty_and_raffles.sql',
-  'supabase/migrations/20260827090100_loyalty_and_raffles_operations.sql',
+  'supabase/migrations_legacy/20260827090000_create_loyalty_and_raffles.sql',
+  'supabase/migrations_legacy/20260827090100_loyalty_and_raffles_operations.sql',
 ]
 
 /**
