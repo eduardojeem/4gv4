@@ -25,8 +25,12 @@ describe('admin reports resource usage', () => {
   })
 
   it('subscribes to realtime changes only for the active report', () => {
-    expect(source).toContain("...(needsProductData ? ['sale_items'] : [])")
-    expect(source).toContain("...(needsRepairData ? ['repairs'] : [])")
     expect(source).toContain("...(activeTab === 'credits'")
+  })
+
+  it('only subscribes to tables published for realtime', () => {
+    expect(source).not.toContain("['sale_items']")
+    expect(source).not.toContain("['repairs']")
+    expect(source).not.toMatch(/const tables = \[\s*'sales'/)
   })
 })

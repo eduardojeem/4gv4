@@ -169,47 +169,11 @@ export function useUsersOptimized({
         }
     }, [page, pageSize, search, roleFilter, statusFilter, dateRange, lastLoginFilter, supabase])
 
-    // Optimized real-time subscription with debounce
+    // Sin Realtime: profiles no está en la publicación supabase_realtime.
     useEffect(() => {
         fetchUsers()
         fetchStats()
-
-        let debounceTimer: NodeJS.Timeout
-
-        const channel = supabase
-            .channel('profiles-changes-optimized')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'profiles'
-                },
-                (payload) => {
-                    console.log('Realtime update:', payload)
-                    
-                    // Debounce updates to avoid excessive refreshes
-                    clearTimeout(debounceTimer)
-                    debounceTimer = setTimeout(() => {
-                        // Only update if the change affects current view
-                        const shouldUpdate = 
-                            !roleFilter || roleFilter === 'all' || 
-                            (payload.new as { role?: string } | null)?.role === roleFilter
-                        
-                        if (shouldUpdate) {
-                            fetchUsers()
-                            fetchStats()
-                        }
-                    }, 1000) // 1 second debounce
-                }
-            )
-            .subscribe()
-
-        return () => {
-            clearTimeout(debounceTimer)
-            supabase.removeChannel(channel)
-        }
-    }, [fetchUsers, fetchStats, supabase, roleFilter])
+    }, [fetchUsers, fetchStats])
 
     const createUser = async (userData: Partial<SupabaseUser>) => {
         try {

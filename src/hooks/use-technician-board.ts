@@ -75,26 +75,9 @@ export function useTechnicianBoard() {
         }
     }, [])
 
+    // Sin Realtime: repairs no está en la publicación supabase_realtime.
     useEffect(() => {
         fetchRepairs()
-
-        if (!isDemoMode()) {
-            const supabase = createSupabaseClient()
-            const channel = supabase
-                .channel('repairs-tech-board')
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'repairs' },
-                    () => {
-                        fetchRepairs()
-                    }
-                )
-                .subscribe()
-
-            return () => {
-                void supabase.removeChannel(channel)
-            }
-        }
     }, [fetchRepairs])
 
     // Initialize Kanban Order

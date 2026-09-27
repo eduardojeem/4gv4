@@ -117,9 +117,9 @@ export function RecentActivity() {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       
+      // Solo tablas publicadas en supabase_realtime: un enlace a una tabla no
+      // publicada hace fallar el canal completo.
       channel = supabase.channel('profile-activity')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, () => load())
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'repairs' }, () => load())
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, () => load())
         .subscribe()
     }

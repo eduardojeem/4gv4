@@ -108,7 +108,9 @@ export function usePOSProducts() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [realTimeEnabled, setRealTimeEnabled] = useState(true)
+  // Desactivado por defecto: products y product_movements no están en la
+  // publicación supabase_realtime, así que el canal solo generaba errores.
+  const [realTimeEnabled, setRealTimeEnabled] = useState(false)
 
   const pendingSaleAttempt = useRef<{ signature: string; idempotencyKey: string } | null>(null)
 

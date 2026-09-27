@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useBranch } from '@/contexts/branch-context'
@@ -121,7 +120,6 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const pathname = usePathname()
     const shouldLoadRepairs = pathname.startsWith('/dashboard/repairs') || pathname.startsWith('/dashboard/technician')
 
-    const supabase = useMemo(() => createClient(), [])
 
     const fetchRepairsWithCustomerFallback = useCallback(async () => {
         // La API topea pageSize en 100 y solo se pedía la página 1: todo lo
@@ -582,33 +580,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         fetchRepairs()
     }, [fetchRepairs, shouldLoadRepairs])
 
-    // Supabase realtime subscription
-    useEffect(() => {
-        if (!shouldLoadRepairs) return
-        const channel = supabase
-            .channel(`repairs_changes_${selectedBranchId || 'all'}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'repairs',
-                    ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
-                },
-                async (payload) => {
-                    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                        await fetchRepairs()
-                    } else if (payload.eventType === 'DELETE') {
-                        setRepairs(prev => prev.filter(repair => repair.id !== payload.old.id))
-                    }
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [fetchRepairs, selectedBranchId, shouldLoadRepairs, supabase])
+    // Sin suscripción Realtime: repairs no está en la publicación
+    // supabase_realtime; las mutaciones de este contexto ya refrescan la lista.
 
     // Create context value object
     const contextValue = useMemo<RepairsContextValue>(() => ({

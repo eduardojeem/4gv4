@@ -234,54 +234,11 @@ export function useUsersSupabase({
     }
   }, [])
 
+  // Sin Realtime: profiles y organization_members no están en la
+  // publicación supabase_realtime.
   useEffect(() => {
     void fetchUsers()
-
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-    const channel = supabase
-      .channel('admin-users-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-        },
-        () => {
-          if (debounceTimer) {
-            clearTimeout(debounceTimer)
-          }
-          debounceTimer = setTimeout(() => {
-            void fetchUsers()
-          }, 250)
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'organization_members',
-        },
-        () => {
-          if (debounceTimer) {
-            clearTimeout(debounceTimer)
-          }
-          debounceTimer = setTimeout(() => {
-            void fetchUsers()
-          }, 250)
-        }
-      )
-      .subscribe()
-
-    return () => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer)
-      }
-      supabase.removeChannel(channel)
-    }
-  }, [fetchUsers, supabase])
+  }, [fetchUsers])
 
   const createUser = async (userData: Partial<SupabaseUser>) => {
     try {

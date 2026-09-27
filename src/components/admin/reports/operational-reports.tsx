@@ -383,11 +383,10 @@ export default function OperationalReports() {
       }, 1000)
     }
 
+    // Solo tablas publicadas en supabase_realtime; sales, sale_items y
+    // repairs no lo están y sus canales fallaban siempre.
     const tables = [
-      'sales',
       'customers',
-      ...(needsProductData ? ['sale_items'] : []),
-      ...(needsRepairData ? ['repairs'] : []),
       ...(activeTab === 'credits' && hasCredits ? ['customer_credits', 'credit_installments', 'credit_payments'] : []),
     ]
     const childTablesWithoutOrganizationId = new Set(['sale_items', 'credit_installments', 'credit_payments'])
@@ -413,7 +412,7 @@ export default function OperationalReports() {
       if (timeout) clearTimeout(timeout)
       channels.forEach(channel => supabase.removeChannel(channel))
     }
-  }, [activeTab, hasCredits, needsProductData, needsRepairData, organization?.id])
+  }, [activeTab, hasCredits, organization?.id])
 
   // Cargar datos reales de Supabase
   useEffect(() => {

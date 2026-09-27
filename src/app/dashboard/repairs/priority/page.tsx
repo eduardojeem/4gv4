@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RepairOrder, type RepairStatus } from "@/types/repairs";
 import { calculatePriorityScore, sortRepairsByPriority } from "@/services/repair-priority";
-import { createClient } from "@/lib/supabase/client";
 import { branchHeaders } from "@/lib/branches/client";
 import { ACTIVE_REPAIR_STATUSES } from "@/lib/constants/repair-status";
 
@@ -90,20 +89,8 @@ export default function RepairsPriorityPage() {
       setLoading(false);
     };
 
+    // Sin Realtime: repairs no está en la publicación supabase_realtime.
     fetchRepairs();
-
-    // Configurar suscripción en tiempo real
-    const supabase = createClient();
-    const channel = supabase
-      .channel('repairs-priority')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
-        fetchRepairs();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   if (loading && repairs.length === 0) {

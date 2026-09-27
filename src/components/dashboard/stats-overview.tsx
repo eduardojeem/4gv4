@@ -243,27 +243,8 @@ export function StatsOverview() {
     }
     
     fetchStats()
-    
-    // Set up realtime subscription for updates
-    const setupRealtime = async () => {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      
-      const channel = supabase.channel('stats_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchStats())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => fetchStats())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchStats())
-        .subscribe()
-        
-      return () => {
-        supabase.removeChannel(channel)
-      }
-    }
-    
-    const cleanupPromise = setupRealtime()
-    return () => {
-      cleanupPromise.then(cleanup => cleanup && cleanup())
-    }
+    // Sin suscripción Realtime: sales, repairs y products no están en la
+    // publicación supabase_realtime y el canal fallaba siempre.
   }, [])
 
   return (
@@ -493,7 +474,6 @@ export function RecentActivity() {
       const { config } = await import('@/lib/config')
       if (!config.supabase.isConfigured) return
       const { createClient } = await import('@/lib/supabase/client')
-      const { formatCurrency } = await import('@/lib/currency')
       const supabase = createClient()
       if (!organization?.id) return
       
@@ -510,41 +490,10 @@ export function RecentActivity() {
         return `Hace ${days} día${days > 1 ? 's' : ''}`
       }
       
+      // Solo customers está publicada en supabase_realtime; ventas y
+      // reparaciones se ven al recargar la actividad.
       const channel = supabase
         .channel('dashboard-activity')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
-          const row = (payload as { new: SaleRow }).new
-          const status: 'completed' | 'in_progress' | 'updated' =
-            isCompletedSaleStatus(row.status) ? 'completed' : isPendingSaleStatus(row.status) ? 'in_progress' : 'updated'
-          const item = {
-            id: `sale:${row.id}`,
-            type: 'sale' as const,
-            description: 'Venta',
-            amount: formatCurrency(Number(row.total ?? 0) || 0),
-            time: toTime(row.created_at),
-            createdAt: new Date(row.created_at).getTime(),
-            status,
-            icon: <ShoppingCart className="h-4 w-4" />
-          }
-          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
-        })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'repairs', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
-          const row = (payload as { new: RepairRow }).new
-          const label = [row.device_brand || '', row.device_model || ''].filter(Boolean).join(' ')
-          const status: 'completed' | 'in_progress' | 'updated' =
-            row.status === 'listo' || row.status === 'entregado' ? 'completed' : row.status === 'reparacion' ? 'in_progress' : 'updated'
-          const item = {
-            id: `repair:${row.id}`,
-            type: 'repair' as const,
-            description: label ? `Reparación - ${label}` : 'Reparación',
-            amount: row.final_cost !== null && row.final_cost !== undefined ? formatCurrency(Number(row.final_cost ?? 0) || 0) : undefined,
-            time: toTime(row.created_at),
-            createdAt: new Date(row.created_at).getTime(),
-            status,
-            icon: <Wrench className="h-4 w-4" />
-          }
-          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
-        })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
           const row = (payload as { new: CustomerRow }).new
           const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()

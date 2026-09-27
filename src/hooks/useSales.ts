@@ -264,30 +264,10 @@ export function useSales() {
         }
     }, [fetchSales, organization?.id, selectedBranchId, supabase])
 
-    // Real-time subscription
+    // Sin Realtime: sales no está en la publicación supabase_realtime.
     useEffect(() => {
         fetchSales()
-
-        const channel = supabase
-            .channel('sales-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'sales',
-                    filter: organization?.id ? `organization_id=eq.${organization.id}` : 'organization_id=eq.__none__'
-                },
-                () => {
-                    fetchSales()
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [fetchSales, organization?.id, selectedBranchId, supabase])
+    }, [fetchSales])
 
     return {
         sales,

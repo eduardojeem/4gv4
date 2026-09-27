@@ -198,29 +198,10 @@ export function useInventory() {
         }
     }, [organization?.id, fetchProducts, supabase])
 
-    // Real-time subscription
+    // Sin Realtime: products no está en la publicación supabase_realtime.
     useEffect(() => {
         fetchProducts()
-
-        const channel = supabase
-            .channel('inventory-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'products'
-                },
-                () => {
-                    fetchProducts()
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [fetchProducts, supabase])
+    }, [fetchProducts])
 
     return {
         products,

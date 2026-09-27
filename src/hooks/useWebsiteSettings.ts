@@ -1,19 +1,11 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
-import type { ScopedMutator } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
-import { createSupabaseClient } from '@/lib/supabase/client'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { getHydrationSafeWebsiteSettingsState } from '@/lib/website/hydration-state'
 
 type FetchError = Error & { status?: number }
-type RealtimeClient = ReturnType<typeof createSupabaseClient>
-type RealtimeChannel = ReturnType<RealtimeClient['channel']>
-
-let publicRealtimeRefCount = 0
-let publicRealtimeSupabase: RealtimeClient | null = null
-let publicRealtimeChannel: RealtimeChannel | null = null
 
 const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
 const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
@@ -21,47 +13,6 @@ const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
 const subscribeToHydration = () => () => undefined
 const getClientHydrationSnapshot = () => true
 const getServerHydrationSnapshot = () => false
-
-/**
- * La app envuelve todo en `SWRConfig` con un proveedor de caché propio
- * (`PersistentCache`). Con un proveedor propio, el `mutate` importado de 'swr'
- * escribe en la caché por defecto, que no es la que leen los componentes: la
- * pantalla no se entera. El ligado a la caché real sólo se obtiene desde un
- * componente, así que el canal de realtime —que vive fuera de React— se lo
- * guarda acá.
- */
-let publicRealtimeMutate: ScopedMutator | null = null
-let publicRealtimeKey: string = WEBSITE_SETTINGS_CACHE_KEY
-
-function ensurePublicWebsiteSettingsRealtime() {
-  if (publicRealtimeChannel) return
-
-  if (!publicRealtimeSupabase) {
-    publicRealtimeSupabase = createSupabaseClient()
-  }
-
-  publicRealtimeChannel = publicRealtimeSupabase
-    .channel('realtime:website_settings_public')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'website_settings'
-      },
-      async () => {
-        await publicRealtimeMutate?.(publicRealtimeKey)
-      }
-    )
-    .subscribe()
-}
-
-function releasePublicWebsiteSettingsRealtime() {
-  if (!publicRealtimeSupabase || !publicRealtimeChannel) return
-
-  publicRealtimeSupabase.removeChannel(publicRealtimeChannel)
-  publicRealtimeChannel = null
-}
 
 // Fetcher estable a nivel de módulo — la URL se construye desde la key de SWR,
 // así todos los componentes comparten la misma referencia de función.
@@ -90,26 +41,9 @@ export function useWebsiteSettings() {
 
   const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, publicSettingsFetcher)
 
-  const { mutate: mutateCache } = useSWRConfig()
-
-  // Share a single realtime subscription across all consumers of this hook.
-  useEffect(() => {
-    publicRealtimeMutate = mutateCache
-    publicRealtimeKey = cacheKey
-    publicRealtimeRefCount += 1
-    try {
-      ensurePublicWebsiteSettingsRealtime()
-    } catch {
-      // Supabase not configured; skip realtime
-    }
-
-    return () => {
-      publicRealtimeRefCount = Math.max(0, publicRealtimeRefCount - 1)
-      if (publicRealtimeRefCount === 0) {
-        releasePublicWebsiteSettingsRealtime()
-      }
-    }
-  }, [mutateCache, cacheKey])
+  // Sin Realtime: website_settings no está en la publicación
+  // supabase_realtime, y cada visitante de la tienda abría un canal que
+  // fallaba. Los cambios se ven al revalidar SWR.
 
   const hydrationSafeState = getHydrationSafeWebsiteSettingsState(isHydrated, data, isLoading)
 
