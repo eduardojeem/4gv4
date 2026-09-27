@@ -38,6 +38,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { logAndTranslateError } from '@/lib/error-translator'
 import { logger } from '@/lib/logger'
+import { loadDashboardProfile, saveDashboardProfile } from '@/lib/profile/dashboard-profile-client'
+import { writeProfilePreferencesCache } from '@/lib/profile/profile-preferences-cache'
 
 export const socialLinksSchema = z.object({
   linkedin: z.string().nullish().or(z.literal('')),
@@ -70,7 +72,7 @@ export type NotificationKey = 'notifications' | 'emailNotifications' | 'pushNoti
 export interface ProfilePreferences {
   notifications: boolean
   compactMode: boolean
-  language: string
+  language: 'es' | 'en' | 'pt'
   emailNotifications: boolean
   pushNotifications: boolean
   marketingEmails: boolean
@@ -243,6 +245,32 @@ export default function UserProfilePage() {
           }
         }
 
+        try {
+          const remote = await loadDashboardProfile()
+          const loadedProfile: UserProfile = {
+            name: remote.fullName,
+            email: remote.email,
+            phone: remote.phone,
+            avatarUrl: remote.avatarUrl,
+            department: remote.department,
+            jobTitle: remote.jobTitle,
+            location: remote.location,
+            bio: remote.bio,
+            website: remote.website,
+            timezone: remote.timezone,
+            socialLinks: remote.socialLinks,
+          }
+          setProfile(loadedProfile)
+          setInitialProfile(loadedProfile)
+          setPrefs(remote.preferences)
+          setInitialPrefs(remote.preferences)
+          setRole(remote.role)
+          writeProfilePreferencesCache(user.id, remote.preferences)
+          return { preferences: remote.preferences }
+        } catch (apiError) {
+          logger.warn('API de perfil no disponible; usando lectura de compatibilidad', apiError)
+        }
+
         if (!config.supabase.isConfigured) {
           setProfile(baseProfile)
           setInitialProfile(baseProfile)
@@ -343,28 +371,16 @@ export default function UserProfilePage() {
       }
     }
 
-    // loadPrefs: lee primero del JSONB profiles.preferences (vía la RPC ya ejecutada),
-    // con localStorage como caché offline. Si hay datos de Supabase los usa; si no,
-    // intenta localStorage; si tampoco hay, usa DEFAULT_PREFS.
+    // Legacy fallback: only the database row is authoritative. The current API path
+    // already hydrates both state and the user-scoped offline cache.
     const loadPrefsFromRow = (profileRow: Record<string, unknown> | null) => {
       try {
-        // 1. Intentar desde la columna preferences de la BD
         const dbPrefs = profileRow?.preferences as Record<string, unknown> | null | undefined
         if (dbPrefs && typeof dbPrefs === 'object' && Object.keys(dbPrefs).length > 0) {
           const merged = { ...DEFAULT_PREFS, ...dbPrefs }
           setPrefs(merged as ProfilePreferences)
           setInitialPrefs(merged as ProfilePreferences)
-          // Sincronizar cache local
-          localStorage.setItem('profile-preferences', JSON.stringify(merged))
-          return
         }
-        // 2. Fallback a localStorage (para usuarios que ya tenían datos guardados)
-        const raw = localStorage.getItem('profile-preferences')
-        if (!raw) return
-        const parsed = JSON.parse(raw) as Record<string, unknown>
-        const merged = { ...DEFAULT_PREFS, ...parsed }
-        setPrefs(merged as ProfilePreferences)
-        setInitialPrefs(merged as ProfilePreferences)
       } catch {
         // no-op — defaults ya aplicados
       }
@@ -392,28 +408,6 @@ export default function UserProfilePage() {
     }
   }, [profile])
 
-  const savePrefs = useCallback(async (): Promise<boolean> => {
-    try {
-      // 1. Persistir en localStorage como caché offline rápido
-      localStorage.setItem('profile-preferences', JSON.stringify(prefs))
-      setInitialPrefs(prefs)
-
-      // 2. Persistir en Supabase para que sea portable entre dispositivos
-      if (userId && config.supabase.isConfigured) {
-        const { error: upsertError } = await supabase
-          .from('profiles')
-          .upsert({ id: userId, preferences: prefs, updated_at: new Date().toISOString() })
-        if (upsertError) {
-          // No es crítico: localStorage ya tiene los datos. Solo loguear.
-          logger.warn('No se pudieron guardar las preferencias en la nube:', upsertError)
-        }
-      }
-      return true
-    } catch {
-      return false
-    }
-  }, [prefs, userId, supabase])
-
   const handleUpdateProfile = useCallback(async (): Promise<boolean> => {
     if (!userId) {
       toast.error('No se pudo identificar al usuario. Recarga la pagina.')
@@ -439,61 +433,47 @@ export default function UserProfilePage() {
     }
 
     try {
-      const payload = {
-        email: normalizedProfile.email,
-        full_name: normalizedProfile.name,
-        avatar_url: normalizedProfile.avatarUrl,
-        phone: normalizedProfile.phone,
-        department: normalizedProfile.department,
-        job_title: normalizedProfile.jobTitle,
-        location: normalizedProfile.location,
-        bio: normalizedProfile.bio,
-        website: normalizedProfile.website,
-        timezone: normalizedProfile.timezone,
-        social_links: normalizedProfile.socialLinks,
-        updated_at: new Date().toISOString()
+      const result = await saveDashboardProfile({
+        fullName: normalizedProfile.name,
+        avatarUrl: normalizedProfile.avatarUrl || '',
+        phone: normalizedProfile.phone || '',
+        department: normalizedProfile.department || '',
+        jobTitle: normalizedProfile.jobTitle || '',
+        location: normalizedProfile.location || '',
+        bio: normalizedProfile.bio || '',
+        website: normalizedProfile.website || '',
+        timezone: normalizedProfile.timezone || 'America/Asuncion',
+        socialLinks: normalizedProfile.socialLinks ?? {},
+        ...(isDirtyPrefs ? { preferences: prefs } : {}),
+      })
+
+      const authoritative: UserProfile = {
+        name: result.profile.fullName,
+        email: result.profile.email,
+        phone: result.profile.phone,
+        avatarUrl: result.profile.avatarUrl,
+        department: result.profile.department,
+        jobTitle: result.profile.jobTitle,
+        location: result.profile.location,
+        bio: result.profile.bio,
+        website: result.profile.website,
+        timezone: result.profile.timezone,
+        socialLinks: result.profile.socialLinks,
       }
-
-      const { error: upsertError } = await supabase
-        .from('profiles')
-        .upsert({ id: userId, ...payload })
-
-      if (upsertError) throw upsertError
-
-      if (config.supabase.isConfigured && 'updateUser' in supabase.auth) {
-        const hasAuthChanges = 
-           normalizedProfile.name !== initialProfile.name ||
-           normalizedProfile.phone !== initialProfile.phone ||
-           normalizedProfile.avatarUrl !== initialProfile.avatarUrl;
-
-        if (hasAuthChanges) {
-            supabase.auth.updateUser({
-              data: {
-                full_name: normalizedProfile.name,
-                phone: normalizedProfile.phone,
-                avatar_url: normalizedProfile.avatarUrl
-              }
-            }).then(({ error }) => {
-              if (error) {
-                console.warn('Error actualizando metadatos de Auth (no crítico):', error)
-              } else {
-                console.log('Metadatos de Auth actualizados en segundo plano')
-              }
-            }).catch(err => {
-                 console.warn('Error en llamada a updateUser:', err)
-            })
-        }
-      }
-
-      setInitialProfile(normalizedProfile)
-      refreshUser().catch(err => console.warn('Error refreshing auth user:', err))
+      setProfile(authoritative)
+      setInitialProfile(authoritative)
+      setPrefs(result.profile.preferences)
+      setInitialPrefs(result.profile.preferences)
+      writeProfilePreferencesCache(userId, result.profile.preferences)
+      if (result.partial) toast.warning('Perfil guardado; recarga para completar la sincronización de sesión')
+      await refreshUser().catch(err => logger.warn('Error refreshing auth user:', err))
       return true
     } catch (error: unknown) {
       const userMessage = logAndTranslateError(error, 'Profile Update')
       toast.error(userMessage)
       return false
     }
-  }, [profile, userId, supabase, validate, initialProfile, refreshUser])
+  }, [profile, userId, validate, isDirtyPrefs, prefs, refreshUser])
 
   const saveAll = useCallback(async () => {
     setLoading(true)
@@ -508,20 +488,23 @@ export default function UserProfilePage() {
         return
       }
 
-      let profileSaved = false
-      let prefsSaved = false
-
-      if (isDirty) profileSaved = await handleUpdateProfile()
-      if (isDirtyPrefs) prefsSaved = await savePrefs()
-
-      const allOk = (!isDirty || profileSaved) && (!isDirtyPrefs || prefsSaved)
-      if (allOk) toast.success('Configuracion guardada correctamente')
-      else if (profileSaved || prefsSaved) toast.warning('Se guardo parcialmente la configuracion')
+      const saved = await handleUpdateProfile()
+      if (saved) toast.success('Configuración guardada correctamente')
       else toast.error('No se pudieron guardar los cambios')
     } finally {
       setLoading(false)
     }
-  }, [handleUpdateProfile, hasPendingChanges, isDirty, isDirtyPrefs, savePrefs, validate])
+  }, [handleUpdateProfile, hasPendingChanges, isDirty, validate])
+
+  useEffect(() => {
+    if (!hasPendingChanges) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [hasPendingChanges])
 
   const handleLogout = async () => {
     setLoading(true)
@@ -592,7 +575,7 @@ export default function UserProfilePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 self-start md:self-auto">
+          <div className="hidden items-center gap-2.5 self-start md:flex md:self-auto">
             {hasPendingChanges && (
               <>
                 <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800 animate-pulse">
@@ -779,21 +762,16 @@ export default function UserProfilePage() {
                 setInitialProfile((p) => ({ ...p, avatarUrl: url }))
                 refreshUser().catch(err => console.warn('Error refreshing auth user:', err))
               }}
-              onSave={saveAll}
-              isSaving={loading}
-              isDirty={isDirty}
             />
           )}
 
           {activeSection === 'preferences' && (
             <DashboardPreferencesForm 
               prefs={prefs}
-              setPrefs={setPrefs}
               profile={profile}
               setProfile={setProfile}
-              onSave={saveAll}
-              isSaving={loading}
-              isDirty={isDirtyPrefs}
+              isDirty={isDirtyPrefs || isDirty}
+              isSynced={!hasPendingChanges}
             />
           )}
 
@@ -805,7 +783,7 @@ export default function UserProfilePage() {
 
       {/* Floating Bottom Quick Save Bar */}
       {hasPendingChanges && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900/95 text-white dark:bg-slate-800/95 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-2xl border border-slate-700/60 animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900/95 text-white dark:bg-slate-800/95 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-2xl border border-slate-700/60 animate-in fade-in slide-in-from-bottom-5 duration-200 md:hidden">
           <div className="flex items-center gap-2 pr-2 border-r border-slate-700/80">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>

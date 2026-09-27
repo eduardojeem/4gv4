@@ -95,7 +95,7 @@ export function DashboardProfileForm({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <div id="profile-avatar" className="flex flex-col items-center sm:items-start flex-shrink-0">
+            <div id="profile-avatar" tabIndex={-1} className="flex flex-col items-center sm:items-start flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg">
               <AvatarUpload
                 currentAvatarUrl={profile.avatarUrl}
                 userName={profile.name}

@@ -1,61 +1,21 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { AlertCircle, ArrowLeft, MessageCircle, Settings, Share2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Settings, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProfileHeader } from '@/components/public/ProfileHeader'
 import { UserStats } from '@/components/public/UserStats'
 import { SocialLinks, SocialLink } from '@/components/public/SocialLinks'
 import { ContentGrid } from '@/components/public/ContentGrid'
-import { ContactForm } from '@/components/public/ContactForm'
+import { toast } from 'sonner'
+import type { PublicProfileData } from '@/lib/profile/public-profile'
 import '@/styles/profile-accessibility.css'
 
-export type PublicProfileData = {
-  profile: {
-    username: string
-    display_name: string
-    title?: string | null
-    bio?: string | null
-    location?: string | null
-    avatar_url?: string | null
-    updated_at: string
-  }
-  socialLinks: Array<{
-    id: string
-    platform: string
-    url: string
-    username?: string | null
-    is_verified: boolean
-  }>
-  stats: {
-    followers_count: number
-    following_count: number
-    posts_count: number
-    projects_count: number
-    profile_views?: number
-    total_likes?: number
-  }
-  content: Array<{
-    id: string
-    title: string
-    description?: string | null
-    image_url?: string | null
-    category?: string | null
-    type: 'post' | 'project'
-    date: string
-    views?: number | null
-    likes?: number | null
-    comments?: number | null
-    link?: string | null
-    tags?: string[] | null
-  }>
-}
+export type { PublicProfileData } from '@/lib/profile/public-profile'
 
 export function PublicProfileClient({ data, isOwnProfile }: { data: PublicProfileData; isOwnProfile: boolean }) {
-  const [showContactForm, setShowContactForm] = useState(false)
-
   const profileData = {
     username: data.profile.username,
     displayName: data.profile.display_name,
@@ -64,7 +24,7 @@ export function PublicProfileClient({ data, isOwnProfile }: { data: PublicProfil
     location: data.profile.location ?? undefined,
     avatarUrl: data.profile.avatar_url ?? undefined,
     email: '',
-    isVerified: true,
+    isVerified: data.profile.verified,
   }
 
   const statsData = {
@@ -98,6 +58,20 @@ export function PublicProfileClient({ data, isOwnProfile }: { data: PublicProfil
     tags: item.tags ?? undefined,
   }))
 
+  const handleShare = async () => {
+    const shareData = { title: profileData.displayName, text: `Perfil de ${profileData.displayName}`, url: window.location.href }
+    try {
+      if (navigator.share) await navigator.share(shareData)
+      else {
+        await navigator.clipboard.writeText(shareData.url)
+        toast.success('Enlace copiado')
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      toast.error('No se pudo compartir el perfil')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-blue-950">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -121,7 +95,7 @@ export function PublicProfileClient({ data, isOwnProfile }: { data: PublicProfil
               </Button>
 
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="sm" onClick={handleShare}>
                   <Share2 className="h-4 w-4" />
                   Compartir
                 </Button>
@@ -183,31 +157,6 @@ export function PublicProfileClient({ data, isOwnProfile }: { data: PublicProfil
             />
           )}
 
-          <div>
-            {!showContactForm ? (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">¿Interesado en colaborar?</h2>
-                <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-                  Ponte en contacto con {profileData.displayName} para discutir oportunidades de colaboración, proyectos o simplemente para conectar.
-                </p>
-                <Button
-                  size="lg"
-                  onClick={() => setShowContactForm(true)}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                >
-                  <MessageCircle className="mr-2 h-5 w-5" />
-                  Contactar
-                </Button>
-              </motion.div>
-            ) : (
-              <ContactForm
-                recipientName={profileData.displayName}
-                recipientEmail={profileData.displayName}
-                onSuccess={() => setShowContactForm(false)}
-                className="max-w-4xl mx-auto"
-              />
-            )}
-          </div>
         </main>
 
         <footer className="border-t border-slate-200 dark:border-slate-800 mt-16">
