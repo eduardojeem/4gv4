@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { adminNavItems } from '@/config/admin-navigation'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { resolveStockLevel } from '@/lib/inventory/stock-status'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const MIGRACION = leer('supabase/migrations_legacy/20260907130000_branch_stock_thresholds_and_totals.sql')
-const NAV = leer('src/config/admin-navigation.ts')
 const PANTALLA = leer('src/components/admin/inventory/inventory-management.tsx')
 
 /**
@@ -120,8 +120,7 @@ describe('el menu pide el permiso que la pantalla necesita', () => {
   it('inventario exige products.read, como /api/products', () => {
     // `inventory.read` se satisface tambien con `inventory.stock.manage`: quien
     // tuviera solo ese veia la seccion y encontraba el catalogo vacio.
-    const bloque = NAV.slice(NAV.indexOf("key: 'inventory'"), NAV.indexOf("key: 'reports'"))
-    expect(bloque).toContain("permissions: ['products.read']")
-    expect(bloque).not.toContain("permissions: ['inventory.read']")
+    const inventario = adminNavItems.find((item) => item.key === 'inventory')
+    expect(inventario?.permissions).toEqual(['products.read'])
   })
 })

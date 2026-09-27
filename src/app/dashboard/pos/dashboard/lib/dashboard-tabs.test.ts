@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { dashboardNavGroups } from '@/config/dashboard-navigation'
+
 import {
   availablePosDashboardTabs,
   resolveActiveTab,
@@ -36,8 +38,9 @@ describe('las pestañas dependen de los módulos de la organización', () => {
 
   it('usa la misma regla que el menú lateral para Reparaciones', () => {
     // Si el menu oculta Reparaciones, el dashboard tampoco puede mostrarla.
-    const sidebar = leer('src/components/dashboard/sidebar.tsx')
-    expect(sidebar).toContain("href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read', requiredModule: 'repairs'")
+    const repairs = dashboardNavGroups.flatMap((group) => group.items).find((item) => item.href === '/dashboard/repairs')
+    expect(repairs).toMatchObject({ permission: 'repairs.read', module: 'repairs' })
+    expect(leer('src/config/dashboard-navigation.ts')).toContain('isNavigationModuleAvailable(item.module, effectiveModules)')
     expect(leer('src/app/dashboard/pos/dashboard/lib/dashboard-tabs.ts')).toContain('isNavigationModuleAvailable(tab.requiredModule, effectiveModules)')
   })
 })

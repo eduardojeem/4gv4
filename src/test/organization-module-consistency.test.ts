@@ -2,12 +2,16 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { dashboardNavGroups } from '@/config/dashboard-navigation'
+
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
 describe('organization module consistency', () => {
   it('binds orders navigation, page and API routes to the orders module', () => {
-    expect(read('src/components/dashboard/sidebar.tsx')).toContain("href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read', requiredModule: 'orders'")
-    expect(read('src/components/dashboard/mobile-nav.tsx')).toContain("href: '/dashboard/orders', icon: ShoppingBag, requiredModule: 'orders'")
+    const orders = dashboardNavGroups.flatMap((group) => group.items).find((item) => item.href === '/dashboard/orders')
+    expect(orders).toMatchObject({ permission: 'orders.read', module: 'orders' })
+    expect(read('src/components/dashboard/sidebar.tsx')).toContain('filterDashboardNavGroups')
+    expect(read('src/components/dashboard/mobile-nav.tsx')).toContain('filterDashboardNavGroups')
     expect(read('src/app/dashboard/orders/layout.tsx')).toContain('<OrganizationModuleGate module="orders">')
 
     const routes = [
