@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { REPAIR_IMAGE_BUCKET } from '@/lib/repairs/repair-image-storage'
 
 /**
  * Utility functions for Supabase storage operations with proper error handling
@@ -14,7 +15,7 @@ export const REQUIRED_BUCKETS: StorageBucket[] = [
   {
     name: 'repair-images',
     description: 'Images for repair documentation',
-    public: true
+    public: false
   },
   {
     name: 'product-images', 
@@ -52,6 +53,8 @@ export async function checkBucketExists(bucketName: string): Promise<boolean> {
  * Get public URL for a file with error handling
  */
 export function getPublicUrl(bucketName: string, filePath: string): string {
+  if (bucketName === REPAIR_IMAGE_BUCKET) return ''
+
   try {
     const supabase = createClient()
     const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath)
@@ -70,8 +73,38 @@ export async function uploadFile(
   filePath: string, 
   file: File,
   options?: { upsert?: boolean }
-): Promise<{ success: boolean; url?: string; error?: string }> {
+): Promise<{ success: boolean; url?: string; path?: string; error?: string }> {
+  const uploadThroughServer = async () => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('bucket', bucketName)
+    formData.append('path', filePath)
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    })
+    const result = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: result?.error || 'No se pudo subir el archivo.',
+      }
+    }
+
+    return {
+      success: true,
+      url: typeof result?.url === 'string' ? result.url : undefined,
+      path: typeof result?.path === 'string' ? result.path : undefined,
+    }
+  }
+
   try {
+    if (bucketName === REPAIR_IMAGE_BUCKET) {
+      return uploadThroughServer()
+    }
+
     const supabase = createClient()
     
     // Check if bucket exists first
@@ -93,29 +126,8 @@ export async function uploadFile(
     
     if (uploadError) {
       // Fallback: server-side upload route with admin client (avoids client-side RLS failures)
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('bucket', bucketName)
-      formData.append('path', filePath)
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        return {
-          success: true,
-          url: result?.url || getPublicUrl(bucketName, filePath),
-        }
-      }
-
-      const apiError = await response.json().catch(() => ({}))
-      return {
-        success: false,
-        error: apiError?.error || uploadError.message,
-      }
+      const result = await uploadThroughServer()
+      return result.success ? result : { ...result, error: result.error || uploadError.message }
     }
     
     const url = getPublicUrl(bucketName, filePath)

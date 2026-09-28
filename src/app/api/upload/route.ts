@@ -4,6 +4,10 @@ import { requireAuth, getAuthResponse, type AuthResult } from '@/lib/auth/requir
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { repairPhotoLimit } from '@/lib/saas/plan-features'
+import {
+  REPAIR_IMAGE_BUCKET,
+  signRepairImagePath,
+} from '@/lib/repairs/repair-image-storage'
 
 // Tipos MIME permitidos para subida
 const ALLOWED_MIME_TYPES = [
@@ -98,13 +102,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(bucket).getPublicUrl(sanitizedPath)
+    if (bucket === REPAIR_IMAGE_BUCKET) {
+      const signedUrl = await signRepairImagePath(supabase, data.path)
+      if (!signedUrl) {
+        await supabase.storage.from(REPAIR_IMAGE_BUCKET).remove([data.path])
+        return NextResponse.json(
+          { error: 'No se pudo proteger la imagen subida.' },
+          { status: 500 },
+        )
+      }
+
+      return NextResponse.json({ success: true, url: signedUrl, path: data.path })
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
 
     return NextResponse.json({
       success: true,
-      url: publicUrl,
+      url: publicUrlData.publicUrl,
       path: data.path,
     })
   } catch (_error) {
