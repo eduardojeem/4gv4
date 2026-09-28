@@ -101,26 +101,16 @@ VALUES ('repair-images', 'repair-images', false)
 ON CONFLICT (id) DO UPDATE
 SET public = false;
 
--- No browser role needs direct access to this private bucket. Upload, signing,
--- and deletion happen only after application authorization through server code.
-DO $$
-DECLARE
-  storage_policy record;
-BEGIN
-  FOR storage_policy IN
-    SELECT policyname
-    FROM pg_policies
-    WHERE schemaname = 'storage'
-      AND tablename = 'objects'
-      AND (
-        coalesce(qual, '') ILIKE '%repair-images%'
-        OR coalesce(with_check, '') ILIKE '%repair-images%'
-      )
-  LOOP
-    EXECUTE format('DROP POLICY %I ON storage.objects', storage_policy.policyname);
-  END LOOP;
-END;
-$$;
+-- No browser role needs direct access to this private bucket. Drop only the
+-- repair-only policies created by the historical setup scripts. Do not parse
+-- policy predicates dynamically: a shared OR/IN policy could also serve other
+-- buckets and deleting it would break unrelated public assets.
+DROP POLICY IF EXISTS "Public Access Repair Images" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Users Upload Repair Images" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Users Update Repair Images" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Users Delete Repair Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public read access for repair images" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload repair images" ON storage.objects;
 
 DROP POLICY IF EXISTS "repair_images_delete_unified" ON public.repair_images;
 DROP POLICY IF EXISTS "repair_images_insert_unified" ON public.repair_images;
@@ -154,6 +144,7 @@ WITH CHECK (EXISTS (
     AND membership.user_id = auth.uid()
     AND membership.status = 'active'
     AND membership.role::text IN ('owner', 'admin', 'manager', 'technician')
+    AND repair_images.image_url LIKE 'organizations/' || r.organization_id::text || '/repair-images/' || auth.uid()::text || '/%'
 ));
 
 CREATE POLICY "repair_images_tenant_update"
@@ -177,6 +168,7 @@ WITH CHECK (EXISTS (
     AND membership.user_id = auth.uid()
     AND membership.status = 'active'
     AND membership.role::text IN ('owner', 'admin', 'manager', 'technician')
+    AND repair_images.image_url LIKE 'organizations/' || r.organization_id::text || '/repair-images/' || auth.uid()::text || '/%'
 ));
 
 CREATE POLICY "repair_images_tenant_delete"

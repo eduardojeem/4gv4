@@ -8,6 +8,7 @@ import {
 import { repairPhotoLimit } from '@/lib/saas/plan-features'
 import {
   REPAIR_IMAGE_BUCKET,
+  isOwnedRepairImagePath,
   repairImagePath,
 } from '@/lib/repairs/repair-image-storage'
 
@@ -47,7 +48,11 @@ export async function POST(request: NextRequest, context: RouteParams) {
     }))
 
     if (normalizedImages.some((image) => (
-      !image.storagePath || !image.storagePath.startsWith(`repairs/${id}/`)
+      !image.storagePath || !isOwnedRepairImagePath(
+        image.storagePath,
+        ctx.organizationId,
+        ctx.userId,
+      )
     ))) {
       return NextResponse.json(
         { error: 'Una o más imágenes no pertenecen a esta reparación.' },
@@ -132,17 +137,20 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       return NextResponse.json({ error: 'La referencia de la imagen no es válida.' }, { status: 409 })
     }
 
+    const { error: storageError } = await ctx.supabase.storage
+      .from(REPAIR_IMAGE_BUCKET)
+      .remove([storagePath])
+    if (storageError) throw storageError
+
+    // Storage goes first so a transient object deletion failure leaves the row
+    // available for a safe retry. Removing an already absent object is
+    // idempotent if the following database delete must be retried.
     const { error } = await ctx.supabase
       .from('repair_images')
       .delete()
       .eq('repair_id', id)
       .eq('id', body.imageId)
     if (error) throw error
-
-    const { error: storageError } = await ctx.supabase.storage
-      .from(REPAIR_IMAGE_BUCKET)
-      .remove([storagePath])
-    if (storageError) throw storageError
 
     const { data: repair, error: fetchError } = await fetchRepairById(ctx, id)
     if (fetchError) throw fetchError

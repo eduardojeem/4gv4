@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   REPAIR_IMAGE_BUCKET,
   REPAIR_IMAGE_URL_TTL_SECONDS,
+  isOwnedRepairImagePath,
   repairImagePath,
+  repairImageUploadPrefix,
   signRepairImagePath,
 } from './repair-image-storage'
 
@@ -38,6 +40,16 @@ describe('repairImagePath', () => {
     'repairs\\secret.jpg',
   ])('rejects an unsafe or foreign value: %s', (value) => {
     expect(repairImagePath(value)).toBeNull()
+  })
+})
+
+describe('repair image upload ownership', () => {
+  it('builds and validates an organization-and-user namespace', () => {
+    const prefix = repairImageUploadPrefix('org-1', 'user-1')
+    expect(prefix).toBe('organizations/org-1/repair-images/user-1/')
+    expect(isOwnedRepairImagePath(`${prefix}photo.jpg`, 'org-1', 'user-1')).toBe(true)
+    expect(isOwnedRepairImagePath(`${prefix}photo.jpg`, 'org-2', 'user-1')).toBe(false)
+    expect(isOwnedRepairImagePath(`${prefix}photo.jpg`, 'org-1', 'user-2')).toBe(false)
   })
 })
 

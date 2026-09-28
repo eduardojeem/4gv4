@@ -31,7 +31,7 @@ vi.mock('@/app/api/repairs/_lib', () => ({
       storage: { from: vi.fn(() => ({ remove: mocks.remove })) },
     },
     userId: 'user-1',
-    organizationId: '',
+    organizationId: 'org-1',
     branchId: 'branch-1',
   })),
   isNextResponse: vi.fn(() => false),
@@ -63,6 +63,16 @@ describe('/api/repairs/[id]/images private image contract', () => {
       error: null,
     })
     mocks.from.mockImplementation((table: string) => {
+      if (table === 'organizations') {
+        const organizationBuilder = {
+          select: vi.fn(),
+          eq: vi.fn(),
+          maybeSingle: vi.fn(async () => ({ data: { subscription_plan: 'enterprise' }, error: null })),
+        }
+        organizationBuilder.select.mockReturnValue(organizationBuilder)
+        organizationBuilder.eq.mockReturnValue(organizationBuilder)
+        return organizationBuilder
+      }
       if (table !== 'repair_images') throw new Error(`Unexpected table ${table}`)
       return {
         insert: mocks.insert,
@@ -75,7 +85,7 @@ describe('/api/repairs/[id]/images private image contract', () => {
   it('attaches only normalized storage paths', async () => {
     const response = await POST(requestWithJson({
       images: [{
-        storagePath: 'repairs/repair-1/photo.jpg',
+        storagePath: 'organizations/org-1/repair-images/user-1/photo.jpg',
         description: 'Frente',
         imageType: 'intake',
       }],
@@ -84,7 +94,7 @@ describe('/api/repairs/[id]/images private image contract', () => {
     expect(response.status).toBe(200)
     expect(mocks.insert).toHaveBeenCalledWith([{
       repair_id: 'repair-1',
-      image_url: 'repairs/repair-1/photo.jpg',
+      image_url: 'organizations/org-1/repair-images/user-1/photo.jpg',
       image_type: 'intake',
       description: 'Frente',
       uploaded_by: 'user-1',
@@ -94,6 +104,15 @@ describe('/api/repairs/[id]/images private image contract', () => {
   it('rejects an arbitrary URL without inserting it', async () => {
     const response = await POST(requestWithJson({
       images: [{ storagePath: 'https://attacker.example/photo.jpg' }],
+    }), context)
+
+    expect(response.status).toBe(400)
+    expect(mocks.insert).not.toHaveBeenCalled()
+  })
+
+  it('rejects a normalized path owned by another organization', async () => {
+    const response = await POST(requestWithJson({
+      images: [{ storagePath: 'organizations/org-other/repair-images/user-1/photo.jpg' }],
     }), context)
 
     expect(response.status).toBe(400)
@@ -119,5 +138,14 @@ describe('/api/repairs/[id]/images private image contract', () => {
     expect(response.status).toBe(404)
     expect(mocks.deleteEq).not.toHaveBeenCalled()
     expect(mocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('keeps the database row retryable when Storage deletion fails', async () => {
+    mocks.remove.mockResolvedValue({ data: null, error: new Error('storage unavailable') })
+
+    const response = await DELETE(requestWithJson({ imageId: 'image-1' }), context)
+
+    expect(response.status).toBe(500)
+    expect(mocks.deleteEq).not.toHaveBeenCalled()
   })
 })

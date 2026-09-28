@@ -35,4 +35,9 @@ describe('GET /api/repairs', () => {
     expect(routeSource).toContain('customer_id.in.')
     expect(routeSource).toContain(".not('status', 'in',")
   })
+
+  it('accepts new repair image paths only from the active organization and uploader', () => {
+    expect(routeSource).toContain('isOwnedRepairImagePath(path, ctx.organizationId, ctx.userId)')
+    expect(routeSource).toContain("code: 'INVALID_REPAIR_IMAGE'")
+  })
 })

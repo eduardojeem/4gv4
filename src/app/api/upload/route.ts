@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireAuth, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -6,6 +7,7 @@ import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { repairPhotoLimit } from '@/lib/saas/plan-features'
 import {
   REPAIR_IMAGE_BUCKET,
+  repairImageUploadPrefix,
   signRepairImagePath,
 } from '@/lib/repairs/repair-image-storage'
 
@@ -39,17 +41,24 @@ export async function POST(request: Request) {
       )
     }
 
-    // Validar bucket permitido
-    const ALLOWED_BUCKETS = ['repair-images', 'product-images', 'avatars']
-    if (!ALLOWED_BUCKETS.includes(bucket)) {
+    // Este endpoint usa service_role y por eso se limita al flujo privado de
+    // reparaciones, que aplica tenant, plan y namespace propios. Los buckets
+    // públicos deben usar sus políticas RLS específicas desde el cliente.
+    if (bucket !== REPAIR_IMAGE_BUCKET) {
       return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 })
     }
 
+    const { user } = auth as Extract<AuthResult, { authenticated: true }>
+    const organization = await getCurrentOrganizationContext(user.id)
+    if (!organization) {
+      return NextResponse.json(
+        { error: 'No se pudo resolver la organización activa para subir el archivo.' },
+        { status: 403 },
+      )
+    }
+
     // Gating por plan: las fotos de reparación requieren el plan más alto (Enterprise).
-    if (bucket === 'repair-images') {
-      const { user } = auth as Extract<AuthResult, { authenticated: true }>
-      const organization = await getCurrentOrganizationContext(user.id)
-      if (organization) {
+    if (organization) {
         const planInfo = await getOrganizationPlanInfo(organization.id)
         if (repairPhotoLimit(planInfo.code) === 0) {
           return NextResponse.json(
@@ -61,7 +70,6 @@ export async function POST(request: Request) {
             { status: 402 }
           )
         }
-      }
     }
 
     // Validar tipo MIME
@@ -83,8 +91,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Sanitizar el path para prevenir path traversal
-    const sanitizedPath = path.replace(/\.\./g, '').replace(/\/\//g, '/')
+    const requestedName = file.name || path.split('/').pop() || 'image'
+    const sanitizedName = requestedName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-180) || 'image'
+    const storagePath = `${repairImageUploadPrefix(organization.id, user.id)}${randomUUID()}-${sanitizedName}`
 
     const supabase = createAdminSupabase()
 
@@ -93,35 +102,25 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(sanitizedPath, buffer, {
+      .upload(storagePath, buffer, {
         contentType: file.type,
-        upsert: true,
+        upsert: false,
       })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    if (bucket === REPAIR_IMAGE_BUCKET) {
-      const signedUrl = await signRepairImagePath(supabase, data.path)
-      if (!signedUrl) {
-        await supabase.storage.from(REPAIR_IMAGE_BUCKET).remove([data.path])
-        return NextResponse.json(
-          { error: 'No se pudo proteger la imagen subida.' },
-          { status: 500 },
-        )
-      }
-
-      return NextResponse.json({ success: true, url: signedUrl, path: data.path })
+    const signedUrl = await signRepairImagePath(supabase, data.path)
+    if (!signedUrl) {
+      await supabase.storage.from(REPAIR_IMAGE_BUCKET).remove([data.path])
+      return NextResponse.json(
+        { error: 'No se pudo proteger la imagen subida.' },
+        { status: 500 },
+      )
     }
 
-    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
-
-    return NextResponse.json({
-      success: true,
-      url: publicUrlData.publicUrl,
-      path: data.path,
-    })
+    return NextResponse.json({ success: true, url: signedUrl, path: data.path })
   } catch (_error) {
     return NextResponse.json(
       { error: 'Internal server error' },

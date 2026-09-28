@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { repairImagePath } from '@/lib/repairs/repair-image-storage'
+import { isOwnedRepairImagePath, repairImagePath } from '@/lib/repairs/repair-image-storage'
 import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
 import { parseRepairPartsInput } from '@/lib/repairs/create-repair-input'
 import {
@@ -118,16 +118,30 @@ function normalizeNotes(notes: RepairNoteInput[], repairId: string, authorId: st
   }).filter((note) => String(note.note_text).length > 0)
 }
 
-function normalizeImages(images: unknown[], repairId: string) {
+function normalizeImages(
+  images: unknown[],
+  repairId: string,
+  existingById: Map<string, string>,
+  organizationId: string,
+  userId: string,
+) {
   return images
-    .map((image) => (typeof image === 'string' ? image : (image as { url?: unknown })?.url))
-    .map((value) => typeof value === 'string' ? repairImagePath(value) : null)
-    .filter((path): path is string => Boolean(path))
-    .map((path) => ({
-      repair_id: repairId,
-      image_url: path,
-      image_type: 'general',
-    }))
+    .map((image) => {
+      const item = typeof image === 'object' && image !== null
+        ? image as { id?: unknown; url?: unknown; storagePath?: unknown }
+        : null
+      const existingId = typeof item?.id === 'string' ? item.id : null
+      const existingPath = existingId ? existingById.get(existingId) : null
+      if (existingId && existingPath) {
+        return { id: existingId, repair_id: repairId, image_url: existingPath, image_type: 'general' }
+      }
+
+      const value = typeof image === 'string' ? image : item?.storagePath ?? item?.url
+      const path = typeof value === 'string' ? repairImagePath(value) : null
+      if (!path || !isOwnedRepairImagePath(path, organizationId, userId)) return null
+      return { repair_id: repairId, image_url: path, image_type: 'general' }
+    })
+    .filter((image): image is NonNullable<typeof image> => Boolean(image))
 }
 
 export async function PATCH(request: NextRequest, context: RouteParams) {
@@ -323,7 +337,20 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     }
 
     if (Array.isArray(images)) {
-      const imagesToInsert = normalizeImages(images, id)
+      const { data: existingImages, error: existingImagesError } = await ctx.supabase
+        .from('repair_images')
+        .select('id, image_url')
+        .eq('repair_id', id)
+      if (existingImagesError) throw existingImagesError
+
+      const existingById = new Map((existingImages ?? []).map((image) => [image.id, image.image_url]))
+      const imagesToInsert = normalizeImages(
+        images,
+        id,
+        existingById,
+        ctx.organizationId,
+        ctx.userId,
+      )
       if (imagesToInsert.length !== images.length) {
         return NextResponse.json(
           { error: 'Una o más referencias de imagen no son válidas.', code: 'INVALID_REPAIR_IMAGE' },

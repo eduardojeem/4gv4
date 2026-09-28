@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getPublicUrl: vi.fn(),
   remove: vi.fn(),
   from: vi.fn(),
+  getOrganization: vi.fn(),
 }))
 
 vi.mock('@/lib/auth/require-auth', () => ({
@@ -14,7 +15,7 @@ vi.mock('@/lib/auth/require-auth', () => ({
 }))
 
 vi.mock('@/lib/saas/context', () => ({
-  getCurrentOrganizationContext: vi.fn(async () => ({ id: 'org-1' })),
+  getCurrentOrganizationContext: mocks.getOrganization,
 }))
 
 vi.mock('@/lib/saas/subscription-service', () => ({
@@ -49,7 +50,8 @@ function uploadRequest(bucket = 'repair-images') {
 describe('POST /api/upload for repair images', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.upload.mockResolvedValue({ data: { path: 'repairs/repair-1/photo.jpg' }, error: null })
+    mocks.getOrganization.mockResolvedValue({ id: 'org-1' })
+    mocks.upload.mockImplementation(async (path: string) => ({ data: { path }, error: null }))
     mocks.createSignedUrl.mockResolvedValue({
       data: { signedUrl: 'https://example.supabase.co/storage/v1/object/sign/repair-images/preview' },
       error: null,
@@ -68,12 +70,18 @@ describe('POST /api/upload for repair images', () => {
     const response = await POST(uploadRequest())
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
+    const body = await response.json()
+    expect(body).toMatchObject({
       success: true,
-      path: 'repairs/repair-1/photo.jpg',
       url: 'https://example.supabase.co/storage/v1/object/sign/repair-images/preview',
     })
-    expect(mocks.createSignedUrl).toHaveBeenCalledWith('repairs/repair-1/photo.jpg', 300)
+    expect(body.path).toMatch(/^organizations\/org-1\/repair-images\/user-1\/[0-9a-f-]+-photo[.]jpg$/)
+    expect(mocks.upload).toHaveBeenCalledWith(
+      body.path,
+      expect.any(Buffer),
+      expect.objectContaining({ upsert: false }),
+    )
+    expect(mocks.createSignedUrl).toHaveBeenCalledWith(body.path, 300)
     expect(mocks.getPublicUrl).not.toHaveBeenCalled()
   })
 
@@ -85,19 +93,26 @@ describe('POST /api/upload for repair images', () => {
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({ error: 'No se pudo proteger la imagen subida.' })
     expect(mocks.getPublicUrl).not.toHaveBeenCalled()
-    expect(mocks.remove).toHaveBeenCalledWith(['repairs/repair-1/photo.jpg'])
+    expect(mocks.remove).toHaveBeenCalledWith([
+      expect.stringMatching(/^organizations\/org-1\/repair-images\/user-1\//),
+    ])
   })
 
-  it('keeps public buckets on permanent public URLs', async () => {
+  it('rejects public buckets before invoking the service-role storage client', async () => {
     const response = await POST(uploadRequest('product-images'))
 
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      path: 'repairs/repair-1/photo.jpg',
-      url: 'https://public.example/photo.jpg',
-    })
-    expect(mocks.getPublicUrl).toHaveBeenCalledWith('repairs/repair-1/photo.jpg')
-    expect(mocks.createSignedUrl).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid bucket' })
+    expect(mocks.getOrganization).not.toHaveBeenCalled()
+    expect(mocks.upload).not.toHaveBeenCalled()
+  })
+
+  it('rejects repair uploads when no active organization can be resolved', async () => {
+    mocks.getOrganization.mockResolvedValue(null)
+
+    const response = await POST(uploadRequest())
+
+    expect(response.status).toBe(403)
+    expect(mocks.upload).not.toHaveBeenCalled()
   })
 })

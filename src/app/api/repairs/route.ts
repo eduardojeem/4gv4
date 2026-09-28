@@ -14,7 +14,7 @@ import {
   resolveRepairRouteContext,
   type RepairRouteContext,
 } from '@/app/api/repairs/_lib'
-import { repairImagePath } from '@/lib/repairs/repair-image-storage'
+import { isOwnedRepairImagePath, repairImagePath } from '@/lib/repairs/repair-image-storage'
 import { signRepairRecordImages } from '@/lib/repairs/sign-repair-images'
 
 const REPAIR_SELECT_VARIANTS = [
@@ -189,7 +189,9 @@ export async function POST(request: NextRequest) {
     const input = parsed.data
     const { idempotency_key: idempotencyKey, parts, notes, images, ...repairFields } = input
     const normalizedImages = images.map(repairImagePath)
-    if (normalizedImages.some((path) => !path)) {
+    if (normalizedImages.some((path) => (
+      !path || !isOwnedRepairImagePath(path, ctx.organizationId, ctx.userId)
+    ))) {
       return NextResponse.json(
         { error: 'Una o más referencias de imagen no son válidas.', code: 'INVALID_REPAIR_IMAGE' },
         { status: 400 },

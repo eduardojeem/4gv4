@@ -6,6 +6,19 @@ export const REPAIR_IMAGE_URL_TTL_SECONDS = 300
 const PUBLIC_OBJECT_PREFIX = `/storage/v1/object/public/${REPAIR_IMAGE_BUCKET}/`
 const MAX_OBJECT_PATH_LENGTH = 1024
 
+export function repairImageUploadPrefix(organizationId: string, userId: string): string {
+  return `organizations/${organizationId}/repair-images/${userId}/`
+}
+
+export function isOwnedRepairImagePath(
+  value: string,
+  organizationId: string,
+  userId: string,
+): boolean {
+  const path = repairImagePath(value)
+  return Boolean(path?.startsWith(repairImageUploadPrefix(organizationId, userId)))
+}
+
 function isKnownSupabaseOrigin(url: URL): boolean {
   const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 

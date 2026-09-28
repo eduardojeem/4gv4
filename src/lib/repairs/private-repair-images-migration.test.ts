@@ -32,15 +32,14 @@ describe('private repair images migration', () => {
     expect(sql).toMatch(/UPDATE public\.repair_images[\s\S]+SET image_url = pg_temp\.repair_image_path\(image_url\)/)
   })
 
-  it('makes the bucket private and removes every repair-images Storage policy', () => {
+  it('makes the bucket private and removes only known repair-only Storage policies', () => {
     const sql = migration()
 
     expect(sql).toContain("VALUES ('repair-images', 'repair-images', false)")
-    expect(sql).toContain('FROM pg_policies')
-    expect(sql).toContain("schemaname = 'storage'")
-    expect(sql).toContain("tablename = 'objects'")
-    expect(sql).toContain("ILIKE '%repair-images%'")
-    expect(sql).toContain('DROP POLICY')
+    expect(sql).toContain('DROP POLICY IF EXISTS "Public Access Repair Images" ON storage.objects')
+    expect(sql).toContain('DROP POLICY IF EXISTS "Public read access for repair images" ON storage.objects')
+    expect(sql).not.toContain('FROM pg_policies')
+    expect(sql).not.toContain("ILIKE '%repair-images%'")
   })
 
   it.each(['select', 'insert', 'update', 'delete']) (
@@ -57,6 +56,9 @@ describe('private repair images migration', () => {
       expect(policy).toContain('organization_members')
       expect(policy).toContain('membership.organization_id = r.organization_id')
       expect(policy).toContain('membership.user_id = auth.uid()')
+      if (operation === 'insert' || operation === 'update') {
+        expect(policy).toContain("repair_images.image_url like 'organizations/' || r.organization_id::text")
+      }
     },
   )
 })
