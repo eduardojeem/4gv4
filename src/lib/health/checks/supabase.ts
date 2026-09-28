@@ -3,6 +3,7 @@ import { errorMessage, runCheck } from '@/lib/health/core'
 import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { HEALTH_MIGRATION, type CatalogResult, type HealthCatalog } from '@/lib/health/catalog'
 import { analyzeTable, analyzeViews } from '@/lib/health/tenant-isolation'
+import { auditPublicBuckets } from '@/lib/health/public-bucket-audit'
 import type {
   HealthCheckResult,
   HealthMetricGroup,
@@ -10,8 +11,6 @@ import type {
 } from '@/lib/health/types'
 
 type Admin = SupabaseClient
-
-const SENSITIVE_BUCKET = /invoice|factura|receipt|recibo|document|backup|private|privad|contract|contrato|id[-_]?card|cedula|export|payroll|nomina/i
 
 async function count(admin: Admin, table: string): Promise<number> {
   const { count: value, error } = await admin.from(table).select('*', { count: 'exact', head: true })
@@ -99,32 +98,12 @@ export async function runSupabaseChecks(admin: Admin, catalog: CatalogResult): P
         category: 'storage',
         name: 'Buckets públicos',
         description: 'Un bucket público sirve cualquier archivo por URL sin autenticación. Aceptable para imágenes de catálogo; no para documentos.',
-        method: 'storage.listBuckets(): flag public y nombre del bucket.',
+        method: 'storage.listBuckets() y muestreo paginado/acotado de hasta 200 objetos públicos; solo se reportan conteos y familias MIME, nunca nombres.',
       },
       async () => {
         const { data, error } = await admin.storage.listBuckets()
         if (error) return { status: 'unknown', severity: 'medium', summary: `No se pudo listar buckets: ${errorMessage(error)}` }
-        const publicBuckets = data.filter((bucket) => bucket.public)
-        const sensitive = publicBuckets.filter((bucket) => SENSITIVE_BUCKET.test(bucket.id))
-        const hasUninspectedPublicContent = sensitive.length === 0 && publicBuckets.length > 0
-        return {
-          status: sensitive.length > 0 ? 'error' : hasUninspectedPublicContent ? 'warning' : 'healthy',
-          severity: sensitive.length > 0 ? 'high' : hasUninspectedPublicContent ? 'low' : 'info',
-          summary: sensitive.length > 0
-            ? `${sensitive.length} bucket(s) con nombre sensible son públicos`
-            : hasUninspectedPublicContent
-              ? `${publicBuckets.length} públicos / ${data.length - publicBuckets.length} privados; el nombre no basta para validar su contenido`
-              : `Todos los ${data.length} buckets son privados`,
-          findings: [
-            ...sensitive.map((bucket) => `El bucket "${bucket.id}" es público y su nombre sugiere documentos sensibles.`),
-            ...publicBuckets.filter((b) => !sensitive.includes(b)).map((bucket) => `Público: ${bucket.id}`),
-          ],
-          recommendation: sensitive.length > 0
-            ? 'Hacer privado el bucket y servir los archivos con URLs firmadas (createSignedUrl) de corta duración.'
-            : hasUninspectedPublicContent
-              ? 'Revisar periódicamente los objetos de cada bucket público y confirmar que solo contengan recursos destinados a acceso anónimo.'
-              : undefined,
-        }
+        return auditPublicBuckets(admin, data)
       },
     ),
   ])
