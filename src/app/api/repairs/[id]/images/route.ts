@@ -6,6 +6,10 @@ import {
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
 import { repairPhotoLimit } from '@/lib/saas/plan-features'
+import {
+  REPAIR_IMAGE_BUCKET,
+  repairImagePath,
+} from '@/lib/repairs/repair-image-storage'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -16,27 +20,39 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     const { id } = await context.params
     const body = await request.json().catch(() => ({})) as {
-      urls?: unknown
       imageType?: unknown
       images?: unknown
     }
 
-    type RawImagePayload = { url: string; description?: string; imageType?: string }
-    const rawImages = Array.isArray(body.images)
-      ? (body.images as unknown[]).filter((img): img is RawImagePayload => {
-          const item = img as RawImagePayload | null
-          return typeof item?.url === 'string' && item.url.length > 0
-        })
-      : []
-    const urls = Array.isArray(body.urls)
-      ? body.urls.filter((url): url is string => typeof url === 'string' && url.length > 0)
-      : []
+    type RawImagePayload = { storagePath?: unknown; description?: unknown; imageType?: unknown }
+    const rawImages = Array.isArray(body.images) ? body.images as RawImagePayload[] : []
     const imageType = typeof body.imageType === 'string' && body.imageType.trim()
       ? body.imageType.trim()
       : 'general'
 
-    if (urls.length === 0 && rawImages.length === 0) {
+    if (rawImages.length === 0) {
       return NextResponse.json({ error: 'No hay imagenes para agregar.' }, { status: 400 })
+    }
+
+    const normalizedImages = rawImages.map((image) => ({
+      storagePath: typeof image?.storagePath === 'string'
+        ? repairImagePath(image.storagePath)
+        : null,
+      description: typeof image?.description === 'string' && image.description.trim()
+        ? image.description.trim()
+        : null,
+      imageType: typeof image?.imageType === 'string' && image.imageType.trim()
+        ? image.imageType.trim()
+        : imageType,
+    }))
+
+    if (normalizedImages.some((image) => (
+      !image.storagePath || !image.storagePath.startsWith(`repairs/${id}/`)
+    ))) {
+      return NextResponse.json(
+        { error: 'Una o más imágenes no pertenecen a esta reparación.' },
+        { status: 400 },
+      )
     }
 
     const exists = await assertRepairExists(ctx, id)
@@ -60,21 +76,13 @@ export async function POST(request: NextRequest, context: RouteParams) {
       }
     }
 
-    const rowsToInsert = rawImages.length > 0
-      ? rawImages.map((img) => ({
-          repair_id: id,
-          image_url: img.url,
-          image_type: img.imageType || imageType,
-          description: img.description || null,
-          uploaded_by: ctx.userId || null,
-        }))
-      : urls.map((url) => ({
-          repair_id: id,
-          image_url: url,
-          image_type: imageType,
-          description: null,
-          uploaded_by: ctx.userId || null,
-        }))
+    const rowsToInsert = normalizedImages.map((image) => ({
+      repair_id: id,
+      image_url: image.storagePath as string,
+      image_type: image.imageType,
+      description: image.description,
+      uploaded_by: ctx.userId || null,
+    }))
 
     const { error } = await ctx.supabase
       .from('repair_images')
@@ -98,24 +106,43 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (isNextResponse(ctx)) return ctx
 
     const { id } = await context.params
-    const body = await request.json().catch(() => ({})) as { imageId?: string; url?: string }
+    const body = await request.json().catch(() => ({})) as { imageId?: unknown }
 
-    if (!body.imageId && !body.url) {
-      return NextResponse.json({ error: 'Falta imageId o url para eliminar la imagen.' }, { status: 400 })
+    if (typeof body.imageId !== 'string' || !body.imageId.trim()) {
+      return NextResponse.json({ error: 'Falta imageId para eliminar la imagen.' }, { status: 400 })
     }
 
     const exists = await assertRepairExists(ctx, id)
     if (!exists) return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
 
-    let query = ctx.supabase.from('repair_images').delete().eq('repair_id', id)
-    if (body.imageId) {
-      query = query.eq('id', body.imageId)
-    } else if (body.url) {
-      query = query.eq('image_url', body.url)
+    const { data: storedImage, error: lookupError } = await ctx.supabase
+      .from('repair_images')
+      .select('id, image_url')
+      .eq('id', body.imageId)
+      .eq('repair_id', id)
+      .maybeSingle()
+
+    if (lookupError) throw lookupError
+    if (!storedImage) {
+      return NextResponse.json({ error: 'Imagen no encontrada.' }, { status: 404 })
     }
 
-    const { error } = await query
+    const storagePath = repairImagePath(storedImage.image_url)
+    if (!storagePath) {
+      return NextResponse.json({ error: 'La referencia de la imagen no es válida.' }, { status: 409 })
+    }
+
+    const { error } = await ctx.supabase
+      .from('repair_images')
+      .delete()
+      .eq('repair_id', id)
+      .eq('id', body.imageId)
     if (error) throw error
+
+    const { error: storageError } = await ctx.supabase.storage
+      .from(REPAIR_IMAGE_BUCKET)
+      .remove([storagePath])
+    if (storageError) throw storageError
 
     const { data: repair, error: fetchError } = await fetchRepairById(ctx, id)
     if (fetchError) throw fetchError

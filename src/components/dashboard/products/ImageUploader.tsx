@@ -20,7 +20,7 @@ interface ImageUploaderProps {
   maxImages?: number
   maxSize?: number
   disabled?: boolean
-  onUploadFiles?: (files: File[]) => Promise<string[]>
+  onUploadFiles?: (files: File[]) => Promise<Array<string | UploadedImageValue>>
   onRemoveImage?: (url: string) => Promise<void> | void
   onUploadingChange?: (uploading: boolean) => void
   /**
@@ -37,6 +37,12 @@ interface ImageUploaderProps {
    */
   tips?: string[]
   tipsTitle?: string
+  allowUrlInput?: boolean
+}
+
+export interface UploadedImageValue {
+  storagePath: string
+  previewUrl: string
 }
 
 const CONSEJOS_POR_DEFECTO = [
@@ -59,6 +65,7 @@ export function ImageUploader({
   compact = false,
   tips,
   tipsTitle,
+  allowUrlInput = true,
 }: ImageUploaderProps) {
   const listaDeConsejos = tips ?? CONSEJOS_POR_DEFECTO
   const [uploading, setUploading] = useState(false)
@@ -66,6 +73,7 @@ export function ImageUploader({
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [loadingUrl, setLoadingUrl] = useState(false)
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
 
   const compressImage = async (file: File): Promise<File> => {
     const options = {
@@ -86,15 +94,18 @@ export function ImageUploader({
     }
   }
 
-  const uploadImage = useCallback(async (file: File): Promise<string> => {
+  const uploadImage = useCallback(async (file: File): Promise<UploadedImageValue> => {
     if (onUploadFiles) {
-      const urls = await onUploadFiles([file])
-      return urls[0]
+      const uploaded = (await onUploadFiles([file]))[0]
+      return typeof uploaded === 'string'
+        ? { storagePath: uploaded, previewUrl: uploaded }
+        : uploaded
     }
     return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onloadend = () => {
-        resolve(reader.result as string)
+        const value = reader.result as string
+        resolve({ storagePath: value, previewUrl: value })
       }
       reader.readAsDataURL(file)
     })
@@ -136,9 +147,13 @@ export function ImageUploader({
     try {
       for (const file of acceptedFiles) {
         const compressedFile = await compressImage(file)
-        const url = await uploadImage(compressedFile)
-        if (url) {
-          uploadedUrls.push(url)
+        const uploaded = await uploadImage(compressedFile)
+        if (uploaded?.storagePath && uploaded.previewUrl) {
+          uploadedUrls.push(uploaded.storagePath)
+          setPreviewUrls((current) => ({
+            ...current,
+            [uploaded.storagePath]: uploaded.previewUrl,
+          }))
           toast.success(`${file.name} subida exitosamente`)
         }
       }
@@ -250,7 +265,7 @@ export function ImageUploader({
                 <Card className="overflow-hidden border-2 hover:border-blue-300 transition-colors">
                   <div className="aspect-square relative">
                     <AppImage
-                      src={url}
+                      src={previewUrls[url] || url}
                       alt={`Imagen ${index + 1}`}
                       className="w-full h-full object-cover"
                     />
@@ -335,7 +350,7 @@ export function ImageUploader({
                 </span>
                 {/* Sin esto la carga por URL quedaba inalcanzable en compacto:
                     el boton que abre el panel vive en la version grande. */}
-                <button
+                {allowUrlInput && <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setShowUrlInput(!showUrlInput) }}
                   disabled={disabled || uploading}
@@ -343,7 +358,7 @@ export function ImageUploader({
                 >
                   <LinkIcon className="h-3 w-3" />
                   URL
-                </button>
+                </button>}
               </div>
             ) : (
               <div className="space-y-3">
@@ -377,7 +392,7 @@ export function ImageUploader({
                     <ImageIcon className="h-4 w-4 mr-2" />
                     Seleccionar Archivos
                   </Button>
-                  <Button 
+                  {allowUrlInput && <Button
                     type="button" 
                     variant="outline" 
                     size="sm" 
@@ -389,7 +404,7 @@ export function ImageUploader({
                   >
                     <LinkIcon className="h-4 w-4 mr-2" />
                     Agregar por URL
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             )}
@@ -397,7 +412,7 @@ export function ImageUploader({
 
           {/* Input de URL */}
           <AnimatePresence>
-            {showUrlInput && (
+            {allowUrlInput && showUrlInput && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}

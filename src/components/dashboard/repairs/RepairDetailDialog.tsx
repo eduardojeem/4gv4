@@ -461,17 +461,18 @@ export function RepairDetailDialog({
         body: formData,
       })
       const uploadData = await uploadRes.json()
-      if (!uploadRes.ok || !uploadData.success || !uploadData.url) {
+      if (!uploadRes.ok || !uploadData.success || !uploadData.url || !uploadData.path) {
         throw new Error(uploadData.error || 'Error al subir el archivo')
       }
 
       const imgUrl = uploadData.url
+      const storagePath = uploadData.path
       const attachRes = await fetch(`/api/repairs/${repair.id}/images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           images: [{
-            url: imgUrl,
+            storagePath,
             description: imageDescriptionDraft.trim() || undefined,
             imageType: 'general',
           }],
@@ -511,7 +512,7 @@ export function RepairDetailDialog({
       const res = await fetch(`/api/repairs/${repair.id}/images`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageId: image.id, url: image.url }),
+        body: JSON.stringify({ imageId: image.id }),
       })
       const data = await res.json()
       if (!res.ok) {

@@ -14,6 +14,7 @@ import {
   resolveRepairRouteContext,
   type RepairRouteContext,
 } from '@/app/api/repairs/_lib'
+import { repairImagePath } from '@/lib/repairs/repair-image-storage'
 
 const REPAIR_SELECT_VARIANTS = [
   `
@@ -186,7 +187,15 @@ export async function POST(request: NextRequest) {
 
     const input = parsed.data
     const { idempotency_key: idempotencyKey, parts, notes, images, ...repairFields } = input
-    const creationPayloadHash = fingerprintRepairCreateInput({ parts, notes, images, ...repairFields })
+    const normalizedImages = images.map(repairImagePath)
+    if (normalizedImages.some((path) => !path)) {
+      return NextResponse.json(
+        { error: 'Una o más referencias de imagen no son válidas.', code: 'INVALID_REPAIR_IMAGE' },
+        { status: 400 },
+      )
+    }
+    const imagePaths = normalizedImages as string[]
+    const creationPayloadHash = fingerprintRepairCreateInput({ parts, notes, images: imagePaths, ...repairFields })
 
     const findExistingCreation = async () => ctx.supabase
       .from('repairs')
@@ -347,12 +356,11 @@ export async function POST(request: NextRequest) {
         if (notesError) throw notesError
       }
 
-      if (Array.isArray(images) && images.length > 0) {
-        const imageRows = images
-          .filter((url): url is string => typeof url === 'string' && url.length > 0)
-          .map((url) => ({
+      if (imagePaths.length > 0) {
+        const imageRows = imagePaths
+          .map((path) => ({
             repair_id: repairId,
-            image_url: url,
+            image_url: path,
             image_type: 'general',
           }))
 

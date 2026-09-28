@@ -13,6 +13,11 @@ interface UseImageUploadOptions {
   onProgress?: (progress: UploadProgress[]) => void
 }
 
+interface UploadedImage {
+  storagePath: string
+  previewUrl: string
+}
+
 export function useImageUpload(options: UseImageUploadOptions = {}) {
   const { maxRetries = 3, retryDelay = 1000, onProgress } = options
   const [isUploading, setIsUploading] = useState(false)
@@ -23,7 +28,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
     bucket: string,
     path: string,
     attempt = 1
-  ): Promise<string> => {
+  ): Promise<UploadedImage> => {
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -41,8 +46,8 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
 
       const result = await response.json()
 
-      if (result.success && result.url) {
-        return result.url
+      if (result.success && result.url && result.path) {
+        return { storagePath: result.path, previewUrl: result.url }
       } else {
         throw new Error(result.error || 'Unknown upload error')
       }
@@ -59,9 +64,9 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
   const uploadFiles = async (
     files: File[],
     bucket: string = 'repair-images'
-  ): Promise<string[]> => {
+  ): Promise<UploadedImage[]> => {
     setIsUploading(true)
-    const urls: string[] = []
+    const uploadedImages: UploadedImage[] = []
 
     // Inicializar progreso
     const initialProgress: UploadProgress[] = files.map(file => ({
@@ -85,8 +90,8 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
         const filename = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
         const path = `uploads/${filename}`
 
-        const url = await uploadFileWithRetry(file, bucket, path)
-        urls.push(url)
+        const uploadedImage = await uploadFileWithRetry(file, bucket, path)
+        uploadedImages.push(uploadedImage)
 
         // Actualizar estado a "success"
         updatedProgress[i] = { ...updatedProgress[i], status: 'success', progress: 100 }
@@ -106,7 +111,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
     }
 
     setIsUploading(false)
-    return urls
+    return uploadedImages
   }
 
   const resetProgress = () => {

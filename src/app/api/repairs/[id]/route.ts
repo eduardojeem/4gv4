@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { repairImagePath } from '@/lib/repairs/repair-image-storage'
 import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
 import { parseRepairPartsInput } from '@/lib/repairs/create-repair-input'
 import {
@@ -120,10 +121,11 @@ function normalizeNotes(notes: RepairNoteInput[], repairId: string, authorId: st
 function normalizeImages(images: unknown[], repairId: string) {
   return images
     .map((image) => (typeof image === 'string' ? image : (image as { url?: unknown })?.url))
-    .filter((url): url is string => typeof url === 'string' && url.length > 0)
-    .map((url) => ({
+    .map((value) => typeof value === 'string' ? repairImagePath(value) : null)
+    .filter((path): path is string => Boolean(path))
+    .map((path) => ({
       repair_id: repairId,
-      image_url: url,
+      image_url: path,
       image_type: 'general',
     }))
 }
@@ -321,13 +323,20 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     }
 
     if (Array.isArray(images)) {
+      const imagesToInsert = normalizeImages(images, id)
+      if (imagesToInsert.length !== images.length) {
+        return NextResponse.json(
+          { error: 'Una o más referencias de imagen no son válidas.', code: 'INVALID_REPAIR_IMAGE' },
+          { status: 400 },
+        )
+      }
+
       const { error: deleteImagesError } = await ctx.supabase
         .from('repair_images')
         .delete()
         .eq('repair_id', id)
       if (deleteImagesError) throw deleteImagesError
 
-      const imagesToInsert = normalizeImages(images, id)
       if (imagesToInsert.length > 0) {
         const { error: insertImagesError } = await ctx.supabase
           .from('repair_images')

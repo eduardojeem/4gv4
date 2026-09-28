@@ -2134,8 +2134,8 @@ export function RepairFormDialogV2({
                               name={`devices.${index}.images`}
                               control={control}
                               render={({ field }) => {
-                                const onUploadFiles = async (files: File[]): Promise<string[]> => {
-                                  const urls: string[] = []
+                                const onUploadFiles = async (files: File[]) => {
+                                  const uploadedImages: Array<{ storagePath: string; previewUrl: string }> = []
 
                                   for (const file of files) {
                                     try {
@@ -2159,8 +2159,11 @@ export function RepairFormDialogV2({
 
                                       const result = await response.json()
 
-                                      if (result.success && result.url) {
-                                        urls.push(result.url)
+                                      if (result.success && result.url && result.path) {
+                                        uploadedImages.push({
+                                          storagePath: result.path,
+                                          previewUrl: result.url,
+                                        })
                                       } else {
                                         throw new Error(result.error || 'Unknown upload error')
                                       }
@@ -2169,7 +2172,7 @@ export function RepairFormDialogV2({
                                       toast.error('Error al subir imagen. Intente nuevamente.')
                                     }
                                   }
-                                  return urls
+                                  return uploadedImages
                                 }
 
                                 return (
@@ -2178,8 +2181,9 @@ export function RepairFormDialogV2({
                                     onChange={field.onChange}
                                     maxImages={6}
                                     maxSize={5242880}
-                                    onUploadFiles={onUploadFiles}
                                     compact
+                                    onUploadFiles={onUploadFiles}
+                                    allowUrlInput={false}
                                     tipsTitle="Fotos del estado con el que entró:"
                                     tips={CONSEJOS_FOTOS_INGRESO}
                                   />
