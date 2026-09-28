@@ -15,6 +15,7 @@ import {
   type RepairRouteContext,
 } from '@/app/api/repairs/_lib'
 import { repairImagePath } from '@/lib/repairs/repair-image-storage'
+import { signRepairRecordImages } from '@/lib/repairs/sign-repair-images'
 
 const REPAIR_SELECT_VARIANTS = [
   `
@@ -220,7 +221,8 @@ export async function POST(request: NextRequest) {
           { status: 409, headers: { 'Retry-After': '2' } }
         )
       }
-      return NextResponse.json({ repair: existingResult.data, replayed: true }, { status: 200 })
+      const repair = await signRepairRecordImages(ctx.supabase, existingResult.data)
+      return NextResponse.json({ repair, replayed: true }, { status: 200 })
     }
 
     const relationError = await validateRepairRelations(
@@ -324,7 +326,8 @@ export async function POST(request: NextRequest) {
             )
           }
           if (!('conflict' in replay)) {
-            return NextResponse.json({ repair: racedResult.data, replayed: true }, { status: 200 })
+            const repair = await signRepairRecordImages(ctx.supabase, racedResult.data)
+            return NextResponse.json({ repair, replayed: true }, { status: 200 })
           }
           return NextResponse.json(
             { error: replay.conflict, code: 'IDEMPOTENCY_KEY_REUSED' },
@@ -445,7 +448,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'La reparacion se creo, pero no se pudo recuperar.' }, { status: 500 })
     }
 
-    return NextResponse.json({ repair: fullRepair, replayed: false }, { status: 201 })
+    const signedRepair = await signRepairRecordImages(ctx.supabase, fullRepair)
+    return NextResponse.json({ repair: signedRepair, replayed: false }, { status: 201 })
   } catch (error) {
     const detail = error as SupabaseError
     logger.error('Repairs API POST failed', {
@@ -530,8 +534,11 @@ export async function GET(request: NextRequest) {
       const { data, error, count } = await query
 
       if (!error) {
+        const repairs = await Promise.all((data ?? []).map((repair) => (
+          signRepairRecordImages(ctx.supabase, repair)
+        )))
         return NextResponse.json({
-          repairs: data ?? [],
+          repairs,
           pagination: {
             page,
             pageSize,

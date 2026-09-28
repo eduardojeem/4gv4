@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { verifyPublicToken } from '@/lib/public-session'
 import { logger } from '@/lib/logger'
+import { signRepairImages } from '@/lib/repairs/sign-repair-images'
 
 /**
  * GET /api/public/repairs/[ticketId]/images
@@ -31,7 +32,7 @@ export async function GET(
       )
     }
     
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
     
     // Get repair ID from ticket number
     const { data: repair } = await supabase
@@ -64,9 +65,11 @@ export async function GET(
       )
     }
     
+    const signedImages = await signRepairImages(supabase, images || [])
+
     return NextResponse.json({
       success: true,
-      data: images || []
+      data: signedImages
     })
   } catch (error) {
     logger.error('Public repair images API error', { error })

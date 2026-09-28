@@ -6,6 +6,7 @@ import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { roleHasPermission, type OrganizationRole, type Permission } from '@/lib/saas/permissions'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import type { AppRole } from '@/lib/auth/role-utils'
+import { signRepairRecordImages } from '@/lib/repairs/sign-repair-images'
 
 export const FULL_REPAIR_SELECT = `
   *,
@@ -134,13 +135,19 @@ export function isNextResponse(value: RepairRouteContext | RepairModuleContext |
 }
 
 export async function fetchRepairById(ctx: RepairRouteContext, repairId: string) {
-  return ctx.supabase
+  const result = await ctx.supabase
     .from('repairs')
     .select(FULL_REPAIR_SELECT)
     .eq('id', repairId)
     .eq('organization_id', ctx.organizationId)
     .eq('branch_id', ctx.branchId)
     .maybeSingle()
+
+  if (result.error || !result.data) return result
+  return {
+    ...result,
+    data: await signRepairRecordImages(ctx.supabase, result.data),
+  }
 }
 
 export async function assertRepairExists(ctx: RepairRouteContext, repairId: string) {
