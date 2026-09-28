@@ -16,6 +16,7 @@ import { ServiceWorkerRegistration } from "@/components/util/ServiceWorkerRegist
 import { ThemeInitScript } from "@/components/util/ThemeInitScript";
 import { RegionalSettingsBoundary } from "@/components/providers/regional-settings-boundary";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
+import { OG_IMAGE_PATH } from '@/lib/seo/page-metadata'
 
 
 const geistSans = Geist({
@@ -52,11 +53,13 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: branding.platformName,
       title: ogTitle,
       description: branding.seoDescription,
+      images: [{ url: OG_IMAGE_PATH, width: 1200, height: 630 }],
     },
     twitter: {
       card: 'summary_large_image',
       title: ogTitle,
       description: branding.seoDescription,
+      images: [OG_IMAGE_PATH],
     },
     icons: {
       icon: branding.faviconUrl || branding.logoUrl || '/globe.svg',

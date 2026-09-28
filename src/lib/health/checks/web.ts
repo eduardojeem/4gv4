@@ -386,18 +386,25 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         },
         async () => {
           const pattern = kind === 'privacy' ? /privacidad|privacy/i : /t[eé]rminos|terms|condiciones/i
+          const implemented = codeAudit.legalPages.some((path) => pattern.test(path))
           const linked = (home?.html.links ?? []).filter((l) => pattern.test(l.href) || pattern.test(l.text)).map((l) => l.href)
           const candidates = [...new Set([...codeAudit.legalPages.filter((p) => pattern.test(p)), ...LEGAL_CANDIDATES[kind], ...linked.filter((h) => h.startsWith('/'))])]
           const responses = await Promise.all(candidates.map(async (path) => ({ path, response: await probe.get(path, { readBody: false }) })))
           const found = responses.find((r) => r.response.ok)
           return {
-            status: found ? (linked.length ? 'healthy' : 'warning') : 'error',
+            status: found ? (linked.length ? 'healthy' : 'warning') : implemented ? 'warning' : 'error',
             severity: 'medium',
-            summary: found ? `Encontrada en ${found.path}` : 'No existe',
+            summary: found ? `Encontrada en ${found.path}` : implemented ? 'Implementada, sin versión publicada' : 'No existe',
             findings: found
               ? linked.length ? [] : ['La página existe pero /saas no la enlaza.']
-              : [`Ninguna ruta respondió 200: ${candidates.join(', ')}`],
-            recommendation: found ? undefined : `Crear la página (p. ej. src/app/saas/${kind === 'privacy' ? 'privacidad' : 'terminos'}/page.tsx) y enlazarla en el footer y en el registro.`,
+              : implemented
+                ? [`La ruta está en el código, pero ninguna versión publicada respondió 200: ${candidates.join(', ')}`]
+                : [`Ninguna ruta respondió 200: ${candidates.join(', ')}`],
+            recommendation: found
+              ? undefined
+              : implemented
+                ? 'Completar y publicar el borrador desde Superadmin → Contenido web → Documentos legales.'
+                : `Crear la página (p. ej. src/app/saas/${kind === 'privacy' ? 'privacidad' : 'terminos'}/page.tsx) y enlazarla en el footer y en el registro.`,
           }
         },
       ),
@@ -438,10 +445,13 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
           ...(duplicated > 0 ? [`${duplicated} página(s) repiten la misma description`] : []),
           ...unreachable(pages),
         ]
+        const unreachableFailures = pages.filter((page) => !page.html && !page.response.challenged)
         return {
-          status: missing.length > 0 ? 'error' : findings.length > 0 ? 'warning' : 'healthy',
+          status: missing.length > 0 ? 'error' : unreachableFailures.length > 0 ? 'unknown' : 'healthy',
           severity: 'low',
-          summary: missing.length > 0 ? `${missing.length} página(s) sin meta description` : `${reachable.length} páginas con description`,
+          summary: missing.length > 0
+            ? `${missing.length} página(s) sin meta description`
+            : `${reachable.length} páginas verificables con description${pages.some((page) => page.response.challenged) ? '; las protegidas por Cloudflare se omiten' : ''}`,
           findings,
           recommendation: findings.length ? 'Definir `metadata.description` (o generateMetadata) en cada page.tsx pública.' : undefined,
         }
@@ -481,7 +491,7 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
           severity: 'low',
           summary: `${locs.length} URLs${foreign.length ? `, ${foreign.length} de otro host` : ''}`,
           findings: [...new Set(foreign.map((loc) => new URL(loc, probe.origin).origin))].map((o) => `URLs con host ${o} (esperado ${probe.origin})`),
-          recommendation: foreign.length ? 'sitemap.ts y robots.ts usan NEXT_PUBLIC_BASE_URL: definirla igual que NEXT_PUBLIC_SITE_URL o usar getSiteUrl().' : undefined,
+          recommendation: foreign.length ? 'Definir NEXT_PUBLIC_SITE_URL con el dominio canónico en Vercel Production y volver a desplegar.' : undefined,
         }
       },
     ),

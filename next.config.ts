@@ -212,12 +212,12 @@ const nextConfig: NextConfig = {
     return [
       {
         // Security headers para todas las rutas.
-        // CSP comienza en Report-Only para detectar incompatibilidades reales
-        // antes de bloquear scripts, conexiones o iframes legítimos.
+        // CSP efectiva: las fuentes requeridas por Supabase y Turnstile están
+        // declaradas explícitamente; cualquier otra carga queda bloqueada.
         source: '/(.*)',
         headers: [
           {
-            key: 'Content-Security-Policy-Report-Only',
+            key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
               "base-uri 'self'",

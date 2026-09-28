@@ -7,11 +7,12 @@ const readProjectFile = (relativePath: string) =>
   readFileSync(resolve(projectRoot, relativePath), 'utf8')
 
 describe('endurecimiento de produccion', () => {
-  it('bloquea el build ante errores TypeScript y reporta violaciones CSP', () => {
+  it('bloquea el build ante errores TypeScript y aplica la CSP', () => {
     const config = readProjectFile('next.config.ts')
 
     expect(config).toContain('ignoreBuildErrors: false')
-    expect(config).toContain("key: 'Content-Security-Policy-Report-Only'")
+    expect(config).toContain("key: 'Content-Security-Policy'")
+    expect(config).not.toContain("key: 'Content-Security-Policy-Report-Only'")
   })
 
   it('no conserva configuracion ni codigo ejecutable de V0 o WhatsApp Cloud', () => {

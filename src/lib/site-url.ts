@@ -4,9 +4,7 @@
  *
  * Prioridad:
  *  1. NEXT_PUBLIC_SITE_URL (dominio canónico configurado)
- *  2. NEXT_PUBLIC_APP_URL (compatibilidad con configuración previa)
- *  3. window.location.origin (solo cliente, último recurso)
- *  4. Fallback duro a producción
+ *  2. Fallback duro a producción
  *
  * Sirve tanto en server como en client (las vars NEXT_PUBLIC_ están disponibles
  * en ambos). Devuelve la URL sin barra final.
@@ -18,9 +16,10 @@ function isLocalhost(url: string): boolean {
 }
 
 export function getSiteUrl(): string {
-  const fromEnv =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL
+  // NEXT_PUBLIC_APP_URL se usó históricamente para servix360.org. No debe
+  // participar en URLs canónicas, porque un valor olvidado contamina sitemap,
+  // robots, Open Graph y enlaces de email al mismo tiempo.
+  const fromEnv = process.env.NEXT_PUBLIC_SITE_URL
 
   let base = fromEnv || FALLBACK_SITE_URL
 
