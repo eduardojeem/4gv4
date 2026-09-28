@@ -509,7 +509,7 @@ export default function UserProfilePage() {
   const handleLogout = async () => {
     setLoading(true)
     try {
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: 'local' })
       toast.success('Sesion cerrada')
       router.push('/login')
       router.refresh()

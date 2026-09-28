@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { SaaSBusinessPageContent } from '@/components/saas/landing/saas-business-page-content'
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
@@ -7,10 +8,11 @@ import { getMarketplaceOrganizations } from '@/lib/public/marketplace'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
-  return {
+  return publicPageMetadata({
     title: `Negocios y Comercios Adheridos | ${branding.platformName}`,
     description: 'Conocé las tiendas, importadoras y talleres técnicos que impulsan sus ventas y operaciones con nuestra plataforma.',
-  }
+    path: '/saas/negocios',
+  })
 }
 
 export default async function SaaSBusinessPage() {

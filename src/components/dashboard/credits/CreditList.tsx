@@ -11,7 +11,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
-import { Users, DollarSign, Calendar, Percent, TrendingUp, Eye, LayoutGrid, List, Table2, Search, X } from 'lucide-react'
+import { Users, DollarSign, Calendar, Percent, TrendingUp, Eye, LayoutGrid, List, Table2, Search, X, Package } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { formatCustomerId } from '@/lib/utils'
 import { CreditRow, InstallmentRow } from '@/hooks/use-credits'
@@ -157,9 +157,12 @@ export function CreditList({
                                                 <span className="font-mono text-muted-foreground">Ticket {display.saleCode}</span>
                                             )}
                                         </div>
-                                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-                                            {display.productSummary}
-                                        </p>
+                                        <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/50">
+                                            <Package className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                            <span className="text-xs font-medium text-blue-900 dark:text-blue-200 truncate">
+                                                {display.productSummary}
+                                            </span>
+                                        </div>
 
                                         {/* Próximo vencimiento destacado */}
                                         {nextPending && remaining > 0 && (
@@ -268,6 +271,10 @@ export function CreditList({
                                 <span className="rounded-full border border-border px-1.5 py-0.5">{display.originLabel}</span>
                                 {display.saleCode && <span className="font-mono">Ticket {display.saleCode}</span>}
                             </div>
+                            <div className="flex items-center gap-1 text-[11px] font-medium text-blue-700 dark:text-blue-300 truncate mt-0.5">
+                                <Package className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{display.productSummary}</span>
+                            </div>
                         </div>
                         {/* Mini progress */}
                         <div className="hidden sm:flex flex-col items-end gap-1 w-28 shrink-0">
@@ -329,7 +336,10 @@ export function CreditList({
                                             <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">{display.originLabel}</span>
                                             {display.saleCode && <span className="font-mono text-[10px] text-muted-foreground">Ticket {display.saleCode}</span>}
                                         </div>
-                                        <p className="max-w-[220px] truncate text-[11px] text-muted-foreground">{display.creditLabel}</p>
+                                        <div className="flex items-center gap-1 max-w-[240px] truncate text-[11px] font-medium text-blue-700 dark:text-blue-300">
+                                            <Package className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">{display.productSummary}</span>
+                                        </div>
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums text-sm">{formatCurrency(c.principal)}</TableCell>

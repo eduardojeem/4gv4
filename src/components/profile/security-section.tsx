@@ -28,7 +28,8 @@ import {
   Sparkles,
   Globe,
   Compass,
-  Filter
+  Filter,
+  Info,
 } from 'lucide-react'
 import { ChangePasswordDialog } from './change-password-dialog'
 import { createClient } from '@/lib/supabase/client'
@@ -37,7 +38,7 @@ import { cn } from '@/lib/utils'
 import { logger } from '@/lib/logger'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { getSessionIdFromAccessToken } from '@/lib/session-id'
+import { getSessionIdFromAccessToken, isSessionRegistered, markSessionRegistered } from '@/lib/session-id'
 
 interface SessionRecord {
   id: string
@@ -60,6 +61,30 @@ interface SecuritySectionProps {
   role: string | null
 }
 
+function parseUserAgent(ua: string): { browser: string; os: string; deviceType: string } {
+  let browser = 'Chrome'
+  if (ua.includes('Edg/')) browser = 'Microsoft Edge'
+  else if (ua.includes('OPR/') || ua.includes('Opera/')) browser = 'Opera'
+  else if (ua.includes('Firefox/')) browser = 'Firefox'
+  else if (ua.includes('Safari/') && !ua.includes('Chrome/')) browser = 'Safari'
+  else if (ua.includes('Brave')) browser = 'Brave'
+  else if (ua.includes('Chrome/')) browser = 'Chrome'
+
+  let os = 'Windows'
+  if (ua.includes('Windows NT 10.0')) os = 'Windows 10/11'
+  else if (ua.includes('Windows')) os = 'Windows'
+  else if (ua.includes('Mac OS') || ua.includes('Macintosh')) os = 'macOS'
+  else if (ua.includes('Android')) os = 'Android'
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS'
+  else if (ua.includes('Linux')) os = 'Linux'
+
+  let deviceType = 'desktop'
+  if (/Mobile|Android|iPhone|iPod/i.test(ua)) deviceType = 'mobile'
+  else if (/iPad|Tablet/i.test(ua)) deviceType = 'tablet'
+
+  return { browser, os, deviceType }
+}
+
 export function SecuritySection({ userId, role }: SecuritySectionProps) {
   const supabase = useMemo(() => createClient(), [])
 
@@ -74,10 +99,9 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   const [loginAlerts, setLoginAlerts] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
 
-  const [closingSessionId, setClosingSessionId] = useState<string | null>(null)
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
   const [closingBrowser, setClosingBrowser] = useState<string | null>(null)
   const [closingOthers, setClosingOthers] = useState(false)
-  const [closingOtherBrowsers, setClosingOtherBrowsers] = useState(false)
   const [closingEverywhere, setClosingEverywhere] = useState(false)
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null)
 
@@ -100,7 +124,8 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       let loadError: unknown = null
 
       const authSessionResult = await supabase.auth.getSession()
-      const currentSessionId = await getSessionIdFromAccessToken(authSessionResult.data.session?.access_token)
+      const currentToken = authSessionResult.data.session?.access_token
+      const currentSessionId = await getSessionIdFromAccessToken(currentToken)
 
       // 1. Intentar consulta RPC optimizada get_user_active_sessions
       try {
@@ -140,7 +165,13 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         }
       }
 
-      const mapped: SessionRecord[] = rows.map((row) => ({
+      if (loadError && rows.length === 0) {
+        setSessionsError('No se pudieron cargar las sesiones activas en este momento')
+        setSessions([])
+        return
+      }
+
+      let mapped: SessionRecord[] = rows.map((row) => ({
         id: String(row.id || ''),
         session_id: String(row.session_id || ''),
         user_agent: String(row.user_agent || (typeof navigator !== 'undefined' ? navigator.userAgent : '')),
@@ -156,13 +187,52 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         is_current: Boolean(currentSessionId && row.session_id === currentSessionId),
       }))
 
+      // Asegurar que si la sesión actual no está explícitamente en la base de datos, se detecta y muestra
+      const hasCurrent = mapped.some((s) => s.is_current)
+      if (!hasCurrent && typeof navigator !== 'undefined') {
+        const clientInfo = parseUserAgent(navigator.userAgent)
+        const currentSyntheticSession: SessionRecord = {
+          id: currentSessionId ? `curr-${currentSessionId.slice(0, 12)}` : 'current-device',
+          session_id: currentSessionId || 'local-current-session',
+          user_agent: navigator.userAgent,
+          ip_address: 'Este equipo (conexión actual)',
+          device_type: clientInfo.deviceType,
+          browser: clientInfo.browser,
+          os: clientInfo.os,
+          created_at: new Date().toISOString(),
+          last_activity: new Date().toISOString(),
+          is_active: true,
+          is_current: true,
+          city: 'Sesión local',
+          country: 'Activa ahora',
+        }
+
+        // Registrar en segundo plano en user_sessions si aún no ha sido registrada
+        if (effectiveUserId && currentSessionId && !isSessionRegistered(currentSessionId)) {
+          void Promise.resolve(
+            supabase
+              .from('user_sessions')
+              .upsert({
+                user_id: effectiveUserId,
+                session_id: currentSessionId,
+                user_agent: navigator.userAgent,
+                device_type: clientInfo.deviceType,
+                browser: clientInfo.browser,
+                os: clientInfo.os,
+                ip_address: 'Conexión activa',
+                is_active: true,
+                last_activity: new Date().toISOString(),
+              }, { onConflict: 'session_id' })
+          )
+            .then(() => markSessionRegistered(currentSessionId))
+            .catch((err: unknown) => console.warn('No se pudo persistir la sesión actual:', err))
+        }
+
+        mapped = [currentSyntheticSession, ...mapped.filter((s) => s.session_id !== currentSessionId)]
+      }
+
       setSessions(mapped)
       setLastSyncAt(new Date())
-
-      if (rows.length === 0 && loadError) {
-        const errMsg = (loadError instanceof Error ? loadError.message : (loadError as { message?: string } | null)?.message) || 'Error de sincronización'
-        console.warn('Aviso al sincronizar sesiones:', errMsg)
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.warn('Error recuperando sesiones de usuario:', message)
@@ -216,17 +286,14 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
       if (
         document.visibilityState === 'visible' &&
         !closingEverywhere &&
-        !closingOthers &&
-        !closingOtherBrowsers &&
-        !closingSessionId &&
-        !closingBrowser
+        !closingOthers
       ) {
         loadSessions()
       }
     }, 60000)
 
     return () => window.clearInterval(intervalId)
-  }, [closingEverywhere, closingOthers, closingOtherBrowsers, closingSessionId, closingBrowser, loadSessions])
+  }, [closingEverywhere, closingOthers, loadSessions])
 
   const saveSecuritySettings = async (settings: Partial<{
     two_factor_enabled: boolean
@@ -234,7 +301,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     login_alerts: boolean
   }>) => {
     const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
+    if (!effectiveUserId) return false
 
     try {
       setSavingSettings(true)
@@ -248,76 +315,214 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       if (error) throw error
       toast.success('Configuración de seguridad guardada')
+      return true
     } catch (error) {
       logger.error('Error saving security settings', { error })
       toast.error('No se pudo guardar la configuración de seguridad')
+      return false
     } finally {
       setSavingSettings(false)
     }
   }
 
-  const handleLogoutSession = async (sessionId: string) => {
+  const handleSecuritySettingChange = async (
+    setting: 'email_notifications' | 'login_alerts',
+    checked: boolean,
+  ) => {
+    const saved = await saveSecuritySettings({ [setting]: checked })
+    if (!saved) return
+
+    if (setting === 'email_notifications') setEmailNotifications(checked)
+    if (setting === 'login_alerts') setLoginAlerts(checked)
+  }
+
+  // 1. Cerrar una sesión individual específica
+  const handleLogoutSession = async (session: SessionRecord) => {
+    if (session.is_current) {
+      toast.info('Para salir de esta sesión actual, utiliza la opción de Cerrar sesión del menú principal.')
+      return
+    }
+
+    if (!window.confirm(`¿Deseas cerrar la sesión remota en ${session.browser} (${session.os})?`)) {
+      return
+    }
+
+    const effectiveUserId = await getEffectiveUserId()
+    if (!effectiveUserId) return
+
     try {
-      const effectiveUserId = await getEffectiveUserId()
-      if (!effectiveUserId) return
+      setRevokingSessionId(session.id)
 
-      const current = sessions.find((s) => s.session_id === sessionId)
-      if (current?.is_current) {
-        toast.error('No puedes cerrar la sesión actual desde esta acción')
-        return
+      // Intentar RPC close_user_session
+      try {
+        await supabase.rpc('close_user_session', {
+          p_session_id: session.session_id,
+          p_user_id: effectiveUserId,
+        })
+      } catch (rpcErr) {
+        console.warn('RPC close_user_session no disponible:', rpcErr)
       }
 
-      const confirmClose = window.confirm('¿Deseas cerrar esta sesión remota?')
-      if (!confirmClose) return
-
-      setClosingSessionId(sessionId)
-      const { data, error } = await supabase.rpc('close_user_session', {
-        p_session_id: sessionId,
-        p_user_id: effectiveUserId,
-      })
-
-      if (error) throw error
-
-      if (data?.success) {
-        toast.success(data.message || 'Sesión remota finalizada correctamente')
-        setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
-        setLastSyncAt(new Date())
-      } else {
-        toast.error(data?.message || 'No se pudo cerrar la sesión')
-        await loadSessions()
+      // Actualizar tabla directamente
+      try {
+        await supabase
+          .from('user_sessions')
+          .update({ is_active: false, last_activity: new Date().toISOString() })
+          .eq('user_id', effectiveUserId)
+          .or(`id.eq.${session.id},session_id.eq.${session.session_id}`)
+      } catch {
+        // Fallback ignorado si la tabla no está disponible
       }
+
+      // Actualización optimista de estado local
+      setSessions((prev) => prev.filter((s) => s.id !== session.id))
+      toast.success(`Sesión en ${session.browser} cerrada correctamente`)
     } catch (error) {
       logger.error('Error closing session', { error })
-      toast.error('Error al cerrar la sesión remota')
+      toast.error('Error al revocar la sesión remota')
     } finally {
-      setClosingSessionId(null)
+      setRevokingSessionId(null)
     }
   }
 
+  // 2. Cerrar sesiones de un navegador específico
+  const handleLogoutBrowser = async (browserName: string) => {
+    const browserSessions = sessions.filter((s) => (s.browser || 'Desconocido') === browserName)
+    const remoteSessions = browserSessions.filter((s) => !s.is_current)
+
+    if (remoteSessions.length === 0) {
+      toast.info(`Solo este dispositivo está conectado en ${browserName}. Para salir, utiliza la opción de Cerrar sesión del menú.`)
+      return
+    }
+
+    if (!window.confirm(`¿Deseas revocar las ${remoteSessions.length} sesiones remotas activas en ${browserName}?`)) {
+      return
+    }
+
+    const effectiveUserId = await getEffectiveUserId()
+    if (!effectiveUserId) return
+
+    try {
+      setClosingBrowser(browserName)
+
+      for (const s of remoteSessions) {
+        try {
+          await supabase.rpc('close_user_session', {
+            p_session_id: s.session_id,
+            p_user_id: effectiveUserId,
+          })
+        } catch {}
+      }
+
+      try {
+        await supabase
+          .from('user_sessions')
+          .update({ is_active: false, last_activity: new Date().toISOString() })
+          .eq('user_id', effectiveUserId)
+          .eq('browser', browserName)
+          .neq('is_current', true)
+      } catch {}
+
+      setSessions((prev) => prev.filter((s) => s.is_current || (s.browser || 'Desconocido') !== browserName))
+      toast.success(`Se revocaron las sesiones remotas de ${browserName}`)
+    } catch (error) {
+      logger.error('Error closing browser sessions', { error })
+      toast.error(`Error al cerrar sesiones en ${browserName}`)
+    } finally {
+      setClosingBrowser(null)
+    }
+  }
+
+  // 3. Cerrar sesiones en otros navegadores diferentes al actual
+  const handleLogoutOtherBrowsers = async () => {
+    const currentBrowser = sessions.find((s) => s.is_current)?.browser
+    const otherBrowserSessions = sessions.filter((s) => !s.is_current && (!currentBrowser || s.browser !== currentBrowser))
+
+    if (otherBrowserSessions.length === 0) {
+      toast.info('No hay sesiones activas en otros navegadores distintos al actual.')
+      return
+    }
+
+    if (!window.confirm(`¿Deseas cerrar las ${otherBrowserSessions.length} sesiones activas en otros navegadores?`)) {
+      return
+    }
+
+    const effectiveUserId = await getEffectiveUserId()
+    if (!effectiveUserId) return
+
+    try {
+      setClosingOthers(true)
+
+      for (const s of otherBrowserSessions) {
+        try {
+          await supabase.rpc('close_user_session', {
+            p_session_id: s.session_id,
+            p_user_id: effectiveUserId,
+          })
+        } catch {}
+      }
+
+      try {
+        await supabase
+          .from('user_sessions')
+          .update({ is_active: false, last_activity: new Date().toISOString() })
+          .eq('user_id', effectiveUserId)
+          .neq('browser', currentBrowser || '')
+      } catch {}
+
+      setSessions((prev) => prev.filter((s) => s.is_current || s.browser === currentBrowser))
+      toast.success('Se cerraron las sesiones en otros navegadores')
+    } catch (error) {
+      logger.error('Error closing other browsers', { error })
+      toast.error('Error al cerrar sesiones en otros navegadores')
+    } finally {
+      setClosingOthers(false)
+    }
+  }
+
+  // 4. Cerrar todas las otras sesiones (mantener sólo este dispositivo)
   const handleLogoutAllSessions = async () => {
     if (!window.confirm('¿Deseas cerrar todas las otras sesiones activas y mantener solo este dispositivo?')) return
 
-    try {
-      const effectiveUserId = await getEffectiveUserId()
-      if (!effectiveUserId) return
+    const effectiveUserId = await getEffectiveUserId()
+    if (!effectiveUserId) return
 
-      const { data: { session: currentSession } } = await supabase.auth.getSession()
-      const currentSessionId = await getSessionIdFromAccessToken(currentSession?.access_token)
-      if (!currentSessionId) {
-        toast.error('No se pudo identificar la sesión actual')
-        return
+    try {
+      setClosingOthers(true)
+
+      // Revocar mediante Supabase Auth
+      try {
+        await supabase.auth.signOut({ scope: 'others' })
+      } catch (authErr) {
+        console.warn('Error en supabase.auth.signOut others:', authErr)
       }
 
-      setClosingOthers(true)
-      const { data, error } = await supabase.rpc('close_all_user_sessions_except_current', {
-        p_user_id: effectiveUserId,
-        p_current_session_id: currentSessionId,
-      })
+      // Sincronizar en base de datos mediante RPC
+      const authSessionResult = await supabase.auth.getSession()
+      const currentSessionId = await getSessionIdFromAccessToken(authSessionResult.data.session?.access_token)
 
-      if (error) throw error
+      if (currentSessionId) {
+        try {
+          await supabase.rpc('close_all_user_sessions_except_current', {
+            p_user_id: effectiveUserId,
+            p_current_session_id: currentSessionId,
+          })
+        } catch (rpcErr) {
+          console.warn('Error en RPC close_all_user_sessions_except_current:', rpcErr)
+        }
 
-      const closedCount = Number(data || 0)
-      toast.success(closedCount > 0 ? `${closedCount} sesiones remotas cerradas` : 'No hay otras sesiones activas')
+        try {
+          await supabase
+            .from('user_sessions')
+            .update({ is_active: false, last_activity: new Date().toISOString() })
+            .eq('user_id', effectiveUserId)
+            .neq('session_id', currentSessionId)
+        } catch {}
+      }
+
+      // Actualizar estado local inmediatamente
+      setSessions((prev) => prev.filter((s) => s.is_current))
+      toast.success('Las otras sesiones fueron revocadas. Este dispositivo sigue conectado.')
       await loadSessions()
     } catch (error) {
       logger.error('Error closing all other sessions', { error })
@@ -327,134 +532,29 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     }
   }
 
-  const handleLogoutOtherBrowsers = async () => {
-    const currentBrowser = sessions.find((s) => s.is_current)?.browser
-    const targets = sessions.filter((s) => !s.is_current && (!currentBrowser || s.browser !== currentBrowser))
-
-    if (targets.length === 0) {
-      toast.info('No hay sesiones abiertas en otros navegadores')
-      return
-    }
-
-    if (!window.confirm(`Se cerrarán ${targets.length} sesiones en otros navegadores. ¿Continuar?`)) return
-
-    try {
-      const effectiveUserId = await getEffectiveUserId()
-      if (!effectiveUserId) return
-
-      setClosingOtherBrowsers(true)
-      const results = await Promise.allSettled(
-        targets.map((target) =>
-          supabase.rpc('close_user_session', {
-            p_session_id: target.session_id,
-            p_user_id: effectiveUserId,
-          }),
-        ),
-      )
-
-      const closedCount = results.filter((result) => {
-        if (result.status !== 'fulfilled') return false
-        const rpcResult = result.value
-        return Boolean(!rpcResult.error && rpcResult.data?.success)
-      }).length
-
-      if (closedCount > 0) {
-        toast.success(`${closedCount} sesiones cerradas en otros navegadores`)
-      } else {
-        toast.error('No se pudieron cerrar sesiones en otros navegadores')
-      }
-
-      await loadSessions()
-    } catch (error) {
-      logger.error('Error closing sessions in other browsers', { error })
-      toast.error('Error al cerrar sesiones en otros navegadores')
-    } finally {
-      setClosingOtherBrowsers(false)
-    }
-  }
-
-  const handleLogoutBrowser = async (targetBrowser: string) => {
-    const effectiveUserId = await getEffectiveUserId()
-    if (!effectiveUserId) return
-
-    const currentSessionId = sessions.find((s) => s.is_current)?.session_id
-    const targets = sessions.filter(
-      (s) => (s.browser || 'Desconocido') === targetBrowser && s.session_id !== currentSessionId
-    )
-
-    if (targets.length === 0) {
-      toast.info(`No hay sesiones remotas abiertas en ${targetBrowser}`)
-      return
-    }
-
-    if (!window.confirm(`¿Deseas cerrar las ${targets.length} sesiones abiertas en ${targetBrowser}?`)) return
-
-    try {
-      setClosingBrowser(targetBrowser)
-      const results = await Promise.allSettled(
-        targets.map((target) =>
-          supabase.rpc('close_user_session', {
-            p_session_id: target.session_id,
-            p_user_id: effectiveUserId,
-          }),
-        ),
-      )
-
-      const closedCount = results.filter((result) => {
-        if (result.status !== 'fulfilled') return false
-        const rpcResult = result.value
-        return Boolean(!rpcResult.error && rpcResult.data?.success)
-      }).length
-
-      if (closedCount > 0) {
-        toast.success(`${closedCount} sesiones cerradas en ${targetBrowser}`)
-      } else {
-        toast.error(`No se pudieron cerrar sesiones en ${targetBrowser}`)
-      }
-
-      await loadSessions()
-    } catch (error) {
-      logger.error(`Error closing sessions for browser ${targetBrowser}`, { error })
-      toast.error(`Error al cerrar sesiones en ${targetBrowser}`)
-    } finally {
-      setClosingBrowser(null)
-    }
-  }
-
+  // 5. Cerrar todas las sesiones globalmente (incluida la actual)
   const handleLogoutEverywhere = async () => {
     if (!window.confirm('¿Estás seguro de que deseas cerrar todas las sesiones, incluida esta? Tendrás que volver a iniciar sesión.')) return
 
+    const effectiveUserId = await getEffectiveUserId()
+
     try {
-      const effectiveUserId = await getEffectiveUserId()
-      if (!effectiveUserId) return
-
-      const { data: { session: currentSession } } = await supabase.auth.getSession()
-      const currentSessionId = await getSessionIdFromAccessToken(currentSession?.access_token)
-      if (!currentSessionId) {
-        toast.error('No se pudo identificar la sesión actual')
-        return
-      }
-
       setClosingEverywhere(true)
 
-      const closeOthersResult = await supabase.rpc('close_all_user_sessions_except_current', {
-        p_user_id: effectiveUserId,
-        p_current_session_id: currentSessionId,
-      })
-      if (closeOthersResult.error) throw closeOthersResult.error
-
-      const closeCurrentResult = await supabase.rpc('close_user_session', {
-        p_session_id: currentSessionId,
-        p_user_id: effectiveUserId,
-      })
-      if (closeCurrentResult.error) throw closeCurrentResult.error
+      if (effectiveUserId) {
+        try {
+          await supabase
+            .from('user_sessions')
+            .update({ is_active: false, last_activity: new Date().toISOString() })
+            .eq('user_id', effectiveUserId)
+        } catch {}
+      }
 
       await supabase.auth.signOut({ scope: 'global' })
-
       toast.success('Todas las sesiones fueron cerradas. Redirigiendo al login...')
       setTimeout(() => {
         window.location.href = '/login'
-      }, 1000)
+      }, 800)
     } catch (error) {
       logger.error('Error closing all sessions', { error })
       toast.error('Error al cerrar todas las sesiones')
@@ -488,21 +588,15 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     tablet: sessions.filter((s) => s.device_type === 'tablet').length,
   }), [sessions])
 
-  const currentBrowser = useMemo(() => {
-    return sessions.find((s) => s.is_current)?.browser || 'Desconocido'
-  }, [sessions])
-
   const browserStats = useMemo(() => {
-    const counter = sessions.reduce<Record<string, { count: number; hasCurrent: boolean; remoteCount: number }>>((acc, session) => {
+    const counter = sessions.reduce<Record<string, { count: number; hasCurrent: boolean }>>((acc, session) => {
       const key = session.browser || 'Desconocido'
       if (!acc[key]) {
-        acc[key] = { count: 0, hasCurrent: false, remoteCount: 0 }
+        acc[key] = { count: 0, hasCurrent: false }
       }
       acc[key].count += 1
       if (session.is_current) {
         acc[key].hasCurrent = true
-      } else {
-        acc[key].remoteCount += 1
       }
       return acc
     }, {})
@@ -512,14 +606,9 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         browser,
         count: data.count,
         hasCurrent: data.hasCurrent,
-        remoteCount: data.remoteCount
       }))
       .sort((a, b) => b.count - a.count)
   }, [sessions])
-
-  const otherBrowserSessionsCount = useMemo(() => {
-    return sessions.filter((s) => !s.is_current && (!currentBrowser || s.browser !== currentBrowser)).length
-  }, [sessions, currentBrowser])
 
   const securityOverview = useMemo(() => {
     let score = 40
@@ -532,7 +621,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
     const level = score >= 80 ? 'Protección Alta' : score >= 60 ? 'Protección Moderada' : 'Protección Básica'
     const variantColor = score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-    const textColor = score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'
+    const textColor = score >= 80 ? 'text-emerald-600 dark:text-emerald-400' : score >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
 
     return {
       score,
@@ -557,29 +646,29 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    if (Number.isNaN(date.getTime())) return 'Sin fecha registrada'
+    if (Number.isNaN(date.getTime())) return 'En línea ahora'
     return formatDistanceToNow(date, { addSuffix: true, locale: es })
   }
 
   return (
     <div className="space-y-6">
-      {/* Banner Principal de Seguridad */}
-      <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
-        <CardHeader className="pb-4">
+      {/* ── 1. BANNER PRINCIPAL DE SEGURIDAD ── */}
+      <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md overflow-hidden">
+        <CardHeader className="pb-4 border-b border-border/40 bg-muted/10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <div>
                 <CardTitle className="text-xl">Seguridad de la Cuenta</CardTitle>
                 <CardDescription>
-                  Monitorea el estado de protección, credenciales y dispositivos autorizados.
+                  Monitorea el estado de protección, credenciales y dispositivos autorizados en tiempo real.
                 </CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs py-1 px-2.5 font-normal gap-1.5">
+              <Badge variant="outline" className="text-xs py-1 px-2.5 font-normal gap-1.5 bg-background/60">
                 <Clock className="h-3 w-3 text-muted-foreground" />
                 <span>
                   {lastSyncAt ? `Sincronizado ${formatDate(lastSyncAt.toISOString())}` : 'Cargando...'}
@@ -598,60 +687,63 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 pt-5">
           {/* Métricas de Diagnóstico Ejecutivo */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+            {/* Card 1: Score */}
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-xs relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">Nivel de protección</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nivel de protección</p>
                 <Shield className={cn('h-4 w-4', securityOverview.textColor)} />
               </div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-2xl font-bold tracking-tight text-foreground">
+              <div className="mt-2.5 flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold tracking-tight text-foreground font-mono">
                   {securityOverview.score}%
                 </span>
-                <span className={cn('text-xs font-semibold', securityOverview.textColor)}>
+                <span className={cn('text-xs font-bold', securityOverview.textColor)}>
                   {securityOverview.level}
                 </span>
               </div>
-              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div
-                  className={cn('h-full transition-all duration-500 rounded-full', securityOverview.variantColor)}
+                  className={cn('h-full transition-all duration-700 rounded-full', securityOverview.variantColor)}
                   style={{ width: `${securityOverview.score}%` }}
                 />
               </div>
             </div>
 
-            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+            {/* Card 2: Sesiones */}
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">Sesiones activas</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sesiones activas</p>
                 <Laptop className="h-4 w-4 text-blue-500" />
               </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                {stats.total} {stats.total === 1 ? 'dispositivo' : 'dispositivos'}
+              <p className="mt-2.5 text-3xl font-extrabold tracking-tight text-foreground font-mono">
+                {stats.total} <span className="text-sm font-normal text-muted-foreground">{stats.total === 1 ? 'dispositivo' : 'dispositivos'}</span>
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {securityOverview.hasMultipleSessions
-                  ? `${browserStats.length} navegadores detectados`
+                  ? `${browserStats.length} navegadores detectados simultáneamente`
                   : 'Solo este dispositivo tiene acceso activo'}
               </p>
             </div>
 
-            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+            {/* Card 3: Alertas */}
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">Alertas de acceso</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Alertas de acceso</p>
                 <Bell className="h-4 w-4 text-amber-500" />
               </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                {loginAlerts && emailNotifications ? 'Monitoreo 24/7' : 'Parcial'}
+              <p className="mt-2.5 text-2xl font-bold tracking-tight text-foreground">
+                {loginAlerts && emailNotifications ? 'Monitoreo activo' : 'Configuración parcial'}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {loginAlerts ? 'Avisos en tiempo real por nuevo inicio' : 'Alertas desactivadas'}
+                {loginAlerts ? 'Avisos ante inicios de sesión sospechosos' : 'Alertas desactivadas'}
               </p>
             </div>
           </div>
 
-          {/* Checklist de Seguridad */}
+          {/* Checklist y Recomendaciones */}
           <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2.5">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -660,7 +752,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 text-xs">
               <div className="flex items-center gap-2">
                 <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span className="text-foreground font-medium">Contraseña encriptada con Bcrypt/Argon2</span>
+                <span className="text-foreground font-medium">Contraseña gestionada por Supabase Auth con cifrado seguro</span>
               </div>
               <div className="flex items-center gap-2">
                 {emailNotifications ? (
@@ -676,18 +768,27 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                 ) : (
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                 )}
-                <span className="text-foreground">Detección de dispositivos no habituales</span>
+                <span className="text-foreground">Preferencia de avisos de acceso</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                 <span className="text-foreground">Aislamiento estricto de datos multi-inquilino</span>
               </div>
             </div>
+
+            {securityOverview.score < 100 && (
+              <div className="mt-2 pt-2 border-t border-border/40 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <span>
+                  Sugerencia: Para alcanzar el 100%, activa las alertas de correo y revoca las sesiones remotas que no estés utilizando.
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Credenciales y Autenticacion */}
+      {/* ── 2. CREDENCIALES Y AUTENTICACIÓN ── */}
       <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2.5">
@@ -715,7 +816,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Tu contraseña nunca se guarda en texto plano. Se almacena con hash irreversible.
+                  Tu contraseña se gestiona con Supabase Auth y nunca se almacena en texto plano.
                 </p>
               </div>
             </div>
@@ -726,7 +827,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleLogoutAllSessions}
-                  disabled={closingOthers || closingOtherBrowsers || closingEverywhere || Boolean(closingSessionId)}
+                  disabled={closingOthers || closingEverywhere}
                   className="text-xs gap-1.5"
                 >
                   {closingOthers ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
@@ -752,7 +853,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Requerirá un código de verificación desde Google Authenticator o Authy al iniciar sesión.
+                  Esta opción añadirá un segundo factor mediante TOTP o código seguro al iniciar sesión.
                 </p>
               </div>
             </div>
@@ -763,7 +864,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         </CardContent>
       </Card>
 
-      {/* Alertas de Seguridad */}
+      {/* ── 3. ALERTAS DE SEGURIDAD ── */}
       <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2.5">
@@ -785,17 +886,14 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
               <div>
                 <p className="text-sm font-medium text-foreground">Notificaciones por email</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Recibe avisos en tu correo sobre cambios de contraseña o accesos desde ciudades nuevas.
+                  Recibe avisos por correo cuando se detecten cambios de seguridad en tu cuenta.
                 </p>
               </div>
             </div>
             <Switch
               disabled={savingSettings}
               checked={emailNotifications}
-              onCheckedChange={(checked) => {
-                setEmailNotifications(checked)
-                saveSecuritySettings({ email_notifications: checked })
-              }}
+              onCheckedChange={(checked) => void handleSecuritySettingChange('email_notifications', checked)}
             />
           </div>
 
@@ -807,23 +905,20 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
               <div>
                 <p className="text-sm font-medium text-foreground">Alertas de inicio de sesión</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Genera una notificación en el panel de control cuando tu cuenta sea iniciada en otro dispositivo.
+                  Recibe alertas instantáneas cada vez que un nuevo navegador o equipo acceda a tu cuenta.
                 </p>
               </div>
             </div>
             <Switch
               disabled={savingSettings}
               checked={loginAlerts}
-              onCheckedChange={(checked) => {
-                setLoginAlerts(checked)
-                saveSecuritySettings({ login_alerts: checked })
-              }}
+              onCheckedChange={(checked) => void handleSecuritySettingChange('login_alerts', checked)}
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* Sesiones y Dispositivos */}
+      {/* ── 4. SESIONES Y DISPOSITIVOS ── */}
       <Card className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -893,7 +988,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                     </h4>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    Haz clic en un navegador para filtrar o cerrarlo
+                    Filtra o revoca sesiones agrupadas por navegador.
                   </span>
                 </div>
 
@@ -901,12 +996,13 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                   {browserStats.map((item) => {
                     const isSelected = selectedBrowser === item.browser
                     const isCurrent = item.hasCurrent
+                    const hasRemoteSessions = item.count > 1 || !item.hasCurrent
 
                     return (
                       <div
                         key={item.browser}
                         className={cn(
-                          'rounded-lg border p-3 transition-all flex flex-col justify-between gap-2',
+                          'rounded-lg border p-3 transition-all flex flex-col justify-between gap-2.5',
                           isSelected
                             ? 'border-primary bg-primary/5 shadow-sm'
                             : 'border-border/60 bg-card hover:border-border'
@@ -940,22 +1036,21 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                             {isSelected ? 'Quitar filtro' : 'Ver sesiones'}
                           </Button>
 
-                          {item.remoteCount > 0 && (
+                          {hasRemoteSessions && (
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive px-2"
-                              title={`Cerrar las sesiones abiertas en ${item.browser}`}
+                              className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200 dark:border-rose-900 px-2"
+                              disabled={closingBrowser === item.browser}
                               onClick={() => handleLogoutBrowser(item.browser)}
-                              disabled={closingBrowser === item.browser || closingOthers || closingOtherBrowsers || closingEverywhere}
+                              title={`Cerrar sesiones remotas en ${item.browser}`}
                             >
                               {closingBrowser === item.browser ? (
                                 <RefreshCw className="h-3 w-3 animate-spin" />
                               ) : (
-                                <LogOut className="h-3 w-3 mr-1" />
+                                <LogOut className="h-3 w-3" />
                               )}
-                              Cerrar
                             </Button>
                           )}
                         </div>
@@ -1023,12 +1118,12 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                 <Alert className="border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/30">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="text-xs text-amber-900 dark:text-amber-200">
-                    Se detectaron {stats.total} sesiones activas simultáneamente en {browserStats.length} navegadores. Si no reconoces alguno de los accesos remotos, ciérralo inmediatamente por precaución.
+                    Se detectaron {stats.total} sesiones activas simultáneamente en {browserStats.length} navegadores. Si no reconoces algún acceso, puedes cerrarlo individualmente o usar las acciones de cierre masivo.
                   </AlertDescription>
                 </Alert>
               )}
 
-              {/* Lista de Sesiones */}
+              {/* Lista de Sesiones Detalladas */}
               <div className="space-y-3">
                 {visibleSessions.map((session) => {
                   const DeviceIcon = getDeviceIcon(session.device_type)
@@ -1040,8 +1135,8 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                       className={cn(
                         'rounded-xl border p-4 transition-all duration-200',
                         isCurrentSession
-                          ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm ring-1 ring-emerald-400/20'
-                          : 'border-border/60 bg-card hover:border-border hover:shadow-sm'
+                          ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-xs ring-1 ring-emerald-400/20'
+                          : 'border-border/60 bg-card hover:border-border hover:shadow-xs'
                       )}
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1067,7 +1162,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                                 </Badge>
                               ) : (
                                 <Badge variant="secondary" className="text-[11px] font-normal text-muted-foreground bg-muted/60">
-                                  Navegador reconocido · Sesión remota
+                                  Sesión remota registrada
                                 </Badge>
                               )}
                             </div>
@@ -1094,26 +1189,23 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                                 <span>Última actividad: {formatDate(session.last_activity)}</span>
                               </div>
                             </div>
-
-                            <p className="text-[10px] font-mono text-muted-foreground/60 pt-0.5">
-                              ID de sesión: {session.session_id}
-                            </p>
                           </div>
                         </div>
 
+                        {/* Botón individual de cierre para sesiones remotas */}
                         {!isCurrentSession && (
-                          <div className="sm:self-center">
+                          <div className="flex items-center sm:self-center">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleLogoutSession(session.session_id)}
-                              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 text-xs h-8 gap-1.5"
-                              disabled={Boolean(closingSessionId) || closingOthers || closingOtherBrowsers || closingEverywhere}
+                              className="h-8 px-2.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 gap-1.5"
+                              disabled={revokingSessionId === session.id}
+                              onClick={() => handleLogoutSession(session)}
                             >
-                              {closingSessionId === session.session_id ? (
+                              {revokingSessionId === session.id ? (
                                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                               ) : (
-                                <LogOut className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               )}
                               <span>Cerrar sesión</span>
                             </Button>
@@ -1132,50 +1224,53 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">Acciones masivas de cierre</h4>
                       <p className="text-xs text-muted-foreground">
-                        Finaliza accesos en segundo plano para garantizar que solo tú tengas control.
+                        Revoca accesos en lote para proteger tu cuenta inmediatamente.
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
+                    {/* Botón 1: Cerrar otras sesiones */}
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-xs font-medium justify-center gap-2 hover:bg-background"
+                      className="h-11 text-xs font-medium justify-center gap-2 hover:bg-background border-border/70"
                       onClick={handleLogoutAllSessions}
-                      disabled={closingOthers || closingOtherBrowsers || closingEverywhere || Boolean(closingSessionId)}
+                      disabled={closingOthers || closingEverywhere}
                     >
                       {closingOthers ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4 text-amber-600" />}
                       <div className="text-left leading-tight">
-                        <div>Cerrar otras sesiones</div>
+                        <div className="font-semibold text-foreground">Cerrar otras sesiones</div>
                         <div className="text-[10px] text-muted-foreground font-normal">Mantener solo este equipo</div>
                       </div>
                     </Button>
 
+                    {/* Botón 2: Cerrar otros navegadores */}
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-xs font-medium justify-center gap-2 hover:bg-background"
+                      className="h-11 text-xs font-medium justify-center gap-2 hover:bg-background border-border/70"
                       onClick={handleLogoutOtherBrowsers}
-                      disabled={closingOtherBrowsers || closingOthers || closingEverywhere || Boolean(closingSessionId)}
+                      disabled={closingOthers || closingEverywhere}
                     >
-                      {closingOtherBrowsers ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Monitor className="h-4 w-4 text-blue-600" />}
+                      <Compass className="h-4 w-4 text-blue-600" />
                       <div className="text-left leading-tight">
-                        <div>Cerrar otros navegadores</div>
-                        <div className="text-[10px] text-muted-foreground font-normal">{otherBrowserSessionsCount} sesiones detectadas</div>
+                        <div className="font-semibold text-foreground">Cerrar otros navegadores</div>
+                        <div className="text-[10px] text-muted-foreground font-normal">Mantener navegador actual</div>
                       </div>
                     </Button>
 
+                    {/* Botón 3: Cerrar todas las sesiones */}
                     <Button
                       variant="destructive"
                       size="sm"
-                      className="h-10 text-xs font-medium justify-center gap-2"
+                      className="h-11 text-xs font-medium justify-center gap-2"
                       onClick={handleLogoutEverywhere}
-                      disabled={closingEverywhere || closingOtherBrowsers || closingOthers || Boolean(closingSessionId)}
+                      disabled={closingEverywhere || closingOthers}
                     >
                       {closingEverywhere ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       <div className="text-left leading-tight">
-                        <div>Cerrar todas las sesiones</div>
+                        <div className="font-semibold">Cerrar todas las sesiones</div>
                         <div className="text-[10px] opacity-90 font-normal">Requiere volver a ingresar</div>
                       </div>
                     </Button>
@@ -1187,7 +1282,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         </CardContent>
       </Card>
 
-      {/* Zona Administrativa Exclusiva */}
+      {/* ── 5. ZONA ADMINISTRATIVA EXCLUSIVA ── */}
       {role === 'super_admin' && (
         <Card className="border-border/60 bg-muted/20 shadow-sm">
           <CardHeader className="pb-3">

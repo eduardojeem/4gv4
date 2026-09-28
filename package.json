@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
+    "prebuild": "node scripts/generate-health-manifest.mjs",
     "build": "next build && node scripts/remove-source-maps.js",
     "build:turbo": "next build --turbopack",
     "build:analyze": "ANALYZE=true npm run build && node scripts/analyze-bundle.js",

@@ -1,5 +1,18 @@
 begin;
 
+-- El proyecto remoto ya tenía estos campos de perfil público, pero el baseline
+-- histórico no los declaraba. Formalizarlos aquí permite reconstruir una base
+-- local desde cero y mantiene la migración segura en entornos donde ya existen.
+alter table public.profiles
+  add column if not exists username text,
+  add column if not exists display_name text,
+  add column if not exists title text,
+  add column if not exists is_public boolean not null default false;
+
+create unique index if not exists profiles_username_key
+  on public.profiles (lower(username))
+  where username is not null;
+
 alter table public.profiles enable row level security;
 revoke all on table public.profiles from anon, authenticated;
 

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PUBLIC_STATUS_HISTORY_COLUMNS, toPublicStatusHistory } from '@/lib/repairs/public-status-history'
 import { cookies } from 'next/headers'
 import { headers } from 'next/headers'
 import { verifyPublicToken } from '@/lib/public-session'
@@ -126,7 +127,7 @@ async function fetchRepairServerSide(
       adminSupabase.from('customers').select('name, phone').eq('id', repair.customer_id).single(),
       adminSupabase
         .from('repair_status_history')
-        .select('status, note, created_at')
+        .select(PUBLIC_STATUS_HISTORY_COLUMNS)
         .eq('repair_id', repair.id)
         .order('created_at', { ascending: true }),
     ])
@@ -149,7 +150,7 @@ async function fetchRepairServerSide(
       paymentStatus: repair.payment_status,
       warrantyMonths: repair.warranty_months,
       warrantyType: repair.warranty_type,
-      statusHistory: statusHistoryResult.data || [],
+      statusHistory: toPublicStatusHistory(statusHistoryResult.data),
       technician: technicianResult.data?.full_name ? { name: technicianResult.data.full_name } : null,
       customer: {
         name: customerResult.data?.name || 'Cliente',

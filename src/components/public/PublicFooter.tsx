@@ -9,6 +9,7 @@ import { isPublicServicesPageAvailable, isPublicRepairsAvailable } from '@/lib/w
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
 import { getSocialLinks } from '@/lib/public/social-links'
 import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
+import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 export function PublicFooter({
@@ -201,6 +202,7 @@ export function PublicFooter({
           <p className="order-2 text-center sm:order-1 sm:text-left">
             © {new Date().getFullYear()} {companyName}. Todos los derechos reservados.
           </p>
+          <LegalFooterLinks className="order-3 [&_ul]:justify-center [&_ul]:text-xs" />
 
           {hasSocials && (
             <div className="order-1 flex items-center gap-3 sm:order-2">

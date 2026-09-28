@@ -4,6 +4,7 @@ import {
   normalizeSearchTerm,
   type SiteAnalyticsEventType,
 } from '@/lib/site-analytics/shared'
+import { isAnalyticsAllowed } from '@/lib/consent/cookie-consent'
 
 const VISITOR_KEY = 'site-analytics:vid'
 const SESSION_KEY = 'site-analytics:sid'
@@ -63,6 +64,8 @@ function getUtmSource() {
 }
 
 function send(payload: Record<string, unknown>) {
+  // El visitante eligió "Solo esenciales" en el aviso de cookies.
+  if (!isAnalyticsAllowed()) return
   const body = JSON.stringify(payload)
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
@@ -108,7 +111,8 @@ function doNotTrack() {
 }
 
 function track(type: SiteAnalyticsEventType, pathname: string, extras: TrackExtras = {}) {
-  if (typeof window === 'undefined' || doNotTrack()) return
+  // Antes de crear identificadores: con "Solo esenciales" no se guarda nada.
+  if (typeof window === 'undefined' || doNotTrack() || !isAnalyticsAllowed()) return
   const page = classifySitePage(withTenantPrefix(pathname))
   if (!page) return
 

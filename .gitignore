@@ -148,6 +148,7 @@ playwright-report/
 # Supabase
 .supabase/
 supabase/.temp/
+supabase/.branches/
 
 # Temporary SQL files for development/testing
 check_promotions_table.sql

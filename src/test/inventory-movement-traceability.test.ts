@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 
-const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
+const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8').replace(/\r\n/g, '\n')
 const MIGRACION = leer('supabase/migrations_legacy/20260907120000_inventory_movement_traceability.sql')
 const PRODUCTOS_API = leer('src/app/api/products/route.ts')
 const PRODUCTO_API = leer('src/app/api/products/[id]/route.ts')

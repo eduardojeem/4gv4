@@ -948,6 +948,17 @@ function RegisterForm() {
                             .
                           </span>
                         </p>
+                        <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+                          Al crear la cuenta aceptás los{' '}
+                          <Link href="/saas/terminos" target="_blank" className="font-medium text-cyan-700 underline-offset-2 hover:underline dark:text-cyan-400">
+                            Términos y condiciones
+                          </Link>{' '}
+                          y la{' '}
+                          <Link href="/saas/privacidad" target="_blank" className="font-medium text-cyan-700 underline-offset-2 hover:underline dark:text-cyan-400">
+                            Política de privacidad
+                          </Link>
+                          .
+                        </p>
                       </div>
                     </form>
                   )}

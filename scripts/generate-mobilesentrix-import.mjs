@@ -299,8 +299,9 @@ function writeFiles(rows, baseName) {
   }
   const csvContent = '\uFEFF' + csvLines.join('\r\n')
 
+  // Solo en la raíz: public/ se sirve sin autenticación y esto incluye precios
+  // de compra del proveedor (detectado por /superadmin/system-health).
   fs.writeFileSync(`${baseName}.csv`, csvContent, 'utf8')
-  fs.writeFileSync(`public/${baseName}.csv`, csvContent, 'utf8')
 
   // Generar Excel (.xlsx)
   const wb = XLSX.utils.book_new()
@@ -323,9 +324,8 @@ function writeFiles(rows, baseName) {
   XLSX.utils.book_append_sheet(wb, ws, 'Productos')
   const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
   fs.writeFileSync(`${baseName}.xlsx`, xlsxBuffer)
-  fs.writeFileSync(`public/${baseName}.xlsx`, xlsxBuffer)
 
-  console.log(`Archivos generados: ${baseName}.csv y ${baseName}.xlsx (en raíz y public/)`)
+  console.log(`Archivos generados: ${baseName}.csv y ${baseName}.xlsx (en la raíz del repo)`)
 }
 
 writeFiles(rowsPYG, 'productos_mobilesentrix_pyg')

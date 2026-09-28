@@ -229,6 +229,12 @@ function SectionCard({
 
 // ---------------------------------------------------------------------------
 
+// Cada refresco vuelve a correr get_site_analytics_summary contra toda la
+// tabla de eventos: apagado por defecto para no generar carga de fondo en
+// Supabase mientras la pestaña del dashboard queda abierta sin que nadie la
+// mire. Quien lo prenda decide pagar ese costo a cambio de ver numeros en vivo.
+const AUTO_REFRESH_INTERVAL_MS = 60_000
+
 export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string; variant: Variant }) {
   const [days, setDays] = useState<SiteAnalyticsRangeDays>(DEFAULT_SITE_ANALYTICS_RANGE_DAYS)
   const [site, setSite] = useState<SiteAnalyticsSite | null>(null)
@@ -236,6 +242,7 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
   const [payload, setPayload] = useState<ApiPayload['data'] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState(false)
 
   const url = useMemo(() => {
     const params = new URLSearchParams({ days: String(days) })
@@ -269,6 +276,12 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
     queueMicrotask(() => void load(controller.signal))
     return () => controller.abort()
   }, [load])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(() => void load(), AUTO_REFRESH_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [autoRefresh, load])
 
   const summary = payload?.summary
   const totals = summary?.totals
@@ -341,6 +354,31 @@ export function SiteAnalyticsDashboard({ endpoint, variant }: { endpoint: string
               {formatNumber(summary.active_now)} en línea ahora
             </Badge>
           )}
+          <div className="inline-flex rounded-lg border bg-muted/40 p-0.5" role="group" aria-label="Actualización">
+            <button
+              type="button"
+              onClick={() => setAutoRefresh(false)}
+              aria-pressed={!autoRefresh}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                !autoRefresh ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Manual
+            </button>
+            <button
+              type="button"
+              onClick={() => setAutoRefresh(true)}
+              aria-pressed={autoRefresh}
+              title={`Vuelve a consultar cada ${AUTO_REFRESH_INTERVAL_MS / 1000}s mientras esté activo`}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                autoRefresh ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Automático
+            </button>
+          </div>
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             <span className="ml-1.5">Actualizar</span>

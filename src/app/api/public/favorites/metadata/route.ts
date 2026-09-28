@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { z } from 'zod'
 import { resolvePublicStorefrontOrganizationBySlug, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { getClientIp, rateLimiter } from '@/lib/rate-limiter'
+
+// Endpoint anónimo que consulta hasta 200 productos por llamada.
+const METADATA_RATE_LIMIT = 60
+const METADATA_RATE_WINDOW_MS = 60 * 1000
 
 const requestSchema = z.object({
   productIds: z.array(z.string().min(1).max(100)).max(200),
@@ -10,6 +15,15 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const allowed = await rateLimiter.check(
+      `favorites-metadata:${getClientIp(request)}`,
+      METADATA_RATE_LIMIT,
+      METADATA_RATE_WINDOW_MS,
+    )
+    if (!allowed) {
+      return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 })
+    }
+
     const body = await request.json().catch(() => null)
     const parsed = requestSchema.safeParse(body)
     if (!parsed.success) {

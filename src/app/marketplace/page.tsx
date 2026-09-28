@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import Link from 'next/link'
 import { ArrowRight, Building2, CheckCircle2, Package, Rocket, Sparkles, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,10 +19,13 @@ import { MarketplaceBusinessPromoShowcase } from '@/components/public/Marketplac
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
-  return {
+  return publicPageMetadata({
     title: `${branding.marketplaceName} | ${branding.platformName}`,
-    description: branding.seoDescription,
-  }
+    description: branding.marketplaceTagline?.trim()
+      ? `${branding.marketplaceTagline.trim()}. Productos, tiendas y servicios técnicos en un solo lugar.`
+      : 'Encontrá productos, tiendas y servicios técnicos de comercios de todo el país en un solo lugar.',
+    path: '/marketplace',
+  })
 }
 
 // La pagina puede reutilizar el HTML/RSC durante la misma ventana corta que el

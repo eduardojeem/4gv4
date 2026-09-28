@@ -1,7 +1,10 @@
 import { MetadataRoute } from 'next'
+import { getSiteUrl } from '@/lib/site-url'
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://localhost:3000'
+  // Mismo dominio canónico que el resto de la app. NEXT_PUBLIC_BASE_URL
+  // apuntaba en producción a un dominio anterior (servix360.org).
+  const baseUrl = getSiteUrl()
 
   return {
     rules: [
@@ -31,6 +34,8 @@ export default function robots(): MetadataRoute.Robots {
           '/dashboard/',
           '/admin',
           '/admin/',
+          '/superadmin',
+          '/superadmin/',
           '/api/',
           '/auth/',
           '/login',

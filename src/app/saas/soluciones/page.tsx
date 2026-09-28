@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { SaaSSolutionsPageContent } from '@/components/saas/landing/saas-solutions-page-content'
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
@@ -6,10 +7,11 @@ import { getPlatformBranding } from '@/lib/platform/branding'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
-  return {
+  return publicPageMetadata({
     title: `Soluciones del Sistema SaaS | ${branding.platformName}`,
     description: 'Descubrí cómo nuestro software resuelve los problemas reales de tu taller técnico, punto de venta, control de inventario y caja sin diferencias.',
-  }
+    path: '/saas/soluciones',
+  })
 }
 
 export default async function SaaSSolutionsPage() {

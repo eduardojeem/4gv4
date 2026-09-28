@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/seo/page-metadata'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { SaaSBusinessSection } from '@/components/saas/landing/saas-business-section'
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
@@ -10,10 +11,11 @@ import { getPlatformBranding } from '@/lib/platform/branding'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
-  return {
+  return publicPageMetadata({
     title: branding.seoTitle,
     description: branding.seoDescription,
-  }
+    path: '/saas',
+  })
 }
 
 export default async function SaaSLandingPage() {

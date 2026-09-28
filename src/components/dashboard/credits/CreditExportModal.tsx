@@ -15,12 +15,10 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
-  Filter,
   Search,
   CheckCircle2,
   AlertTriangle,
   Clock,
-  TrendingUp,
   BarChart3,
   Calendar,
   Layers,
@@ -30,17 +28,23 @@ import {
   ArrowUpDown,
   RotateCcw,
   SlidersHorizontal,
-  Wallet,
   Users,
   User,
   UserCheck,
   X,
   Check,
   ChevronDown,
+  Package,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { formatDateOnlyDisplay, startOfLocalDay } from '@/lib/date-only'
 import { isInstallmentLate, type CreditRow, type InstallmentRow, type PaymentRow } from '@/hooks/use-credits'
+import {
+  getCreditDisplayInfo,
+  getInstallmentDisplayInfo,
+  type SaleLike,
+  type SaleItemLike,
+} from '@/lib/credits/display'
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -51,6 +55,8 @@ interface CreditExportModalProps {
   installments: InstallmentRow[]
   payments: PaymentRow[]
   creditById: Record<string, CreditRow>
+  sales?: SaleLike[]
+  saleItems?: SaleItemLike[]
 }
 
 type ExportScope = 'all' | 'installments' | 'payments'
@@ -87,13 +93,14 @@ function DonutChart({ segments, size = 110, strokeWidth = 14 }: DonutProps) {
   const circumference = 2 * Math.PI * radius
   const total = segments.reduce((s, seg) => s + seg.value, 0)
 
-  let offset = 0
-  const arcs = segments.map((seg) => {
+  const arcs = segments.map((seg, index) => {
     const frac = total > 0 ? seg.value / total : 0
     const dash = frac * circumference
-    const arc = { ...seg, dash, gap: circumference - dash, offset }
-    offset += dash
-    return arc
+    const offset = segments.slice(0, index).reduce((sum, previous) => {
+      const previousFraction = total > 0 ? previous.value / total : 0
+      return sum + previousFraction * circumference
+    }, 0)
+    return { ...seg, dash, gap: circumference - dash, offset }
   })
 
   return (
@@ -192,8 +199,9 @@ const getAvatarGradient = (idOrName: string): string => {
   return AVATAR_GRADIENTS[idx]
 }
 
-const csvEscape = (value: string | number) => {
-  const text = String(value ?? '').replace(/\r?\n/g, ' ').trim()
+const csvEscape = (value: unknown) => {
+  if (value === null || value === undefined) return ''
+  const text = String(value).replace(/\r?\n/g, ' ').trim()
   const escaped = text.replace(/"/g, '""')
   return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
 }
@@ -216,7 +224,25 @@ export function CreditExportModal({
   installments,
   payments,
   creditById,
+  sales = [],
+  saleItems = [],
 }: CreditExportModalProps) {
+  // Helper to resolve product summary per installment or credit
+  const getProductForInstallment = (inst: InstallmentRow): string => {
+    const info = getInstallmentDisplayInfo(inst, creditById[inst.credit_id], installments, sales, saleItems)
+    return info.productSummary || 'Crédito'
+  }
+
+  const getProductForCredit = (creditId: string, saleId?: string | null): string => {
+    if (saleId) {
+      const dummyInst = { credit_id: creditId, sale_id: saleId } as InstallmentRow
+      const info = getInstallmentDisplayInfo(dummyInst, creditById[creditId], installments, sales, saleItems)
+      if (info.productSummary) return info.productSummary
+    }
+    const info = getCreditDisplayInfo(creditById[creditId], installments, sales, saleItems)
+    return info.productSummary || 'Crédito'
+  }
+
   // Tab state
   const [activeTab, setActiveTab] = useState<ModalTab>('summary')
 
@@ -715,7 +741,7 @@ export function CreditExportModal({
       if (scope === 'all' || scope === 'installments') {
         // Calculate Top 5 Debtors for Executive briefing
         const topDebtors = Object.values(
-          filteredInstallments.reduce<Record<string, { name: string; code: string; count: number; open: number }>>((acc, inst) => {
+          filteredInstallments.reduce<Record<string, { name: string; code: string; product: string; count: number; open: number }>>((acc, inst) => {
             const cid = inst.credit_id
             const amt = Number(inst.amount || 0)
             const paid = Math.max(0, Number(inst.amount_paid || 0))
@@ -725,6 +751,7 @@ export function CreditExportModal({
               acc[cid] = {
                 name: creditById[cid]?.customer_name || 'Sin nombre',
                 code: creditById[cid]?.credit_code || cid,
+                product: getProductForCredit(cid, inst.sale_id),
                 count: 0,
                 open: 0,
               }
@@ -740,6 +767,7 @@ export function CreditExportModal({
         const topDebtorRows = topDebtors.map((d, idx) => [
           { v: d.name, s: dataCellStyle(idx, 'left', true) },
           { v: d.code, s: dataCellStyle(idx, 'center') },
+          { v: d.product, s: dataCellStyle(idx, 'left') },
           { v: d.count, t: 'n', s: dataCellStyle(idx, 'center') },
           { v: d.open, t: 'n', z: numFormat, s: dataCellStyle(idx, 'right', true) },
         ])
@@ -875,6 +903,7 @@ export function CreditExportModal({
             [
               { v: 'Cliente', s: subTableHdrStyle },
               { v: 'Código Crédito', s: subTableHdrStyle },
+              { v: 'Producto / Concepto', s: subTableHdrStyle },
               { v: 'Cuotas Abiertas', s: subTableHdrStyle },
               { v: 'Saldo Pendiente (Gs.)', s: subTableHdrStyle },
             ],
@@ -884,14 +913,15 @@ export function CreditExportModal({
             [
               { v: 'SUBTOTAL TOP CLIENTES', s: totalRowStyle },
               { v: '', s: totalRowStyle },
-              { f: `SUM(C${topStartRow}:C${topEndRow})`, v: topDebtors.reduce((s, d) => s + d.count, 0), t: 'n', s: totalRowStyle },
-              { f: `SUM(D${topStartRow}:D${topEndRow})`, v: topDebtors.reduce((s, d) => s + d.open, 0), t: 'n', z: numFormat, s: totalRowStyle },
+              { v: '', s: totalRowStyle },
+              { f: `SUM(D${topStartRow}:D${topEndRow})`, v: topDebtors.reduce((s, d) => s + d.count, 0), t: 'n', s: totalRowStyle },
+              { f: `SUM(E${topStartRow}:E${topEndRow})`, v: topDebtors.reduce((s, d) => s + d.open, 0), t: 'n', z: numFormat, s: totalRowStyle },
             ],
           ] : []),
         ]
 
         const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa)
-        wsSummary['!cols'] = [{ wch: 34 }, { wch: 22 }, { wch: 22 }, { wch: 28 }]
+        wsSummary['!cols'] = [{ wch: 34 }, { wch: 18 }, { wch: 32 }, { wch: 18 }, { wch: 26 }]
         XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen Ejecutivo')
       }
 
@@ -900,6 +930,7 @@ export function CreditExportModal({
         const instHeaderTitles = [
           'Cliente',
           'Código Crédito',
+          'Producto / Concepto',
           'N° Cuota',
           'Vencimiento',
           'Monto Cuota (Gs.)',
@@ -945,21 +976,23 @@ export function CreditExportModal({
             },
             // B: Código Crédito
             { v: creditById[i.credit_id]?.credit_code || i.credit_id, s: dataCellStyle(rowIdx, 'center') },
-            // C: N° Cuota
+            // C: Producto / Concepto
+            { v: getProductForInstallment(i), s: dataCellStyle(rowIdx, 'left') },
+            // D: N° Cuota
             { v: i.installment_number, t: 'n', s: dataCellStyle(rowIdx, 'center') },
-            // D: Vencimiento
+            // E: Vencimiento
             { v: formatDateOnlyDisplay(i.due_date), s: dataCellStyle(rowIdx, 'center') },
-            // E: Monto Cuota (Gs.)
+            // F: Monto Cuota (Gs.)
             { v: amount, t: 'n', z: numFormat, s: dataCellStyle(rowIdx, 'right') },
-            // F: Monto Pagado (Gs.)
+            // G: Monto Pagado (Gs.)
             { v: paid, t: 'n', z: numFormat, s: dataCellStyle(rowIdx, 'right') },
-            // G: Saldo Pendiente (Gs.) -> FÓRMULA MATEMÁTICA VIVA: =MAX(0, E{r}-F{r})
-            { f: `MAX(0, E${rowNumber}-F${rowNumber})`, v: open, t: 'n', z: numFormat, s: dataCellStyle(rowIdx, 'right', open > 0) },
-            // H: % Pagado -> FÓRMULA MATEMÁTICA VIVA: =IF(E{r}>0, F{r}/E{r}, 0)
-            { f: `IF(E${rowNumber}>0, F${rowNumber}/E${rowNumber}, 0)`, v: pctPaid, t: 'n', z: '0.0%', s: dataCellStyle(rowIdx, 'center') },
-            // I: Estado
+            // H: Saldo Pendiente (Gs.) -> FÓRMULA MATEMÁTICA VIVA: =MAX(0, F{r}-G{r})
+            { f: `MAX(0, F${rowNumber}-G${rowNumber})`, v: open, t: 'n', z: numFormat, s: dataCellStyle(rowIdx, 'right', open > 0) },
+            // I: % Pagado -> FÓRMULA MATEMÁTICA VIVA: =IF(F{r}>0, G{r}/F{r}, 0)
+            { f: `IF(F${rowNumber}>0, G${rowNumber}/F${rowNumber}, 0)`, v: pctPaid, t: 'n', z: '0.0%', s: dataCellStyle(rowIdx, 'center') },
+            // J: Estado
             { v: statusKey === 'paid' ? 'Pagada' : statusKey === 'late' ? 'En Mora' : 'Pendiente', s: statusCellStyle(statusKey) },
-            // J: Días Atraso (opcional)
+            // K: Días Atraso (opcional)
             ...(includeDaysOverdue ? [{ v: daysOverdue > 0 ? daysOverdue : '', t: daysOverdue > 0 ? 'n' : 's', s: dataCellStyle(rowIdx, 'center') }] : []),
           ]
         })
@@ -973,21 +1006,23 @@ export function CreditExportModal({
           { v: 'TOTALES CONSOLIDADOS', s: { ...totalRowStyle, alignment: { horizontal: 'left', vertical: 'center' } } },
           // B: Vacío
           { v: '', s: totalRowStyle },
-          // C: Total Cuotas -> FÓRMULA: =COUNTA(C2:C{N})
-          { f: `COUNTA(C2:C${lastDataRow})`, v: sortedInstallments.length, t: 'n', s: totalRowStyle },
-          // D: Vacío
+          // C: Vacío (Producto)
           { v: '', s: totalRowStyle },
-          // E: Total Monto Cuota -> FÓRMULA: =SUM(E2:E{N})
-          { f: `SUM(E2:E${lastDataRow})`, v: sumAmount, t: 'n', z: numFormat, s: totalRowStyle },
-          // F: Total Monto Pagado -> FÓRMULA: =SUM(F2:F{N})
-          { f: `SUM(F2:F${lastDataRow})`, v: sumPaid, t: 'n', z: numFormat, s: totalRowStyle },
-          // G: Total Saldo Pendiente -> FÓRMULA: =SUM(G2:G{N})
-          { f: `SUM(G2:G${lastDataRow})`, v: sumOpen, t: 'n', z: numFormat, s: totalRowStyle },
-          // H: Promedio Ponderado Recupero -> FÓRMULA: =IF(E{total}>0, F{total}/E{total}, 0)
-          { f: `IF(E${totalRowIndex}>0, F${totalRowIndex}/E${totalRowIndex}, 0)`, v: sumAmount > 0 ? sumPaid / sumAmount : 0, t: 'n', z: '0.0%', s: totalRowStyle },
-          // I: Estado
+          // D: Total Cuotas -> FÓRMULA: =COUNTA(D2:D{N})
+          { f: `COUNTA(D2:D${lastDataRow})`, v: sortedInstallments.length, t: 'n', s: totalRowStyle },
+          // E: Vacío
           { v: '', s: totalRowStyle },
-          // J: Días Atraso
+          // F: Total Monto Cuota -> FÓRMULA: =SUM(F2:F{N})
+          { f: `SUM(F2:F${lastDataRow})`, v: sumAmount, t: 'n', z: numFormat, s: totalRowStyle },
+          // G: Total Monto Pagado -> FÓRMULA: =SUM(G2:G{N})
+          { f: `SUM(G2:G${lastDataRow})`, v: sumPaid, t: 'n', z: numFormat, s: totalRowStyle },
+          // H: Total Saldo Pendiente -> FÓRMULA: =SUM(H2:H${lastDataRow})
+          { f: `SUM(H2:H${lastDataRow})`, v: sumOpen, t: 'n', z: numFormat, s: totalRowStyle },
+          // I: Promedio Ponderado Recupero -> FÓRMULA: =IF(F{total}>0, G{total}/F{total}, 0)
+          { f: `IF(F${totalRowIndex}>0, G${totalRowIndex}/F${totalRowIndex}, 0)`, v: sumAmount > 0 ? sumPaid / sumAmount : 0, t: 'n', z: '0.0%', s: totalRowStyle },
+          // J: Estado
+          { v: '', s: totalRowStyle },
+          // K: Días Atraso
           ...(includeDaysOverdue ? [{ v: '', s: totalRowStyle }] : []),
         ] : []
 
@@ -1000,6 +1035,7 @@ export function CreditExportModal({
         wsInstallments['!cols'] = [
           { wch: 32 }, // Cliente
           { wch: 18 }, // Código Crédito
+          { wch: 32 }, // Producto / Concepto
           { wch: 11 }, // N° Cuota
           { wch: 15 }, // Vencimiento
           { wch: 19 }, // Monto Cuota
@@ -1028,6 +1064,7 @@ export function CreditExportModal({
         const payHeaderTitles = [
           'Cliente',
           'Código Crédito',
+          'Producto / Concepto',
           'Fecha de Cobro',
           'Método de Pago',
           'Monto Cobrado (Gs.)',
@@ -1051,6 +1088,7 @@ export function CreditExportModal({
               s: dataCellStyle(rowIdx, 'left'),
             },
             { v: creditById[p.credit_id]?.credit_code || p.credit_id, s: dataCellStyle(rowIdx, 'center') },
+            { v: getProductForCredit(p.credit_id), s: dataCellStyle(rowIdx, 'left') },
             { v: p.created_at ? new Date(p.created_at).toLocaleDateString('es-PY') : '', s: dataCellStyle(rowIdx, 'center') },
             { v: p.payment_method ? (p.payment_method === 'cash' ? 'Efectivo' : p.payment_method === 'card' ? 'Tarjeta' : p.payment_method === 'transfer' ? 'Transferencia' : p.payment_method) : 'Sin especificar', s: dataCellStyle(rowIdx, 'center') },
             { v: amt, t: 'n', z: numFormat, s: dataCellStyle(rowIdx, 'right', true) },
@@ -1063,10 +1101,11 @@ export function CreditExportModal({
           { v: 'TOTAL RECAUDADO', s: { ...totalRowStyle, alignment: { horizontal: 'left', vertical: 'center' } } },
           { v: '', s: totalRowStyle },
           { v: '', s: totalRowStyle },
+          { v: '', s: totalRowStyle },
           // Total de cobros registrados
           { f: `COUNTA(A2:A${lastPayRow})`, v: filteredPayments.length, t: 'n', s: totalRowStyle },
-          // Suma total recaudada -> FÓRMULA VIVA: =SUM(E2:E{N})
-          { f: `SUM(E2:E${lastPayRow})`, v: sumPayAmount, t: 'n', z: numFormat, s: totalRowStyle },
+          // Suma total recaudada -> FÓRMULA VIVA: =SUM(F2:F{N})
+          { f: `SUM(F2:F${lastPayRow})`, v: sumPayAmount, t: 'n', z: numFormat, s: totalRowStyle },
           { v: '', s: totalRowStyle },
         ] : []
 
@@ -1079,6 +1118,7 @@ export function CreditExportModal({
         wsPayments['!cols'] = [
           { wch: 32 },
           { wch: 18 },
+          { wch: 32 },
           { wch: 16 },
           { wch: 18 },
           { wch: 22 },
@@ -1088,7 +1128,7 @@ export function CreditExportModal({
         // Freeze Panes and Autofilter
         wsPayments['!freeze'] = { xSplit: 0, ySplit: 1 }
         if (filteredPayments.length > 0) {
-          wsPayments['!autofilter'] = { ref: `A1:F${filteredPayments.length + 1}` }
+          wsPayments['!autofilter'] = { ref: `A1:G${filteredPayments.length + 1}` }
         }
 
         XLSX.utils.book_append_sheet(wb, wsPayments, 'Historial de Cobros')
@@ -1204,11 +1244,14 @@ export function CreditExportModal({
         const open = Math.max(0, amt - paid)
         const isLate = isInstallmentLate(i)
         const statusStr = i.status === 'paid' ? 'Pagada' : isLate ? 'En Mora' : 'Pendiente'
+        const product = getProductForInstallment(i)
 
         return [
           creditById[i.credit_id]?.customer_name
             ? `${creditById[i.credit_id]?.customer_name}${creditById[i.credit_id]?.customer_code ? ` (${creditById[i.credit_id]?.customer_code})` : ''}`
             : 'Cliente',
+          creditById[i.credit_id]?.credit_code || i.credit_id,
+          product,
           `#${i.installment_number}`,
           formatDateOnlyDisplay(i.due_date),
           formatCurrency(amt),
@@ -1219,29 +1262,31 @@ export function CreditExportModal({
 
       autoTable(doc, {
         startY: 61,
-        head: [['Cliente', 'Cuota', 'Vence', 'Monto', 'Saldo', 'Estado']],
+        head: [['Cliente', 'Crédito', 'Producto / Concepto', 'Cuota', 'Vence', 'Monto', 'Saldo', 'Estado']],
         body: tableRows,
         theme: 'striped',
         headStyles: {
           fillColor: primaryColor,
           textColor: [255, 255, 255],
-          fontSize: 8,
+          fontSize: 7.5,
           fontStyle: 'bold',
         },
         styles: {
-          fontSize: 7.5,
-          cellPadding: 2,
+          fontSize: 7,
+          cellPadding: 1.8,
         },
         columnStyles: {
-          0: { cellWidth: 50 },
-          1: { cellWidth: 16, halign: 'center' },
-          2: { cellWidth: 26, halign: 'center' },
-          3: { cellWidth: 32, halign: 'right' },
-          4: { cellWidth: 32, halign: 'right' },
-          5: { cellWidth: 26, halign: 'center' },
+          0: { cellWidth: 32 },
+          1: { cellWidth: 18, halign: 'center' },
+          2: { cellWidth: 38 },
+          3: { cellWidth: 14, halign: 'center' },
+          4: { cellWidth: 20, halign: 'center' },
+          5: { cellWidth: 22, halign: 'right' },
+          6: { cellWidth: 22, halign: 'right' },
+          7: { cellWidth: 16, halign: 'center' },
         },
         didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 5) {
+          if (data.section === 'body' && data.column.index === 7) {
             const val = String(data.cell.raw)
             if (val === 'En Mora') {
               data.cell.styles.textColor = [225, 29, 72]
@@ -1280,56 +1325,275 @@ export function CreditExportModal({
   const handleExportCsv = () => {
     setIsExporting('csv')
     try {
-      type CsvRow = {
-        'Código Cliente': string
-        Cliente: string
-        Crédito: string
-        'N° Cuota': number
-        Vencimiento: string
-        'Monto (Gs)': number
-        'Pagado (Gs)': number
-        'Saldo (Gs)': number
-        Estado: string
+      const lines: string[] = []
+      const formatRow = (cells: unknown[]): string => cells.map((c) => csvEscape(c)).join(',')
+
+      // ── 1. ENCABEZADO Y METADATOS ──────────────────────────────────────────
+      lines.push(formatRow(['SISTEMA 4G — GESTIÓN FINANCIERA DE CRÉDITOS Y COBRANZAS']))
+      lines.push(formatRow([`Reporte emitido el ${new Date().toLocaleDateString('es-PY')} a las ${new Date().toLocaleTimeString('es-PY')} · Base de datos en tiempo real`]))
+      lines.push(formatRow([
+        `Filtros: ${selectedCustomer ? `Cliente = ${selectedCustomer.name} (${selectedCustomer.code || 'ID: ' + selectedCustomer.id}) | ` : ''}Estado = ${statusFilter.toUpperCase()} | Período = ${datePreset} | Cuotas evaluadas = ${metrics.totalCount}`
+      ]))
+      lines.push('')
+
+      // ── 2. RESUMEN EJECUTIVO (KPIs) ─────────────────────────────────────────
+      lines.push(formatRow(['RESUMEN EJECUTIVO DE CARTERA']))
+      lines.push(formatRow([
+        'TOTAL POR COBRAR',
+        'CARTERA EN MORA',
+        'TOTAL RECUPERADO',
+        'TOTAL CARTERA EVALUADA'
+      ]))
+      lines.push(formatRow([
+        metrics.totalOutstanding,
+        metrics.totalOverdue,
+        metrics.totalPaid,
+        metrics.totalScheduled
+      ]))
+      lines.push(formatRow([
+        `${metrics.pendingCount + metrics.lateCount} cuotas abiertas`,
+        `${metrics.lateCount} cuotas en atraso`,
+        `${metrics.paidCount} cuotas saldadas`,
+        `${metrics.involvedCredits} créditos · ${metrics.totalCount} cuotas`
+      ]))
+      lines.push('')
+
+      // ── 3. DISTRIBUCIÓN POR ESTADO ─────────────────────────────────────────
+      lines.push(formatRow(['DISTRIBUCIÓN DE CUOTAS POR ESTADO']))
+      lines.push(formatRow(['Estado de Cuota', 'Cantidad Cuotas', '% Participación', 'Monto Total (Gs.)']))
+      lines.push(formatRow([
+        'Pagadas (Canceladas)',
+        metrics.paidCount,
+        `${metrics.totalScheduled > 0 ? ((metrics.totalPaid / metrics.totalScheduled) * 100).toFixed(1) : '0.0'}%`,
+        metrics.totalPaid
+      ]))
+      lines.push(formatRow([
+        'Pendientes (Al Día)',
+        metrics.pendingCount,
+        `${metrics.totalScheduled > 0 ? ((metrics.currentAmount / metrics.totalScheduled) * 100).toFixed(1) : '0.0'}%`,
+        metrics.currentAmount
+      ]))
+      lines.push(formatRow([
+        'En Mora / Atrasadas',
+        metrics.lateCount,
+        `${metrics.totalScheduled > 0 ? ((metrics.totalOverdue / metrics.totalScheduled) * 100).toFixed(1) : '0.0'}%`,
+        metrics.totalOverdue
+      ]))
+      lines.push(formatRow([
+        'TOTALES',
+        metrics.totalCount,
+        '100.0%',
+        metrics.totalScheduled
+      ]))
+      lines.push('')
+
+      // ── 4. ANTIGÜEDAD DE DEUDA EN MORA (AGING) ──────────────────────────────
+      lines.push(formatRow(['ANTIGÜEDAD DE DEUDA EN MORA (AGING)']))
+      lines.push(formatRow(['Tramo de Vencimiento', 'Cuotas en Atraso', '% de la Mora', 'Saldo Vencido (Gs.)']))
+      lines.push(formatRow([
+        '1 a 7 días de atraso',
+        metrics.aging.aging1to7Count,
+        `${metrics.totalOverdue > 0 ? ((metrics.aging.aging1to7 / metrics.totalOverdue) * 100).toFixed(1) : '0.0'}%`,
+        metrics.aging.aging1to7
+      ]))
+      lines.push(formatRow([
+        '8 a 30 días de atraso',
+        metrics.aging.aging8to30Count,
+        `${metrics.totalOverdue > 0 ? ((metrics.aging.aging8to30 / metrics.totalOverdue) * 100).toFixed(1) : '0.0'}%`,
+        metrics.aging.aging8to30
+      ]))
+      lines.push(formatRow([
+        '31 a 60 días de atraso',
+        metrics.aging.aging31to60Count,
+        `${metrics.totalOverdue > 0 ? ((metrics.aging.aging31to60 / metrics.totalOverdue) * 100).toFixed(1) : '0.0'}%`,
+        metrics.aging.aging31to60
+      ]))
+      lines.push(formatRow([
+        'Más de 60 días de atraso',
+        metrics.aging.aging60plusCount,
+        `${metrics.totalOverdue > 0 ? ((metrics.aging.aging60plus / metrics.totalOverdue) * 100).toFixed(1) : '0.0'}%`,
+        metrics.aging.aging60plus
+      ]))
+      lines.push(formatRow([
+        'TOTAL CARTERA EN MORA',
+        metrics.lateCount,
+        '100.0%',
+        metrics.totalOverdue
+      ]))
+      lines.push('')
+
+      // ── 5. TOP CLIENTES CON MAYOR SALDO PENDIENTE ───────────────────────────
+      const topDebtors = Object.values(
+        filteredInstallments.reduce<Record<string, { name: string; code: string; product: string; count: number; open: number }>>((acc, inst) => {
+          const cid = inst.credit_id
+          const amt = Number(inst.amount || 0)
+          const paid = Math.max(0, Number(inst.amount_paid || 0))
+          const open = Math.max(0, amt - paid)
+          if (open <= 0) return acc
+          if (!acc[cid]) {
+            acc[cid] = {
+              name: creditById[cid]?.customer_name || 'Sin nombre',
+              code: creditById[cid]?.credit_code || cid,
+              product: getProductForCredit(cid, inst.sale_id),
+              count: 0,
+              open: 0,
+            }
+          }
+          acc[cid].count++
+          acc[cid].open += open
+          return acc
+        }, {})
+      )
+        .sort((a, b) => b.open - a.open)
+        .slice(0, 5)
+
+      if (topDebtors.length > 0) {
+        lines.push(formatRow(['TOP CLIENTES CON MAYOR SALDO PENDIENTE']))
+        lines.push(formatRow(['Cliente', 'Código Crédito', 'Producto / Concepto', 'Cuotas Abiertas', 'Saldo Pendiente (Gs.)']))
+        topDebtors.forEach((d) => {
+          lines.push(formatRow([d.name, d.code, d.product, d.count, d.open]))
+        })
+        lines.push(formatRow([
+          'SUBTOTAL TOP CLIENTES',
+          '',
+          '',
+          topDebtors.reduce((s, d) => s + d.count, 0),
+          topDebtors.reduce((s, d) => s + d.open, 0)
+        ]))
+        lines.push('')
       }
 
-      const headers: Array<keyof CsvRow> = [
-        'Código Cliente',
-        'Cliente',
-        'Crédito',
-        'N° Cuota',
-        'Vencimiento',
-        'Monto (Gs)',
-        'Pagado (Gs)',
-        'Saldo (Gs)',
-        'Estado',
-      ]
+      // ── 6. PLANILLA DETALLADA DE CUOTAS ─────────────────────────────────────
+      if (scope === 'all' || scope === 'installments') {
+        lines.push(formatRow(['PLANILLA DETALLADA DE CUOTAS']))
+        const instHeaders = [
+          'Cliente',
+          'Código Crédito',
+          'Producto / Concepto',
+          'N° Cuota',
+          'Vencimiento',
+          'Monto Cuota (Gs.)',
+          'Monto Pagado (Gs.)',
+          'Saldo Pendiente (Gs.)',
+          '% Pagado',
+          'Estado',
+          ...(includeDaysOverdue ? ['Días Atraso'] : []),
+        ]
+        lines.push(formatRow(instHeaders))
 
-      const rows: CsvRow[] = sortedInstallments.map((i) => {
-        const amt = Number(i.amount || 0)
-        const paid = Math.max(0, Number(i.amount_paid || 0))
-        const open = Math.max(0, amt - paid)
-        const isLate = isInstallmentLate(i)
-        return {
-          'Código Cliente': creditById[i.credit_id]?.customer_code || '',
-          Cliente: creditById[i.credit_id]?.customer_name || '',
-          Crédito: creditById[i.credit_id]?.credit_code || i.credit_id,
-          'N° Cuota': i.installment_number,
-          Vencimiento: formatDateOnlyDisplay(i.due_date),
-          'Monto (Gs)': amt,
-          'Pagado (Gs)': paid,
-          'Saldo (Gs)': open,
-          Estado: i.status === 'paid' ? 'Pagada' : isLate ? 'En Mora' : 'Pendiente',
-        }
-      })
+        const today = new Date()
+        let sumAmount = 0
+        let sumPaid = 0
+        let sumOpen = 0
 
-      const csv = [
-        headers.join(','),
-        ...rows.map((r) => headers.map((h) => csvEscape(r[h])).join(',')),
-      ].join('\n')
+        sortedInstallments.forEach((i) => {
+          const amt = Number(i.amount || 0)
+          const paid = Math.max(0, Number(i.amount_paid || 0))
+          const open = Math.max(0, amt - paid)
+          const isLate = isInstallmentLate(i)
+          const dueDate = new Date(i.due_date)
+          const daysOverdue = isLate ? Math.max(1, Math.floor((today.getTime() - dueDate.getTime()) / 86400000)) : 0
+          const pctPaid = amt > 0 ? Math.min(1, paid / amt) : 0
+          const customerLabel = creditById[i.credit_id]?.customer_name
+            ? `${creditById[i.credit_id]?.customer_name}${creditById[i.credit_id]?.customer_code ? ` (${creditById[i.credit_id]?.customer_code})` : ''}`
+            : 'Sin nombre'
 
+          sumAmount += amt
+          sumPaid += Math.min(amt, paid)
+          sumOpen += open
+
+          lines.push(formatRow([
+            customerLabel,
+            creditById[i.credit_id]?.credit_code || i.credit_id,
+            getProductForInstallment(i),
+            i.installment_number,
+            formatDateOnlyDisplay(i.due_date),
+            amt,
+            paid,
+            open,
+            `${(pctPaid * 100).toFixed(1)}%`,
+            i.status === 'paid' ? 'Pagada' : isLate ? 'En Mora' : 'Pendiente',
+            ...(includeDaysOverdue ? [daysOverdue > 0 ? daysOverdue : ''] : []),
+          ]))
+        })
+
+        // Fila de Totales de Cuotas
+        lines.push(formatRow([
+          'TOTALES CONSOLIDADOS',
+          '',
+          '',
+          `${sortedInstallments.length} cuotas`,
+          '',
+          sumAmount,
+          sumPaid,
+          sumOpen,
+          `${sumAmount > 0 ? ((sumPaid / sumAmount) * 100).toFixed(1) : '0.0'}%`,
+          '',
+          ...(includeDaysOverdue ? [''] : []),
+        ]))
+        lines.push('')
+      }
+
+      // ── 7. HISTORIAL DE COBROS Y PAGOS ───────────────────────────────────────
+      if (scope === 'all' || scope === 'payments') {
+        lines.push(formatRow(['HISTORIAL DE COBROS Y PAGOS']))
+        const payHeaders = [
+          'Cliente',
+          'Código Crédito',
+          'Producto / Concepto',
+          'Fecha de Cobro',
+          'Método de Pago',
+          'Monto Cobrado (Gs.)',
+          'Notas / Referencia',
+        ]
+        lines.push(formatRow(payHeaders))
+
+        let sumPayAmount = 0
+        filteredPayments.forEach((p) => {
+          const amt = Number(p.amount || 0)
+          sumPayAmount += amt
+          const customerLabel = creditById[p.credit_id]?.customer_name
+            ? `${creditById[p.credit_id]?.customer_name}${creditById[p.credit_id]?.customer_code ? ` (${creditById[p.credit_id]?.customer_code})` : ''}`
+            : 'Sin nombre'
+
+          const methodLabel = p.payment_method
+            ? p.payment_method === 'cash'
+              ? 'Efectivo'
+              : p.payment_method === 'card'
+              ? 'Tarjeta'
+              : p.payment_method === 'transfer'
+              ? 'Transferencia'
+              : p.payment_method
+            : 'Sin especificar'
+
+          lines.push(formatRow([
+            customerLabel,
+            creditById[p.credit_id]?.credit_code || p.credit_id,
+            getProductForCredit(p.credit_id),
+            p.created_at ? new Date(p.created_at).toLocaleDateString('es-PY') : '',
+            methodLabel,
+            amt,
+            p.notes || '',
+          ]))
+        })
+
+        // Fila de Total de Pagos
+        lines.push(formatRow([
+          'TOTAL COBRADO',
+          '',
+          '',
+          '',
+          `${filteredPayments.length} pagos`,
+          '',
+          sumPayAmount,
+          '',
+        ]))
+      }
+
+      const csvContent = lines.join('\r\n')
       const bom = '\uFEFF'
-      const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' })
-      triggerDownload(blob, `cuotas_${new Date().toISOString().slice(0, 10)}.csv`)
+      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
+      triggerDownload(blob, `cartera_creditos_${new Date().toISOString().slice(0, 10)}.csv`)
     } finally {
       setIsExporting(null)
     }
@@ -2227,11 +2491,15 @@ export function CreditExportModal({
                             <div className="truncate font-semibold text-xs text-slate-900 dark:text-white">
                               {creditById[inst.credit_id]?.customer_name || 'Sin nombre'}
                             </div>
-                            {creditById[inst.credit_id]?.customer_code && (
-                              <div className="font-mono text-[10px] text-muted-foreground truncate">
-                                {creditById[inst.credit_id]?.customer_code}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground truncate">
+                              {creditById[inst.credit_id]?.customer_code && (
+                                <span className="font-mono">{creditById[inst.credit_id]?.customer_code} ·</span>
+                              )}
+                              <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300 truncate">
+                                <Package className="h-3 w-3 shrink-0 text-blue-500" />
+                                <span className="truncate">{getProductForInstallment(inst)}</span>
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <div className="w-14 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">

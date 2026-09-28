@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { recordWebhookEvent } from '@/lib/health/webhook-log'
 import {
   parsePagoparNotificationAmount,
   validatePagoparNotificationToken,
@@ -26,7 +27,23 @@ function parsePaidAt(value: string | null | undefined) {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString()
 }
 
+const WEBHOOK_ENDPOINT = '/api/payments/pagopar/webhook'
+
 export async function POST(request: Request) {
+  const response = await handleNotification(request)
+
+  // Registro para /superadmin/system-health: solo resultado y código HTTP,
+  // después de responder y sin poder afectar el procesamiento.
+  const status = response.status
+  const errorMessage = status >= 400
+    ? await response.clone().json().then((body: { error?: string }) => body.error ?? null).catch(() => null)
+    : null
+  after(() => recordWebhookEvent({ provider: 'pagopar', endpoint: WEBHOOK_ENDPOINT, status, errorMessage }))
+
+  return response
+}
+
+async function handleNotification(request: Request) {
   const payload = await request.json().catch(() => null) as PagoparNotification | null
   const item = payload?.resultado?.[0]
 

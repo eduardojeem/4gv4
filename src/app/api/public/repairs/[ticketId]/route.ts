@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { PUBLIC_STATUS_HISTORY_COLUMNS, toPublicStatusHistory } from '@/lib/repairs/public-status-history'
 import {
   extractBearerToken,
   isPublicRepairSessionAuthorized,
@@ -167,7 +168,7 @@ export async function GET(
       admin.from('customers').select('name, phone').eq('id', repair.customer_id).single(),
       admin
         .from('repair_status_history')
-        .select('status, note, created_at')
+        .select(PUBLIC_STATUS_HISTORY_COLUMNS)
         .eq('repair_id', repair.id)
         .order('created_at', { ascending: true })
     ])
@@ -209,7 +210,7 @@ export async function GET(
       paymentStatus: repair.payment_status,
       warrantyMonths: repair.warranty_months,
       warrantyType: repair.warranty_type,
-      statusHistory: statusHistoryResult.data || [],
+      statusHistory: toPublicStatusHistory(statusHistoryResult.data),
       technician: technicianResult.data ? {
         name: technicianResult.data.full_name
       } : null,

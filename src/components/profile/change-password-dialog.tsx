@@ -18,7 +18,6 @@ import { toast } from 'sonner'
 import { Key, Loader2, Eye, EyeOff, Check, X, Clock, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { logAuthEventClient } from '@/lib/auth-event-client'
-import { getSessionIdFromAccessToken } from '@/lib/session-id'
 import { cn } from '@/lib/utils'
 import { z } from 'zod'
 
@@ -151,19 +150,8 @@ export function ChangePasswordDialog({ className }: ChangePasswordDialogProps = 
 
       if (closeOtherSessions) {
         try {
-          const [{ data: userData }, { data: sessionData }] = await Promise.all([
-            supabase.auth.getUser(),
-            supabase.auth.getSession()
-          ])
-          const currentUserId = userData.user?.id
-          const currentSessionId = await getSessionIdFromAccessToken(sessionData.session?.access_token)
-
-          if (currentUserId && currentSessionId) {
-            await supabase.rpc('close_all_user_sessions_except_current', {
-              p_user_id: currentUserId,
-              p_current_session_id: currentSessionId
-            })
-          }
+          const { error: signOutError } = await supabase.auth.signOut({ scope: 'others' })
+          if (signOutError) throw signOutError
         } catch {
           toast.warning('Contraseña actualizada, pero no se pudieron cerrar otras sesiones')
         }

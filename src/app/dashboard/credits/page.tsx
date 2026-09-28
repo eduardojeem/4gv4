@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { FilterPanel } from '@/components/shared'
-import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, RefreshCw, Download, Users, ShoppingBag, Wallet, AlertTriangle, ArrowRight } from 'lucide-react'
+import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, RefreshCw, Download, Users, ShoppingBag, Wallet, AlertTriangle, ArrowRight, Package } from 'lucide-react'
 import { SectionGuideButton } from '@/components/dashboard/common/SectionGuideButton'
 import { CREDITS_GUIDE } from '@/components/dashboard/common/section-guides-data'
 import { formatCurrency } from '@/lib/currency'
@@ -986,9 +986,12 @@ function CreditsDashboardContent() {
                           {display.originLabel}
                         </span>
                       </div>
-                      <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                        {display.saleCode ? `Ticket ${display.saleCode} · ` : ''}{display.productSummary}
-                      </p>
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-800 dark:text-slate-200 truncate">
+                        <Package className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span className="truncate">
+                          {display.saleCode ? `Ticket ${display.saleCode} · ` : ''}{display.productSummary}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Cuota # */}
@@ -1203,6 +1206,8 @@ function CreditsDashboardContent() {
         installments={installments}
         payments={payments}
         creditById={creditById}
+        sales={sales}
+        saleItems={saleItems}
       />
 
       </div>

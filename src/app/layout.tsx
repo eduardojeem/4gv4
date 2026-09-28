@@ -9,11 +9,13 @@ import { SWRProvider } from "@/providers/swr-provider";
 import { Toaster } from "sonner";
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from "@/lib/platform/branding";
+import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
 import { ServiceWorkerRegistration } from "@/components/util/ServiceWorkerRegistration";
 import { ThemeInitScript } from "@/components/util/ThemeInitScript";
 import { RegionalSettingsBoundary } from "@/components/providers/regional-settings-boundary";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 
 
 const geistSans = Geist({
@@ -35,9 +37,27 @@ export async function generateMetadata(): Promise<Metadata> {
     branding = DEFAULT_PLATFORM_BRANDING;
   }
 
+  const ogTitle = branding.seoTitle || branding.platformName;
+
   return {
+    // Resuelve URLs relativas de og:image/canonical al dominio canónico.
+    metadataBase: new URL(getSiteUrl()),
     title: branding.platformName,
     description: branding.seoDescription,
+    // Valores por defecto para previews en WhatsApp/redes; cada página pública
+    // los sobreescribe con publicPageMetadata(). La imagen: ./opengraph-image.tsx
+    openGraph: {
+      type: 'website',
+      locale: 'es_PY',
+      siteName: branding.platformName,
+      title: ogTitle,
+      description: branding.seoDescription,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: ogTitle,
+      description: branding.seoDescription,
+    },
     icons: {
       icon: branding.faviconUrl || branding.logoUrl || '/globe.svg',
       // iOS no lee el manifest: sin esto, "Agregar a inicio" usa una captura de
@@ -82,6 +102,7 @@ export default function RootLayout({
                       <main id="main-content" tabIndex={-1}>
                         {children}
                       </main>
+                      <CookieConsentBanner />
                       <Toaster
                       position="top-right"
                       richColors

@@ -41,6 +41,8 @@ import {
   Wrench,
   X,
   Megaphone,
+  HeartPulse,
+  Scale,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -171,6 +173,7 @@ const navItems: NavItem[] = [
       { title: 'Landing', href: '/superadmin/web-content/landing', icon: LayoutTemplate },
       { title: 'Marketplace', href: '/superadmin/web-content/marketplace', icon: Store },
       { title: 'Aviso del marketplace', href: '/superadmin/web-content/anuncio', icon: Megaphone },
+      { title: 'Documentos legales', href: '/superadmin/web-content/legal', icon: Scale },
     ],
   },
   {
@@ -193,6 +196,7 @@ const navItems: NavItem[] = [
     section: 'system',
     children: [
       { title: 'Vista general', href: '/superadmin/monitoring', icon: Activity },
+      { title: 'Salud del sistema', href: '/superadmin/system-health', icon: HeartPulse },
       { title: 'Base de datos', href: '/superadmin/database-monitoring', icon: Database },
     ],
   },

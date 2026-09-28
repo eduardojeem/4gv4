@@ -505,16 +505,9 @@ ws['!cols'] = [
 ]
 XLSX.utils.book_append_sheet(wb, ws, 'Productos')
 
-const publicDir = path.join(process.cwd(), 'public')
-if (!fs.existsSync(publicDir)) {
-  fs.mkdirSync(publicDir, { recursive: true })
-}
-
 const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
 const xlsxPath = path.join(process.cwd(), 'productos_para_importar.xlsx')
-const publicXlsxPath = path.join(publicDir, 'productos_para_importar.xlsx')
 fs.writeFileSync(xlsxPath, xlsxBuffer)
-fs.writeFileSync(publicXlsxPath, xlsxBuffer)
 
 // 2. Guardar archivo CSV (.csv) con BOM UTF-8
 const headers = Object.keys(productsData[0])
@@ -529,13 +522,9 @@ const csvRows = productsData.map((row) => headers.map((h) => escapeCSV(row[h])).
 const csvContent = '\uFEFF' + [headers.join(','), ...csvRows].join('\r\n')
 
 const csvPath = path.join(process.cwd(), 'productos_para_importar.csv')
-const publicCsvPath = path.join(publicDir, 'productos_para_importar.csv')
 fs.writeFileSync(csvPath, csvContent, 'utf-8')
-fs.writeFileSync(publicCsvPath, csvContent, 'utf-8')
 
 console.log(`Archivos generados exitosamente:`)
 console.log(`- Excel: ${xlsxPath}`)
-console.log(`- Excel público: ${publicXlsxPath}`)
 console.log(`- CSV: ${csvPath}`)
-console.log(`- CSV público: ${publicCsvPath}`)
 console.log(`Total productos procesados: ${productsData.length}`)
