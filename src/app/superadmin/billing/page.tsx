@@ -1,13 +1,20 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { FinancialDashboard, type FinancialData } from '@/components/superadmin/FinancialDashboard'
 import { sumMoneyByCurrency } from '@/lib/superadmin/money-totals'
+import {
+  buildPlanPriceMap,
+  calculateRecurringRevenue,
+  normalizeRevenuePlan,
+  planMonthlyPrice,
+} from '@/lib/superadmin/metrics-calculations'
 
 async function getFinancialData(): Promise<FinancialData> {
   const admin = createAdminSupabase()
 
   const [{ data: plans, error: plansError }, { data: subs, error: subscriptionsError }, { data: payments, error: paymentsError }] = await Promise.all([
-    admin.from('subscription_plans').select('tier, name, price, is_active').eq('is_active', true),
-    admin.from('subscriptions').select('id, organization_id, plan, status, trial_ends_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at'),
+    // Todos los planes: uno retirado se sigue cobrando a quien ya lo tiene.
+    admin.from('subscription_plans').select('tier, name, price, is_active'),
+    admin.from('subscriptions').select('id, organization_id, plan, status, payment_status, trial_ends_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at'),
     admin.from('subscription_payments').select('amount, currency, status, paid_at, created_at, provider, plan_id'),
   ])
 
@@ -15,17 +22,19 @@ async function getFinancialData(): Promise<FinancialData> {
     throw new Error(plansError?.message || subscriptionsError?.message || paymentsError?.message || 'No se pudieron cargar los datos financieros.')
   }
 
-  // Price lookup by plan tier
-  const priceByTier = new Map<string, number>()
-  ;((plans ?? []) as Array<{ tier: string; price: number }>).forEach((p) => {
-    priceByTier.set(p.tier.toUpperCase(), Number(p.price) || 0)
-  })
+  const prices = buildPlanPriceMap((plans ?? []) as Array<{ tier: string; price: number }>)
+  const priceOf = (plan: string | null) => planMonthlyPrice(prices, plan) ?? 0
 
   const subscriptions = (subs ?? []) as Array<{
-    id: string; organization_id: string; plan: string | null; status: string | null
+    id: string; organization_id: string; plan: string | null; status: string | null; payment_status: string | null
     trial_ends_at: string | null; current_period_ends_at: string | null
     cancel_at_period_end: boolean | null; created_at: string | null; updated_at: string | null
   }>
+  const revenueOf = (rows: typeof subscriptions) =>
+    calculateRecurringRevenue(
+      rows.map((s) => ({ plan: s.plan, status: s.status, paymentStatus: s.payment_status })),
+      prices,
+    )
 
   // MRR / ARR — sumar precios de subs active
   const activeSubs = subscriptions.filter((s) => s.status === 'active')
@@ -35,11 +44,10 @@ async function getFinancialData(): Promise<FinancialData> {
   const canceledSubs = subscriptions.filter((s) => s.status === 'canceled' || s.status === 'cancelled')
   const cancelingSoon = subscriptions.filter((s) => s.cancel_at_period_end)
 
-  const mrr = activeSubs.reduce((sum, s) => sum + (priceByTier.get((s.plan ?? 'FREE').toUpperCase()) ?? 0), 0)
-  const arr = mrr * 12
+  const { mrr, arr } = revenueOf(subscriptions)
 
   // MRR potencial (trials que pasarán a active si pagan)
-  const potentialMrr = trialingSubs.reduce((sum, s) => sum + (priceByTier.get((s.plan ?? 'FREE').toUpperCase()) ?? 0), 0)
+  const potentialMrr = trialingSubs.reduce((sum, s) => sum + priceOf(s.plan), 0)
 
   // MRR perdido (suscripciones canceladas o suspendidas en últimos 30d)
   const monthAgo = Date.now() - 30 * 86400000
@@ -47,7 +55,7 @@ async function getFinancialData(): Promise<FinancialData> {
     const updated = s.updated_at ? new Date(s.updated_at).getTime() : 0
     return updated >= monthAgo
   })
-  const churnedMrr = lostThisMonth.reduce((sum, s) => sum + (priceByTier.get((s.plan ?? 'FREE').toUpperCase()) ?? 0), 0)
+  const churnedMrr = lostThisMonth.reduce((sum, s) => sum + priceOf(s.plan), 0)
 
   // Churn rate (canceled+suspended últimos 30d / total active de hace 30d)
   // Aproximación: churn = lostThisMonth / (active + lostThisMonth)
@@ -85,18 +93,22 @@ async function getFinancialData(): Promise<FinancialData> {
   })
 
   // Subscripciones por plan
-  const subsByPlan = new Map<string, { total: number; active: number; trialing: number; mrr: number }>()
+  const subsByTier = new Map<string, typeof subscriptions>()
   subscriptions.forEach((s) => {
-    const tier = (s.plan ?? 'FREE').toUpperCase()
-    const entry = subsByPlan.get(tier) ?? { total: 0, active: 0, trialing: 0, mrr: 0 }
-    entry.total++
-    if (s.status === 'active') {
-      entry.active++
-      entry.mrr += priceByTier.get(tier) ?? 0
-    }
-    if (s.status === 'trialing') entry.trialing++
-    subsByPlan.set(tier, entry)
+    const tier = normalizeRevenuePlan(s.plan)
+    subsByTier.set(tier, [...(subsByTier.get(tier) ?? []), s])
   })
+  const subsByPlan = new Map(
+    Array.from(subsByTier.entries()).map(([tier, rows]) => [
+      tier,
+      {
+        total: rows.length,
+        active: rows.filter((s) => s.status === 'active').length,
+        trialing: rows.filter((s) => s.status === 'trialing').length,
+        mrr: revenueOf(rows).mrr,
+      },
+    ]),
+  )
 
   // Growth: comparar suscripciones nuevas últimos 30d vs 30d previos
   const twoMonthsAgo = Date.now() - 60 * 86400000

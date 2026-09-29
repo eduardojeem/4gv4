@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { buildPlanPriceMap, calculateRecurringRevenue } from '@/lib/superadmin/metrics-calculations'
 
 /**
  * Gastos y rentabilidad del SaaS: calculos puros, sin base de datos, para que
@@ -114,18 +115,19 @@ export interface PlanPrice {
 export interface SubscriptionStatus {
   plan: string | null
   status: string | null
+  paymentStatus?: string | null
 }
 
-/** Mismo criterio que /superadmin/billing: MRR = suma del precio del plan de cada suscripción activa. */
+/** MRR con la definición única del superadmin (ver calculateRecurringRevenue). */
 export function computeMrr(plans: PlanPrice[], subscriptions: SubscriptionStatus[]) {
-  const priceByTier = new Map(plans.map((plan) => [plan.tier.toUpperCase(), Number(plan.price) || 0]))
-  const active = subscriptions.filter((sub) => sub.status === 'active')
-  const prices = active.map((sub) => priceByTier.get((sub.plan ?? 'FREE').toUpperCase()) ?? 0)
+  const revenue = calculateRecurringRevenue(subscriptions, buildPlanPriceMap(plans))
   return {
-    mrr: prices.reduce((sum, price) => sum + price, 0),
-    activeOrgs: active.length,
-    /** Suscripciones activas que efectivamente pagan (plan con precio > 0). */
-    payingOrgs: prices.filter((price) => price > 0).length,
+    mrr: revenue.mrr,
+    activeOrgs: subscriptions.filter((sub) => sub.status === 'active').length,
+    /** Suscripciones que facturan y cuyo plan tiene precio. */
+    payingOrgs: revenue.activeSubscriptions - revenue.unpricedSubscriptions,
+    /** Deberían facturar pero su plan no tiene precio: el MRR está incompleto. */
+    unpricedOrgs: revenue.unpricedSubscriptions,
   }
 }
 

@@ -83,15 +83,20 @@ export async function listPlatformExpenses(): Promise<ExpensesResult> {
 export async function loadPlatformRevenue() {
   const admin = createAdminSupabase()
   const [{ data: plans, error: plansError }, { data: subs, error: subsError }] = await Promise.all([
-    admin.from('subscription_plans').select('tier, price').eq('is_active', true),
-    admin.from('subscriptions').select('plan, status'),
+    // Todos los planes: uno retirado se sigue cobrando a quien ya lo tiene.
+    admin.from('subscription_plans').select('tier, price'),
+    admin.from('subscriptions').select('plan, status, payment_status'),
   ])
   if (plansError || subsError) {
     throw new Error(plansError?.message || subsError?.message || 'No se pudieron cargar las suscripciones.')
   }
   return computeMrr(
     ((plans ?? []) as Array<{ tier: string; price: number | string }>).map((p) => ({ tier: p.tier, price: Number(p.price) || 0 })),
-    (subs ?? []) as Array<{ plan: string | null; status: string | null }>,
+    ((subs ?? []) as Array<{ plan: string | null; status: string | null; payment_status: string | null }>).map((s) => ({
+      plan: s.plan,
+      status: s.status,
+      paymentStatus: s.payment_status,
+    })),
   )
 }
 

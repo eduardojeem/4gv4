@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
+import { buildPlanPriceMap } from '@/lib/superadmin/metrics-calculations'
 import type { ModuleTrial } from './plan-features'
 import { buildOrganizationBusinessProfile } from './effective-modules'
 import { deriveTechnicalModules } from './plan-modules'
@@ -417,10 +418,10 @@ export async function getCommercialPlanPrices(): Promise<Record<string, number>>
     throw new Error(`No se pudieron cargar los precios de los planes: ${error.message}`)
   }
 
-  return Object.fromEntries(
-    ((data ?? []) as Array<Record<string, unknown>>)
-      .filter((row) => row.is_active !== false)
-      .map((row) => [normalizePlanCode(row.tier), toNumber(row.price)])
+  // Solo se usa para métricas de ingresos: incluye planes inactivos, porque
+  // quien ya tiene un plan retirado lo sigue pagando.
+  return buildPlanPriceMap(
+    ((data ?? []) as Array<{ tier: string; price: number | string | null }>)
   )
 }
 

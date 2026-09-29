@@ -21,7 +21,7 @@ export async function GET() {
     // no estuviera aca, esas organizaciones aportarian 0 y el MRR mostraria
     // menos facturacion de la real.
     admin.from('subscription_plans').select('tier, price, is_active'),
-    admin.from('subscriptions').select('plan, status'),
+    admin.from('subscriptions').select('plan, status, payment_status'),
   ])
 
   return NextResponse.json(

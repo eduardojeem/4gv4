@@ -61,7 +61,20 @@ describe('MRR', () => {
         { plan: 'pro', status: 'canceled' },
       ],
     )
-    expect(result).toEqual({ mrr: 400_000, activeOrgs: 3, payingOrgs: 2 })
+    expect(result).toEqual({ mrr: 400_000, activeOrgs: 3, payingOrgs: 2, unpricedOrgs: 0 })
+  })
+
+  it('usa la regla única: alias, planes retirados, cobros fallidos y planes sin precio', () => {
+    const result = computeMrr(
+      [{ tier: 'basic', price: 100_000 }, { tier: 'legacy', price: 90_000 }],
+      [
+        { plan: 'starter', status: 'active' },
+        { plan: 'legacy', status: 'active' },
+        { plan: 'basic', status: 'active', paymentStatus: 'failed' },
+        { plan: 'enterprise', status: 'active' },
+      ],
+    )
+    expect(result).toEqual({ mrr: 190_000, activeOrgs: 4, payingOrgs: 2, unpricedOrgs: 1 })
   })
 })
 
