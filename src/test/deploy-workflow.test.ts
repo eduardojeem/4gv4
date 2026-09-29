@@ -12,4 +12,9 @@ describe('workflow de despliegue', () => {
     expect(workflow).toContain('VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}')
     expect(workflow).toContain('--token=${{ secrets.VERCEL_TOKEN }}')
   })
+
+  it('cancela despliegues obsoletos cuando main recibe un commit más nuevo', () => {
+    expect(workflow).toContain('group: production-deploy')
+    expect(workflow).toContain('cancel-in-progress: true')
+  })
 })
