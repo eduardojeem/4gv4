@@ -176,7 +176,30 @@ describe('analyzeTable', () => {
         policy({ name: 'org_guard', permissive: false, using: ORG_SCOPED }),
       ],
     }))
-    expect(finding.severity).toBe('low')
+    expect(finding.status).toBe('healthy')
+    expect(finding.severity).toBe('info')
+  })
+
+  it('no considera guard una RESTRICTIVE de otro rol', () => {
+    const finding = analyzeTable(table({
+      policies: [
+        policy({ name: 'wide', roles: ['authenticated'], using: AUTHENTICATED_ONLY }),
+        policy({ name: 'anon_guard', roles: ['anon'], permissive: false, using: ORG_SCOPED }),
+      ],
+    }))
+    expect(finding.status).toBe('error')
+    expect(finding.severity).toBe('critical')
+  })
+
+  it('no considera guard una RESTRICTIVE de otro comando', () => {
+    const finding = analyzeTable(table({
+      policies: [
+        policy({ name: 'wide_read', command: 'SELECT', using: AUTHENTICATED_ONLY }),
+        policy({ name: 'insert_guard', command: 'INSERT', permissive: false, with_check: ORG_SCOPED }),
+      ],
+    }))
+    expect(finding.status).toBe('error')
+    expect(finding.severity).toBe('critical')
   })
 
   it('ignora políticas que solo aplican a service_role', () => {

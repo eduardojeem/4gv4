@@ -172,6 +172,23 @@ function coversCommand(policy: CatalogPolicy, command: CatalogPolicy['command'])
   return policy.command === 'ALL' || policy.command === command
 }
 
+function rolesOverlap(left: CatalogPolicy, right: CatalogPolicy): boolean {
+  return left.roles.includes('public') || right.roles.includes('public')
+    || left.roles.some((role) => right.roles.includes(role))
+}
+
+function isScopedForCommand(policy: CatalogPolicy, command: CatalogPolicy['command']): boolean {
+  const expressions = command === 'INSERT'
+    ? [policy.with_check]
+    : command === 'UPDATE'
+      ? [policy.using, policy.with_check ?? policy.using]
+      : [policy.using]
+
+  return expressions.every((expression) =>
+    classifyExpression(expression).every((kind) => kind === 'scoped'),
+  )
+}
+
 type Issue = { status: HealthStatus; severity: HealthSeverity; reason: string }
 
 const BRANCH_LABEL: Record<Exclude<BranchKind, 'scoped' | 'restricted'>, string> = {
@@ -188,9 +205,8 @@ function policyIssues(table: CatalogTable, tenant: boolean): Issue[] {
     ? ''
     : ' (la tabla no tiene organization_id: si sus filas pertenecen a una organización, el riesgo es crítico)'
   const issues: Issue[] = []
-  const restrictiveScoped = table.policies.filter(
-    (policy) => !policy.permissive && appliesToClients(policy) &&
-      classifyExpression(policy.using ?? policy.with_check).every((kind) => kind === 'scoped'),
+  const restrictivePolicies = table.policies.filter(
+    (policy) => !policy.permissive && appliesToClients(policy),
   )
 
   for (const policy of table.policies) {
@@ -202,14 +218,15 @@ function policyIssues(table: CatalogTable, tenant: boolean): Issue[] {
       ?? kinds.find((kind) => kind === 'public_condition')
     if (!weakest) continue
 
-    const guarded = restrictiveScoped.some((restrictive) =>
-      restrictive.command === 'ALL' || restrictive.command === policy.command,
+    const guarded = restrictivePolicies.some((restrictive) =>
+      coversCommand(restrictive, policy.command)
+      && rolesOverlap(restrictive, policy)
+      && isScopedForCommand(restrictive, policy.command),
     )
     const isRead = coversCommand(policy, 'SELECT')
     const label = `Política "${policy.name}" (${policy.command}) ${BRANCH_LABEL[weakest]}`
 
     if (guarded) {
-      issues.push({ status: 'warning', severity: 'low', reason: `${label}; una política RESTRICTIVE por organización la acota.` })
       continue
     }
 
