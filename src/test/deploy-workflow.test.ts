@@ -13,6 +13,8 @@ describe('workflow de despliegue', () => {
     expect(workflow).toContain('VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}')
     expect(workflow).toContain('VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}')
     expect(workflow).toContain('--token=${{ secrets.VERCEL_TOKEN }}')
+    expect(workflow).toContain("if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''")
+    expect(workflow).toContain('Vercel Git integration will deploy this commit')
   })
 
   it('cancela despliegues obsoletos cuando main recibe un commit más nuevo', () => {

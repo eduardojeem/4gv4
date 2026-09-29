@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: production
     env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
@@ -33,10 +34,17 @@ jobs:
       run: npm run test
 
     - name: Pull Vercel Production environment
+      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
       run: npx --yes vercel@61.0.0 pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
     - name: Build application with Vercel Production environment
+      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
       run: npx --yes vercel@61.0.0 build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
     - name: Deploy to Vercel
+      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
       run: npx --yes vercel@61.0.0 deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+
+    - name: Confirm Vercel Git integration handoff
+      if: env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == ''
+      run: echo "Vercel Git integration will deploy this commit; add all three Vercel secrets to enable CLI deployment."
