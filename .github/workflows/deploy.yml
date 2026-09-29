@@ -5,10 +5,18 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     environment: production
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
     steps:
     - uses: actions/checkout@v5
@@ -25,16 +33,18 @@ jobs:
     - name: Run tests
       run: npm run test
 
-    - name: Build application
-      run: npm run build:production
-      env:
-        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+    - name: Pull Vercel Production environment
+      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+      run: npx --yes vercel@61.0.0 pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+    - name: Build application with Vercel Production environment
+      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+      run: npx --yes vercel@61.0.0 build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
     - name: Deploy to Vercel
-      uses: vercel/action@v1
-      with:
-        vercel-token: ${{ secrets.VERCEL_TOKEN }}
-        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-        vercel-args: '--prod'
+      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+      run: npx --yes vercel@61.0.0 deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+
+    - name: Confirm Vercel Git integration handoff
+      if: env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == ''
+      run: echo "Vercel Git integration will deploy this commit; add all three Vercel secrets to enable CLI deployment."

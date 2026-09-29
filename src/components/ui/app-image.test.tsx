@@ -19,16 +19,12 @@ describe('AppImage', () => {
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-height', '1')
   })
 
-  // AppImage forzaba unoptimized=true siempre: ninguna imagen de producto o
-  // logo pasaba por el optimizador de Next salvo que el call site lo pisara a
-  // mano. Ahora el default sigue la misma politica que ya usan ProductCard y
-  // el resto (shouldBypassImageOptimization).
   it('optimiza por defecto una URL real de Supabase Storage', () => {
     render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg" alt="Producto" />)
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'false')
   })
 
-  it('sigue evitando el optimizador para SVG, data URIs y hosts ya optimizados', () => {
+  it('sigue evitando el optimizador para SVG y data URIs', () => {
     const { rerender } = render(<AppImage src="/placeholder-product.svg" alt="Producto" />)
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'true')
 
@@ -36,7 +32,7 @@ describe('AppImage', () => {
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'true')
   })
 
-  it('respeta un `unoptimized` explicito por encima del default', () => {
+  it('respeta un unoptimized explícito por encima del default', () => {
     render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg" alt="Producto" unoptimized />)
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'true')
   })

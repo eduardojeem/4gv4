@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect } from 'react'
+import { logger } from '@/lib/logger'
 
 export default function GlobalError({
   error,
 }: {
-  error: Error
+  error: Error & { digest?: string }
 }) {
   useEffect(() => {
-    console.error(error)
+    logger.error('Global render error:', error)
   }, [error])
 
   return (
@@ -19,14 +20,17 @@ export default function GlobalError({
           <p className="text-sm text-muted-foreground mb-4">
             Algo salió mal al renderizar la aplicación.
           </p>
-          <div className="text-left text-xs bg-muted/40 p-3 rounded mb-4 overflow-auto max-h-64">
-            <div className="font-mono break-words">
-              <div className="font-semibold mb-1">{error?.message || 'Error inesperado'}</div>
-              {error?.stack && (
-                <pre className="whitespace-pre-wrap">{error.stack}</pre>
-              )}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="text-left text-xs bg-muted/40 p-3 rounded mb-4 overflow-auto max-h-64">
+              <div className="font-mono break-words">
+                <div className="font-semibold mb-1">{error.message || 'Error inesperado'}</div>
+                {error.stack && <pre className="whitespace-pre-wrap">{error.stack}</pre>}
+              </div>
             </div>
-          </div>
+          )}
+          {error.digest && (
+            <p className="mb-4 text-xs text-muted-foreground">Referencia: {error.digest}</p>
+          )}
           <button
             onClick={() => {
               // In global-error, Next.js does not provide a reset function.

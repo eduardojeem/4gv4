@@ -53,4 +53,14 @@ describe('endurecimiento de produccion', () => {
       existsSync(resolve(projectRoot, 'src/components/optimization/performance-dashboard.tsx'))
     ).toBe(false)
   })
+
+  it('no muestra stack ni mensajes internos en el error global de producción', () => {
+    const globalError = readProjectFile('src/app/global-error.tsx')
+    const superadminError = readProjectFile('src/app/superadmin/error.tsx')
+
+    expect(globalError).toContain("process.env.NODE_ENV === 'development'")
+    expect(globalError).toContain("logger.error('Global render error:', error)")
+    expect(globalError).not.toContain('console.error(error)')
+    expect(superadminError).toContain("logger.error('SuperAdmin render error:', error)")
+  })
 })
