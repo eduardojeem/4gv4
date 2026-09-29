@@ -41,6 +41,7 @@ import {
   Megaphone,
   HeartPulse,
   Scale,
+  Wallet,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -153,6 +154,7 @@ const navItems: NavItem[] = [
     section: 'billing',
     children: [
       { title: 'Resumen financiero', href: '/superadmin/billing', icon: Banknote },
+      { title: 'Gastos y rentabilidad', href: '/superadmin/finanzas', icon: Wallet },
       { title: 'Planes', href: '/superadmin/plans', icon: Sparkles },
       { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard },
       { title: 'Promociones', href: '/superadmin/promo-codes', icon: TicketPercent },
