@@ -36,8 +36,10 @@ export const resolveProductImageUrl = (url?: string | null): string => {
     return isSupportedImageSource(cleanUrl) ? cleanUrl : '/placeholder-product.svg'
   }
   
-  // Si es una ruta relativa que empieza con /, retornar tal cual (archivo público en /public)
-  if (cleanUrl.startsWith('/')) return cleanUrl
+  // Archivo de /public. Sin query ni hash: Next rechaza (y rompe el build al
+  // prerenderizar) una imagen local con query string que no esté declarada en
+  // images.localPatterns, y en un archivo estático el ?v= no aporta nada.
+  if (cleanUrl.startsWith('/')) return cleanUrl.split(/[?#]/)[0] || '/placeholder-product.svg'
   
   // Si empieza con 'product-images/', limpiarlo para evitar duplicar el bucket en getPublicUrl
   const normalizedPath = cleanUrl.replace(/^product-images\//, '')
