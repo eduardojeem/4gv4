@@ -97,7 +97,7 @@ import {
   type RepairSummary,
 } from '@/lib/superadmin/organization-volume'
 import { describeLastAccess, summarizeTeamAccess } from '@/lib/superadmin/last-access'
-import { auditActionLabel } from '@/components/superadmin/AuditLogsDashboard'
+import { auditActionLabel } from '@/lib/superadmin/audit-labels'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'

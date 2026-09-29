@@ -103,7 +103,7 @@ describe('SuperAdminShell', () => {
     await user.click(toolsGroup)
 
     expect(screen.getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/superadmin/audit-logs')
-    expect(screen.getByRole('link', { name: 'Diagnóstico' })).toHaveAttribute('href', '/superadmin/diagnostic')
+    expect(screen.getByRole('link', { name: 'Comunicaciones' })).toHaveAttribute('href', '/superadmin/communications')
     expect(screen.getByRole('link', { name: 'Mantenimiento' })).toHaveAttribute('href', '/superadmin/maintenance')
   })
 })
