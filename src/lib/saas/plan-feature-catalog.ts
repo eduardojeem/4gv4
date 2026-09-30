@@ -44,12 +44,12 @@ export const PLAN_FEATURES: readonly PlanFeatureDefinition[] = [
   { key: 'crm', label: 'CRM / Gestión de clientes', module: 'crm', group: 'operacion', hint: 'Fichas e historial de clientes' },
   { key: 'analytics', label: 'Analytics avanzado', module: 'analytics', group: 'gestion', hint: 'Ventas, márgenes, rankings y comparativas (Analytics)' },
   { key: 'webAnalytics', label: 'Visitas web', module: 'web_analytics', group: 'gestion', hint: 'Visitas de la tienda online, productos más vistos y contactos por WhatsApp' },
-  { key: 'security', label: 'Seguridad y auditoría', module: 'security', group: 'gestion', hint: 'Abre Seguridad: accesos y auditoría de acciones' },
+  { key: 'security', label: 'Seguridad y auditoría', module: 'security', group: 'gestion', hint: 'Registro de accesos y de acciones sensibles del equipo' },
   { key: 'finances', label: 'Finanzas y rentabilidad', module: 'finances', group: 'gestion', hint: 'Gastos, nómina, obligaciones y rentabilidad (Finanzas)' },
-  { key: 'reports', label: 'Reportes exportables (CSV/PDF)', module: 'reports', group: 'gestion', hint: 'Informativo: se habilita en cualquier plan pago' },
-  { key: 'users', label: 'Gestión de usuarios', module: null, group: 'gestion', hint: 'Informativo: la cantidad la define el límite de usuarios' },
-  { key: 'branches', label: 'Sucursales múltiples', module: null, group: 'gestion', hint: 'Informativo: la cantidad la define el límite de sucursales' },
-  { key: 'support', label: 'Soporte prioritario', module: null, group: 'servicio', hint: 'Informativo: es un servicio, no una función de la app' },
+  { key: 'reports', label: 'Reportes exportables (CSV/PDF)', module: 'reports', group: 'gestion', hint: 'Descargá ventas, productos y reportes en CSV, Excel y PDF' },
+  { key: 'users', label: 'Gestión de usuarios', module: null, group: 'gestion', hint: 'Roles y permisos para tu equipo; la cantidad depende del plan' },
+  { key: 'branches', label: 'Sucursales múltiples', module: null, group: 'gestion', hint: 'Más de un local con stock y caja propios' },
+  { key: 'support', label: 'Soporte prioritario', module: null, group: 'servicio', hint: 'Tus consultas se atienden primero' },
 ]
 
 export function planFeatureByKey(key: string): PlanFeatureDefinition | undefined {

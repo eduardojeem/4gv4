@@ -1,3 +1,7 @@
+import { PLAN_FEATURES, PLAN_FEATURE_GROUP_LABEL, type PlanFeatureGroup } from '@/lib/saas/plan-feature-catalog'
+import { PLAN_LIMIT_FIELDS, formatPlanLimit as formatPanelLimit, parsePlanLimit, type PlanLimitKey } from '@/lib/saas/plan-limits'
+import { effectivePlanFeatures } from '@/lib/saas/plan-modules'
+
 export type PlanFeature = {
   label: string
   iconName?: string
@@ -32,29 +36,15 @@ export type PlanComparisonRow<T> = {
   values: Record<string, T>
 }
 
-const LIMIT_LABELS: Record<string, string> = {
-  users: 'Usuarios y cajeros concurrentes',
-  products: 'Productos en catálogo',
-  services: 'Servicios en catálogo',
-  branches: 'Sucursales comerciales permitidas',
-  cashRegisters: 'Cajas registradoras',
-  categories: 'Categorías',
-  repairs: 'Órdenes de reparación por mes',
-  storage: 'Almacenamiento',
-  storageMb: 'Almacenamiento',
+export type PlanFeatureComparisonRow = PlanComparisonRow<boolean> & {
+  group: PlanFeatureGroup
+  hint: string
 }
 
-const LIMIT_ORDER = Object.keys(LIMIT_LABELS)
-
-function normalized(value: string) {
-  return value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-}
-
-function humanizeKey(key: string) {
-  return key
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .replace(/^./, (first) => first.toUpperCase())
+export type PlanFeatureComparisonGroup = {
+  group: PlanFeatureGroup
+  label: string
+  rows: PlanFeatureComparisonRow[]
 }
 
 export function selectActivePlans(plans: SubscriptionPlan[] | undefined) {
@@ -62,50 +52,59 @@ export function selectActivePlans(plans: SubscriptionPlan[] | undefined) {
   return plans.filter((plan) => plan.is_active === true)
 }
 
+/**
+ * Texto de un límite con el mismo formato que el panel ("10.000", "300/mes",
+ * "Ilimitadas"). Antes se mostraba el texto guardado tal cual y un 0 de fotos
+ * por reparación se leía como "0" en vez de "No incluye".
+ */
+export function publicLimitText(key: PlanLimitKey, raw: PlanLimitValue): string {
+  if (raw === undefined || raw === '') return 'No especificado'
+  const value = parsePlanLimit(raw)
+  if (value === undefined) return String(raw)
+  if (value === 0) return 'No incluye'
+  return formatPanelLimit(key, value)
+}
+
+/** Formato suelto para valores fuera del catálogo de límites. */
 export function formatPlanLimit(value: PlanLimitValue) {
   if (value === null) return 'Ilimitado'
   if (value === undefined || value === '') return 'No especificado'
   return String(value)
 }
 
+/** Los mismos 6 límites, con el mismo nombre y orden, que edita el superadmin. */
 export function buildPlanLimitRows(plans: SubscriptionPlan[]): PlanComparisonRow<string>[] {
-  const keys = Array.from(new Set(plans.flatMap((plan) => Object.keys(plan.limits ?? {}))))
-    .sort((left, right) => {
-      const leftIndex = LIMIT_ORDER.indexOf(left)
-      const rightIndex = LIMIT_ORDER.indexOf(right)
-      if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right)
-      if (leftIndex === -1) return 1
-      if (rightIndex === -1) return -1
-      return leftIndex - rightIndex
-    })
+  return PLAN_LIMIT_FIELDS
+    .filter((field) => plans.some((plan) => plan.limits && field.key in plan.limits))
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      values: Object.fromEntries(plans.map((plan) => [plan.id, publicLimitText(field.key, plan.limits?.[field.key])])),
+    }))
+}
 
-  return keys.map((key) => ({
-    key,
-    label: LIMIT_LABELS[key] ?? humanizeKey(key),
-    values: Object.fromEntries(plans.map((plan) => [plan.id, formatPlanLimit(plan.limits?.[key])])),
+/**
+ * Todas las funciones del catálogo, agrupadas, con lo que cada plan da de
+ * verdad a las tiendas. Antes se listaban las etiquetas guardadas tal cual:
+ * sin orden, con nombres viejos, y lo que faltaba en la lista no aparecía.
+ */
+export function buildPlanFeatureGroups(plans: SubscriptionPlan[]): PlanFeatureComparisonGroup[] {
+  const included = new Map(plans.map((plan) => [plan.id, effectivePlanFeatures(plan.tier, plan.features)]))
+  const groups: PlanFeatureGroup[] = ['venta', 'operacion', 'gestion', 'servicio']
+
+  return groups.map((group) => ({
+    group,
+    label: PLAN_FEATURE_GROUP_LABEL[group],
+    rows: PLAN_FEATURES.filter((feature) => feature.group === group).map((feature) => ({
+      key: feature.key,
+      label: feature.label,
+      group,
+      hint: feature.hint,
+      values: Object.fromEntries(plans.map((plan) => [plan.id, Boolean(included.get(plan.id)?.[feature.key])])),
+    })),
   }))
 }
 
-export function buildPlanFeatureRows(
-  plans: SubscriptionPlan[],
-): PlanComparisonRow<string | boolean>[] {
-  const rows = new Map<string, PlanComparisonRow<string | boolean>>()
-
-  for (const plan of plans) {
-    for (const feature of plan.features ?? []) {
-      if (!feature.label?.trim()) continue
-      const key = normalized(feature.label)
-      const row = rows.get(key) ?? { key, label: feature.label.trim(), values: {} }
-      row.values[plan.id] = feature.value
-      rows.set(key, row)
-    }
-  }
-
-  for (const row of rows.values()) {
-    for (const plan of plans) {
-      if (!(plan.id in row.values)) row.values[plan.id] = false
-    }
-  }
-
-  return Array.from(rows.values())
+export function buildPlanFeatureRows(plans: SubscriptionPlan[]): PlanFeatureComparisonRow[] {
+  return buildPlanFeatureGroups(plans).flatMap((group) => group.rows)
 }

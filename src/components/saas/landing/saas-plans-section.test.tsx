@@ -39,7 +39,11 @@ describe('SaaSPlansSection', () => {
 
     expect(screen.getByText('20/mes')).toBeInTheDocument()
     expect(screen.getByText('Ilimitadas')).toBeInTheDocument()
-    expect(screen.queryByText('Soporte prioritario')).not.toBeInTheDocument()
+    // Todas las funciones del catálogo, con lo que da cada plan.
+    expect(screen.getByText('Visitas web')).toBeInTheDocument()
+    expect(screen.getByText('Seguridad y auditoría')).toBeInTheDocument()
+    expect(screen.getByText('Visitas web incluido en PRO')).toBeInTheDocument()
+    expect(screen.getByText('Visitas web no incluido en FREE')).toBeInTheDocument()
   })
 
   it('shows an honest empty state when the database has no active plans', () => {
