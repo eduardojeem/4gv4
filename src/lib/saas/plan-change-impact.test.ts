@@ -42,3 +42,14 @@ describe('impacto de guardar un plan', () => {
     expect(impact.loweredLimits).toEqual([])
   })
 })
+
+describe('funciones incluidas según plans.modules', () => {
+  it('lee los módulos técnicos y los informativos de la lista comercial', async () => {
+    const { includedPlanFeatures } = await import('./plan-modules')
+    const included = includedPlanFeatures(['pos', 'analytics'], [{ label: 'Soporte prioritario', value: true }])
+    expect(included.analytics).toBe(true)
+    expect(included.security).toBe(false)
+    expect(included.support).toBe(true)
+    expect(included.orders).toBe(false)
+  })
+})

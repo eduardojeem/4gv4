@@ -241,17 +241,17 @@ describe('las otras tres pestañas', () => {
   const planLibre: PlanRecord = {
     code: 'FREE', slug: 'free', name: 'Plan Free', price_monthly: 0, price_note: 'Siempre gratis',
     currency: 'PYG', limits: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null },
-    features: { marketplace: false, analytics: false, credits: false }, modules: [], is_active: true,
+    features: { marketplace: false, analytics: false, credits: false }, modules: ['pos', 'inventory', 'ecommerce'], is_active: true,
   }
   const planPro: PlanRecord = {
     code: 'PRO', slug: 'pro', name: 'Plan Pro', price_monthly: 150000, price_note: null,
     currency: 'PYG', limits: { users: 5, branches: 2, cashRegisters: 3, products: 1000, categories: null },
-    features: { marketplace: true, analytics: true, credits: true }, modules: [], is_active: true,
+    features: { marketplace: true, analytics: true, credits: true }, modules: ['pos', 'inventory', 'ecommerce', 'orders', 'credits'], is_active: true,
   }
   const planMax: PlanRecord = {
     code: 'ENTERPRISE', slug: 'enterprise', name: 'Plan Max', price_monthly: 400000, price_note: null,
     currency: 'PYG', limits: { users: null, branches: null, cashRegisters: null, products: null, categories: null },
-    features: { marketplace: true, analytics: true, credits: true }, modules: [], is_active: true,
+    features: { marketplace: true, analytics: true, credits: true }, modules: ['pos', 'inventory', 'ecommerce', 'orders', 'credits', 'analytics', 'security'], is_active: true,
   }
 
   const props = {
@@ -297,8 +297,19 @@ describe('las otras tres pestañas', () => {
     window.location.hash = '#plans'
     render(<SubscriptionsClientView {...props} />)
 
-    expect(screen.getAllByText('Marketplace web: incluido').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Marketplace web: no incluido').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pedidos: incluido').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pedidos: no incluido').length).toBeGreaterThan(0)
+  })
+
+  /** Antes se veían tres funciones: Analytics, Visitas web y Seguridad no figuraban. */
+  it('muestra todas las funciones del catálogo, según los módulos del plan', () => {
+    window.location.hash = '#plans'
+    render(<SubscriptionsClientView {...props} />)
+
+    // Solo Plan Max trae analytics (Analytics + Visitas web) y seguridad.
+    expect(screen.getAllByText('Analytics avanzado: incluido')).toHaveLength(1)
+    expect(screen.getAllByText('Analytics avanzado: no incluido')).toHaveLength(2)
+    expect(screen.getAllByText('Seguridad y auditoría: incluido')).toHaveLength(1)
   })
 
   /** Se veian solo los ultimos 25 y nada lo decia. */

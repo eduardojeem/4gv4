@@ -64,3 +64,19 @@ export function effectivePlanFeatures(tier: string, features: PlanFeature[] | nu
     ]),
   )
 }
+
+/**
+ * Igual que `effectivePlanFeatures` pero a partir de `plans.modules`, que es
+ * lo que el sistema hace cumplir. Para las pantallas de la tienda, que leen el
+ * plan técnico ya sincronizado.
+ */
+export function includedPlanFeatures(modules: readonly string[] | null | undefined, features: unknown): Record<string, boolean> {
+  const active = new Set(modules ?? [])
+  const list = Array.isArray(features) ? (features as PlanFeature[]).filter((f): f is { label: string; value?: boolean | string } => typeof f?.label === 'string') : []
+  return Object.fromEntries(
+    PLAN_FEATURES.map((feature) => [
+      feature.key,
+      feature.module ? active.has(feature.module) : Boolean(getCommercialFeatureValue(list, feature.key)),
+    ]),
+  )
+}

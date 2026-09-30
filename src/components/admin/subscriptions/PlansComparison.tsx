@@ -13,6 +13,8 @@ import {
   Package,
   Star,
   Users,
+  Wrench,
+  Camera,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -20,19 +22,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { PLAN_FEATURES, PLAN_FEATURE_GROUP_LABEL, type PlanFeatureGroup } from '@/lib/saas/plan-feature-catalog'
+import { PLAN_LIMIT_FIELDS, formatPlanLimit, type PlanLimitKey } from '@/lib/saas/plan-limits'
 
 export type PlanRow = {
   code: string
   name: string
   priceLabel: string
   priceMonthly: number
-  users: string
-  branches: string
-  cashRegisters: string
-  products: string
-  marketplace: string
-  analytics: string
-  credits: string
+  /** Número, null (sin límite) o undefined (el plan no lo define). */
+  limits: Partial<Record<PlanLimitKey, number | null>>
+  /** Clave del catálogo de funciones → incluida o no. */
+  included: Record<string, boolean>
   isPopular?: boolean
 }
 
@@ -42,25 +43,40 @@ type Props = {
   canChangePlan: boolean
 }
 
-const resources: Array<{ key: keyof PlanRow; label: string; icon: typeof Users }> = [
-  { key: 'users', label: 'Usuarios', icon: Users },
-  { key: 'branches', label: 'Sucursales', icon: Building2 },
-  { key: 'cashRegisters', label: 'Cajas', icon: CreditCard },
-  { key: 'products', label: 'Productos', icon: Package },
-]
+const LIMIT_ICONS: Record<PlanLimitKey, typeof Users> = {
+  users: Users,
+  branches: Building2,
+  cashRegisters: CreditCard,
+  products: Package,
+  repairs: Wrench,
+  repairPhotos: Camera,
+}
 
-const features: Array<{ key: 'marketplace' | 'analytics' | 'credits'; label: string }> = [
-  { key: 'marketplace', label: 'Marketplace web' },
-  { key: 'analytics', label: 'Analytics y reportes' },
-  { key: 'credits', label: 'Créditos y cuotas' },
-]
+const GROUPS: PlanFeatureGroup[] = ['venta', 'operacion', 'gestion', 'servicio']
+
+/**
+ * Todas las funciones del catálogo, las mismas que edita el superadmin. Antes
+ * se mostraban tres (marketplace, analytics y créditos) y no se veía en qué
+ * plan venían Visitas web, Seguridad y auditoría, Pedidos o Promociones.
+ */
+const FEATURE_GROUPS = GROUPS.map((group) => ({
+  group,
+  label: PLAN_FEATURE_GROUP_LABEL[group],
+  features: PLAN_FEATURES.filter((feature) => feature.group === group),
+}))
+
+function limitText(key: PlanLimitKey, value: number | null | undefined) {
+  if (value === undefined) return '—'
+  if (value === 0) return 'No incluye'
+  return formatPlanLimit(key, value)
+}
 
 /**
  * Un tilde o una cruz no dicen nada en voz alta, y la vista de tabla mostraba
  * el mismo dato como texto: la misma informacion en dos idiomas distintos.
  */
-function FeatureValue({ value, label }: { value: string; label: string }) {
-  if (value === 'Incluido') {
+function FeatureValue({ value, label }: { value: boolean; label: string }) {
+  if (value) {
     return (
       <>
         <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
@@ -68,15 +84,22 @@ function FeatureValue({ value, label }: { value: string; label: string }) {
       </>
     )
   }
-  if (value === 'No incluido') {
-    return (
-      <>
-        <X className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
-        <span className="sr-only">{label}: no incluido</span>
-      </>
-    )
-  }
-  return <span className="text-xs font-medium text-foreground">{value}</span>
+  return (
+    <>
+      <X className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
+      <span className="sr-only">{label}: no incluido</span>
+    </>
+  )
+}
+
+function GroupRow({ label, span }: { label: string; span: number }) {
+  return (
+    <TableRow className="border-border bg-muted/40 hover:bg-muted/40">
+      <TableCell colSpan={span} className="py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </TableCell>
+    </TableRow>
+  )
 }
 
 /** Adonde te lleva el boton respecto del plan que ya tenes. */
@@ -189,22 +212,32 @@ function PlanCard({
       </div>
 
       <div className="space-y-2.5 border-t border-border bg-muted/30 px-6 py-4">
-        {resources.map(({ key, label, icon: Icon }) => (
-          <div key={key} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 font-medium text-muted-foreground">
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-              {label}
+        {PLAN_LIMIT_FIELDS.map(({ key, label }) => {
+          const Icon = LIMIT_ICONS[key]
+          return (
+            <div key={key} className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 font-medium text-muted-foreground">
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                {label}
+              </div>
+              <span className="font-bold tabular-nums text-foreground">{limitText(key, plan.limits[key])}</span>
             </div>
-            <span className="font-bold tabular-nums text-foreground">{plan[key] as string}</span>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      <div className="space-y-2 border-t border-border px-6 py-4">
-        {features.map(({ key, label }) => (
-          <div key={key} className="flex items-center justify-between text-xs">
-            <span className="font-medium text-muted-foreground">{label}</span>
-            <FeatureValue value={plan[key]} label={label} />
+      <div className="space-y-4 border-t border-border px-6 py-4">
+        {FEATURE_GROUPS.map(({ group, label, features }) => (
+          <div key={group} className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</p>
+            {features.map((feature) => (
+              <div key={feature.key} className="flex items-center justify-between gap-2 text-xs" title={feature.hint}>
+                <span className={cn('font-medium', plan.included[feature.key] ? 'text-foreground' : 'text-muted-foreground')}>
+                  {feature.label}
+                </span>
+                <FeatureValue value={Boolean(plan.included[feature.key])} label={feature.label} />
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -282,63 +315,81 @@ export function PlansComparison({ plans, currentPlanCode, canChangePlan }: Props
           </div>
         ) : (
           <div className="overflow-x-auto">
+            {/* Funciones en filas y planes en columnas: con 17 funciones, una
+                columna por función no entraba en pantalla. */}
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="border-border">
-                  <TableHead className="text-xs font-bold">Plan</TableHead>
-                  <TableHead className="text-xs font-bold">Precio</TableHead>
-                  <TableHead className="text-xs font-bold">Usuarios</TableHead>
-                  <TableHead className="text-xs font-bold">Sucursales</TableHead>
-                  <TableHead className="text-xs font-bold">Cajas</TableHead>
-                  <TableHead className="text-xs font-bold">Productos</TableHead>
-                  {features.map(({ key, label }) => (
-                    <TableHead key={key} className="text-xs font-bold">
-                      {label}
-                    </TableHead>
-                  ))}
-                  <TableHead className="text-right text-xs font-bold" />
+                  <TableHead className="text-xs font-bold">Qué incluye</TableHead>
+                  {plans.map((plan) => {
+                    const isCurrent = plan.code === currentPlanCode
+                    return (
+                      <TableHead key={plan.code} className={cn('text-center text-xs font-bold', isCurrent && 'bg-primary/5')}>
+                        <div className="flex flex-col items-center gap-0.5 py-1">
+                          <span className="flex items-center gap-1.5">
+                            {plan.name}
+                            {isCurrent && (
+                              <Badge className="border-0 bg-primary px-2 py-0 text-[10px] text-primary-foreground">Actual</Badge>
+                            )}
+                          </span>
+                          <span className="font-semibold tabular-nums text-muted-foreground">
+                            {plan.priceLabel}
+                            {plan.priceMonthly > 0 ? '/mes' : ''}
+                          </span>
+                        </div>
+                      </TableHead>
+                    )
+                  })}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {plans.map((plan) => {
-                  const direction = planDirection(plan, currentPrice, currentPlanCode)
-                  return (
-                    <TableRow
-                      key={plan.code}
-                      className={cn('border-border', direction === 'current' && 'bg-primary/5 font-semibold')}
-                    >
-                      <TableCell className="text-xs font-bold">
-                        <div className="flex items-center gap-2">
-                          {plan.name}
-                          {direction === 'current' && (
-                            <Badge className="border-0 bg-primary px-2 py-0 text-[10px] text-primary-foreground">Actual</Badge>
-                          )}
-                        </div>
+                <GroupRow label="Límites" span={plans.length + 1} />
+                {PLAN_LIMIT_FIELDS.map(({ key, label }) => (
+                  <TableRow key={key} className="border-border">
+                    <TableCell className="text-xs font-medium">{label}</TableCell>
+                    {plans.map((plan) => (
+                      <TableCell
+                        key={plan.code}
+                        className={cn('text-center text-xs font-semibold tabular-nums', plan.code === currentPlanCode && 'bg-primary/5')}
+                      >
+                        {limitText(key, plan.limits[key])}
                       </TableCell>
-                      <TableCell className="text-xs font-bold tabular-nums">{plan.priceLabel}</TableCell>
-                      <TableCell className="text-xs tabular-nums">{plan.users}</TableCell>
-                      <TableCell className="text-xs tabular-nums">{plan.branches}</TableCell>
-                      <TableCell className="text-xs tabular-nums">{plan.cashRegisters}</TableCell>
-                      <TableCell className="text-xs tabular-nums">{plan.products}</TableCell>
-                      {features.map(({ key, label }) => (
-                        <TableCell key={key} className="text-xs">
-                          <FeatureValue value={plan[key]} label={label} />
+                    ))}
+                  </TableRow>
+                ))}
+                {FEATURE_GROUPS.flatMap(({ group, label, features }) => [
+                  <GroupRow key={`group-${group}`} label={label} span={plans.length + 1} />,
+                  ...features.map((feature) => (
+                    <TableRow key={feature.key} className="border-border">
+                      <TableCell className="text-xs">
+                        <span className="font-medium">{feature.label}</span>
+                        <span className="block text-[10px] text-muted-foreground">{feature.hint}</span>
+                      </TableCell>
+                      {plans.map((plan) => (
+                        <TableCell key={plan.code} className={cn('text-center', plan.code === currentPlanCode && 'bg-primary/5')}>
+                          <span className="inline-flex justify-center">
+                            <FeatureValue value={Boolean(plan.included[feature.key])} label={`${feature.label} en ${plan.name}`} />
+                          </span>
                         </TableCell>
                       ))}
-                      <TableCell className="text-right">
-                        {direction !== 'current' && canChangePlan && (
-                          <PlanCta
-                            plan={plan}
-                            direction={direction}
-                            canChangePlan={canChangePlan}
-                            size="sm"
-                            className="h-8 rounded-xl text-xs"
-                          />
-                        )}
-                      </TableCell>
                     </TableRow>
-                  )
-                })}
+                  )),
+                ])}
+                {canChangePlan && (
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableCell />
+                    {plans.map((plan) => {
+                      const direction = planDirection(plan, currentPrice, currentPlanCode)
+                      return (
+                        <TableCell key={plan.code} className="text-center">
+                          {direction !== 'current' && (
+                            <PlanCta plan={plan} direction={direction} canChangePlan={canChangePlan} size="sm" className="h-8 rounded-xl text-xs" />
+                          )}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
