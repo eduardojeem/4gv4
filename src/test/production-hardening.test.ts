@@ -15,6 +15,13 @@ describe('endurecimiento de produccion', () => {
     expect(config).not.toContain("key: 'Content-Security-Policy-Report-Only'")
   })
 
+  it('la CSP deja cargar y enviar Cloudflare Web Analytics', () => {
+    const config = readProjectFile('next.config.ts')
+    const scriptSrc = config.match(/\? "script-src [^"]+"/)?.[0] ?? ''
+    expect(scriptSrc).toContain('https://static.cloudflareinsights.com')
+    expect(config).toMatch(/"connect-src [^"]*https:\/\/cloudflareinsights\.com/)
+  })
+
   it('no conserva configuracion ni codigo ejecutable de V0 o WhatsApp Cloud', () => {
     const envExample = readProjectFile('.env.example')
     const communicationsPage = readProjectFile(

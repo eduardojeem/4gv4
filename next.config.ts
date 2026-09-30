@@ -204,9 +204,12 @@ const nextConfig: NextConfig = {
   // Headers para seguridad y optimización de caché
   async headers() {
     const isProd = process.env.NODE_ENV === 'production'
+    // Cloudflare Web Analytics inyecta su beacon desde static.cloudflareinsights.com
+    // y envía las mediciones a cloudflareinsights.com. Sin estos dos dominios la
+    // CSP lo bloqueaba y Cloudflare no registraba ninguna visita.
     const scriptSrc = isProd
-      ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com"
-      : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com"
+      ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com"
+      : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com"
 
     return [
       {
@@ -227,7 +230,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com",
               "frame-src https://challenges.cloudflare.com",
               "worker-src 'self' blob:",
               "manifest-src 'self'",
