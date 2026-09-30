@@ -31,6 +31,35 @@ export function findPlaceholders(content: string): string[] {
   return [...new Set(content.match(new RegExp(PLACEHOLDER.source, 'gi')) ?? [])]
 }
 
+/**
+ * Qué datos del responsable no aparecen en el texto. El texto base no nombra
+ * a nadie ("La plataforma opera como prestador..."): sin razón social, RUC,
+ * domicilio ni un correo, el lector no sabe con quién contrata ni a quién
+ * pedirle sus datos. Es un aviso para el editor, no bloquea la publicación.
+ */
+export function responsibleDataGaps(content: string): string[] {
+  const gaps: string[] = []
+  if (!/raz[oó]n social/i.test(content)) gaps.push('razón social')
+  if (!/\bRUC\b[^\n]{0,40}\d{4,}/i.test(content)) gaps.push('RUC')
+  if (!/domicilio/i.test(content)) gaps.push('domicilio')
+  if (!/[\w.+-]+@[\w-]+\.[\w.]+/.test(content)) gaps.push('correo de contacto')
+  return gaps
+}
+
+/**
+ * Sección para identificar al responsable. Los marcadores entre corchetes
+ * bloquean la publicación hasta que se reemplazan por los datos reales.
+ */
+export function responsibleSection(documentType: LegalDocumentType): string {
+  const heading = documentType === 'privacy' ? '## Responsable del tratamiento' : '## Quién presta el servicio'
+  return `${heading}
+
+- **Razón social:** [RAZÓN SOCIAL]
+- **RUC:** [RUC]
+- **Domicilio:** [DOMICILIO]
+- **Correo de contacto:** [EMAIL de contacto]`
+}
+
 export function isLegalDocumentType(value: string): value is LegalDocumentType {
   return (LEGAL_DOCUMENT_TYPES as readonly string[]).includes(value)
 }

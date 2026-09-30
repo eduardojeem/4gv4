@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Eye, FilePen, FileText, History, Loader2, Save, Send } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Eye, FilePen, FileText, History, Loader2, Save, Send, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,10 +27,13 @@ import {
   LEGAL_DOCUMENT_META,
   LEGAL_DOCUMENT_TYPES,
   findPlaceholders,
+  responsibleDataGaps,
+  responsibleSection,
   type LegalDocument,
   type LegalDocumentType,
   type LegalDocumentsState,
 } from '@/lib/legal/shared'
+import { DEFAULT_LEGAL_DOCUMENTS } from '@/lib/legal/defaults'
 import { publishLegalDocumentAction, saveLegalDraftAction } from '@/app/superadmin/web-content/legal/actions'
 
 function formatDate(value: string | null): string {
@@ -48,16 +51,19 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
   const router = useRouter()
   const published = versions.find((v) => v.status === 'published') ?? null
   const draft = versions.find((v) => v.status === 'draft') ?? null
-  const base = draft ?? published
+  // Sin versiones, el primer borrador arranca del texto base en vez de vacío.
+  const base = draft ?? published ?? DEFAULT_LEGAL_DOCUMENTS[documentType]
 
-  const [title, setTitle] = useState(base?.title ?? LEGAL_DOCUMENT_META[documentType].label)
-  const [content, setContent] = useState(base?.content ?? '')
+  const [title, setTitle] = useState(base.title)
+  const [content, setContent] = useState(base.content)
   const [changeSummary, setChangeSummary] = useState(draft?.changeSummary ?? '')
   const [preview, setPreview] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
   const placeholders = useMemo(() => findPlaceholders(content), [content])
+  const responsibleGaps = useMemo(() => responsibleDataGaps(content), [content])
+  const insertResponsible = () => setContent((current) => `${responsibleSection(documentType)}\n\n${current.trimStart()}`)
   const dirty = !draft || title !== draft.title || content !== draft.content || changeSummary !== (draft.changeSummary ?? '')
 
   const save = () =>
@@ -107,7 +113,7 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
           {preview ? (
             <div className="rounded-lg border p-5 dark:border-slate-800">
               <h2 className="mb-4 text-2xl font-bold">{title}</h2>
-              <LegalContent content={content} />
+              <LegalContent content={content} title={title} />
             </div>
           ) : (
             <>
@@ -138,6 +144,18 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
                 />
               </div>
             </>
+          )}
+
+          {responsibleGaps.length > 0 && placeholders.length === 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 sm:flex-row sm:items-center dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              <UserRound className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden />
+              <p className="flex-1">
+                El texto no dice quién está detrás de la plataforma: falta {responsibleGaps.join(', ')}. Quien lee no sabe con quién contrata ni a quién pedir sus datos.
+              </p>
+              <Button type="button" size="sm" variant="outline" className="shrink-0 bg-white/70 dark:bg-transparent" onClick={insertResponsible} disabled={preview}>
+                Agregar sección
+              </Button>
+            </div>
           )}
 
           {placeholders.length > 0 && (
@@ -174,7 +192,7 @@ function DocumentPanel({ documentType, versions }: { documentType: LegalDocument
               </>
             ) : (
               <p className="text-slate-500">
-                Sin versión publicada: {LEGAL_DOCUMENT_META[documentType].path} responde 404 y el diagnóstico lo marca como faltante.
+                Sin versión publicada: {LEGAL_DOCUMENT_META[documentType].path} muestra el texto base de la plataforma hasta que publiques la primera.
               </p>
             )}
           </CardContent>
@@ -232,7 +250,7 @@ export function LegalDocumentsEditor({ state }: { state: LegalDocumentsState }) 
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Documentos legales</h1>
         <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-          Política de privacidad y términos de la plataforma. Cada cambio se guarda como borrador con número de versión; al publicar, la versión anterior queda archivada como registro.
+          Política de privacidad y términos de la plataforma. Cada cambio se guarda como borrador con número de versión; al publicar, la versión anterior queda archivada como registro. El ícono de cada pestaña avisa si el texto publicado todavía no identifica al responsable.
         </p>
       </div>
 
@@ -242,10 +260,24 @@ export function LegalDocumentsEditor({ state }: { state: LegalDocumentsState }) 
         </p>
       ) : (
         <Tabs defaultValue="privacy" className="space-y-4">
-          <TabsList>
-            {LEGAL_DOCUMENT_TYPES.map((type) => (
-              <TabsTrigger key={type} value={type}>{LEGAL_DOCUMENT_META[type].label}</TabsTrigger>
-            ))}
+          <TabsList className="h-auto flex-wrap">
+            {LEGAL_DOCUMENT_TYPES.map((type) => {
+              const versions = state.documents.filter((d) => d.documentType === type)
+              const published = versions.find((v) => v.status === 'published')
+              const hasDraft = versions.some((v) => v.status === 'draft')
+              const needsReview = !published || responsibleDataGaps(published.content).length > 0
+              return (
+                <TabsTrigger key={type} value={type} className="gap-2">
+                  {needsReview
+                    ? <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden />
+                    : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden />}
+                  {LEGAL_DOCUMENT_META[type].label}
+                  <span className="text-xs font-normal text-slate-500">
+                    {published ? `v${published.version}` : 'sin publicar'}{hasDraft ? ' · borrador' : ''}
+                  </span>
+                </TabsTrigger>
+              )
+            })}
           </TabsList>
           {LEGAL_DOCUMENT_TYPES.map((type) => {
             const versions = state.documents.filter((d) => d.documentType === type)
