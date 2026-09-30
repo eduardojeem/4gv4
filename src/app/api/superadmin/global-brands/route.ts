@@ -7,6 +7,7 @@ import { brandSlug, normalizeBrandName, suggestBrandLinks, type GlobalBrand } fr
 import { groupUnmatched } from '@/lib/catalog/unmatched'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
+import { handleManualLinkAction, handleUsageRequest } from '@/lib/catalog/manual-link-actions'
 
 /**
  * Catálogo global de marcas: lo administra solo la plataforma.
@@ -46,6 +47,9 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
+    const usageResponse = await handleUsageRequest('brand', request)
+    if (usageResponse) return usageResponse
+
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')?.trim()
     const admin = createAdminSupabase()
@@ -132,6 +136,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null
+
+    const manual = await handleManualLinkAction('brand', body, user, request)
+    if (manual) return manual
 
     // Acción aparte: vincular por nombre las marcas de empresas sueltas.
     if (body?.action === 'link-existing') {

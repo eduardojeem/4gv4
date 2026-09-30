@@ -80,6 +80,27 @@ describe('catálogo de marcas del superadmin', () => {
     expect(dialog).toHaveTextContent(/ninguna empresa pierde datos/)
   })
 
+  /** «Xiaomi» o «JBL» pueden ser otra forma de escribir una que ya está. */
+  it('vincula a una marca existente y guarda el nombre como alias', async () => {
+    const posts: unknown[] = []
+    servidor(marcas, (body) => posts.push(body))
+    render(<GlobalBrandsManager />)
+
+    const panel = within(await screen.findByRole('region', { name: 'marcas que faltan en el catálogo' }))
+    fireEvent.click(panel.getByRole('button', { name: /Ver cuáles/ }))
+    fireEvent.change(panel.getByRole('combobox', { name: 'Vincular «Xiaomi» a' }), { target: { value: 'b1' } })
+    fireEvent.click(panel.getAllByRole('button', { name: 'Vincular' })[0])
+
+    await waitFor(() => expect(posts).toContainEqual({ action: 'link-to', targetId: 'b1', ids: ['u1', 'u2'], alias: 'Xiaomi' }))
+  })
+
+  it('muestra qué empresas usan una marca', async () => {
+    servidor(marcas)
+    render(<GlobalBrandsManager />)
+    fireEvent.click(await screen.findByRole('button', { name: '6 empresas' }))
+    expect(await screen.findByRole('dialog', { name: /Quién usa «Samsung»/ })).toBeInTheDocument()
+  })
+
   it('filtra las que todavía no tienen logo', async () => {
     servidor(marcas)
     render(<GlobalBrandsManager />)
@@ -162,7 +183,8 @@ describe('catálogo de marcas del superadmin', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Nueva marca/ }))
 
     const archivo = new File(['x'], 'samsung.png', { type: 'image/png' })
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    // El del formulario: la página tiene otro para subir el logo desde la fila.
+    const input = (await screen.findByRole('dialog')).querySelector('input[type="file"]') as HTMLInputElement
     fireEvent.change(input, { target: { files: [archivo] } })
 
     await waitFor(() => expect(subidas).toHaveLength(1))
@@ -170,6 +192,25 @@ describe('catálogo de marcas del superadmin', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Logo oficial (URL)')).toHaveValue('https://cdn/plataforma/samsung.png')
     )
+  })
+
+  it('sube el logo desde la fila, sin abrir el formulario', async () => {
+    const pedidos: Array<{ url: string; method?: string; body?: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      pedidos.push({ url: String(url), method: init?.method, body: init?.body })
+      if (String(url).endsWith('/logo')) return { ok: true, status: 200, json: async () => ({ success: true, url: 'https://cdn/plataforma/panaderia.png' }) }
+      if (init?.method === 'PUT') return { ok: true, status: 200, json: async () => ({ success: true }) }
+      return { ok: true, status: 200, json: async () => marcas }
+    }))
+
+    render(<GlobalBrandsManager />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Subir logo' }))
+    const input = document.querySelector('input[type="file"][aria-hidden="true"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['x'], 'p.png', { type: 'image/png' })] } })
+
+    await waitFor(() => expect(pedidos.some((pedido) => pedido.method === 'PUT')).toBe(true))
+    const put = pedidos.find((pedido) => pedido.method === 'PUT')!
+    expect(JSON.parse(String(put.body))).toEqual({ id: 'b2', logo_url: 'https://cdn/plataforma/panaderia.png' })
   })
 
   it('una marca de baja se puede reactivar, no borrar', async () => {

@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
 import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
+import { CatalogUsageDialog } from './CatalogUsageDialog'
 
 /**
  * Taxonomía global de categorías.
@@ -70,6 +71,8 @@ export function GlobalCategoriesManager() {
   const [creating, setCreating] = useState(false)
   const [toDeactivate, setToDeactivate] = useState<GlobalCategory | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [linkingName, setLinkingName] = useState<string | null>(null)
+  const [usageOf, setUsageOf] = useState<GlobalCategory | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -203,6 +206,41 @@ export function GlobalCategoriesManager() {
     }
   }
 
+  /** Las categorías activas a las que se puede vincular, con su madre adelante. */
+  const linkTargets = useMemo(() => {
+    const byId = new Map(categories.map((category) => [category.id, category]))
+    return categories
+      .filter((category) => category.is_active)
+      .map((category) => {
+        const parent = category.parent_id ? byId.get(category.parent_id) : undefined
+        return { id: category.id, label: parent ? `${parent.name} › ${category.name}` : category.name }
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+  }, [categories])
+
+  /** Vincula a una categoría que ya existe las de empresas con otro nombre. */
+  const linkTo = async (entry: UnmatchedEntry, targetId: string, alias: string | null) => {
+    setLinkingName(entry.name)
+    try {
+      const response = await fetch('/api/superadmin/global-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link-to', targetId, ids: entry.ids, alias }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo vincular.')
+      const target = linkTargets.find((item) => item.id === targetId)?.label ?? 'la categoría'
+      toast.success(`«${entry.name}» vinculada a ${target}`, {
+        description: payload.aliasAdded ? `«${entry.name}» quedó como alias: la próxima tienda se vincula sola.` : undefined,
+      })
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo vincular.')
+    } finally {
+      setLinkingName(null)
+    }
+  }
+
   const reactivate = async (category: GlobalCategory) => {
     try {
       const response = await fetch('/api/superadmin/global-categories', {
@@ -298,6 +336,9 @@ export function GlobalCategoriesManager() {
         itemLabel="categoría"
         busy={creating}
         onCreate={(entries) => void createFromTenant(entries)}
+        targets={linkTargets}
+        onLink={(entry, targetId, alias) => void linkTo(entry, targetId, alias)}
+        linkingName={linkingName}
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -382,9 +423,16 @@ export function GlobalCategoriesManager() {
                   )}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {category.slug}
-                  {(category.aliases?.length ?? 0) > 0 && ` · alias: ${category.aliases!.join(', ')}`}
-                  {` · ${category.linked_count ?? 0} categoría${(category.linked_count ?? 0) === 1 ? '' : 's'} de empresas`}
+                  {(category.linked_count ?? 0) > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setUsageOf(category)}
+                      className="font-medium text-foreground underline-offset-2 hover:underline"
+                    >
+                      {category.linked_count} categoría{category.linked_count === 1 ? '' : 's'} de empresas
+                    </button>
+                  ) : 'Sin empresas'}
+                  {(category.aliases?.length ?? 0) > 0 && ` · también: ${category.aliases!.join(', ')}`}
                 </p>
               </div>
 
@@ -424,6 +472,14 @@ export function GlobalCategoriesManager() {
           ))}
         </ul>
       )}
+
+      <CatalogUsageDialog
+        endpoint="/api/superadmin/global-categories"
+        item={usageOf}
+        itemLabel="categoría"
+        onClose={() => setUsageOf(null)}
+        onChanged={() => void load()}
+      />
 
       <CatalogDeactivateDialog
         item={toDeactivate ? { name: toDeactivate.name, consequence: deactivationConsequence(toDeactivate) } : null}

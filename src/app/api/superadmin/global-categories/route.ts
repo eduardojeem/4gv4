@@ -6,6 +6,7 @@ import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { categorySlug, normalizeCategoryName, sortGlobalCategories, suggestCategoryLinks, type GlobalCategory } from '@/lib/categories/global-catalog'
 import { groupUnmatched } from '@/lib/catalog/unmatched'
 import { logger } from '@/lib/logger'
+import { handleManualLinkAction, handleUsageRequest } from '@/lib/catalog/manual-link-actions'
 
 /**
  * Taxonomía global de categorías: la administra solo la plataforma.
@@ -31,11 +32,14 @@ const categorySchema = z.object({
 
 const updateSchema = categorySchema.partial().extend({ id: z.string().uuid() })
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSuperAdminUser()
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
+    const usageResponse = await handleUsageRequest('category', request)
+    if (usageResponse) return usageResponse
+
     const admin = createAdminSupabase()
     const [{ data, error }, { data: tenantCategories }] = await Promise.all([
       admin.from('global_categories').select(COLUMNS),
@@ -111,6 +115,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null
+
+    const manual = await handleManualLinkAction('category', body, user, request)
+    if (manual) return manual
 
     // Acción aparte: vincular por nombre las categorías de empresas sueltas.
     if (body?.action === 'link-existing') {

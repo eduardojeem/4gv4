@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Loader2, Plus, Search, Sparkles } from 'lucide-react'
+import { Link2, Loader2, Plus, Search, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -30,15 +30,30 @@ export function UnmatchedCatalogPanel({
   itemLabel,
   busy,
   onCreate,
+  targets,
+  onLink,
+  linkingName,
 }: {
   entries: UnmatchedEntry[]
   /** «marca» o «categoría»: se usa en los textos. */
   itemLabel: 'marca' | 'categoría'
   busy: boolean
   onCreate: (entries: UnmatchedEntry[]) => void
+  /**
+   * Las globales a las que se puede vincular a mano. Muchas no faltan: son
+   * sinónimos de una que ya existe («Smartphones» → «Celulares»).
+   */
+  targets?: Array<{ id: string; label: string }>
+  onLink?: (entry: UnmatchedEntry, targetId: string, alias: string | null) => void
+  /** El nombre que se está vinculando ahora, para mostrarlo ocupado. */
+  linkingName?: string | null
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [targetFor, setTargetFor] = useState<Record<string, string>>({})
+  // Guardar el nombre como alias hace que la próxima tienda se vincule sola.
+  const [saveAlias, setSaveAlias] = useState(true)
+  const canLink = Boolean(targets?.length && onLink)
   // Crear en el catálogo escribe para todas las empresas: nada viene marcado.
   const [chosen, setChosen] = useState<Record<string, boolean>>({})
 
@@ -98,15 +113,16 @@ export function UnmatchedCatalogPanel({
             />
           </div>
 
-          <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
+          <ul className="max-h-[28rem] space-y-1 overflow-y-auto pr-1">
             {visible.map((entry) => (
-              <li key={entry.name}>
-                <label
-                  className={cn(
-                    'flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm',
-                    chosen[entry.name] ? 'bg-primary/10' : 'bg-background/60',
-                  )}
-                >
+              <li
+                key={entry.name}
+                className={cn(
+                  'flex flex-wrap items-center gap-2 rounded-lg pr-2 text-sm sm:flex-nowrap',
+                  chosen[entry.name] ? 'bg-primary/10' : 'bg-background/60',
+                )}
+              >
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2">
                   <input
                     type="checkbox"
                     className="h-4 w-4 shrink-0"
@@ -126,6 +142,30 @@ export function UnmatchedCatalogPanel({
                     {entry.count}
                   </span>
                 </label>
+                {canLink && (
+                  <div className="flex w-full items-center gap-1.5 px-3 pb-2 sm:w-auto sm:px-0 sm:pb-0">
+                    <select
+                      aria-label={`Vincular «${entry.name}» a`}
+                      value={targetFor[entry.name] ?? ''}
+                      onChange={(event) => setTargetFor((current) => ({ ...current, [entry.name]: event.target.value }))}
+                      className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs sm:w-44 sm:flex-none"
+                    >
+                      <option value="">Vincular a una existente…</option>
+                      {targets!.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
+                    </select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1"
+                      disabled={!targetFor[entry.name] || Boolean(linkingName)}
+                      onClick={() => onLink!(entry, targetFor[entry.name], saveAlias ? entry.name : null)}
+                    >
+                      {linkingName === entry.name ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                      Vincular
+                    </Button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -134,7 +174,15 @@ export function UnmatchedCatalogPanel({
             <p className="py-6 text-center text-sm text-muted-foreground">Ninguna coincide con esa búsqueda.</p>
           )}
 
+          {canLink && (
+            <label className="flex items-center gap-2 text-xs text-foreground">
+              <input type="checkbox" className="h-4 w-4" checked={saveAlias} onChange={(event) => setSaveAlias(event.target.checked)} />
+              Al vincular, guardar el nombre como alias: la próxima tienda que lo use se vincula sola.
+            </label>
+          )}
+
           <p className="text-xs text-muted-foreground">
+            {canLink && `Si es otra forma de nombrar una ${itemLabel} que ya existe, vinculala. Si es nueva, tildala y creala. `}
             {itemLabel === 'marca'
               ? 'Se crean sin logo: quedan en «Sin logo» para cargarles el oficial.'
               : 'Entran como categorías principales; después podés colgarlas de otra.'}{' '}

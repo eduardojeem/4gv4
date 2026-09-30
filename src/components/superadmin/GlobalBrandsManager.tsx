@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
 import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
+import { CatalogUsageDialog } from './CatalogUsageDialog'
 
 /**
  * Catálogo global de marcas.
@@ -70,6 +71,13 @@ export function GlobalBrandsManager() {
   const [uploading, setUploading] = useState(false)
   const [toDeactivate, setToDeactivate] = useState<GlobalBrand | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [linkingName, setLinkingName] = useState<string | null>(null)
+  const [usageOf, setUsageOf] = useState<GlobalBrand | null>(null)
+  // Subir el logo desde la fila, sin abrir el formulario: la mayoría de las
+  // marcas del catálogo todavía no tiene logo.
+  const rowFileInput = useRef<HTMLInputElement>(null)
+  const [logoFor, setLogoFor] = useState<GlobalBrand | null>(null)
+  const [rowUploadingId, setRowUploadingId] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -219,6 +227,61 @@ export function GlobalBrandsManager() {
     }
   }
 
+  const linkTargets = useMemo(
+    () => brands.filter((brand) => brand.is_active).map((brand) => ({ id: brand.id, label: brand.name })),
+    [brands],
+  )
+
+  /** Vincula a una marca del catálogo las de empresas escritas de otra forma. */
+  const linkTo = async (entry: UnmatchedEntry, targetId: string, alias: string | null) => {
+    setLinkingName(entry.name)
+    try {
+      const response = await fetch('/api/superadmin/global-brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link-to', targetId, ids: entry.ids, alias }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo vincular.')
+      const target = linkTargets.find((item) => item.id === targetId)?.label ?? 'la marca'
+      toast.success(`«${entry.name}» vinculada a ${target}`, {
+        description: payload.aliasAdded ? `«${entry.name}» quedó como alias: la próxima tienda se vincula sola.` : undefined,
+      })
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo vincular.')
+    } finally {
+      setLinkingName(null)
+    }
+  }
+
+  const uploadRowLogo = async (brand: GlobalBrand, file: File) => {
+    setRowUploadingId(brand.id)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('name', brand.name)
+      const upload = await fetch('/api/superadmin/global-brands/logo', { method: 'POST', body })
+      const uploaded = await upload.json().catch(() => null)
+      if (!upload.ok || !uploaded?.success) throw new Error(uploaded?.error || 'No se pudo subir el logo.')
+      const response = await fetch('/api/superadmin/global-brands', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: brand.id, logo_url: uploaded.url }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo guardar el logo.')
+      toast.success(`Logo de ${brand.name} cargado`)
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo subir el logo.')
+    } finally {
+      setRowUploadingId(null)
+      setLogoFor(null)
+      if (rowFileInput.current) rowFileInput.current.value = ''
+    }
+  }
+
   const reactivate = async (brand: GlobalBrand) => {
     try {
       const response = await fetch('/api/superadmin/global-brands', {
@@ -309,6 +372,22 @@ export function GlobalBrandsManager() {
         itemLabel="marca"
         busy={creating}
         onCreate={(entries) => void createFromTenant(entries)}
+        targets={linkTargets}
+        onLink={(entry, targetId, alias) => void linkTo(entry, targetId, alias)}
+        linkingName={linkingName}
+      />
+
+      <input
+        ref={rowFileInput}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/avif,image/svg+xml"
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file && logoFor) void uploadRowLogo(logoFor, file)
+        }}
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -387,13 +466,32 @@ export function GlobalBrandsManager() {
                   )}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {brand.slug}
-                  {(brand.aliases?.length ?? 0) > 0 && ` · alias: ${brand.aliases!.join(', ')}`}
-                  {` · ${brand.linked_count ?? 0} empresa${(brand.linked_count ?? 0) === 1 ? '' : 's'}`}
+                  {(brand.linked_count ?? 0) > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setUsageOf(brand)}
+                      className="font-medium text-foreground underline-offset-2 hover:underline"
+                    >
+                      {brand.linked_count} empresa{brand.linked_count === 1 ? '' : 's'}
+                    </button>
+                  ) : 'Sin empresas'}
+                  {(brand.aliases?.length ?? 0) > 0 && ` · también: ${brand.aliases!.join(', ')}`}
                 </p>
               </div>
 
               <div className="flex items-center gap-1">
+                {!brand.logo_url && brand.is_active && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={rowUploadingId !== null}
+                    onClick={() => { setLogoFor(brand); rowFileInput.current?.click() }}
+                  >
+                    {rowUploadingId === brand.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    Subir logo
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -429,6 +527,14 @@ export function GlobalBrandsManager() {
           ))}
         </ul>
       )}
+
+      <CatalogUsageDialog
+        endpoint="/api/superadmin/global-brands"
+        item={usageOf}
+        itemLabel="marca"
+        onClose={() => setUsageOf(null)}
+        onChanged={() => void load()}
+      />
 
       <CatalogDeactivateDialog
         item={toDeactivate ? { name: toDeactivate.name, consequence: deactivationConsequence(toDeactivate) } : null}
