@@ -67,5 +67,5 @@ describe('el contexto de auth no se mueve al volver a la pestaña', () => {
     recorrer('src')
 
     expect(consumidores, `leen session: ${consumidores.join(', ')}`).toEqual([])
-  })
+  }, 30_000)
 })

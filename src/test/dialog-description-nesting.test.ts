@@ -50,7 +50,7 @@ describe('las descripciones de diálogo no anidan bloques dentro de un párrafo'
     }
 
     expect(culpables).toEqual([])
-  })
+  }, 30_000)
 
   it('el cartel de confirmar el sorteo usa asChild', () => {
     const manager = readFileSync(

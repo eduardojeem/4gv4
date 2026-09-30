@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parseAuditFilters } from './audit-feed'
 import { isOrganizationId, organizationAuditFilter } from './organization-audit'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
@@ -21,7 +22,9 @@ describe('auditoría de una organización', () => {
   })
 
   it('la auditoría acepta el filtro y la ficha tiene pantalla de carga', () => {
-    expect(leer('src/app/superadmin/audit-logs/page.tsx')).toContain('isOrganizationId(params.org)')
+    expect(parseAuditFilters({ source: 'tenant', org: ID }).organizationId).toBe(ID)
+    expect(parseAuditFilters({ source: 'tenant', org: 'hca-celular' }).organizationId).toBeNull()
+    expect(leer('src/app/superadmin/audit-logs/page.tsx')).toContain('parseAuditFilters(await searchParams)')
     expect(leer('src/app/superadmin/organizations/[id]/page.tsx')).toContain('organizationAuditFilter(String(org.id))')
     expect(leer('src/app/superadmin/organizations/[id]/loading.tsx')).toContain('role="status"')
   })
