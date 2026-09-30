@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Barcode, ImageOff, Loader2, Plus, RefreshCw, RotateCcw, Search, Sparkles, Trash2 } from 'lucide-react'
+import { Barcode, ChevronDown, FolderTree, ImageOff, List, Loader2, Plus, RefreshCw, RotateCcw, Search, Sparkles, Tag, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { GlobalProductCandidate } from '@/lib/products/barcode-catalog'
+import { groupGlobalProducts, type ProductGroupView } from '@/lib/products/global-product-groups'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
 
 /**
@@ -31,7 +32,22 @@ type GlobalProduct = {
   stores: number
 }
 
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; parent_id?: string | null; sort_order?: number | null }
+
+const VIEWS: Array<{ id: ProductGroupView; label: string; icon: React.ElementType }> = [
+  { id: 'category', label: 'Por categoría', icon: FolderTree },
+  { id: 'brand', label: 'Por marca', icon: Tag },
+  { id: 'list', label: 'Lista', icon: List },
+]
+
+/** «Accesorios › Cargadores»: el nombre de la categoría con su madre. */
+function categoryLabels(categories: Option[]) {
+  const byId = new Map(categories.map((category) => [category.id, category]))
+  return new Map(categories.map((category) => {
+    const parent = category.parent_id ? byId.get(category.parent_id) : undefined
+    return [category.id, parent ? `${parent.name} › ${category.name}` : category.name]
+  }))
+}
 
 type Draft = {
   id?: string
@@ -47,12 +63,14 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { gtin: '', name: '', brand_name: '', global_brand_id: '', global_category_id: '', description: '', image_url: '', is_active: true }
 
-type Filter = 'all' | 'used' | 'no-image' | 'inactive'
+type Filter = 'all' | 'no-category' | 'no-brand' | 'no-image' | 'used' | 'inactive'
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'all', label: 'Todos' },
-  { id: 'used', label: 'Usados' },
+  { id: 'no-category', label: 'Sin categoría' },
+  { id: 'no-brand', label: 'Sin marca' },
   { id: 'no-image', label: 'Sin foto' },
+  { id: 'used', label: 'Usados' },
   { id: 'inactive', label: 'De baja' },
 ]
 
@@ -160,6 +178,25 @@ export function GlobalProductsManager() {
   const [importing, setImporting] = useState(false)
   const [toDeactivate, setToDeactivate] = useState<GlobalProduct | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [view, setView] = useState<ProductGroupView>('category')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkCategory, setBulkCategory] = useState('')
+  const [bulkBrand, setBulkBrand] = useState('')
+  const [bulkSaving, setBulkSaving] = useState(false)
+
+  // La vista elegida se recuerda en este navegador.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('superadmin:global-products:view')
+      if (stored === 'category' || stored === 'brand' || stored === 'list') setView(stored)
+    } catch { /* sin almacenamiento: queda la vista por defecto */ }
+  }, [])
+  const chooseView = (next: ProductGroupView) => {
+    setView(next)
+    setCollapsed(new Set())
+    try { localStorage.setItem('superadmin:global-products:view', next) } catch { /* no pasa nada */ }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -189,20 +226,76 @@ export function GlobalProductsManager() {
   useEffect(() => { void load() }, [load])
 
   const brandName = useMemo(() => new Map(brands.map((brand) => [brand.id, brand.name])), [brands])
-  const categoryName = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories])
-  const optionName = (kind: 'brand' | 'category', id: string | null) => (id ? (kind === 'brand' ? brandName : categoryName).get(id) ?? null : null)
+  const categoryName = useMemo(() => categoryLabels(categories), [categories])
+  const optionName = useCallback(
+    (kind: 'brand' | 'category', id: string | null) => (id ? (kind === 'brand' ? brandName : categoryName).get(id) ?? null : null),
+    [brandName, categoryName],
+  )
+  const categoryOptions = useMemo(
+    () => [...categories].sort((a, b) => (categoryName.get(a.id) ?? a.name).localeCompare(categoryName.get(b.id) ?? b.name, 'es')),
+    [categories, categoryName],
+  )
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
     return products.filter((product) => {
-      if (needle && ![product.name, product.gtin, product.brand_name ?? '', optionName('brand', product.global_brand_id) ?? ''].some((value) => value.toLowerCase().includes(needle))) return false
-      if (filter === 'used') return product.is_active && product.stores > 0
+      if (needle && ![product.name, product.gtin, product.brand_name ?? '', optionName('brand', product.global_brand_id) ?? '', optionName('category', product.global_category_id) ?? '']
+        .some((value) => value.toLowerCase().includes(needle))) return false
+      if (filter === 'no-category') return product.is_active && !product.global_category_id
+      if (filter === 'no-brand') return product.is_active && !product.global_brand_id
       if (filter === 'no-image') return product.is_active && !product.image_url
+      if (filter === 'used') return product.is_active && product.stores > 0
       if (filter === 'inactive') return !product.is_active
       return true
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, search, filter, brandName])
+  }, [products, search, filter, optionName])
+
+  const groups = useMemo(() => groupGlobalProducts(visible, view, categories, brands), [visible, view, categories, brands])
+
+  const toggleSelected = (ids: string[], on: boolean) => setSelected((current) => {
+    const next = new Set(current)
+    for (const id of ids) {
+      if (on) next.add(id)
+      else next.delete(id)
+    }
+    return next
+  })
+  const toggleCollapsed = (key: string) => setCollapsed((current) => {
+    const next = new Set(current)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+
+  /** Asigna la categoría y/o la marca elegidas a todos los seleccionados. */
+  const applyBulk = async () => {
+    if (selected.size === 0 || (!bulkCategory && !bulkBrand)) return
+    setBulkSaving(true)
+    try {
+      const response = await fetch('/api/superadmin/global-products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk-update',
+          ids: [...selected],
+          ...(bulkCategory ? { global_category_id: bulkCategory } : {}),
+          ...(bulkBrand ? { global_brand_id: bulkBrand } : {}),
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo asignar.')
+      const what = [bulkCategory && `categoría «${categoryName.get(bulkCategory)}»`, bulkBrand && `marca «${brandName.get(bulkBrand)}»`].filter(Boolean).join(' y ')
+      toast.success(`${payload.updated} producto${payload.updated === 1 ? '' : 's'} con ${what}`)
+      setSelected(new Set())
+      setBulkCategory('')
+      setBulkBrand('')
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo asignar.')
+    } finally {
+      setBulkSaving(false)
+    }
+  }
 
   const save = async () => {
     if (!draft) return
@@ -310,7 +403,7 @@ export function GlobalProductsManager() {
             cells={[
               { label: 'En el catálogo', value: active.length, hint: 'fichas activas' },
               { label: 'Usados', value: active.filter((product) => product.stores > 0).length, hint: 'por al menos una tienda' },
-              { label: 'Sin foto', value: active.filter((product) => !product.image_url).length, hint: 'se completan sin foto', warn: active.some((product) => !product.image_url) },
+              { label: 'Sin categoría', value: active.filter((product) => !product.global_category_id).length, hint: 'la tienda la elige a mano', warn: active.some((product) => !product.global_category_id) },
               { label: 'Por sumar', value: candidatesTotal, hint: `de ${productsWithBarcode} productos con código`, warn: candidatesTotal > 0 },
             ]}
           />
@@ -318,9 +411,29 @@ export function GlobalProductsManager() {
           <CandidatesPanel candidates={candidates} total={candidatesTotal} busy={importing} optionName={optionName} onImport={(entries) => void importCandidates(entries)} />
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full max-w-sm">
+            <div role="group" aria-label="Cómo ver el catálogo" className="flex rounded-lg border bg-muted/40 p-0.5">
+              {VIEWS.map((item) => {
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={view === item.id}
+                    onClick={() => chooseView(item.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                      view === item.id ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="relative w-full max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nombre, marca o código" className="pl-9" />
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nombre, marca, categoría o código" className="pl-9" />
             </div>
             <div role="tablist" aria-label="Filtrar productos" className="flex flex-wrap gap-1.5">
               {FILTERS.map((item) => (
@@ -356,52 +469,141 @@ export function GlobalProductsManager() {
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-              {visible.map((product) => (
-                <li key={product.id} className="flex flex-wrap items-center gap-3 bg-card px-4 py-3">
-                  <Thumb url={product.image_url} />
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
-                      {product.name}
-                      {!product.is_active && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">De baja</span>}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      <span className="font-mono">{product.gtin}</span>
-                      {[optionName('brand', product.global_brand_id) ?? product.brand_name, optionName('category', product.global_category_id)].filter(Boolean).map((value) => ` · ${value}`).join('')}
-                      {` · ${product.stores > 0 ? `${product.stores} tienda${product.stores === 1 ? '' : 's'}` : 'sin uso todavía'}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDraft({
-                        id: product.id,
-                        gtin: product.gtin,
-                        name: product.name,
-                        brand_name: product.brand_name ?? '',
-                        global_brand_id: product.global_brand_id ?? '',
-                        global_category_id: product.global_category_id ?? '',
-                        description: product.description ?? '',
-                        image_url: product.image_url ?? '',
-                        is_active: product.is_active,
-                      })}
-                    >
-                      Editar
-                    </Button>
-                    {product.is_active ? (
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setToDeactivate(product)} aria-label={`Dar de baja ${product.name}`}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" onClick={() => void setActive(product, true)} aria-label={`Reactivar ${product.name}`}>
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
+            <div className="space-y-3">
+              {selected.size > 0 && (
+                <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-background/95 p-3 shadow-md backdrop-blur">
+                  <span className="text-sm font-semibold text-foreground">{selected.size} seleccionado{selected.size === 1 ? '' : 's'}</span>
+                  <select
+                    aria-label="Categoría a asignar"
+                    value={bulkCategory}
+                    onChange={(event) => setBulkCategory(event.target.value)}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="">Categoría: sin cambios</option>
+                    {categoryOptions.map((category) => <option key={category.id} value={category.id}>{categoryName.get(category.id)}</option>)}
+                  </select>
+                  <select
+                    aria-label="Marca a asignar"
+                    value={bulkBrand}
+                    onChange={(event) => setBulkBrand(event.target.value)}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="">Marca: sin cambios</option>
+                    {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                  </select>
+                  <Button size="sm" className="h-8 gap-1.5" disabled={bulkSaving || (!bulkCategory && !bulkBrand)} onClick={() => void applyBulk()}>
+                    {bulkSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Asignar
+                  </Button>
+                  <Button size="sm" variant="ghost" className="ml-auto h-8 gap-1" onClick={() => setSelected(new Set())}>
+                    <X className="h-3.5 w-3.5" /> Quitar selección
+                  </Button>
+                </div>
+              )}
+
+              {groups.map((group) => {
+                const ids = group.items.map((item) => item.id)
+                const allSelected = ids.every((id) => selected.has(id))
+                const isCollapsed = collapsed.has(group.key)
+                const showHeader = view !== 'list'
+                return (
+                  <section
+                    key={group.key}
+                    className={cn('overflow-hidden rounded-xl border', group.pending ? 'border-amber-300 dark:border-amber-900/60' : 'border-border')}
+                  >
+                    {showHeader && (
+                      <div className={cn('flex items-center gap-3 px-4 py-2', group.pending ? 'bg-amber-50 dark:bg-amber-950/20' : 'bg-muted/40')}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          aria-label={`Elegir todos los de ${group.label}`}
+                          checked={allSelected}
+                          onChange={(event) => toggleSelected(ids, event.target.checked)}
+                        />
+                        <button type="button" onClick={() => toggleCollapsed(group.key)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={!isCollapsed}>
+                          <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isCollapsed && '-rotate-90')} aria-hidden="true" />
+                          <span className="truncate text-sm font-bold text-foreground">
+                            {group.parentLabel && <span className="font-normal text-muted-foreground">{group.parentLabel} › </span>}
+                            {group.label}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{group.items.length}</span>
+                        </button>
+                        {group.pending && (
+                          <span className="hidden shrink-0 text-xs font-medium text-amber-700 sm:inline dark:text-amber-400">
+                            Elegilos y asignales {view === 'category' ? 'una categoría' : 'una marca del catálogo'}
+                          </span>
+                        )}
+                      </div>
                     )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                    {!isCollapsed && (
+                      <ul className="divide-y divide-border">
+                        {group.items.map((product) => {
+                          const brand = optionName('brand', product.global_brand_id) ?? product.brand_name
+                          const category = optionName('category', product.global_category_id)
+                          return (
+                            <li key={product.id} className={cn('flex flex-wrap items-center gap-3 bg-card px-4 py-2.5', selected.has(product.id) && 'bg-primary/5')}>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                aria-label={`Elegir ${product.name}`}
+                                checked={selected.has(product.id)}
+                                onChange={(event) => toggleSelected([product.id], event.target.checked)}
+                              />
+                              <Thumb url={product.image_url} />
+                              <div className="min-w-0 flex-1">
+                                <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
+                                  {product.name}
+                                  {!product.is_active && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">De baja</span>}
+                                </p>
+                                <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span className="font-mono">{product.gtin}</span>
+                                  {view !== 'brand' && (brand
+                                    ? <span>{brand}</span>
+                                    : <span className="font-medium text-amber-700 dark:text-amber-400">sin marca</span>)}
+                                  {view !== 'category' && (category
+                                    ? <span>{category}</span>
+                                    : <span className="font-medium text-amber-700 dark:text-amber-400">sin categoría</span>)}
+                                  {!product.image_url && <span className="font-medium text-amber-700 dark:text-amber-400">sin foto</span>}
+                                  <span>{product.stores > 0 ? `${product.stores} tienda${product.stores === 1 ? '' : 's'}` : 'sin uso todavía'}</span>
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setDraft({
+                                    id: product.id,
+                                    gtin: product.gtin,
+                                    name: product.name,
+                                    brand_name: product.brand_name ?? '',
+                                    global_brand_id: product.global_brand_id ?? '',
+                                    global_category_id: product.global_category_id ?? '',
+                                    description: product.description ?? '',
+                                    image_url: product.image_url ?? '',
+                                    is_active: product.is_active,
+                                  })}
+                                >
+                                  Editar
+                                </Button>
+                                {product.is_active ? (
+                                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setToDeactivate(product)} aria-label={`Dar de baja ${product.name}`}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <Button variant="ghost" size="sm" onClick={() => void setActive(product, true)} aria-label={`Reactivar ${product.name}`}>
+                                    <RotateCcw className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </section>
+                )
+              })}
+            </div>
           )}
         </>
       )}
@@ -446,7 +648,7 @@ export function GlobalProductsManager() {
                   <Label htmlFor="gp-category">Categoría</Label>
                   <select id="gp-category" value={draft.global_category_id} onChange={(e) => setDraft({ ...draft, global_category_id: e.target.value })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
                     <option value="">Sin categoría</option>
-                    {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    {categoryOptions.map((category) => <option key={category.id} value={category.id}>{categoryName.get(category.id)}</option>)}
                   </select>
                 </div>
               </div>

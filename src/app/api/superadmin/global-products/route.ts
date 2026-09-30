@@ -28,6 +28,15 @@ const productSchema = z.object({
 
 const updateSchema = productSchema.partial().extend({ id: z.string().uuid() })
 
+/** Asignar la misma categoría o marca a varias fichas de una vez. */
+const bulkSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1, 'Elegí al menos un producto.').max(500),
+  global_category_id: z.string().uuid().nullable().optional(),
+  global_brand_id: z.string().uuid().nullable().optional(),
+}).refine((value) => value.global_category_id !== undefined || value.global_brand_id !== undefined, {
+  message: 'Elegí la categoría o la marca a asignar.',
+})
+
 const importSchema = z.object({
   entries: z.array(z.object({
     gtin: z.string().trim().min(8).max(14),
@@ -100,7 +109,7 @@ export async function GET() {
       admin.from('global_products').select(COLUMNS).order('name').limit(5000),
       readProductsWithBarcode(admin).catch(() => [] as CatalogCandidateRow[]),
       admin.from('global_brands').select('id, name').eq('is_active', true).order('name'),
-      admin.from('global_categories').select('id, name').eq('is_active', true).order('name'),
+      admin.from('global_categories').select('id, name, parent_id, sort_order').eq('is_active', true).order('name'),
     ])
     if (isMissingTable(error)) {
       return NextResponse.json({ success: false, missingTable: true, error: 'La tabla global_products no existe todavía. Ejecutá su SQL en Supabase.' }, { status: 503 })
@@ -140,6 +149,32 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null
     const admin = createAdminSupabase()
+
+    if (body?.action === 'bulk-update') {
+      const validation = bulkSchema.safeParse(body)
+      if (!validation.success) {
+        return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
+      }
+      const { ids, global_category_id, global_brand_id } = validation.data
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (global_category_id !== undefined) updates.global_category_id = global_category_id
+      if (global_brand_id !== undefined) {
+        updates.global_brand_id = global_brand_id
+        // Con marca del catálogo, el texto suelto sobra.
+        if (global_brand_id) updates.brand_name = null
+      }
+      const { data, error } = await admin.from('global_products').update(updates).in('id', ids).select('id')
+      if (error) throw error
+      await logSuperAdminAction({
+        actorId: user.id,
+        actorEmail: user.email,
+        action: 'update',
+        resource: 'global_products',
+        newValues: { ...updates, count: data?.length ?? 0, action: 'bulk-update' },
+        request,
+      })
+      return NextResponse.json({ success: true, updated: data?.length ?? 0 })
+    }
 
     // Sumar los productos que ya cargaron las tiendas con su código.
     if (body?.action === 'import') {
