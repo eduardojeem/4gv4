@@ -23,7 +23,6 @@ import {
   Users,
   Wrench,
   Eye,
-  Activity,
   ToggleLeft,
   ToggleRight,
   AlertCircle,
@@ -50,7 +49,7 @@ import { PlanCreateSheet } from './plan-create-sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { getCommercialFeatureValue, isCommercialFeatureLabel } from '@/lib/saas/commercial-plan-features'
-import { RobotGuide } from '@/components/common/RobotGuide'
+import { PageHeader } from '@/components/superadmin/ui/page-header'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -568,9 +567,6 @@ export function PlansPageContent() {
   // El sistema usa 4 tiers fijos; si ya existen los 4 no se puede crear otro.
   const ALL_TIERS = ['free', 'basic', 'pro', 'enterprise']
   const allTiersUsed = ALL_TIERS.every((t) => plans.some((p) => p.tier === t))
-  const mrrFormatted = stats
-    ? new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(stats.mrr)
-    : '—'
   const mostUsedPlanName = stats?.mostUsedPlan
     ? (plans.find((p) => p.tier.toUpperCase() === stats.mostUsedPlan)?.name ?? stats.mostUsedPlan)
     : (popularPlan?.name ?? '—')
@@ -589,20 +585,6 @@ export function PlansPageContent() {
       helper: stats ? `${stats.mostUsedPercent}% de ${stats.totalOrgs} organizaciones` : 'Calculando…',
       icon: Star,
       tone: 1,
-    },
-    {
-      label: 'MRR estimado',
-      value: loading ? '…' : mrrFormatted,
-      helper: stats ? `${stats.activeSubs} suscripciones activas` : '—',
-      icon: TrendingUp,
-      tone: 2,
-    },
-    {
-      label: 'Trials activos',
-      value: loading ? '…' : String(stats?.trialingSubs ?? 0),
-      helper: 'Organizaciones en período de prueba',
-      icon: Activity,
-      tone: 3,
     },
   ]
 
@@ -624,69 +606,31 @@ export function PlansPageContent() {
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
 
-      {/* ── Premium Header ── */}
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="contents">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-400">
-              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-              Superadmin · Facturación · SaaS
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
-              Gestión de Planes SaaS
-            </h1>
-            <p className="max-w-2xl text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              Control centralizado sobre precios, límites y módulos activos. Los cambios se sincronizan en tiempo real con la base de datos.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadPlans}
-              disabled={loading}
-              className="h-9 gap-2 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
-            >
-              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              Actualizar
+      <PageHeader
+        icon={CreditCard}
+        title="Planes"
+        description="Precio, límites y módulos de cada plan. Los cambios se aplican enseguida a las tiendas que lo tienen; lo que factura cada plan está en Resumen."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={loadPlans} disabled={loading}>
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Actualizar
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportJson}
-              disabled={loading || plans.length === 0}
-              className="h-9 gap-2 rounded-xl text-xs font-bold border-slate-200 dark:border-slate-800 cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Exportar JSON
+            <Button variant="outline" size="sm" onClick={exportJson} disabled={loading || plans.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Exportar JSON
             </Button>
             <Button
               size="sm"
               onClick={() => setCreateOpen(true)}
               disabled={loading || allTiersUsed}
               title={allTiersUsed ? 'Ya existen los 4 planes (free, basic, pro, enterprise). Editá uno existente.' : undefined}
-              className="h-9 gap-2 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 cursor-pointer"
             >
-              <Plus className="h-3.5 w-3.5" />
-              Nuevo plan
+              <Plus className="h-3.5 w-3.5" /> Nuevo plan
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      {/* 🤖 Robot Mascot Consultant */}
-      <div className="rounded-3xl border border-violet-200/80 bg-gradient-to-r from-violet-50/70 via-white to-purple-50/70 p-4 sm:p-5 shadow-xs dark:border-violet-900/60 dark:from-violet-950/40 dark:via-slate-900 dark:to-purple-950/30">
-        <RobotGuide
-          variant="navy-gold"
-          size="md"
-          speechTitle="ByteBot · Consultor de Planes & Facturación SaaS"
-          speechText={`Actualmente cuentas con ${activeCount} planes activos en catálogo generando un MRR estimado de ${mrrFormatted}. Los cambios que realices en precios y módulos se aplican en tiempo real.`}
-        />
-      </div>
-
-      {/* ── KPIs ── */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2">
         {kpis.map((k) => (
           <KPICard key={k.label} {...k} />
         ))}
@@ -741,11 +685,6 @@ export function PlansPageContent() {
                 {filterKey === 'all' ? 'Todos' : filterKey === 'active' ? 'Activos' : 'Populares'}
               </button>
             ))}
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] font-medium text-slate-400 pl-1">
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            Sincronizado
           </div>
         </div>
       </div>
