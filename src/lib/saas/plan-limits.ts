@@ -2,9 +2,11 @@
  * Límites de un plan: los números que el sistema hace cumplir (`plans.limits`)
  * y el texto que se muestra en la venta (`subscription_plans.limits`).
  *
- * El panel guardaba solo el texto ("80/mes", "5 000"), que nadie aplicaba:
- * subir "Productos" a 1000 cambiaba la publicidad y la tienda seguía topada en
- * 500. Ahora se parte del número y el texto se genera, así no pueden diferir.
+ * El trigger `sync_subscription_plans_to_plans` extrae los dígitos del texto
+ * comercial y los copia a `plans.limits`. El panel aceptaba texto libre sin
+ * validar ("muchos" quedaba como sin límite) y no dejaba editar cajas ni fotos.
+ * Ahora se valida el número y el texto se genera con un formato que el trigger
+ * lee igual ("10.000", "300/mes", "Ilimitadas").
  */
 
 export const PLAN_LIMIT_FIELDS = [
