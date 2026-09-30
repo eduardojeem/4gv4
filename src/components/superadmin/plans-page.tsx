@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowUpRight,
-  Boxes,
   Building2,
   CheckCircle2,
   Check,
@@ -11,26 +10,16 @@ import {
   Crown,
   Download,
   Edit2,
-  Globe,
   Minus,
   Package,
   Plus,
   RefreshCw,
-  ShoppingCart,
   Sparkles,
   Star,
-  TrendingUp,
-  Users,
-  Wrench,
   Eye,
   ToggleLeft,
   ToggleRight,
   AlertCircle,
-  TicketPercent,
-  ShieldCheck,
-  ClipboardList,
-  Handshake,
-  Truck,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,7 +39,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { getCommercialFeatureValue, isCommercialFeatureLabel } from '@/lib/saas/commercial-plan-features'
 import { PageHeader } from '@/components/superadmin/ui/page-header'
-import { INFORMATIVE_FEATURE_KEYS } from '@/lib/saas/plan-modules'
+import { effectivePlanFeatures } from '@/lib/saas/plan-modules'
+import {
+  PLAN_FEATURES,
+  PLAN_FEATURE_GROUP_LABEL,
+  type PlanFeatureDefinition,
+  type PlanFeatureGroup,
+} from '@/lib/saas/plan-feature-catalog'
+import { PLAN_LIMIT_FIELDS, formatPlanLimit, parsePlanLimit } from '@/lib/saas/plan-limits'
+import { PLAN_FEATURE_ICONS } from './plans/plan-feature-icons'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -170,39 +167,22 @@ function FeatureValue({ val }: { val: boolean | string }) {
   )
 }
 
-function LimitBar({
-  label,
-  val,
-  accent,
-}: {
-  label: string
-  val: unknown
-  accent: string
-}) {
-  const isUnlimited = String(val).toLowerCase() === 'ilimitado' || val === '∞'
-  const numericVal = typeof val === 'number' ? val : parseInt(String(val), 10)
-  const hasNumber = !isNaN(numericVal) && numericVal > 0
+/** Los 6 límites del plan, con el mismo formato que el editor y la venta. */
+function PlanLimitsGrid({ limits, accent }: { limits: Record<string, unknown> | null | undefined; accent: string }) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-        <p className={cn('font-black text-xs', isUnlimited ? 'text-emerald-600 dark:text-emerald-400' : accent)}>
-          {isUnlimited ? '∞ Ilimitado' : String(val ?? '–')}
-        </p>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        {isUnlimited ? (
-          <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 opacity-80" />
-        ) : hasNumber ? (
-          <div
-            className={cn('h-full rounded-full bg-gradient-to-r', accent.replace('text-', 'from-').replace('-600', '-500').replace('-300', '-400'))}
-            style={{ width: `${Math.min(100, (numericVal / 500) * 100)}%` }}
-          />
-        ) : (
-          <div className="h-full w-1/4 rounded-full bg-slate-300 dark:bg-slate-600" />
-        )}
-      </div>
-    </div>
+    <dl className="grid grid-cols-2 gap-2">
+      {PLAN_LIMIT_FIELDS.map((field) => {
+        const value = parsePlanLimit(limits?.[field.key])
+        return (
+          <div key={field.key} className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/50">
+            <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{field.label}</dt>
+            <dd className={cn('text-sm font-black tabular-nums', value === null ? 'text-emerald-600 dark:text-emerald-400' : value === 0 ? 'text-slate-400' : accent)}>
+              {value === undefined ? '—' : value === 0 ? 'No incluye' : formatPlanLimit(field.key, value)}
+            </dd>
+          </div>
+        )
+      })}
+    </dl>
   )
 }
 
@@ -225,10 +205,9 @@ function PlanCard({
   const accent = tierAccent[plan.tier] || 'from-slate-400 to-slate-500'
   const accentText = plan.color_config?.accent || 'text-slate-700'
   const badge = tierBadge[plan.tier] || 'bg-slate-100 text-slate-700'
-  const inventoryAdminEnabled = Boolean(getCommercialFeatureValue(plan.features, 'inventoryAdmin'))
-  const creditsEnabled = Boolean(getCommercialFeatureValue(plan.features, 'credits'))
-  const promotionsEnabled = Boolean(getCommercialFeatureValue(plan.features, 'promotions'))
-  const securityEnabled = Boolean(getCommercialFeatureValue(plan.features, 'security'))
+  const included = effectivePlanFeatures(plan.tier, plan.features)
+  const moduleFeatures = PLAN_FEATURES.filter((feature) => feature.module)
+  const includedModules = moduleFeatures.filter((feature) => included[feature.key])
 
   return (
     <div
@@ -298,61 +277,36 @@ function PlanCard({
           <span className={cn('text-xl font-extrabold tabular-nums', accentText)}>{orgCount}</span>
         </div>
 
-        <div className={cn(
-          'flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold',
-          inventoryAdminEnabled
-            ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/20 dark:text-indigo-300'
-            : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
-        )}>
-          <Boxes className="h-3.5 w-3.5" />
-          Inventario avanzado
-          <span className="ml-auto">{inventoryAdminEnabled ? 'Incluido' : 'No incluido'}</span>
-        </div>
-
-        <div className={cn(
-          'flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold',
-          creditsEnabled
-            ? 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/50 dark:bg-cyan-950/20 dark:text-cyan-300'
-            : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
-        )}>
-          <CreditCard className="h-3.5 w-3.5" />
-          Créditos
-          <span className="ml-auto">{creditsEnabled ? 'Incluido' : 'No incluido'}</span>
-        </div>
-
-        <div className={cn(
-          'flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold',
-          promotionsEnabled
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
-            : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
-        )}>
-          <TicketPercent className="h-3.5 w-3.5" />
-          Promociones
-          <span className="ml-auto">{promotionsEnabled ? 'Incluido' : 'No incluido'}</span>
-        </div>
-
-        <div className={cn(
-          'flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold',
-          securityEnabled
-            ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300'
-            : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
-        )}>
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Seguridad
-          <span className="ml-auto">{securityEnabled ? 'Incluido' : 'No incluido'}</span>
+        {/* Módulos: los mismos que tilda el editor y reciben las tiendas */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Módulos · {includedModules.length} de {moduleFeatures.length}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {moduleFeatures.map((feature) => {
+              const FeatureIcon = PLAN_FEATURE_ICONS[feature.key] ?? Package
+              const on = included[feature.key]
+              return (
+                <span
+                  key={feature.key}
+                  title={feature.hint}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                    on
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
+                      : 'border-slate-200 text-slate-400 line-through decoration-slate-300 dark:border-slate-800',
+                  )}
+                >
+                  <FeatureIcon className="h-3 w-3" />
+                  {feature.label}
+                </span>
+              )
+            })}
+          </div>
         </div>
 
         {/* Limits */}
-        <div className="space-y-3">
-          {[
-            { label: 'Usuarios', val: plan.limits?.users },
-            { label: 'Productos', val: plan.limits?.products },
-            { label: 'Sucursales', val: plan.limits?.branches },
-            { label: 'Reparaciones', val: plan.limits?.repairs },
-          ].map(({ label, val }) => (
-            <LimitBar key={label} label={label} val={val} accent={accentText} />
-          ))}
-        </div>
+        <PlanLimitsGrid limits={plan.limits} accent={accentText} />
 
         {/* Highlights */}
         {(plan.highlights || []).length > 0 && (
@@ -430,25 +384,17 @@ function PlanCard({
 
 // ─── Feature table ────────────────────────────────────────────────────────────
 
-const availableFeatures = [
-  { key: 'pos',       label: 'Punto de Venta (POS)',       icon: ShoppingCart },
-  { key: 'inventory', label: 'Inventario',                  icon: Boxes        },
-  { key: 'inventoryAdmin', label: 'Inventario avanzado',     icon: Boxes        },
-  { key: 'users',     label: 'Gestión de usuarios',         icon: Users        },
-  { key: 'branches',  label: 'Sucursales múltiples',        icon: Building2    },
-  { key: 'repairs',   label: 'Módulo de Reparaciones',      icon: Wrench       },
-  { key: 'services',  label: 'Servicios',                   icon: Handshake    },
-  { key: 'orders',    label: 'Pedidos',                     icon: ClipboardList },
-  { key: 'delivery',  label: 'Entregas',                    icon: Truck        },
-  { key: 'crm',       label: 'CRM / Gestión de clientes',   icon: Users        },
-  { key: 'ecommerce', label: 'Ecommerce & Marketplace',     icon: Globe        },
-  { key: 'analytics', label: 'Analytics avanzado',          icon: TrendingUp   },
-  { key: 'reports',   label: 'Reportes exportables (CSV/PDF)', icon: Download  },
-  { key: 'credits',   label: 'Créditos y cuotas',              icon: CreditCard },
-  { key: 'promotions', label: 'Promociones y descuentos',      icon: TicketPercent },
-  { key: 'security',   label: 'Seguridad y auditoría',         icon: ShieldCheck },
-  { key: 'support',   label: 'Soporte prioritario',         icon: Crown        },
-]
+const MATRIX_GROUPS: PlanFeatureGroup[] = ['venta', 'operacion', 'gestion', 'servicio']
+
+function MatrixGroupRow({ label, span }: { label: string; span: number }) {
+  return (
+    <tr className="bg-slate-50/80 dark:bg-slate-900/60">
+      <td colSpan={span} className="sticky left-0 px-6 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </td>
+    </tr>
+  )
+}
 
 function FeatureTableHeader({ plan }: { plan: SubscriptionPlan }) {
   const Icon = tierIcons[plan.tier] || Package
@@ -542,15 +488,29 @@ export function PlansPageContent() {
     }
   }
 
-  async function handleToggleFeature(plan: SubscriptionPlan, featureKey: string, featureLabel: string, currentVal: boolean | string) {
+  async function handleToggleFeature(plan: SubscriptionPlan, feature: PlanFeatureDefinition, currentVal: boolean) {
     // Sin esta guardia, dos clics seguidos en features distintos armaban ambos
     // arrays desde el mismo estado local: el segundo pisaba al primero y el
     // cambio se perdia sin ningun aviso.
     if (togglingId) return
 
+    if (currentVal && feature.key === 'inventory' && effectivePlanFeatures(plan.tier, plan.features).inventoryAdmin) {
+      toast.error('Inventario avanzado necesita Inventario: quitá primero Inventario avanzado.')
+      return
+    }
+
+    // Quitar un módulo lo corta al instante en todas las tiendas del plan.
+    const stores = stats?.orgsByPlan?.[plan.tier.toUpperCase()] ?? 0
+    if (currentVal && feature.module && stores > 0) {
+      const ok = window.confirm(
+        `Quitar "${feature.label}" de ${plan.name} lo desactiva ya en ${stores === 1 ? 'la tienda' : `las ${stores} tiendas`} con este plan. ¿Continuar?`,
+      )
+      if (!ok) return
+    }
+
     setTogglingId(plan.id)
-    const newFeatures = (plan.features || []).filter((feature) => !isCommercialFeatureLabel(feature.label, featureKey))
-    newFeatures.push({ label: featureLabel, value: !Boolean(currentVal) })
+    const newFeatures = (plan.features || []).filter((item) => !isCommercialFeatureLabel(item.label, feature.key))
+    newFeatures.push({ label: feature.label, value: !currentVal })
     try {
       await updateSubscriptionPlan(plan.id, { features: newFeatures })
       toast.success(`Feature actualizado en ${plan.name}`)
@@ -768,15 +728,30 @@ export function PlansPageContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {availableFeatures.map((feat, i) => {
-                    const Icon = feat.icon
+                  <MatrixGroupRow label="Límites" span={filteredPlans.length + 1} />
+                  {PLAN_LIMIT_FIELDS.map((field) => (
+                    <tr key={field.key} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/20">
+                      <td className="sticky left-0 z-10 bg-white px-6 py-3 text-sm font-semibold text-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                        {field.label}
+                      </td>
+                      {filteredPlans.map((plan) => {
+                        const value = parsePlanLimit(plan.limits?.[field.key])
+                        return (
+                          <td key={plan.tier} className={cn('px-4 py-3 text-center text-xs font-bold tabular-nums text-slate-700 dark:text-slate-300', plan.is_popular && 'bg-violet-50/30 dark:bg-violet-950/5')}>
+                            {value === undefined ? '—' : value === 0 ? <span className="text-slate-400">No incluye</span> : formatPlanLimit(field.key, value)}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                  {MATRIX_GROUPS.flatMap((group) => [
+                    <MatrixGroupRow key={`group-${group}`} label={PLAN_FEATURE_GROUP_LABEL[group]} span={filteredPlans.length + 1} />,
+                    ...PLAN_FEATURES.filter((feat) => feat.group === group).map((feat) => {
+                    const Icon = PLAN_FEATURE_ICONS[feat.key] ?? Package
                     return (
                       <tr
                         key={feat.key}
-                        className={cn(
-                          'transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/20',
-                          i % 2 !== 0 && 'bg-slate-50/30 dark:bg-slate-900/10',
-                        )}
+                        className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/20"
                       >
                         {/* Fondo opaco obligatorio: una celda sticky transparente
                             deja ver las columnas pasando por debajo. */}
@@ -787,7 +762,7 @@ export function PlansPageContent() {
                             </div>
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                               {feat.label}
-                              {(INFORMATIVE_FEATURE_KEYS as readonly string[]).includes(feat.key) && (
+                              {feat.module === null && (
                                 <span
                                   className="ml-1.5 text-[10px] font-medium text-slate-400"
                                   title="Se muestra en la venta pero no habilita un módulo: depende de los límites, del plan pago o es un servicio."
@@ -799,7 +774,12 @@ export function PlansPageContent() {
                           </div>
                         </td>
                         {filteredPlans.map((plan) => {
-                          const featureVal = getCommercialFeatureValue(plan.features, feat.key)
+                          // Módulos: lo que la tienda recibe (con los que el plan
+                          // trae por defecto). Informativos: el texto de la venta.
+                          const listed = getCommercialFeatureValue(plan.features, feat.key)
+                          const featureVal: boolean | string = feat.module || typeof listed === 'boolean'
+                            ? Boolean(effectivePlanFeatures(plan.tier, plan.features)[feat.key])
+                            : listed
                           const isBool = typeof featureVal === 'boolean'
                           return (
                             <td
@@ -813,7 +793,7 @@ export function PlansPageContent() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    handleToggleFeature(plan, feat.key, feat.label, featureVal)
+                                    handleToggleFeature(plan, feat, featureVal)
                                   }
                                   title={`${featureVal ? 'Desactivar' : 'Activar'} ${feat.label} en ${plan.name}`}
                                   className="mx-auto flex cursor-pointer items-center justify-center transition-transform hover:scale-110"
@@ -828,7 +808,7 @@ export function PlansPageContent() {
                         })}
                       </tr>
                     )
-                  })}
+                  })])}
                 </tbody>
               </table>
             )}
@@ -848,6 +828,7 @@ export function PlansPageContent() {
         onOpenChange={setEditOpen}
         plan={editingPlan}
         onSuccess={loadPlans}
+        activeStores={editingPlan ? stats?.orgsByPlan?.[editingPlan.tier.toUpperCase()] ?? 0 : 0}
       />
       <PlanDetailsSheet
         open={viewOpen}

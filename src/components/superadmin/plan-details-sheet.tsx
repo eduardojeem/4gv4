@@ -8,18 +8,12 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { SubscriptionPlan } from '@/services/subscription-plans'
-import {
-  Boxes, Building2, CheckCircle2, CreditCard, Crown,
-  Download, Globe, Package, ShoppingCart, Sparkles, Star,
-  TrendingUp, Users, Wrench, XCircle,
-  TicketPercent,
-  ShieldCheck,
-  ClipboardList,
-  Handshake,
-  Truck,
-} from 'lucide-react'
+import { CheckCircle2, CreditCard, Crown, Package, Star, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getCommercialFeatureValue } from '@/lib/saas/commercial-plan-features'
+import { effectivePlanFeatures } from '@/lib/saas/plan-modules'
+import { PLAN_FEATURES } from '@/lib/saas/plan-feature-catalog'
+import { PLAN_LIMIT_FIELDS, formatPlanLimit, parsePlanLimit } from '@/lib/saas/plan-limits'
+import { PLAN_FEATURE_ICONS } from './plans/plan-feature-icons'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,25 +28,6 @@ const TIER_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   free: Package, basic: CreditCard, pro: Star, enterprise: Crown,
 }
 
-const FEATURE_LIST = [
-  { label: 'Punto de Venta (POS)',    icon: ShoppingCart },
-  { label: 'Inventario',              icon: Boxes        },
-  { label: 'Inventario avanzado',      icon: Boxes        },
-  { label: 'Gestión de usuarios',     icon: Users        },
-  { label: 'Sucursales múltiples',    icon: Building2    },
-  { label: 'Módulo de Reparaciones',  icon: Wrench       },
-  { label: 'Servicios',               icon: Handshake    },
-  { label: 'Pedidos',                 icon: ClipboardList },
-  { label: 'Entregas',                icon: Truck        },
-  { label: 'CRM / Clientes',          icon: Users        },
-  { label: 'Ecommerce & Marketplace', icon: Globe        },
-  { label: 'Analytics avanzado',      icon: TrendingUp   },
-  { label: 'Reportes exportables',    icon: Download     },
-  { label: 'Créditos y cuotas',       icon: CreditCard   },
-  { label: 'Promociones y descuentos', icon: TicketPercent },
-  { label: 'Seguridad y auditoría',     icon: ShieldCheck },
-  { label: 'Soporte prioritario',     icon: Sparkles     },
-]
 
 function formatPYG(amount: number) {
   if (amount === 0) return 'Gratis'
@@ -73,9 +48,11 @@ export function PlanDetailsSheet({ plan, open, onOpenChange }: Props) {
   const tierStyle = TIER_STYLES[plan.tier] || TIER_STYLES.basic
   const TierIcon  = TIER_ICONS[plan.tier] || Package
 
-  // Build feature map from plan.features + fallback to FEATURE_LIST
-  const enabledFeatures = FEATURE_LIST.filter((feature) => Boolean(getCommercialFeatureValue(plan.features, feature.label)))
-  const disabledFeatures = FEATURE_LIST.filter((feature) => !Boolean(getCommercialFeatureValue(plan.features, feature.label)))
+  // Lo mismo que muestran el editor y la matriz: lo que reciben las tiendas.
+  const included = effectivePlanFeatures(plan.tier, plan.features)
+  const withIcon = PLAN_FEATURES.map((feature) => ({ label: feature.label, icon: PLAN_FEATURE_ICONS[feature.key] ?? Package, on: included[feature.key] }))
+  const enabledFeatures = withIcon.filter((feature) => feature.on)
+  const disabledFeatures = withIcon.filter((feature) => !feature.on)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -139,18 +116,19 @@ export function PlanDetailsSheet({ plan, open, onOpenChange }: Props) {
               <div className="space-y-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Límites del sistema</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(plan.limits || {}).map(([key, value]) => {
-                    const isUnlimited = String(value).toLowerCase() === 'ilimitado' || String(value) === '∞'
+                  {PLAN_LIMIT_FIELDS.map((field) => {
+                    const value = parsePlanLimit(plan.limits?.[field.key])
+                    const isUnlimited = value === null
                     return (
-                      <div key={key} className={cn(
+                      <div key={field.key} className={cn(
                         'rounded-xl border p-3',
                         isUnlimited
                           ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-950/20'
                           : 'border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900',
                       )}>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 capitalize">{key}</p>
-                        <p className={cn('mt-0.5 text-base font-extrabold', isUnlimited ? 'text-emerald-600' : tierStyle.accent)}>
-                          {isUnlimited ? '∞' : String(value)}
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{field.label}</p>
+                        <p className={cn('mt-0.5 text-base font-extrabold', isUnlimited ? 'text-emerald-600' : value === 0 ? 'text-slate-400' : tierStyle.accent)}>
+                          {value === undefined ? '—' : value === 0 ? 'No incluye' : formatPlanLimit(field.key, value)}
                         </p>
                       </div>
                     )
@@ -200,7 +178,7 @@ export function PlanDetailsSheet({ plan, open, onOpenChange }: Props) {
             {/* Right: features */}
             <div className="col-span-2 p-5">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                Módulos · <span className="text-emerald-500">{enabledFeatures.length}</span>/{FEATURE_LIST.length}
+                Módulos · <span className="text-emerald-500">{enabledFeatures.length}</span>/{PLAN_FEATURES.length}
               </p>
 
               {/* Enabled */}

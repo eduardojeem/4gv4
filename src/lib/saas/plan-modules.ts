@@ -1,40 +1,25 @@
-import { commercialFeatureKeyForLabel } from './commercial-plan-features'
+import { commercialFeatureKeyForLabel, getCommercialFeatureValue } from './commercial-plan-features'
+import { PLAN_FEATURES, planFeatureByKey } from './plan-feature-catalog'
 
 type PlanFeature = { label?: string; value?: boolean | string }
-
-/**
- * Feature de la matriz de planes → módulo que habilita.
- *
- * Antes solo 8 de los 17 features estaban conectados: tildar "Ecommerce",
- * "Analytics" o "Reparaciones" cambiaba lo que se publicitaba pero no lo que
- * la tienda recibía (Gratis mostraba Ecommerce ✓ sin tenerlo).
- */
-const MODULE_BY_FEATURE_KEY: Record<string, string> = {
-  pos: 'pos',
-  inventory: 'inventory',
-  inventoryAdmin: 'inventory_admin',
-  repairs: 'repairs',
-  services: 'services',
-  orders: 'orders',
-  delivery: 'delivery',
-  crm: 'crm',
-  ecommerce: 'ecommerce',
-  analytics: 'analytics',
-  credits: 'credits',
-  promotions: 'promotions',
-  security: 'security',
-}
 
 /**
  * Features que se muestran en la venta pero no habilitan un módulo: usuarios y
  * sucursales dependen de los límites, exportar reportes de que el plan sea pago
  * y el soporte es un servicio.
  */
-export const INFORMATIVE_FEATURE_KEYS = ['users', 'branches', 'reports', 'support'] as const
+export const INFORMATIVE_FEATURE_KEYS = PLAN_FEATURES.filter((feature) => feature.module === null).map((feature) => feature.key)
 
+/**
+ * Feature de la matriz de planes → módulo que habilita, según el catálogo.
+ *
+ * Antes solo 8 de los 17 features estaban conectados: tildar "Ecommerce",
+ * "Analytics" o "Reparaciones" cambiaba lo que se publicitaba pero no lo que
+ * la tienda recibía (Gratis mostraba Ecommerce ✓ sin tenerlo).
+ */
 export function moduleForFeatureLabel(label: string): string | null {
   const key = commercialFeatureKeyForLabel(label)
-  return key ? MODULE_BY_FEATURE_KEY[key] ?? null : null
+  return key ? planFeatureByKey(key)?.module ?? null : null
 }
 
 const defaultsByTier: Record<string, string[]> = {
@@ -62,4 +47,20 @@ export function deriveTechnicalModules(tier: string, features: unknown) {
   if (modules.has('inventory_admin')) modules.add('inventory')
 
   return Array.from(modules)
+}
+
+/**
+ * Cada feature del catálogo → si el plan lo incluye de verdad. Los de módulo
+ * salen de los módulos que reciben las tiendas (incluidos los que el plan trae
+ * por defecto sin estar en la lista); los informativos, de la lista comercial.
+ * Todas las pantallas de planes muestran esto para no contradecirse.
+ */
+export function effectivePlanFeatures(tier: string, features: PlanFeature[] | null | undefined): Record<string, boolean> {
+  const modules = new Set(deriveTechnicalModules(tier, features ?? []))
+  return Object.fromEntries(
+    PLAN_FEATURES.map((feature) => [
+      feature.key,
+      feature.module ? modules.has(feature.module) : Boolean(getCommercialFeatureValue(features, feature.key)),
+    ]),
+  )
 }

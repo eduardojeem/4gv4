@@ -47,7 +47,7 @@ export type NormalizedPlanLimits = {
 
 /** Valores iniciales del formulario para un plan nuevo. */
 export function emptyLimits(): Record<PlanLimitKey, string> {
-  return { users: '1', branches: '1', cashRegisters: '1', products: '100', repairs: '', repairPhotos: '0' }
+  return { users: '1', branches: '1', cashRegisters: '1', products: '100', repairs: 'Ilimitado', repairPhotos: '0' }
 }
 
 /** Valores del formulario a partir de los límites guardados del plan. */
