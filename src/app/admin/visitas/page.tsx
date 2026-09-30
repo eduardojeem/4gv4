@@ -24,7 +24,7 @@ export default function WebsiteVisitsPage() {
       </section>
 
       <PlanGate
-        module="analytics"
+        module="web_analytics"
         title="Visitas web"
         description="Mirá cuántas personas visitan tu tienda online, de dónde llegan y qué productos miran."
       >

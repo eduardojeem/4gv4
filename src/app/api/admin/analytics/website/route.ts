@@ -11,7 +11,7 @@ import { upgradePlanNameFor } from '@/lib/saas/upgrade-plan'
 /**
  * GET /api/admin/analytics/website?days=1|7|30|90
  * Visitas e interacciones del sitio público de la organización activa.
- * Requiere el módulo `analytics`, igual que la página.
+ * Requiere el módulo `web_analytics`, igual que la página.
  */
 async function getHandler(request: NextRequest, context: AdminAuthContext) {
   let organizationId = context.organizationId
@@ -27,15 +27,15 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
 
   if (context.user.role !== 'super_admin') {
     const planInfo = await getOrganizationPlanInfo(organizationId)
-    if (!planInfo.modules.includes('analytics')) {
-      const commerciallyAvailable = planInfo.entitledModules.includes('analytics')
-        || planInfo.moduleTrials.some((trial) => trial.module === 'analytics')
-      const upgradePlan = upgradePlanNameFor('analytics', planInfo.modulePlanAvailability)
+    if (!planInfo.modules.includes('web_analytics')) {
+      const commerciallyAvailable = planInfo.entitledModules.includes('web_analytics')
+        || planInfo.moduleTrials.some((trial) => trial.module === 'web_analytics')
+      const upgradePlan = upgradePlanNameFor('web_analytics', planInfo.modulePlanAvailability)
       return NextResponse.json(
         {
           success: false,
           error: commerciallyAvailable
-            ? 'El módulo de analytics está desactivado para esta organización.'
+            ? 'Las visitas web están desactivadas para esta organización.'
             : `Las visitas web no están incluidas en tu plan.${upgradePlan ? ` Están disponibles en el plan ${upgradePlan}.` : ''}`,
           code: commerciallyAvailable ? 'MODULE_DISABLED' : 'MODULE_NOT_ENTITLED',
         },

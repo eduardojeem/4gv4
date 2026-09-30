@@ -252,7 +252,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'analytics',
     href: '/admin/visitas',
     permissions: ['analytics.read'],
-    module: 'analytics',
+    module: 'web_analytics',
     keywords: ['visitas', 'trafico', 'tienda online', 'marketplace', 'busquedas', 'whatsapp', 'conversion', 'google analytics'],
     steps: [
       {

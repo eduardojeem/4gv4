@@ -10,6 +10,7 @@ import {
   CreditCard,
   FileText,
   Globe,
+  MousePointerClick,
   Layers,
   Loader2,
   LockKeyhole,
@@ -72,6 +73,7 @@ const moduleLabels: Record<OrganizationModule, string> = {
   credits: 'Créditos y cuotas',
   delivery: 'Entregas',
   analytics: 'Analítica',
+  web_analytics: 'Visitas web',
   promotions: 'Promociones',
   security: 'Seguridad y auditoría',
 }
@@ -88,6 +90,7 @@ const moduleIcons: Record<OrganizationModule, ElementType> = {
   credits: Coins,
   delivery: Truck,
   analytics: TrendingUp,
+  web_analytics: MousePointerClick,
   promotions: Tag,
   security: LockKeyhole,
 }

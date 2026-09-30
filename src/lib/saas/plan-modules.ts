@@ -24,9 +24,9 @@ export function moduleForFeatureLabel(label: string): string | null {
 
 const defaultsByTier: Record<string, string[]> = {
   FREE: ['inventory', 'pos', 'crm', 'repairs', 'services'],
-  BASIC: ['inventory', 'inventory_admin', 'pos', 'crm', 'ecommerce', 'repairs', 'services', 'orders', 'delivery'],
-  PRO: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
-  ENTERPRISE: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'promotions', 'security'],
+  BASIC: ['inventory', 'inventory_admin', 'pos', 'crm', 'ecommerce', 'repairs', 'services', 'orders', 'delivery', 'web_analytics'],
+  PRO: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security'],
+  ENTERPRISE: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security'],
 }
 
 export function deriveTechnicalModules(tier: string, features: unknown) {

@@ -16,6 +16,7 @@ const aliasesByKey: Record<string, string[]> = {
   crm: ['CRM / Gestión de clientes', 'CRM / Clientes', 'Gestión de clientes'],
   ecommerce: ['Ecommerce & Marketplace', 'Ecommerce / Marketplace'],
   analytics: ['Analytics avanzado'],
+  webAnalytics: ['Visitas web', 'Visitas de la tienda online'],
   reports: ['Reportes exportables (CSV/PDF)', 'Reportes exportables'],
   credits: ['Créditos y cuotas', 'Creditos y cuotas', 'Créditos'],
   promotions: ['Promociones y descuentos'],

@@ -20,6 +20,7 @@ const MODULOS = [
   'orders',
   'ecommerce',
   'analytics',
+  'web_analytics',
   'security',
   'repairs',
   'promotions',

@@ -24,6 +24,7 @@ export const ORGANIZATION_MODULES = [
   'credits',
   'delivery',
   'analytics',
+  'web_analytics',
   'promotions',
   'security',
 ] as const
@@ -62,10 +63,10 @@ const MODULE_PRESETS: Record<OperatingModel, OrganizationModule[]> = {
 
 const VERTICAL_RECOMMENDATIONS: Record<BusinessVertical, OrganizationModule[]> = {
   general: [],
-  clothing: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions'],
-  cosmetics: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions', 'credits'],
+  clothing: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions', 'web_analytics'],
+  cosmetics: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions', 'credits', 'web_analytics'],
   electronics: ['inventory', 'pos', 'crm', 'repairs', 'services', 'orders', 'delivery', 'credits'],
-  food: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions'],
+  food: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions', 'web_analytics'],
   hardware: ['inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'delivery', 'credits', 'analytics'],
   other: [],
 }
