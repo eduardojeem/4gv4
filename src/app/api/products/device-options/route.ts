@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { buildDeviceOptions } from '@/lib/products/device-options'
+import { mergeCatalogIntoOptions, type GlobalDeviceModel } from '@/lib/devices/global-models'
 
 /**
  * Marcas y modelos de celular para elegir de una lista.
@@ -39,10 +40,23 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
             .limit(5000),
     ])
 
-    const opciones = buildDeviceOptions({
+    const propias = buildDeviceOptions({
       productos: (productos.data ?? []) as Array<{ device_brand: string | null; device_models: string[] | null }>,
       reparaciones: (reparaciones.data ?? []) as Array<{ device_brand: string | null; device_model: string | null }>,
     })
+
+    // El catálogo global de la plataforma se suma después de lo propio, así una
+    // tienda nueva no arranca con la lista vacía. Para filtrar no: un modelo
+    // que la tienda no tiene daría un listado vacío. Sin la tabla, solo lo propio.
+    let opciones = propias
+    if (!soloProductos) {
+      const { data: catalogo, error: catalogoError } = await admin
+        .from('global_device_models')
+        .select('id, brand, model, device_type, aliases, release_year, is_active')
+        .eq('is_active', true)
+        .limit(5000)
+      if (!catalogoError && catalogo) opciones = mergeCatalogIntoOptions(propias, catalogo as GlobalDeviceModel[])
+    }
 
     return NextResponse.json({ success: true, data: { ...opciones, columnsReady: conColumnas } })
   } catch (error) {

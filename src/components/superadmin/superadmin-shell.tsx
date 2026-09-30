@@ -30,6 +30,7 @@ import {
   Search,
   Settings,
   Shield,
+  Smartphone,
   Sparkles,
   Store,
   FolderTree,
@@ -184,11 +185,14 @@ const navItems: NavItem[] = [
     title: 'Catálogos globales',
     href: '/superadmin/categories',
     icon: FolderTree,
-    description: 'Categorías y marcas que comparten todas las tiendas',
+    description: 'Categorías, marcas y modelos de equipos que comparten todas las tiendas',
     section: 'content',
     children: [
       { title: 'Categorías', href: '/superadmin/categories', icon: FolderTree },
       { title: 'Marcas', href: '/superadmin/brands', icon: Tag },
+      // Solo la usan las tiendas de electrónica y los talleres: son las que
+      // cargan marca y modelo de equipo en productos y reparaciones.
+      { title: 'Modelos de equipos', href: '/superadmin/device-models', icon: Smartphone },
     ],
   },
   {
