@@ -180,6 +180,57 @@ describe('analyzeTable', () => {
     expect(finding.severity).toBe('info')
   })
 
+  it('una RESTRICTIVE authenticated acota una permissive public que exige usuario autenticado', () => {
+    const finding = analyzeTable(table({
+      name: 'cash_registers',
+      policies: [
+        policy({
+          name: 'legacy_staff_write',
+          command: 'UPDATE',
+          roles: ['public'],
+          using: "(EXISTS (SELECT 1 FROM public.user_roles WHERE user_roles.user_id = auth.uid()))",
+          with_check: "(EXISTS (SELECT 1 FROM public.user_roles WHERE user_roles.user_id = auth.uid()))",
+        }),
+        policy({
+          name: 'branch_guard',
+          command: 'ALL',
+          roles: ['authenticated'],
+          permissive: false,
+          using: 'public.user_has_branch_access(branch_id)',
+          with_check: 'public.user_has_branch_access(branch_id)',
+        }),
+      ],
+    }))
+    expect(finding.status).toBe('healthy')
+  })
+
+  it('una RESTRICTIVE anon y authenticated acota una lectura permissive public', () => {
+    const finding = analyzeTable(table({
+      name: 'website_settings',
+      policies: [
+        policy({ name: 'public_read', roles: ['public'], using: 'true' }),
+        policy({
+          name: 'publication_gate',
+          roles: ['anon', 'authenticated'],
+          permissive: false,
+          using: "has_org_permission(organization_id, 'settings.read') OR EXISTS (SELECT 1 FROM organizations WHERE id = organization_id)",
+        }),
+      ],
+    }))
+    expect(finding.status).toBe('healthy')
+  })
+
+  it('reconoce los catalogos y gastos de plataforma como tablas globales', () => {
+    for (const name of ['global_device_models', 'platform_expenses']) {
+      const finding = analyzeTable(table({
+        name,
+        has_organization_id: false,
+        policies: [policy({ roles: ['authenticated'], using: "get_jwt_role() = 'super_admin'::text" })],
+      }))
+      expect(finding.status).toBe('healthy')
+    }
+  })
+
   it('no considera guard una RESTRICTIVE de otro rol', () => {
     const finding = analyzeTable(table({
       policies: [

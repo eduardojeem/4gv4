@@ -50,6 +50,10 @@ export const GLOBAL_TABLES = new Set([
   // Atributos de variante compartidos por todas las tiendas (sin organization_id).
   'variant_attributes',
   'variant_attribute_options',
+  // Catalogo compartido de modelos de dispositivos; no contiene datos de tiendas.
+  'global_device_models',
+  // Gastos del operador del SaaS; solo SuperAdmin, no pertenecen a un tenant.
+  'platform_expenses',
 ])
 
 /**
@@ -174,7 +178,24 @@ function coversCommand(policy: CatalogPolicy, command: CatalogPolicy['command'])
 
 function restrictiveCoversClientRoles(restrictive: CatalogPolicy, permissive: CatalogPolicy): boolean {
   if (restrictive.roles.includes('public')) return true
-  if (permissive.roles.includes('public')) return false
+  if (permissive.roles.includes('public')) {
+    const coversAnon = restrictive.roles.includes('anon')
+    const coversAuthenticated = restrictive.roles.includes('authenticated')
+    if (coversAnon && coversAuthenticated) return true
+
+    // `public` es el rol por defecto que Postgres asigna cuando una policy no
+    // declara TO. Muchas policies antiguas siguen usando `public`, pero su
+    // expresion exige auth.uid()/user_roles y por tanto anon nunca puede
+    // satisfacerlas. En ese caso una RESTRICTIVE para authenticated cubre todo
+    // el conjunto de clientes que realmente puede pasar la policy permisiva.
+    const expression = permissive.command === 'INSERT' ? permissive.with_check : permissive.using
+    const requiresSession = Boolean(expression && (
+      /auth\.uid\s*\(\)|auth\.role\s*\(\)\s*=\s*'authenticated'/i.test(expression)
+      || GLOBAL_ROLE_FN.test(expression)
+      || GLOBAL_ROLE_TABLE.test(expression)
+    ))
+    return coversAuthenticated && requiresSession
+  }
 
   return permissive.roles
     .filter((role) => role === 'anon' || role === 'authenticated')

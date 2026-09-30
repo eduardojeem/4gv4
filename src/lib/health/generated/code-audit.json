@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T04:44:04.006Z",
+  "generatedAt": "2026-09-30T12:25:50.885Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
@@ -2277,7 +2277,7 @@
       "serviceRole": true
     },
     {
-      "route": "/api/superadmin/audit-logs/[id]",
+      "route": "/api/superadmin/audit-logs/export",
       "methods": [
         "GET"
       ],
@@ -2285,7 +2285,7 @@
       "turnstile": false,
       "superAdminGuard": true,
       "authGuard": true,
-      "serviceRole": true
+      "serviceRole": false
     },
     {
       "route": "/api/superadmin/database-monitoring",
@@ -2307,18 +2307,7 @@
       "turnstile": false,
       "superAdminGuard": true,
       "authGuard": true,
-      "serviceRole": true
-    },
-    {
-      "route": "/api/superadmin/diagnostic",
-      "methods": [
-        "GET"
-      ],
-      "rateLimited": false,
-      "turnstile": false,
-      "superAdminGuard": true,
-      "authGuard": true,
-      "serviceRole": true
+      "serviceRole": false
     },
     {
       "route": "/api/superadmin/emails/test",
@@ -2510,17 +2499,6 @@
       "superAdminGuard": true,
       "authGuard": true,
       "serviceRole": false
-    },
-    {
-      "route": "/api/superadmin/storage-cleanup",
-      "methods": [
-        "POST"
-      ],
-      "rateLimited": false,
-      "turnstile": false,
-      "superAdminGuard": true,
-      "authGuard": true,
-      "serviceRole": true
     },
     {
       "route": "/api/superadmin/subscription-plans",

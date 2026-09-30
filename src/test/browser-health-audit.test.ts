@@ -22,6 +22,8 @@ describe('auditoría de navegador para System Health', () => {
     expect(script).toContain('bypassCSP: true')
     expect(script).toContain('failureSummary')
     expect(script).toContain("page.title().catch(() => '')")
+    expect(script).toContain('const auditable = status >= 200 && status < 400')
+    expect(script).toContain("reason: 'La pagina devolvio un desafio o error HTTP; no se audita su HTML intermedio.'")
 
     const healthCheck = readFileSync(resolve(process.cwd(), 'src/lib/health/checks/web.ts'), 'utf8')
     expect(healthCheck).toContain('npm run audit:browser')

@@ -71,6 +71,8 @@ describe('SystemHealthDashboard', () => {
     // Métrica sin fuente confiable: se muestra "No disponible", nunca un número inventado.
     expect(screen.getAllByText('No disponible').length).toBeGreaterThan(0)
     expect(screen.getByText('Sin snapshots')).toBeInTheDocument()
+    expect(screen.getByText('2/3 controles verificados')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Contraste/ })).toBeInTheDocument()
   }, 30_000)
 
   it('abre el detalle con qué se comprobó y la recomendación', async () => {

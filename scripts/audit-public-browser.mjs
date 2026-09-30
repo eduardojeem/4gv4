@@ -40,13 +40,17 @@ try {
     const elapsedMs = Date.now() - startedAt
     const status = response?.status() ?? 0
     const title = await page.title().catch(() => '')
+    const auditable = status >= 200 && status < 400
 
-    await page.addScriptTag({ content: axe.source })
-    const accessibility = await page.evaluate(async () => globalThis.axe.run(document, {
-      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] },
-    }))
+    let accessibility = null
+    if (auditable) {
+      await page.addScriptTag({ content: axe.source })
+      accessibility = await page.evaluate(async () => globalThis.axe.run(document, {
+        runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] },
+      }))
+    }
 
-    const forms = await page.locator('form').evaluateAll((elements) => elements.map((form) => {
+    const forms = auditable ? await page.locator('form').evaluateAll((elements) => elements.map((form) => {
       const controls = [...form.querySelectorAll('input:not([type="hidden"]), select, textarea')]
       const unlabeled = controls.filter((control) => {
         const id = control.getAttribute('id')
@@ -61,7 +65,7 @@ try {
         unlabeled: unlabeled.length,
         validBeforeInteraction: form.checkValidity(),
       }
-    }))
+    })) : []
 
     const navigation = await page.evaluate(() => {
       const entry = performance.getEntriesByType('navigation')[0]
@@ -83,7 +87,8 @@ try {
       navigationError,
       navigation,
       forms,
-      accessibility: {
+      accessibility: accessibility ? {
+        available: true,
         violations: accessibility.violations.map((violation) => ({
           id: violation.id,
           impact: violation.impact,
@@ -95,6 +100,10 @@ try {
             failureSummary: node.failureSummary,
           })),
         })),
+      } : {
+        available: false,
+        reason: 'La pagina devolvio un desafio o error HTTP; no se audita su HTML intermedio.',
+        violations: [],
       },
       consoleErrors,
     })
