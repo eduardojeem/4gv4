@@ -76,6 +76,9 @@ import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
+import { BarcodeScanner } from '@/components/ui/barcode-scanner'
+import { BarcodeAssist, type GlobalProductMatch } from '@/components/dashboard/products/BarcodeAssist'
+import { cleanBarcode } from '@/lib/products/barcode-catalog'
 import { useForm, useFieldArray, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
@@ -703,6 +706,39 @@ export function ProductModal({
        onCatalogChange?.()
     } else {
        toast.error(result.error || 'Error al crear proveedor')
+    }
+  }
+
+  /**
+   * Completa con el catálogo global SOLO lo que está vacío: si la tienda ya
+   * escribió el nombre o eligió la categoría, se respeta. La foto es la del
+   * catálogo (no se vuelve a subir): una sola imagen para todas las tiendas.
+   */
+  const applyGlobalProduct = (match: GlobalProductMatch) => {
+    const current = form.getValues()
+    const filled: string[] = []
+    const opts = { shouldDirty: true, shouldValidate: true } as const
+
+    if (!String(current.name ?? '').trim()) { setValue('name', match.name, opts); filled.push('nombre') }
+    if (!String(current.description ?? '').trim() && match.description) { setValue('description', match.description, opts); filled.push('descripción') }
+    if (!current.brand_id && match.tenantBrandId) {
+      setValue('brand_id', match.tenantBrandId, opts)
+      setValue('brand', localBrands.find((brand) => brand.id === match.tenantBrandId)?.name ?? match.brandName ?? '', opts)
+      filled.push('marca')
+    } else if (!current.brand_id && !String(current.brand ?? '').trim() && match.brandName) {
+      setValue('brand', match.brandName, opts)
+      filled.push('marca')
+    }
+    if (!current.category_id && match.tenantCategoryId) { setValue('category_id', match.tenantCategoryId, opts); filled.push('categoría') }
+    if ((current.images ?? []).length === 0 && match.imageUrl) { setValue('images', [match.imageUrl], opts); filled.push('foto') }
+
+    if (filled.length === 0) {
+      toast.info('El formulario ya tenía esos datos: no se cambió nada.')
+    } else {
+      const missingCategory = !current.category_id && !match.tenantCategoryId && match.categoryName
+      toast.success(`Completado: ${filled.join(', ')}`, {
+        description: missingCategory ? `Tu tienda no tiene una categoría vinculada a «${match.categoryName}»: elegila a mano.` : 'Revisá los datos y cargá precio y stock.',
+      })
     }
   }
 
@@ -1688,11 +1724,16 @@ export function ProductModal({
                                 <div className="flex gap-2">
                                   <FormControl>
                                     <Input
-                                      placeholder="Ej: 7501234567890 (o escaneá con pistola USB)"
+                                      placeholder="Ej: 7891000315507 (o escaneá con el lector)"
                                       {...field}
                                       value={field.value || ""}
                                     />
                                   </FormControl>
+                                  <BarcodeScanner
+                                    size="icon"
+                                    label="Escanear con la cámara"
+                                    onScan={(scanned) => setValue('barcode', cleanBarcode(scanned), { shouldDirty: true, shouldValidate: true })}
+                                  />
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1704,14 +1745,12 @@ export function ProductModal({
                                     <Sparkles className="h-4 w-4" />
                                   </Button>
                                 </div>
-                                <FormDescription className="hidden sm:block text-[11px]">
-                                  💡 Si el producto físico ya tiene código de barras, podés posicionar el cursor aquí y <strong>disparar con tu lector láser</strong>.
+                                <FormDescription className="text-[11px]">
+                                  Escaneá con la cámara o con el lector, o escribilo. Si el producto no trae código, generá uno interno con ✨.
                                 </FormDescription>
                                 <FormMessage />
-                                {field.value && !errors.barcode && (
-                                  <FormDescription className="text-green-600 dark:text-green-400">
-                                    Código de barras válido
-                                  </FormDescription>
+                                {!errors.barcode && (
+                                  <BarcodeAssist code={field.value || ''} excludeId={product?.id ?? null} onApply={applyGlobalProduct} />
                                 )}
                               </FormItem>
                             )}

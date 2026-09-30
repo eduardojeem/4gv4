@@ -1,0 +1,40 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BarcodeAssist, type GlobalProductMatch } from './BarcodeAssist'
+
+const nescafe: GlobalProductMatch = {
+  id: 'g1', gtin: '7891000315507', name: 'Nescafé Tradición 170 g', description: 'Café instantáneo', imageUrl: null,
+  brandName: 'Nescafé', categoryName: 'Almacén', tenantBrandId: 'b1', tenantCategoryId: null,
+}
+
+function lookup(data: { own: unknown; global: unknown }) {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, data: { code: '', kind: '', ...data } })))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+afterEach(() => { vi.unstubAllGlobals() })
+
+describe('asistente del código de barras', () => {
+  it('avisa si la tienda ya tiene ese código', async () => {
+    lookup({ own: { id: 'p1', name: 'Café 170', variant: null }, global: null })
+    render(<BarcodeAssist code="7891000315507" onApply={vi.fn()} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ya tenés este código en Café 170')
+  })
+
+  it('ofrece completar con el catálogo global', async () => {
+    lookup({ own: null, global: nescafe })
+    const onApply = vi.fn()
+    render(<BarcodeAssist code="7891000315507" onApply={onApply} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar datos' }))
+    expect(onApply).toHaveBeenCalledWith(nescafe)
+    expect(screen.getByRole('button', { name: 'Completado' })).toBeInTheDocument()
+  })
+
+  it('un código inválido no consulta al servidor', () => {
+    const fetchMock = lookup({ own: null, global: null })
+    render(<BarcodeAssist code="7891000315508" onApply={vi.fn()} />)
+    expect(screen.getByText(/No es un EAN\/UPC válido/)).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
