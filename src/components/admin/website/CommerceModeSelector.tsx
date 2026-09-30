@@ -62,9 +62,12 @@ const COMMERCE_MODES = [
 export function CommerceModeSelector({
   value,
   onChange,
+  cartUnavailableReason = null,
 }: {
   value: PublicCommerceMode
   onChange: (value: PublicCommerceMode) => void
+  /** Si el plan no incluye pedidos online: por qué no se puede elegir el carrito. */
+  cartUnavailableReason?: string | null
 }) {
   const selectedModeObj = COMMERCE_MODES.find(m => m.value === value) || COMMERCE_MODES[0]
 
@@ -88,7 +91,8 @@ export function CommerceModeSelector({
       {/* Selector de 3 Tarjetas */}
       <div role="radiogroup" aria-label="Modo de venta pública" className="grid gap-3.5 sm:grid-cols-3">
         {COMMERCE_MODES.map(({ value: mode, label, tag, tagColor, shortDesc, icon: Icon }) => {
-          const selected = value === mode
+          const locked = mode === 'cart' && Boolean(cartUnavailableReason)
+          const selected = value === mode && !locked
 
           return (
             <button
@@ -96,10 +100,15 @@ export function CommerceModeSelector({
               type="button"
               role="radio"
               aria-checked={selected}
+              aria-disabled={locked}
+              disabled={locked}
+              title={locked ? cartUnavailableReason ?? undefined : undefined}
               onClick={() => onChange(mode)}
               className={cn(
                 'flex flex-col justify-between items-start gap-2 rounded-xl border p-3 text-left transition-all relative overflow-hidden',
-                selected
+                locked
+                  ? 'cursor-not-allowed border-dashed border-border/80 bg-muted/30 opacity-70'
+                  : selected
                   ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs'
                   : 'border-border/80 bg-background hover:border-primary/40 hover:bg-muted/30'
               )}
@@ -111,7 +120,11 @@ export function CommerceModeSelector({
                 )}>
                   <Icon aria-hidden="true" className="h-5 w-5" />
                 </div>
-                {selected ? (
+                {locked ? (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    {cartUnavailableReason}
+                  </span>
+                ) : selected ? (
                   <Badge className="bg-primary text-primary-foreground text-[10px] font-extrabold flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3" />
                     <span>Activo</span>

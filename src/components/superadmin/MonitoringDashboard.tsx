@@ -618,8 +618,8 @@ export function MonitoringDashboard({ data }: { data: MonitoringData }) {
         {[
           { href: '/superadmin/database-monitoring', icon: Database, label: 'DB Detallada', sub: 'Hit ratio, almacenamiento e índices' },
           { href: '/superadmin/audit-logs', icon: Shield, label: 'Audit Logs', sub: 'Historial completo de auditoría' },
-          { href: '/superadmin/storage-cleanup', icon: Server, label: 'Storage & Cuotas', sub: 'Archivos y optimización' },
-          { href: '/superadmin/diagnostic', icon: Activity, label: 'Diagnóstico de APIs', sub: 'Pruebas de conectividad y endpoints' },
+          { href: '/superadmin/maintenance?tab=storage', icon: Server, label: 'Archivos', sub: 'Imágenes sin uso y limpieza' },
+          { href: '/superadmin/system-health', icon: Activity, label: 'Salud del sistema', sub: 'Seguridad, integridad y configuración' },
         ].map(({ href, icon: Icon, label, sub }) => (
           <Link
             key={href}

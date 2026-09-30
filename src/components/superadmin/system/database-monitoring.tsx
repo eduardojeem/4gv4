@@ -86,10 +86,9 @@ interface MaintenanceActivity {
 }
 
 const RETENTION_LABELS: Record<string, string> = {
-  '30': '30 dias',
-  '60': '60 dias',
   '90': '90 dias',
   '180': '180 dias',
+  '365': '365 dias',
 }
 
 function getBadgeVariantForStatus(status: 'good' | 'warning' | 'critical') {
@@ -1037,10 +1036,10 @@ export default function DatabaseMonitoring() {
                           <SelectValue placeholder="Seleccionar" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="30">30 dias</SelectItem>
-                          <SelectItem value="60">60 dias</SelectItem>
+                          {/* Mínimo 90 días: ver src/lib/superadmin/maintenance.ts */}
                           <SelectItem value="90">90 dias</SelectItem>
                           <SelectItem value="180">180 dias</SelectItem>
+                          <SelectItem value="365">365 dias</SelectItem>
                         </SelectContent>
                       </Select>
                       <Button onClick={() => setConfirmRotateOpen(true)} disabled={maintenanceBusy}>

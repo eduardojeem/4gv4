@@ -130,15 +130,19 @@ export async function runIntegrationChecks(
         }
         const none = webhookEvents.events.length === 0
         return {
-          status: failing ? 'error' : stale || none ? 'warning' : 'healthy',
-          severity: failing ? 'high' : 'medium',
-          summary: failing ? 'El último webhook recibido falló' : none ? 'Sin eventos registrados todavía' : stale ? `Sin webhooks en ${WEBHOOK_STALE_DAYS} días` : 'Recibiendo y procesando',
+          status: failing ? 'error' : stale ? 'warning' : 'healthy',
+          severity: failing ? 'high' : stale ? 'medium' : 'info',
+          summary: failing
+            ? 'El último webhook recibido falló'
+            : none
+              ? 'Sin eventos registrados todavía (en espera de transacciones)'
+              : stale
+                ? `Sin webhooks en ${WEBHOOK_STALE_DAYS} días`
+                : 'Recibiendo y procesando',
           findings,
           recommendation: failing
             ? 'Revisar el error_code y la configuración de la URL de notificación en el panel del proveedor.'
-            : none
-              ? 'El registro empieza a llenarse desde este deploy. Si hay pagos en curso y no aparecen eventos, verificar la URL de notificación en el proveedor.'
-              : undefined,
+            : undefined,
         }
       },
     ),

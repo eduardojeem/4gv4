@@ -4,7 +4,6 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireAuth, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
-import { repairPhotoLimit } from '@/lib/saas/plan-features'
 import {
   REPAIR_IMAGE_BUCKET,
   repairImageUploadPrefix,
@@ -57,13 +56,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Gating por plan: las fotos de reparación requieren el plan más alto (Enterprise).
+    // Gating por plan: el cupo de fotos por reparación lo define el catálogo.
     if (organization) {
         const planInfo = await getOrganizationPlanInfo(organization.id)
-        if (repairPhotoLimit(planInfo.code) === 0) {
+        if (planInfo.repairPhotoLimit === 0) {
           return NextResponse.json(
             {
-              error: `Tu plan ${planInfo.name} no incluye fotos en reparaciones. Esta función está reservada exclusivamente para el plan Enterprise.`,
+              error: `Tu plan ${planInfo.name} no incluye fotos en reparaciones.${planInfo.repairPhotoUpgradePlan ? ` Están disponibles en el plan ${planInfo.repairPhotoUpgradePlan}.` : ''}`,
               code: 'PLAN_LIMIT_REACHED',
               resource: 'repairPhotos',
             },

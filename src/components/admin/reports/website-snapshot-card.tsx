@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowRight, Globe } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/currency'
+import { usePlanModule } from '@/contexts/SubscriptionStatusContext'
 import type { SiteAnalyticsRangeDays, SiteAnalyticsSummary } from '@/lib/site-analytics/shared'
 
 const numberFormat = new Intl.NumberFormat('es-PY')
@@ -13,8 +14,13 @@ const numberFormat = new Intl.NumberFormat('es-PY')
 export function WebsiteSnapshotCard({ days, rangeNote }: { days: SiteAnalyticsRangeDays; rangeNote?: string }) {
   const [summary, setSummary] = useState<SiteAnalyticsSummary | null>(null)
   const [failed, setFailed] = useState(false)
+  // Visitas web es un módulo aparte de Analytics: un plan puede tener uno sin
+  // el otro. Sin el módulo la API responde 402 y la tarjeta decía «No se
+  // pudieron cargar», como si fuera una falla.
+  const hasWebAnalytics = usePlanModule('web_analytics')
 
   useEffect(() => {
+    if (!hasWebAnalytics) return
     const controller = new AbortController()
     fetch(`/api/admin/analytics/website?days=${days}`, { cache: 'no-store', signal: controller.signal })
       .then((response) => response.json())
@@ -27,7 +33,7 @@ export function WebsiteSnapshotCard({ days, rangeNote }: { days: SiteAnalyticsRa
         if (error.name !== 'AbortError') setFailed(true)
       })
     return () => controller.abort()
-  }, [days])
+  }, [days, hasWebAnalytics])
 
   const stats = summary
     ? [
@@ -55,12 +61,16 @@ export function WebsiteSnapshotCard({ days, rangeNote }: { days: SiteAnalyticsRa
             href="/admin/visitas"
             className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
           >
-            Ver visitas web
+            {hasWebAnalytics ? 'Ver visitas web' : 'Conocer Visitas web'}
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
 
-        {failed ? (
+        {!hasWebAnalytics ? (
+          <p className="text-sm text-muted-foreground">
+            Tu plan no incluye Visitas web. En la sección podés ver qué muestra y probarla.
+          </p>
+        ) : failed ? (
           <p className="text-sm text-muted-foreground">No se pudieron cargar las visitas de la tienda.</p>
         ) : !stats ? (
           <div className="grid grid-cols-2 gap-3" aria-busy="true">

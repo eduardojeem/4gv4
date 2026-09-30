@@ -24,7 +24,7 @@ const REQUIRED_BUCKETS = [
   {
     id: 'repair-images',
     name: 'repair-images', 
-    public: true,
+    public: false,
     description: 'Images for repair documentation'
   },
   {
@@ -64,14 +64,14 @@ async function setupStorageBuckets() {
     // Crear buckets faltantes
     for (const bucket of REQUIRED_BUCKETS) {
       if (existingBucketNames.includes(bucket.name)) {
-        console.log(`✅ Bucket '${bucket.name}' ya existe. Asegurando que sea público...`)
+        console.log(`✅ Bucket '${bucket.name}' ya existe. Asegurando configuración public = ${bucket.public}...`)
         const { error: updateError } = await supabase.storage.updateBucket(bucket.id, {
-          public: true
+          public: bucket.public
         })
         if (updateError) {
-          console.warn(`⚠️  No se pudo actualizar el bucket '${bucket.name}' a público:`, updateError.message)
+          console.warn(`⚠️  No se pudo actualizar el bucket '${bucket.name}':`, updateError.message)
         } else {
-          console.log(`✅ Bucket '${bucket.name}' verificado y configurado como público`)
+          console.log(`✅ Bucket '${bucket.name}' verificado y configurado (public: ${bucket.public})`)
         }
         continue
       }

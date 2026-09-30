@@ -7,9 +7,8 @@ export default function InventoryPage() {
         <div className="space-y-6">
             <PlanGate
                 module="inventory_admin"
-                requiredPlan="Basic"
                 title="Inventario avanzado no incluido"
-                description="Esta sección incluye proveedores, stock por sucursal, movimientos, variantes, promociones y reportes. Activa Inventario avanzado en el plan o sube a Basic para usarla."
+                description="Proveedores, stock por sucursal, movimientos, variantes y reportes de inventario."
             >
                 <Suspense fallback={<div className="p-4">Cargando inventario...</div>}>
                     <InventoryManagement />

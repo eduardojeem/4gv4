@@ -30,6 +30,15 @@ describe('image URL policy', () => {
     expect(isSupportedImageSource('product-images/item.webp')).toBe(true)
   })
 
+  // Dos productos quedaron guardados como /images/products/x.webp?v=518f9871
+  // y rompieron el build: Next no optimiza una imagen local con query string
+  // que no esté en images.localPatterns y el prerender de /marketplace falla.
+  it('quita query y hash de las rutas locales de /public', () => {
+    expect(resolveProductImageUrl('/images/products/campera-softshell-corporativa.webp?v=518f9871'))
+      .toBe('/images/products/campera-softshell-corporativa.webp')
+    expect(resolveProductImageUrl('/images/products/remera.webp#frente')).toBe('/images/products/remera.webp')
+  })
+
   it('bypasses Vercel transformations for sources that are already optimized', () => {
     expect(shouldBypassImageOptimization(vtexImage)).toBe(true)
     expect(shouldBypassImageOptimization('/placeholder-product.svg')).toBe(true)

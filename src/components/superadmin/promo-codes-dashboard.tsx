@@ -57,6 +57,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { benefitSummary, codeStatus, getExpirationNotice } from '@/lib/superadmin/promo-codes'
+import { PageHeader } from '@/components/superadmin/ui/page-header'
 
 export { benefitSummary, codeStatus, getExpirationNotice }
 
@@ -512,50 +513,20 @@ export function PromoCodesDashboard() {
   return (
     <div className="space-y-6">
       {/* Hero Banner Ejecutivo */}
-      <div className="relative overflow-hidden rounded-3xl border border-indigo-200/50 bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-950 p-6 text-white shadow-xl sm:p-8">
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-indigo-400/30 bg-indigo-500/20 text-indigo-200 font-medium backdrop-blur-sm">
-                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
-                SuperAdmin SaaS · Motor de Promociones
-              </Badge>
-              <Badge variant="outline" className="border-white/20 text-slate-300 text-xs font-normal">
-                {codes.length} {codes.length === 1 ? 'código registrado' : 'códigos registrados'}
-              </Badge>
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
-              Gestor de Códigos Promocionales
-            </h1>
-            <p className="text-sm leading-relaxed text-slate-300">
-              Crea cupones de descuento, activaciones de planes prémium y extensiones de períodos
-              para organizaciones cliente con control estricto de cupos y trazabilidad por canje.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCSV}
-              disabled={loading || codes.length === 0}
-              className="border-white/20 bg-white/5 text-white hover:bg-white/10 shadow-sm"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar CSV
+      <PageHeader
+        icon={TicketPercent}
+        title="Promociones"
+        description="Códigos de descuento, activaciones de plan y extensiones de período para las tiendas, con cupos y registro de cada canje."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={loading || codes.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Exportar CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Actualizar
             </Button>
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => void loadData()}
-              disabled={loading}
-              className="border-white/20 bg-white/5 text-white hover:bg-white/10 shadow-sm"
-            >
-              <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
-              Actualizar
-            </Button>
-            <Button
               onClick={() => {
                 setForm({
                   code: generateRandomCode('PROMO'),
@@ -573,14 +544,12 @@ export function PromoCodesDashboard() {
                 })
                 setCreateOpen(true)
               }}
-              className="bg-white font-semibold text-slate-950 hover:bg-indigo-50 shadow-md transition-all"
             >
-              <Plus className="mr-2 h-4 w-4 text-indigo-600" />
-              Nueva Promoción
+              <Plus className="h-3.5 w-3.5" /> Nueva promoción
             </Button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

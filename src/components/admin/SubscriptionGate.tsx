@@ -5,7 +5,7 @@ import { SubscriptionStatusProvider, type SubscriptionStatusData } from '@/conte
 
 const EMPTY: SubscriptionStatusData = {
   status: null, isBlocked: false, isTrialing: false, trialDaysLeft: null, periodDaysLeft: null,
-  planCode: 'FREE', planName: 'Free', modules: [], downgradedFromExpiry: false,
+  planCode: 'FREE', planName: 'Free', repairPhotoLimit: 0, repairPhotoUpgradePlan: null, modules: [], downgradedFromExpiry: false,
   entitledModules: [], enabledModules: null, effectiveModules: [],
   businessVertical: 'general', operatingModel: 'retail',
   moduleTrials: [], trialedModules: [],
@@ -28,6 +28,8 @@ export async function SubscriptionGate({ children }: { children: React.ReactNode
           ...sub,
           planCode: planInfo.code,
           planName: planInfo.name,
+          repairPhotoLimit: planInfo.repairPhotoLimit,
+          repairPhotoUpgradePlan: planInfo.repairPhotoUpgradePlan,
           modules: planInfo.modules,
           modulePlanAvailability: planInfo.modulePlanAvailability,
           entitledModules: planInfo.entitledModules,

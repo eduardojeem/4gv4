@@ -28,9 +28,8 @@ export default function CreditsDashboardPage() {
   return (
     <PlanGate
       module="credits"
-      requiredPlan="Pro"
       title="Módulo de créditos no incluido"
-      description="Tu organización necesita habilitar Créditos y cuotas en su plan para gestionar financiación y cobranza."
+      description="Financiación y cobranza en cuotas para tus clientes."
     >
       <CreditsDashboardContent />
     </PlanGate>

@@ -3,6 +3,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
+import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
 
 /**
  * GET /api/public/website/settings
@@ -46,6 +48,10 @@ export async function GET(request: NextRequest) {
 
     normalized.checkout = {
       ...normalized.checkout,
+      commerceMode: resolvePublicCommerceMode(normalized.checkout.commerceMode, {
+        ordersEnabled: await isOrganizationModuleEnabled(organization.id, 'orders'),
+        hasWhatsapp: Boolean(normalized.company_info.whatsapp?.trim()),
+      }),
       payment: {
         ...normalized.checkout.payment,
         transfer: {

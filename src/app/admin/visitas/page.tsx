@@ -24,10 +24,9 @@ export default function WebsiteVisitsPage() {
       </section>
 
       <PlanGate
-        module="analytics"
-        requiredPlan="Pro"
+        module="web_analytics"
         title="Visitas web"
-        description="Las visitas de tu tienda online están disponibles desde el plan Pro. Subí tu plan para ver de dónde llegan tus clientes y qué miran."
+        description="Mirá cuántas personas visitan tu tienda online, de dónde llegan y qué productos miran."
       >
         <SiteAnalyticsDashboard endpoint="/api/admin/analytics/website" variant="organization" />
       </PlanGate>

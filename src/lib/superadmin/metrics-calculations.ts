@@ -11,11 +11,30 @@ type RevenueSubscription = {
 
 type PlanPrices = Record<string, number>
 
-function normalizeMetricPlan(plan: string | null) {
+/**
+ * Código de plan para ingresos. Los alias históricos se unifican; un código
+ * desconocido se conserva (en vez de volverse FREE) para que aparezca como
+ * suscripción sin precio y no desaparezca en silencio del MRR.
+ */
+export function normalizeRevenuePlan(plan: string | null | undefined) {
   const normalized = plan?.trim().toUpperCase() || 'FREE'
   if (normalized === 'STARTER') return 'BASIC'
-  if (normalized === 'PROFESSIONAL') return 'PRO'
+  if (normalized === 'PROFESSIONAL' || normalized === 'PROFESIONAL') return 'PRO'
   return normalized
+}
+
+/**
+ * Precios por plan para calcular ingresos. Incluye planes inactivos: un plan
+ * retirado deja de venderse, pero quien ya lo tiene lo sigue pagando.
+ */
+export function buildPlanPriceMap(rows: Array<{ tier: string; price: number | string | null }>): PlanPrices {
+  return Object.fromEntries(rows.map((row) => [normalizeRevenuePlan(row.tier), Number(row.price) || 0]))
+}
+
+/** Precio mensual del plan, o null si ese plan no tiene precio cargado. */
+export function planMonthlyPrice(prices: PlanPrices, plan: string | null | undefined): number | null {
+  const price = prices[normalizeRevenuePlan(plan)]
+  return price === undefined ? null : price
 }
 
 export function buildMonthSeries(count: number, now = new Date()): MonthSeriesItem[] {
@@ -28,6 +47,12 @@ export function buildMonthSeries(count: number, now = new Date()): MonthSeriesIt
   })
 }
 
+/**
+ * ÚNICA definición de MRR del superadmin: Resumen, Suscripciones, Planes,
+ * Gastos, Panel general y Analíticas la usan, así que todas muestran el mismo
+ * número. Cuenta suscripciones activas de planes pagos cuyo último cobro no
+ * falló ni fue reembolsado.
+ */
 export function calculateRecurringRevenue(
   subscriptions: RevenueSubscription[],
   prices: PlanPrices
@@ -35,13 +60,17 @@ export function calculateRecurringRevenue(
   const billableSubscriptions = subscriptions.filter((subscription) => {
     const paymentStatus = subscription.paymentStatus?.toLowerCase() ?? null
     return subscription.status === 'active'
-      && normalizeMetricPlan(subscription.plan) !== 'FREE'
+      && normalizeRevenuePlan(subscription.plan) !== 'FREE'
       && !['failed', 'refunded', 'unpaid'].includes(paymentStatus ?? '')
   })
 
-  const mrr = billableSubscriptions.reduce((sum, subscription) => {
-    return sum + (prices[normalizeMetricPlan(subscription.plan)] ?? 0)
-  }, 0)
+  let mrr = 0
+  let unpricedSubscriptions = 0
+  for (const subscription of billableSubscriptions) {
+    const price = planMonthlyPrice(prices, subscription.plan)
+    if (price === null) unpricedSubscriptions++
+    else mrr += price
+  }
   const activeSubscriptions = billableSubscriptions.length
 
   return {
@@ -49,6 +78,8 @@ export function calculateRecurringRevenue(
     arr: mrr * 12,
     activeSubscriptions,
     averageRevenuePerSubscription: activeSubscriptions > 0 ? mrr / activeSubscriptions : 0,
+    /** Suscripciones que deberían facturar pero cuyo plan no tiene precio: el MRR está incompleto. */
+    unpricedSubscriptions,
   }
 }
 

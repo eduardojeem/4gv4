@@ -18,7 +18,7 @@ import {
   ExternalLink,
   Globe, Layers,
   Lock,
-  MapPin, RefreshCw, ShieldCheck,
+  MapPin, MousePointerClick, RefreshCw, ShieldCheck,
   ShoppingBag,
   ShoppingCart, Sparkles,
   Store, Tags,
@@ -97,7 +97,7 @@ import {
   type RepairSummary,
 } from '@/lib/superadmin/organization-volume'
 import { describeLastAccess, summarizeTeamAccess } from '@/lib/superadmin/last-access'
-import { auditActionLabel } from '@/components/superadmin/AuditLogsDashboard'
+import { auditActionLabel } from '@/lib/superadmin/audit-labels'
 import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
@@ -485,6 +485,15 @@ export const MODULE_CATEGORIES = [
         capabilities: ['Reporte de ventas por vendedor/sucursal', 'Productos más y menos vendidos', 'Comparativas mensuales'],
       },
       {
+        key: 'web_analytics',
+        name: 'Visitas web',
+        short: 'Visitas',
+        icon: MousePointerClick,
+        color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
+        summary: 'Tráfico de la tienda online y del perfil en el marketplace.',
+        capabilities: ['Visitas y visitantes por día', 'Productos y páginas más vistos', 'Contactos por WhatsApp y pedidos'],
+      },
+      {
         key: 'security',
         name: 'Auditoría & Trazabilidad',
         short: 'Auditoría',
@@ -492,6 +501,24 @@ export const MODULE_CATEGORIES = [
         color: 'text-foreground/80 bg-muted border-border',
         summary: 'Registro detallado de acciones críticas, eliminaciones y cambios de precios.',
         capabilities: ['Registro inmutable con IP y usuario', 'Historial de modificaciones de precios', 'Alertas de actividades sospechosas'],
+      },
+      {
+        key: 'finances',
+        name: 'Finanzas & Rentabilidad',
+        short: 'Finanzas',
+        icon: Wallet,
+        color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
+        summary: 'Gastos, nómina, obligaciones y rentabilidad del negocio.',
+        capabilities: ['Gastos y comprobantes por categoría', 'Nómina y comisiones', 'Rentabilidad por período'],
+      },
+      {
+        key: 'reports',
+        name: 'Reportes exportables',
+        short: 'Exportar',
+        icon: Receipt,
+        color: 'text-slate-600 bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700',
+        summary: 'Descarga de reportes y tablas en CSV, Excel y PDF.',
+        capabilities: ['Ventas y productos en CSV/Excel', 'Reportes de gestión en PDF', 'Datos listos para el contador'],
       },
     ],
   },

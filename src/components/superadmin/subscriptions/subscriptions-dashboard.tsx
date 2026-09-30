@@ -1,17 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
-  ArrowRight,
   CreditCard,
   Download,
   LayoutGrid,
   LayoutList,
   RefreshCw,
-  Sparkles,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -35,7 +32,7 @@ import {
 } from './utils'
 import { normalizeText } from '@/lib/text/normalize'
 import { cn } from '@/lib/utils'
-import { SubscriptionStats } from './subscription-stats'
+import { PageHeader } from '@/components/superadmin/ui/page-header'
 import { SubscriptionFilters } from './subscription-filters'
 import { SubscriptionTable } from './subscription-table'
 import { SubscriptionCard } from './subscription-card'
@@ -102,9 +99,6 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  // Risk banner dismissal
-  const [riskBannerDismissed, setRiskBannerDismissed] = useState(false)
 
   // View mode toggle: table (default on desktop) or grid cards
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
@@ -189,33 +183,6 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
     [filtered, state.page, state.size]
   )
 
-  // Stats
-  const stats = useMemo(() => {
-    const active = subscriptions.filter((s) => s.status === 'active').length
-    const trialing = subscriptions.filter((s) => s.status === 'trialing').length
-    const atRisk = subscriptions.filter((s) => ['past_due', 'unpaid'].includes(s.status)).length
-    const canceling = subscriptions.filter((s) => s.cancel_at_period_end).length
-    const renewingSoon = tabCounts.renewals
-    // El MRR sumaba tambien los trials: plata que todavia no existe, contada
-    // como si el 100% fuera a convertir. Solo cobra lo que esta activo.
-    const paying = subscriptions.filter((s) => s.status === 'active')
-    const estimatedMrr = paying.reduce((sum, s) => sum + (s.plan_details?.price_monthly ?? 0), 0)
-
-    // Y un plan sin precio configurado aportaba 0 en silencio, asi que el MRR
-    // podia estar bajo por datos faltantes sin que nada lo dijera.
-    const missingPrice = paying.filter(
-      (s) => !s.plan_details || s.plan_details.price_monthly === null
-    ).length
-
-    // `active / (active + trialing)` no es una conversion: es la proporcion
-    // entre dos estados actuales, ignorando cancelados, vencidos e impagos. Con
-    // 100 activas, 5 trials y 400 canceladas daba 95%.
-    const activeRate = subscriptions.length
-      ? Math.round((active / subscriptions.length) * 100)
-      : 0
-
-    return { active, activeRate, atRisk, canceling, estimatedMrr, missingPrice, renewingSoon, trialing, total: subscriptions.length }
-  }, [subscriptions, tabCounts.renewals])
 
   // Handlers
   function clearFilters() {
@@ -339,50 +306,21 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
 
-      {/* ── Page header ───────────────────────────────────────────── */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            <CreditCard className="h-3.5 w-3.5 text-violet-500" />
-            Superadmin · Facturación & Planes SaaS
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-50 sm:text-3xl">
-            Suscripciones
-          </h1>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-            onClick={() => router.refresh()}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Actualizar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-            onClick={exportCsv}
-            disabled={filtered.length === 0}
-          >
-            <Download className="h-3.5 w-3.5" />
-            Exportar CSV
-          </Button>
-          <Button
-            asChild
-            size="sm"
-            className="h-8 gap-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 shadow-sm cursor-pointer"
-          >
-            <Link href="/superadmin/plans">
-              <Sparkles className="h-3.5 w-3.5" />
-              Catálogo de Planes
-            </Link>
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        icon={CreditCard}
+        title="Suscripciones"
+        description="Cada organización con su plan, estado y próximo vencimiento. Las pestañas separan lo que necesita atención; el MRR y los ingresos están en Resumen."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => router.refresh()}>
+              <RefreshCw className="h-3.5 w-3.5" /> Actualizar
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Exportar CSV
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Load error ────────────────────────────────────────────── */}
       {loadError && (
@@ -391,49 +329,6 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
           <AlertTitle>No se pudieron cargar las suscripciones</AlertTitle>
           <AlertDescription>{loadError}</AlertDescription>
         </Alert>
-      )}
-
-      {/* ── KPI Strip ─────────────────────────────────────────────── */}
-      <SubscriptionStats
-        stats={stats}
-        onNavigate={(targetTab) => {
-          setTab(targetTab as TabValue)
-          setRiskBannerDismissed(false)
-        }}
-      />
-
-      {/* ── Risk alert banner ─────────────────────────────────────── */}
-      {stats.atRisk > 0 && !riskBannerDismissed && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3 dark:border-rose-900/60 dark:bg-rose-950/30">
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-            <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">
-              {stats.atRisk} {stats.atRisk === 1 ? 'cuenta requiere' : 'cuentas requieren'} atención inmediata —{' '}
-              <span className="underline underline-offset-2">cobros pendientes o sin pagar</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              className="h-7 gap-1 rounded-lg bg-rose-600 px-3 text-xs font-bold text-white hover:bg-rose-700 cursor-pointer"
-              onClick={() => {
-                setTab('attention')
-                setRiskBannerDismissed(true)
-              }}
-            >
-              Ver ahora
-              <ArrowRight className="h-3 w-3" />
-            </Button>
-            <button
-              type="button"
-              onClick={() => setRiskBannerDismissed(true)}
-              className="rounded-lg p-1 text-rose-500 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/40 cursor-pointer"
-              title="Cerrar alerta"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
       )}
 
       {/* ── Main card (full-width) ─────────────────────────────────── */}

@@ -7,6 +7,7 @@ import { createSiteProbe } from '@/lib/health/site-probe'
 import { runSupabaseChecks } from '@/lib/health/checks/supabase'
 import { runWebChecks } from '@/lib/health/checks/web'
 import { runIntegrationChecks } from '@/lib/health/checks/integrations'
+import { runIntegrityChecks } from '@/lib/health/checks/integrity'
 import { HEALTH_STATUSES, type HealthReport, type HealthStatus } from '@/lib/health/types'
 
 if (typeof window !== 'undefined') {
@@ -42,13 +43,14 @@ async function execute(triggeredBy: string): Promise<HealthReport> {
   const probe = createSiteProbe()
 
   const catalog = await loadHealthCatalog(admin)
-  const [supabase, web, integrations] = await Promise.all([
+  const [supabase, web, integrations, integrity] = await Promise.all([
     runSupabaseChecks(admin, catalog),
     runWebChecks(probe),
     runIntegrationChecks(admin, probe),
+    runIntegrityChecks(admin),
   ])
 
-  const checks = [...supabase.checks, ...web.checks, ...integrations.checks].sort(
+  const checks = [...supabase.checks, ...web.checks, ...integrations.checks, ...integrity].sort(
     (a, b) => statusRank(a.status) - statusRank(b.status) || compareSeverity(a.severity, b.severity),
   )
   const counts = Object.fromEntries(HEALTH_STATUSES.map((status) => [status, 0])) as Record<HealthStatus, number>

@@ -96,8 +96,8 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/visitas',
                 description: 'Visitas e interacciones de tu tienda online',
                 permissions: ['analytics.read'],
-                // Mismo módulo que Analytics: disponible desde el plan Pro.
-                module: 'analytics',
+                // Módulo propio: se puede vender sin Analytics.
+                module: 'web_analytics',
             },
         ],
     },
@@ -134,6 +134,7 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/finances',
                 description: 'Gestión de gastos, nómina y rentabilidad',
                 permissions: ['finances.read'],
+                module: 'finances',
             },
         ],
     },

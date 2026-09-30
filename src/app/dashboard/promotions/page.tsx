@@ -299,7 +299,7 @@ export default function PromotionsPage() {
       <PlanGate
         module="promotions"
         title="Promociones no está incluido en tu plan"
-        description="Actualiza tu plan para crear descuentos, campañas y códigos promocionales."
+        description="Descuentos, campañas y códigos promocionales para tus clientes."
       >
       <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
         {/* Header con estilo moderno y acceso rápido */}

@@ -200,7 +200,7 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         category: 'auth',
         name: 'Protección de /superadmin',
         description: '/superadmin/* y /api/superadmin/* no deben responder a visitantes ni a usuarios de organizaciones cliente.',
-        method: `GET sin sesión a ${probe.origin}/superadmin/system-health y /api/superadmin/diagnostic (sin seguir redirecciones). ${codeAuditMethod()}`,
+        method: `GET sin sesión a ${probe.origin}/superadmin/system-health y /api/superadmin/notifications (sin seguir redirecciones). ${codeAuditMethod()}`,
       },
       async () => {
         const findings: string[] = []
@@ -216,15 +216,15 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
           uncertain = true
           findings.push(`/superadmin/system-health no permitió confirmar la protección: ${describeStatus(page)}`)
         }
-        const api = await probe.get('/api/superadmin/diagnostic', { redirect: 'manual', readBody: false })
+        const api = await probe.get('/api/superadmin/notifications', { redirect: 'manual', readBody: false })
         if (api.status >= 200 && api.status < 300) {
           critical = true
-          findings.push(`/api/superadmin/diagnostic respondió ${api.status} sin sesión.`)
+          findings.push(`/api/superadmin/notifications respondió ${api.status} sin sesión.`)
         } else if (isExpectedProtectedResponse(api)) {
-          findings.push(`/api/superadmin/diagnostic → ${api.status} (correcto)`)
+          findings.push(`/api/superadmin/notifications → ${api.status} (correcto)`)
         } else {
           uncertain = true
-          findings.push(`/api/superadmin/diagnostic no permitió confirmar la protección: ${describeStatus(api)}`)
+          findings.push(`/api/superadmin/notifications no permitió confirmar la protección: ${describeStatus(api)}`)
         }
         const unguarded = codeAudit.apiRoutes.filter((r) => r.route.startsWith('/api/superadmin/') && !r.superAdminGuard)
         unguarded.forEach((r) => findings.push(`${r.route} no llama a getSuperAdminUser/requireSuperAdmin/withSuperAdminAuth.`))

@@ -107,9 +107,12 @@ export const AVAILABLE_MODULES = [
   { key: 'services', label: 'Servicios & Citas', desc: 'Agenda y presupuestos' },
   { key: 'delivery', label: 'Delivery & Envíos', desc: 'Rastreo y logística' },
   { key: 'analytics', label: 'Métricas & Reportes', desc: 'Estadísticas y KPI' },
+  { key: 'web_analytics', label: 'Visitas web', desc: 'Tráfico de la tienda online' },
   { key: 'promotions', label: 'Promociones', desc: 'Cupones y descuentos' },
   { key: 'inventory_admin', label: 'Stock Avanzado', desc: 'Lotes y transferencias' },
   { key: 'security', label: 'Auditoría', desc: 'Trazabilidad de acciones' },
+  { key: 'finances', label: 'Finanzas', desc: 'Gastos, nómina y rentabilidad' },
+  { key: 'reports', label: 'Reportes exportables', desc: 'CSV, Excel y PDF' },
 ]
 
 export function EditOrganizationDialog({ organization, open, onClose, onSuccess }: Props) {

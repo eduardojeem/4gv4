@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildPlanFeatureGroups,
   buildPlanFeatureRows,
   buildPlanLimitRows,
+  publicLimitText,
   selectActivePlans,
   type SubscriptionPlan,
 } from './saas-plan-presentation'
+import { PLAN_FEATURES } from '@/lib/saas/plan-feature-catalog'
 
 const plans: SubscriptionPlan[] = [
   {
@@ -13,7 +16,7 @@ const plans: SubscriptionPlan[] = [
     name: 'FREE',
     price: 0,
     is_active: true,
-    limits: { users: '1', repairs: '20/mes' },
+    limits: { users: '1', repairs: '20/mes', repairPhotos: '0' },
     features: [
       { label: 'Inventario', value: true },
       { label: 'Analytics avanzado', value: false },
@@ -57,11 +60,32 @@ describe('public SaaS plan presentation', () => {
     expect(rows.every((row) => !('enterprise' in row.values))).toBe(true)
   })
 
+  it('usa los nombres y el formato del panel, y un 0 dice «No incluye»', () => {
+    const rows = buildPlanLimitRows(selectActivePlans(plans))
+    expect(rows.map((row) => row.label)).toEqual(['Usuarios', 'Reparaciones por mes', 'Fotos por reparación'])
+    expect(rows.find((row) => row.key === 'repairPhotos')?.values).toEqual({ free: 'No incluye', pro: 'No especificado' })
+    expect(publicLimitText('products', '10000')).toBe('10.000')
+  })
+
   it('builds included features from each active plan instead of a tier matrix', () => {
     const rows = buildPlanFeatureRows(selectActivePlans(plans))
 
     expect(rows.find((row) => row.label === 'Analytics avanzado')?.values)
       .toEqual({ free: false, pro: true })
-    expect(rows.some((row) => row.label === 'Soporte prioritario')).toBe(false)
+    // Soporte solo lo marca el plan inactivo: se lista, pero ningún activo lo tiene.
+    expect(rows.find((row) => row.label === 'Soporte prioritario')?.values).toEqual({ free: false, pro: false })
+  })
+
+  it('lista todas las funciones del catálogo, agrupadas, según lo que da cada plan', () => {
+    const groups = buildPlanFeatureGroups(selectActivePlans(plans))
+    expect(groups.flatMap((group) => group.rows).map((row) => row.key)).toEqual(
+      ['venta', 'operacion', 'gestion', 'servicio'].flatMap((group) =>
+        PLAN_FEATURES.filter((feature) => feature.group === group).map((feature) => feature.key)),
+    )
+    const row = (key: string) => groups.flatMap((group) => group.rows).find((item) => item.key === key)
+    // El plan pro trae Visitas web y Finanzas por defecto aunque su lista no las nombre.
+    expect(row('webAnalytics')?.values).toEqual({ free: false, pro: true })
+    expect(row('finances')?.values).toEqual({ free: false, pro: true })
+    expect(row('webAnalytics')?.hint).toMatch(/tienda online/)
   })
 })

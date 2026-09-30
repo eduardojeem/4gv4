@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildMonthSeries,
+  buildPlanPriceMap,
+  planMonthlyPrice,
   calculateRoundedDistribution,
   calculateRecurringRevenue,
   calculateUsagePercent,
@@ -30,7 +32,28 @@ describe('superadmin metric calculations', () => {
       arr: 1_800_000,
       activeSubscriptions: 1,
       averageRevenuePerSubscription: 150_000,
+      unpricedSubscriptions: 0,
     })
+  })
+
+  it('unifica alias, cobra planes retirados y avisa los planes sin precio', () => {
+    const prices = buildPlanPriceMap([
+      { tier: 'basic', price: '100000' },
+      { tier: 'pro', price: 150_000 },
+      { tier: 'legacy', price: 90_000 },
+    ])
+    const revenue = calculateRecurringRevenue([
+      { plan: 'starter', status: 'active' },
+      { plan: 'Profesional', status: 'active' },
+      { plan: 'legacy', status: 'active' },
+      { plan: 'enterprise', status: 'active' },
+    ], prices)
+
+    expect(revenue.mrr).toBe(340_000)
+    expect(revenue.activeSubscriptions).toBe(4)
+    expect(revenue.unpricedSubscriptions).toBe(1)
+    expect(planMonthlyPrice(prices, 'STARTER')).toBe(100_000)
+    expect(planMonthlyPrice(prices, 'enterprise')).toBeNull()
   })
 
   it('flags usage when a resource has a zero limit', () => {

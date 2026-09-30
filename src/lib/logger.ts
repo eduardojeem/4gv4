@@ -4,6 +4,13 @@
  */
 
 const isDevelopment = process.env.NODE_ENV === 'development'
+// Los logs del servidor (rutas API, Server Components) van a los Function
+// Logs de Vercel, privados para quien administra el proyecto: nunca llegan al
+// navegador de un visitante. Solo el logging que corre en el cliente necesita
+// la version sanitizada; en el servidor, ocultar el error en produccion no
+// evita ninguna fuga, solo hace imposible diagnosticar el fallo despues.
+const isServer = typeof window === 'undefined'
+const showFullErrors = isDevelopment || isServer
 
 export const logger = {
     /**
@@ -35,7 +42,7 @@ export const logger = {
      * Error logging - always shown but sanitized in production
      */
     error: (...args: unknown[]) => {
-        if (isDevelopment) {
+        if (showFullErrors) {
             const formatted = args.map(arg => {
                 if (arg instanceof Error) {
                     return `${arg.name}: ${arg.message}\n${arg.stack || ''}`

@@ -39,7 +39,7 @@ vi.mock('../RepairWarrantyCase', () => ({ RepairWarrantyCase: () => null }))
 // prueba de la pestaña de imagenes no tiene que ver con las imagenes.
 vi.mock('@/contexts/SubscriptionStatusContext', async (original) => ({
   ...(await original<typeof import('@/contexts/SubscriptionStatusContext')>()),
-  useSubscriptionStatus: () => ({ planCode: 'ENTERPRISE', planName: 'Enterprise' }),
+  useSubscriptionStatus: () => ({ planCode: 'PRO', planName: 'Pro Max', repairPhotoLimit: 6, repairPhotoUpgradePlan: 'Pro' }),
 }))
 
 const sampleRepair: Repair = {

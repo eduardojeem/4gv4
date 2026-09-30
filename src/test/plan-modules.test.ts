@@ -54,4 +54,36 @@ describe('deriveTechnicalModules', () => {
     expect(deriveTechnicalModules('free', [{ label: 'Pedidos', value: true }])).toContain('orders')
     expect(deriveTechnicalModules('basic', [{ label: 'Entregas', value: false }])).not.toContain('delivery')
   })
+
+  // Gratis mostraba "Ecommerce & Marketplace ✓" sin tener el módulo: esos
+  // features cambiaban la publicidad pero no lo que recibía la tienda.
+  it('conecta ecommerce, analítica, reparaciones y clientes a sus módulos', () => {
+    expect(deriveTechnicalModules('free', [{ label: 'Ecommerce & Marketplace', value: true }])).toContain('ecommerce')
+    expect(deriveTechnicalModules('basic', [{ label: 'Analytics avanzado', value: true }])).toContain('analytics')
+    expect(deriveTechnicalModules('pro', [{ label: 'Analytics avanzado', value: false }])).not.toContain('analytics')
+    expect(deriveTechnicalModules('free', [{ label: 'Módulo de Reparaciones', value: false }])).not.toContain('repairs')
+    expect(deriveTechnicalModules('free', [{ label: 'CRM / Clientes', value: false }])).not.toContain('crm')
+  })
+
+  it('los features informativos no tocan módulos', () => {
+    const base = deriveTechnicalModules('basic', [])
+    expect(deriveTechnicalModules('basic', [
+      { label: 'Gestión de usuarios', value: false },
+      { label: 'Sucursales múltiples', value: false },
+      { label: 'Soporte prioritario', value: true },
+    ]).sort()).toEqual(base.sort())
+  })
+
+  it('Reportes exportables ya no es informativo: apagarlo quita el módulo', () => {
+    expect(deriveTechnicalModules('basic', [])).toContain('reports')
+    expect(deriveTechnicalModules('basic', [{ label: 'Reportes exportables', value: false }])).not.toContain('reports')
+  })
+
+  it('el inventario avanzado arrastra al básico', () => {
+    const modules = deriveTechnicalModules('basic', [
+      { label: 'Inventario', value: false },
+      { label: 'Inventario avanzado', value: true },
+    ])
+    expect(modules).toEqual(expect.arrayContaining(['inventory', 'inventory_admin']))
+  })
 })

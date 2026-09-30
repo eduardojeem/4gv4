@@ -201,13 +201,12 @@ const nextConfig: NextConfig = {
     return config;
   },
   
-  // Headers para optimización de caché
+  // Headers para seguridad y optimización de caché
   async headers() {
-    // Development chunks change on every HMR update. Marking them immutable
-    // leaves browsers executing stale module factories after Turbopack rebuilds.
-    if (process.env.NODE_ENV !== 'production') {
-      return []
-    }
+    const isProd = process.env.NODE_ENV === 'production'
+    const scriptSrc = isProd
+      ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com"
+      : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com"
 
     return [
       {
@@ -224,7 +223,7 @@ const nextConfig: NextConfig = {
               "object-src 'none'",
               "frame-ancestors 'self'",
               "form-action 'self'",
-              "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
@@ -249,24 +248,19 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // Se quito el header propio para /_next/static/(.*).
-      //
-      // Next ya sirve esos archivos con `max-age=31536000, immutable` por su
-      // cuenta, porque llevan hash en el nombre: repetirlo no agregaba nada en
-      // produccion y en desarrollo hacia dano. Los chunks cambian con cada
-      // edicion, asi que marcarlos inmutables por un año dejaba al navegador
-      // sirviendo JavaScript viejo y el HMR parecia no andar. El propio build
-      // lo advertia: "Setting a custom Cache-Control header can break Next.js
-      // development behavior".
-      {
-        source: '/images/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=86400, stale-while-revalidate=604800',
-          },
-        ],
-      },
+      ...(isProd
+        ? [
+            {
+              source: '/images/(.*)',
+              headers: [
+                {
+                  key: 'Cache-Control',
+                  value: 'public, max-age=86400, stale-while-revalidate=604800',
+                },
+              ],
+            },
+          ]
+        : []),
     ]
   },
   async rewrites() {

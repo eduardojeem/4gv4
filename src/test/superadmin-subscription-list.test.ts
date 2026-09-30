@@ -7,7 +7,6 @@ import type { SuperAdminSubscription } from '@/components/superadmin/subscriptio
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const TABLERO = leer('src/components/superadmin/subscriptions/subscriptions-dashboard.tsx')
-const TARJETAS = leer('src/components/superadmin/subscriptions/subscription-stats.tsx')
 const PAGINA = leer('src/app/superadmin/subscriptions/page.tsx')
 const TARJETA = leer('src/components/superadmin/subscriptions/subscription-card.tsx')
 
@@ -43,42 +42,24 @@ describe('un trial terminado deja de contar como trial', () => {
 })
 
 /**
- * El MRR sumaba también los trials: plata que todavía no existe, contada como
- * si el 100% fuera a convertir.
+ * El MRR se calculaba en cinco pantallas con reglas distintas. Ahora vive en
+ * Resumen, con calculateRecurringRevenue; Suscripciones gestiona la cartera y
+ * no repite números: los contadores de las pestañas son el único resumen.
  */
-describe('el MRR cuenta lo que cobra', () => {
-  it('solo suma las activas', () => {
-    expect(TABLERO).toContain("const paying = subscriptions.filter((s) => s.status === 'active')")
-    expect(TABLERO).not.toContain("['active', 'trialing'].includes(s.status))\n      .reduce")
+describe('suscripciones no repite el MRR ni los contadores', () => {
+  it('no calcula su propio MRR', () => {
+    expect(TABLERO).not.toContain('estimatedMrr')
+    expect(TABLERO).not.toContain('price_monthly ?? 0), 0)')
   })
 
-  it('avisa cuando hay activas sin precio configurado', () => {
-    // Aportaban 0 en silencio: el MRR podía estar bajo por datos faltantes.
-    expect(TABLERO).toContain('const missingPrice = paying.filter(')
-    expect(TARJETAS).toContain('sin precio configurado')
-    expect(TARJETAS).toContain('warn: stats.missingPrice > 0')
+  it('los contadores viven solo en las pestañas', () => {
+    expect(TABLERO).not.toContain('SubscriptionStats')
+    expect(TABLERO).not.toContain('riskBannerDismissed')
+    expect(TABLERO).toContain("{ value: 'attention', label: 'Atención', count: tabCounts.attention")
   })
 
-  it('la tarjeta dice qué suma', () => {
-    expect(TARJETAS).toContain("label: 'MRR de activas'")
-    expect(TARJETAS).not.toContain("label: 'MRR Estimado'")
-  })
-})
-
-describe('las tarjetas dicen lo que miden', () => {
-  it('«conversión» no era una conversión', () => {
-    // Era `active / (active + trialing)`: la proporción entre dos estados
-    // actuales, ignorando canceladas y vencidas. Daba 95% con 400 bajas.
-    // El nombre viejo sobrevive en el comentario que explica por qué se sacó;
-    // lo que no puede sobrevivir es el texto que se pinta.
-    expect(TARJETAS).not.toContain('helper: `${stats.activeRate}% conversión`')
-    expect(TARJETAS).toContain('helper: `${stats.activeRate}% del total`')
-    expect(TABLERO).toContain('Math.round((active / subscriptions.length) * 100)')
-  })
-
-  it('«En riesgo» explica en castellano en vez de mostrar la columna cruda', () => {
-    expect(TARJETAS).not.toContain("'past_due / unpaid'")
-    expect(TARJETAS).toContain('Con cobro pendiente')
+  it('usa el encabezado común del superadmin', () => {
+    expect(TABLERO).toContain('<PageHeader')
   })
 })
 
