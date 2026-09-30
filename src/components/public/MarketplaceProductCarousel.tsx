@@ -366,7 +366,7 @@ export function MarketplaceProductCarousel({
                           rel="noopener noreferrer"
                           suppressHydrationWarning
                           onClick={(e) => e.stopPropagation()}
-                          className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:h-8 sm:rounded-xl sm:text-xs dark:text-[#4ADE80]"
+                          className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#075E54] transition-colors hover:bg-[#075E54] hover:text-white sm:h-8 sm:rounded-xl sm:text-xs dark:text-[#4ADE80]"
                         >
                           <MessageCircle className="h-3.5 w-3.5" />
                           <span>Preguntar</span>

@@ -131,7 +131,7 @@ function MarqueeVerticalBrandCard({
               {brand.organization_count} tiendas
             </span>
           ) : (
-            <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground/80">
+            <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
               Catálogo oficial
             </span>
           )}

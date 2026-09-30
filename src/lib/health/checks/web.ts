@@ -667,21 +667,21 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
       },
     ),
     runCheck(
-      { id: 'ux.forms', category: 'ux', name: 'Formularios', description: 'Validación, mensajes de error y envío de login, registro, reseñas y pedidos.', method: 'Requiere prueba E2E (Playwright) con datos de prueba; no se envían formularios reales desde este panel.' },
+      { id: 'ux.forms', category: 'ux', name: 'Formularios', description: 'Validación, mensajes de error y envío de login, registro, reseñas y pedidos.', method: 'Requiere navegador. Ejecutar npm run audit:browser para la estructura y validación nativa; el envío real necesita staging.' },
       async () => ({
         status: 'unknown',
         severity: 'info',
         summary: 'No verificable automáticamente desde el servidor',
-        recommendation: 'Agregar pruebas E2E sobre un entorno de staging para login, registro, reseña y pedido.',
+        recommendation: 'Ejecutar npm run audit:browser; completar los envíos de login, registro, reseña y pedido en staging con datos de prueba.',
       }),
     ),
     runCheck(
-      { id: 'ux.contrast', category: 'ux', name: 'Contraste', description: 'Relación de contraste WCAG AA (4.5:1 texto normal).', method: 'Requiere renderizar la página (Lighthouse / axe-core); el servidor no puede calcular estilos.' },
+      { id: 'ux.contrast', category: 'ux', name: 'Contraste', description: 'Relación de contraste WCAG AA (4.5:1 texto normal).', method: 'Requiere renderizar la página. Ejecutar npm run audit:browser (Playwright + axe-core).' },
       async () => ({
         status: 'unknown',
         severity: 'info',
         summary: 'No disponible: requiere auditoría en navegador',
-        recommendation: 'Ejecutar Lighthouse (Accessibility) o axe DevTools sobre /saas, /marketplace y /register.',
+        recommendation: 'Ejecutar npm run audit:browser; el reporte incluye selectores y razones de cada incumplimiento WCAG.',
       }),
     ),
 
