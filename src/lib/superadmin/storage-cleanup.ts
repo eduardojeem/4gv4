@@ -33,6 +33,8 @@ const REFERENCE_TABLES = [
   'global_brands',
   'categories',
   'global_categories',
+  // La foto de una ficha del catálogo puede ser la que subió una tienda.
+  'global_products',
   'organizations',
   'organization_settings',
   'website_settings',
@@ -46,6 +48,9 @@ const REFERENCE_TABLES = [
   'communication_templates',
   'customer_segments',
 ] as const
+
+/** Tablas que se crean con un SQL aparte y pueden no existir todavía. */
+const OPTIONAL_REFERENCE_TABLES = new Set<string>(['global_products'])
 
 /** Ruta dentro del bucket, con o sin la URL pública delante. */
 const PATH_PATTERN = /(?:product-images\/)?(products\/[A-Za-z0-9._~%\-/]+)/g
@@ -130,7 +135,11 @@ async function collectReferencedPaths(admin: ReturnType<typeof createAdminSupaba
         admin.from(table).select('*').range(from, to) as unknown as PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
       )
     } catch (error) {
-      throw new Error(`No se pudieron leer las referencias de "${table}": ${error instanceof Error ? error.message : 'error'}. Escaneo cancelado.`)
+      const message = error instanceof Error ? error.message : 'error'
+      // Una tabla opcional que todavía no se creó no referencia nada: saltearla
+      // no puede marcar como huérfano un archivo en uso.
+      if (OPTIONAL_REFERENCE_TABLES.has(table) && /does not exist|could not find/i.test(message)) continue
+      throw new Error(`No se pudieron leer las referencias de "${table}": ${message}. Escaneo cancelado.`)
     }
     for (const row of rows) {
       for (const path of extractReferencedPaths(JSON.stringify(row))) referenced.add(path)

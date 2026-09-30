@@ -8,6 +8,7 @@ import {
   Activity,
   Banknote,
   BarChart3,
+  Barcode,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -185,11 +186,12 @@ const navItems: NavItem[] = [
     title: 'Catálogos globales',
     href: '/superadmin/categories',
     icon: FolderTree,
-    description: 'Categorías, marcas y modelos de equipos que comparten todas las tiendas',
+    description: 'Categorías, marcas, productos por código de barras y modelos de equipos que comparten todas las tiendas',
     section: 'content',
     children: [
       { title: 'Categorías', href: '/superadmin/categories', icon: FolderTree },
       { title: 'Marcas', href: '/superadmin/brands', icon: Tag },
+      { title: 'Productos por código', href: '/superadmin/global-products', icon: Barcode },
       // Solo la usan las tiendas de electrónica y los talleres: son las que
       // cargan marca y modelo de equipo en productos y reparaciones.
       { title: 'Modelos de equipos', href: '/superadmin/device-models', icon: Smartphone },
