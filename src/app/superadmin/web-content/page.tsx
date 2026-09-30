@@ -1,103 +1,78 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { WebContentOverview, type WebContentData } from '@/components/superadmin/WebContentOverview'
+import { WebContentHub, type WebContentHubData } from '@/components/superadmin/WebContentHub'
+import { getLandingRows } from '@/lib/superadmin/landing-rows'
+import { summarizeLandings } from '@/lib/superadmin/landing-readiness'
+import { getPlatformBranding, DEFAULT_PLATFORM_BRANDING } from '@/lib/platform/branding'
+import { getPlatformAnnouncementsUncached } from '@/lib/platform/announcement'
+import { announcementStatus } from '@/lib/announcements/announcement'
+import { listLegalDocuments, LEGAL_DOCUMENT_TYPES, responsibleDataGaps } from '@/lib/legal/documents'
 
 export const revalidate = 60
 
-async function getWebContentData(): Promise<WebContentData> {
+/** Tiendas publicadas en el marketplace y sus productos, contados por Postgres. */
+async function getMarketplaceSummary() {
   const admin = createAdminSupabase()
+  const [{ data: orgs, error }, { data: counts }] = await Promise.all([
+    admin.from('organizations').select('id, storefront_public, marketplace_public'),
+    (admin as unknown as {
+      from: (table: string) => { select: (columns: string) => Promise<{ data: Array<{ organization_id: string; products: number | string }> | null }> }
+    }).from('org_catalog_counts').select('organization_id, products'),
+  ])
+  if (error) return null
+  const visible = new Set(
+    ((orgs ?? []) as Array<{ id: string; storefront_public: boolean | null; marketplace_public: boolean | null }>)
+      .filter((org) => org.storefront_public === true && org.marketplace_public === true)
+      .map((org) => org.id),
+  )
+  const products = counts
+    ? counts.filter((row) => visible.has(row.organization_id)).reduce((sum, row) => sum + (Number(row.products) || 0), 0)
+    : null
+  return { visibleStores: visible.size, totalStores: orgs?.length ?? 0, products }
+}
 
-  const [{ data: orgsData }, { data: settingsData }] = await Promise.all([
-    admin.from('organizations').select('id, name, slug, plan, marketplace_public, storefront_public, created_at'),
-    admin.from('website_settings').select('organization_id, key, value, updated_at, updated_by'),
+async function getHubData(): Promise<WebContentHubData> {
+  const now = new Date()
+  const [landing, branding, announcements, legal, marketplace] = await Promise.all([
+    getLandingRows(),
+    getPlatformBranding(),
+    getPlatformAnnouncementsUncached(),
+    listLegalDocuments(),
+    getMarketplaceSummary(),
   ])
 
-  const orgs = (orgsData ?? []) as Array<{
-    id: string; name: string; slug: string; plan: string | null
-    marketplace_public: boolean | null; storefront_public: boolean | null; created_at: string | null
-  }>
-  const settings = (settingsData ?? []) as Array<{
-    organization_id: string | null; key: string; value: unknown
-    updated_at: string | null; updated_by: string | null
-  }>
-
-  // Group settings by org
-  const settingsByOrg = new Map<string, Map<string, { value: unknown; updated_at: string | null }>>()
-  settings.forEach((s) => {
-    if (!s.organization_id) return
-    const m = settingsByOrg.get(s.organization_id) ?? new Map()
-    m.set(s.key, { value: s.value, updated_at: s.updated_at })
-    settingsByOrg.set(s.organization_id, m)
-  })
-
-  // Per-org status
-  const orgStatuses = orgs.map((o) => {
-    const orgSettings = settingsByOrg.get(o.id) ?? new Map()
-    const companyInfo = orgSettings.get('company_info')?.value as Record<string, unknown> | undefined
-    const heroContent = orgSettings.get('hero_content')?.value as Record<string, unknown> | undefined
-    const maintenance = orgSettings.get('maintenance_mode')?.value as Record<string, unknown> | undefined
-    const services = orgSettings.get('services')?.value as unknown[] | undefined
-    const testimonials = orgSettings.get('testimonials')?.value as unknown[] | undefined
-
-    // Calcular completitud
-    const checks = {
-      hasLogo:        Boolean(companyInfo?.logoUrl),
-      hasPhone:       Boolean(companyInfo?.phone),
-      hasEmail:       Boolean(companyInfo?.email),
-      hasAddress:     Boolean(companyInfo?.address),
-      hasHero:        Boolean(heroContent?.title),
-      hasServices:    Array.isArray(services) && services.length > 0,
-      hasTestimonials: Array.isArray(testimonials) && testimonials.length > 0,
-    }
-    const completed = Object.values(checks).filter(Boolean).length
-    const totalChecks = Object.keys(checks).length
-    const completion = Math.round((completed / totalChecks) * 100)
-
-    // Last updated
-    let lastUpdated: string | null = null
-    orgSettings.forEach((s) => {
-      if (s.updated_at && (!lastUpdated || s.updated_at > lastUpdated)) {
-        lastUpdated = s.updated_at
-      }
-    })
-
-    return {
-      id: o.id,
-      name: o.name,
-      slug: o.slug,
-      plan: o.plan ?? 'FREE',
-      marketplacePublic: o.storefront_public === true && o.marketplace_public === true,
-      maintenanceMode: Boolean(maintenance?.enabled),
-      completion,
-      settingsCount: orgSettings.size,
-      lastUpdated,
-      checks,
-    }
-  })
-
-  // Summary stats
-  const fullyConfigured = orgStatuses.filter((o) => o.completion >= 80).length
-  const inMaintenance = orgStatuses.filter((o) => o.maintenanceMode).length
-  const marketplacePublic = orgStatuses.filter((o) => o.marketplacePublic).length
-  const noLogo = orgStatuses.filter((o) => !o.checks.hasLogo).length
-  const avgCompletion = orgStatuses.length
-    ? Math.round(orgStatuses.reduce((sum, o) => sum + o.completion, 0) / orgStatuses.length)
-    : 0
+  const statuses = announcements.map((announcement) => announcementStatus(announcement, now))
 
   return {
-    orgs: orgStatuses,
-    summary: {
-      total: orgStatuses.length,
-      fullyConfigured,
-      inMaintenance,
-      marketplacePublic,
-      noLogo,
-      avgCompletion,
+    landings: landing.failed ? null : summarizeLandings(landing.rows.map((row) => row.assessment)),
+    brand: {
+      platformName: branding.platformName,
+      hasLogo: Boolean(branding.logoUrl),
+      hasFavicon: Boolean(branding.faviconUrl),
+      isDefaultName: branding.platformName === DEFAULT_PLATFORM_BRANDING.platformName,
+      hasSeoDescription: branding.seoDescription !== DEFAULT_PLATFORM_BRANDING.seoDescription,
     },
-    fetchedAt: new Date().toISOString(),
+    announcements: {
+      total: announcements.length,
+      live: statuses.filter((status) => status === 'activo').length,
+      scheduled: statuses.filter((status) => status === 'programado').length,
+    },
+    legal: 'reason' in legal
+      ? null
+      : LEGAL_DOCUMENT_TYPES.map((type) => {
+        const versions = legal.documents.filter((document) => document.documentType === type)
+        const published = versions.find((document) => document.status === 'published') ?? null
+        return {
+          type,
+          publishedVersion: published?.version ?? null,
+          hasDraft: versions.some((document) => document.status === 'draft'),
+          responsibleGaps: published ? responsibleDataGaps(published.content) : [],
+        }
+      }),
+    marketplace,
   }
 }
 
 export default async function SuperAdminWebContentPage() {
-  const data = await getWebContentData()
-  return <WebContentOverview data={data} />
+  const data = await getHubData()
+  return <WebContentHub data={data} />
 }

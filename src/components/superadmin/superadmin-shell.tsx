@@ -165,15 +165,17 @@ const navItems: NavItem[] = [
     title: 'Contenido web',
     href: '/superadmin/web-content',
     icon: Globe,
-    description: 'Paginas publicas del sistema SaaS',
+    description: 'Lo que ve un visitante: la plataforma y las páginas de las tiendas',
     section: 'content',
+    // Primero lo que se edita de la plataforma, después lo que se revisa de las
+    // tiendas, en el mismo orden que el resumen.
     children: [
-      { title: 'Contenido general', href: '/superadmin/web-content', icon: Globe },
+      { title: 'Resumen', href: '/superadmin/web-content', icon: Globe },
       { title: 'Marca SaaS', href: '/superadmin/web-content/brand', icon: Sparkles },
-      { title: 'Landing', href: '/superadmin/web-content/landing', icon: LayoutTemplate },
-      { title: 'Marketplace', href: '/superadmin/web-content/marketplace', icon: Store },
       { title: 'Aviso del marketplace', href: '/superadmin/web-content/anuncio', icon: Megaphone },
       { title: 'Documentos legales', href: '/superadmin/web-content/legal', icon: Scale },
+      { title: 'Landings de tiendas', href: '/superadmin/web-content/landing', icon: LayoutTemplate },
+      { title: 'Marketplace', href: '/superadmin/web-content/marketplace', icon: Store },
     ],
   },
   {

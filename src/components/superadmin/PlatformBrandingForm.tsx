@@ -412,6 +412,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
   }
 
   const handleSave = useCallback(async () => {
+    if (JSON.stringify(draft) === JSON.stringify(savedState)) return
     setSaving(true)
 
     try {
@@ -434,7 +435,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
     } finally {
       setSaving(false)
     }
-  }, [draft])
+  }, [draft, savedState])
 
   // Atajo de teclado Ctrl+S / Cmd+S
   useEffect(() => {
@@ -478,15 +479,10 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 Contenido web
               </Link>
             </Button>
-            <span className="text-slate-300 dark:text-slate-700">/</span>
-            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-cyan-600 dark:text-cyan-400">
-              <Sparkles className="h-3.5 w-3.5" />
-              Personalización Global
-            </div>
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-slate-50">
-              Identidad de Marca & Logotipos
+              Marca SaaS
             </h1>
             {hasChanges && (
               <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[11px]">
@@ -495,7 +491,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
             )}
           </div>
           <p className="max-w-2xl text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            Configura el logo oficial, favicon, nombres comerciales y textos globales que se aplican automáticamente en la landing SaaS, navegación, login y marketplace.
+            Logo, ícono, nombre y textos de la plataforma. Se aplican en la landing, la barra de navegación, el login, el marketplace y cómo aparece en Google.
           </p>
         </div>
 
@@ -519,19 +515,19 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
           >
             <a href="/saas" target="_blank" rel="noreferrer">
               <Globe className="h-3.5 w-3.5 text-cyan-600" />
-              Ver Landing
+              Ver landing
               <ExternalLink className="h-3 w-3 opacity-60" />
             </a>
           </Button>
 
           <Button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !hasChanges}
             size="sm"
             className="gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-md shadow-cyan-600/20 px-4 h-9"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Guardando...' : 'Guardar Cambios'}
+            {saving ? 'Guardando…' : hasChanges ? 'Guardar cambios' : 'Sin cambios'}
           </Button>
         </div>
       </header>
@@ -558,7 +554,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
               </TabsTrigger>
               <TabsTrigger value="seo" className="text-xs gap-1.5 font-medium data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs">
                 <Search className="h-3.5 w-3.5 text-indigo-600" />
-                <span>SEO & Login</span>
+                <span>Google y login</span>
               </TabsTrigger>
             </TabsList>
 
@@ -606,11 +602,11 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                   <div className="flex items-center gap-2">
                     <Sliders className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                     <CardTitle className="text-sm font-bold">
-                      Opciones de Visualización en Cabecera & Navbar
+                      Cómo se ve el logo en la barra superior
                     </CardTitle>
                   </div>
                   <CardDescription className="text-xs">
-                    Controla la visualización del nombre, slogan, tamaño y efectos del logo en la barra superior pública.
+                    Si se muestran el nombre y el slogan junto al logo, su tamaño y el brillo en modo oscuro.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -765,7 +761,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-cyan-600" />
-                    Plataforma SaaS Principal
+                    Plataforma
                   </CardTitle>
                   <CardDescription className="text-xs">
                     Nombres y textos que identifican al sistema globalmente.
@@ -783,7 +779,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                   />
                   <Field
                     id="platformTagline"
-                    label="Slogan / Subtítulo Corto"
+                    label="Slogan"
                     value={draft.platformTagline}
                     onChange={updateField}
                     placeholder="Ej: POS, inventario, marketplace y servicios"
@@ -797,7 +793,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Store className="h-4 w-4 text-blue-600" />
-                    Marketplace Multitienda
+                    Marketplace
                   </CardTitle>
                   <CardDescription className="text-xs">
                     Identidad visible en el directorio comercial y tiendas de clientes.
@@ -830,16 +826,16 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <MousePointerClick className="h-4 w-4 text-emerald-600" />
-                    Llamadas a la Acción (Hero y Navbar)
+                    Botones de la portada y la barra superior
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Personaliza los botones de conversión que guían a tus visitantes.
+                    Los dos botones que invitan a registrarse o a explorar.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-900/40">
                     <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                      Botón Principal (Conversión)
+                      Botón principal
                     </span>
                     <Field
                       id="primaryCtaLabel"
@@ -862,7 +858,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
 
                   <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-900/40">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Botón Secundario (Exploración)
+                      Botón secundario
                     </span>
                     <Field
                       id="secondaryCtaLabel"
@@ -892,13 +888,13 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Sliders className="h-4 w-4 text-indigo-600" />
-                    Pantalla de Inicio de Sesión
+                    Pantalla de inicio de sesión
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
                   <Field
                     id="loginEyebrow"
-                    label="Etiqueta superior (Eyebrow)"
+                    label="Etiqueta superior"
                     value={draft.loginEyebrow}
                     onChange={updateField}
                     placeholder="Panel interno"
@@ -919,13 +915,13 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Search className="h-4 w-4 text-blue-600" />
-                    Posicionamiento Web & Metadatos (SEO)
+                    Cómo aparece en Google
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Field
                     id="seoTitle"
-                    label="Título SEO (Google Title)"
+                    label="Título en Google"
                     value={draft.seoTitle}
                     onChange={updateField}
                     placeholder="MiTiendaPy para POS, inventario, marketplace y servicios"
@@ -934,7 +930,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="seoDescription" className="text-xs font-semibold">
-                        Descripción SEO (Google Meta Description)
+                        Descripción en Google
                       </Label>
                       <span className="text-[10px] text-slate-400 tabular-nums">
                         {draft.seoDescription.length}/240
@@ -952,7 +948,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="footerText" className="text-xs font-semibold">
-                        Texto de Pie de Página (Footer Copyright)
+                        Texto del pie de página
                       </Label>
                       <span className="text-[10px] text-slate-400 tabular-nums">
                         {draft.footerText.length}/180
@@ -980,7 +976,7 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <div className="flex items-center gap-2">
                   <Eye className="h-4 w-4 text-cyan-600" />
                   <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Simulador en Vivo
+                    Vista previa
                   </CardTitle>
                 </div>
 

@@ -268,7 +268,7 @@ describe('el marketplace y el panel del superadmin', () => {
 
   it('el superadmin lo encuentra en su menú', () => {
     expect(leer('src/components/superadmin/superadmin-shell.tsx')).toContain("href: '/superadmin/web-content/anuncio'")
-    expect(leer('src/components/superadmin/WebContentOverview.tsx')).toContain("href: '/superadmin/web-content/anuncio'")
+    expect(leer('src/components/superadmin/WebContentHub.tsx')).toContain('href="/superadmin/web-content/anuncio"')
   })
 })
 
