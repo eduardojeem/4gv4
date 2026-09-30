@@ -91,7 +91,7 @@ export default function SecurityPage() {
       <PlanGate
         module="security"
         title="Seguridad avanzada no está incluida en tu plan"
-        description="Actualiza tu plan para monitorear accesos, eventos sensibles y acciones administrativas."
+        description="Monitoreo de accesos, eventos sensibles y acciones administrativas."
       >
         <Suspense fallback={
           <div className="rounded-2xl border border-border/80 bg-card p-12">

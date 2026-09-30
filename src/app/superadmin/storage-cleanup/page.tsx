@@ -1,11 +1,6 @@
-import type { Metadata } from 'next'
-import { StorageCleanupPanel } from '@/components/superadmin/system/storage-cleanup-panel'
+import { redirect } from 'next/navigation'
 
-export const metadata: Metadata = {
-  title: 'Storage Cleanup | Superadmin',
-  description: 'Analiza archivos huerfanos y ejecuta limpieza controlada del storage operativo.',
-}
-
+// La limpieza de archivos ahora es una pestaña de Mantenimiento.
 export default function StorageCleanupPage() {
-  return <StorageCleanupPanel />
+  redirect('/superadmin/maintenance?tab=storage')
 }

@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { chunkQueryValues } from '@/lib/analytics/query-batches'
 import { calculateFinancialSummary } from '@/lib/finance/calculations'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { upgradePlanNameFor } from '@/lib/saas/upgrade-plan'
 import { z } from 'zod'
 
 import type {
@@ -196,9 +198,33 @@ export function toFinanceApiError(error: unknown) {
   )
 }
 
+/**
+ * Finanzas es un módulo del plan. Todas las rutas de /api/admin/finances pasan
+ * por resolveFinanceOrganizationId, así que el control vive acá y no en cada
+ * ruta. `alsoAllow` deja pasar a quien tiene otro módulo que usa estos datos
+ * (el resumen de dinero dentro de Analytics).
+ */
+async function assertFinanceModule(organizationId: string, alsoAllow: readonly string[]) {
+  const planInfo = await getOrganizationPlanInfo(organizationId)
+  if ([ 'finances', ...alsoAllow ].some((module) => planInfo.modules.includes(module))) return
+
+  const commerciallyAvailable = planInfo.entitledModules.includes('finances')
+    || planInfo.moduleTrials.some((trial) => trial.module === 'finances')
+  if (commerciallyAvailable) {
+    throw new FinanceApiError('Finanzas está desactivado para esta organización.', 403, 'MODULE_DISABLED')
+  }
+  const upgradePlan = upgradePlanNameFor('finances', planInfo.modulePlanAvailability)
+  throw new FinanceApiError(
+    `Finanzas no está incluido en tu plan.${upgradePlan ? ` Está disponible en el plan ${upgradePlan}.` : ''}`,
+    402,
+    'MODULE_NOT_ENTITLED',
+  )
+}
+
 export async function resolveFinanceOrganizationId(
   context: AdminAuthContext,
   requestedOrganizationId?: string,
+  options: { alsoAllow?: readonly string[] } = {},
 ) {
   if (context.organizationId) {
     if (
@@ -212,6 +238,10 @@ export async function resolveFinanceOrganizationId(
       )
     }
 
+    // El super_admin en modo soporte ve todo; el resto, lo que da su plan.
+    if (context.user.role !== 'super_admin') {
+      await assertFinanceModule(context.organizationId, options.alsoAllow ?? [])
+    }
     return context.organizationId
   }
 

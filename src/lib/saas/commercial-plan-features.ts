@@ -16,6 +16,8 @@ const aliasesByKey: Record<string, string[]> = {
   crm: ['CRM / Gestión de clientes', 'CRM / Clientes', 'Gestión de clientes'],
   ecommerce: ['Ecommerce & Marketplace', 'Ecommerce / Marketplace'],
   analytics: ['Analytics avanzado'],
+  webAnalytics: ['Visitas web', 'Visitas de la tienda online'],
+  finances: ['Finanzas y rentabilidad', 'Finanzas'],
   reports: ['Reportes exportables (CSV/PDF)', 'Reportes exportables'],
   credits: ['Créditos y cuotas', 'Creditos y cuotas', 'Créditos'],
   promotions: ['Promociones y descuentos'],
@@ -34,6 +36,12 @@ export function getCommercialFeatureValue(features: CommercialPlanFeature[] | nu
     ?? [keyOrLabel]
   const normalizedAliases = new Set(aliases.map(normalized))
   return features?.find(feature => feature.label && normalizedAliases.has(normalized(feature.label)))?.value ?? false
+}
+
+/** Clave del feature (pos, ecommerce, analytics...) a partir de cualquiera de sus nombres. */
+export function commercialFeatureKeyForLabel(label: string): string | null {
+  const target = normalized(label)
+  return Object.entries(aliasesByKey).find(([, group]) => group.some((alias) => normalized(alias) === target))?.[0] ?? null
 }
 
 export function isCommercialFeatureLabel(label: string | undefined, key: string) {

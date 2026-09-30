@@ -7,31 +7,41 @@ import { Lock, Sparkles, Gift, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { upgradePlanNameFor } from '@/lib/saas/upgrade-plan'
+
+/** "Está disponible en Pro." según el catálogo, o nada si ningún plan activo lo incluye. */
+function availabilitySentence(planName: string | null) {
+  return planName ? ` Está disponible en el plan ${planName}.` : ''
+}
 
 /**
  * Envuelve contenido que requiere un módulo del plan. Si el plan activo no lo
  * incluye, muestra el contenido difuminado con una tarjeta de upgrade encima.
+ *
+ * El plan al que hay que subir sale del catálogo (el más barato activo que
+ * incluye el módulo). Antes cada pantalla lo escribía a mano y quedaba
+ * desactualizado: "Tu plan Pro no incluye esta sección. Subí a Pro".
  */
 export function PlanGate({
   module,
-  requiredPlan = 'Pro',
   title,
   description,
   fallback,
   children,
 }: {
   module: string
-  requiredPlan?: string
   title?: string
+  /** Qué hace la sección. No nombrar planes: la disponibilidad se agrega sola. */
   description?: string
   /** Fondo decorativo (liviano) que se difumina detrás del aviso cuando está bloqueado.
    *  Si no se pasa, los `children` NO se montan (útil para componentes pesados). */
   fallback?: React.ReactNode
   children: React.ReactNode
 }) {
-  const { modules, planName, trialedModules } = useSubscriptionStatus()
+  const { modules, planName, trialedModules, modulePlanAvailability } = useSubscriptionStatus()
   const router = useRouter()
   const [starting, setStarting] = useState(false)
+  const upgradePlan = upgradePlanNameFor(module, modulePlanAvailability)
 
   if (modules.includes(module)) {
     return <>{children}</>
@@ -77,7 +87,7 @@ export function PlanGate({
             {title || 'Función no incluida en tu plan'}
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {description || `Tu plan ${planName} no incluye esta sección. Subí a ${requiredPlan} para desbloquearla.`}
+            {(description || `Tu plan ${planName} no incluye esta sección.`) + availabilitySentence(upgradePlan)}
           </p>
           <div className="mt-4 flex flex-col items-center gap-2">
             {canTrial && (
@@ -107,16 +117,18 @@ export function PlanGate({
  */
 export function UpgradeHint({
   message,
-  requiredPlan = 'Pro',
+  upgradePlan,
 }: {
+  /** Qué no incluye el plan. No nombrar planes: se agrega `upgradePlan`. */
   message?: string
-  requiredPlan?: string
+  /** Plan que lo incluye, resuelto desde el catálogo. */
+  upgradePlan?: string | null
 }) {
   const { planName } = useSubscriptionStatus()
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm dark:border-violet-900 dark:bg-violet-950/30">
       <span className="text-violet-700 dark:text-violet-300">
-        {message || `Tu plan ${planName} no incluye esto. Disponible desde ${requiredPlan}.`}
+        {(message || `Tu plan ${planName} no incluye esto.`) + availabilitySentence(upgradePlan ?? null)}
       </span>
       <Button asChild size="sm" variant="outline" className="shrink-0">
         <Link href="/admin/subscriptions">

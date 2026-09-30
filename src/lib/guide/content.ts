@@ -182,6 +182,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'analytics',
     href: '/admin/finances',
     permissions: ['finances.read'],
+    module: 'finances',
     keywords: ['finanzas', 'gastos', 'nomina', 'sueldos', 'rentabilidad', 'ganancia', 'devengado', 'caja'],
     steps: [
       {
@@ -252,7 +253,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     group: 'analytics',
     href: '/admin/visitas',
     permissions: ['analytics.read'],
-    module: 'analytics',
+    module: 'web_analytics',
     keywords: ['visitas', 'trafico', 'tienda online', 'marketplace', 'busquedas', 'whatsapp', 'conversion', 'google analytics'],
     steps: [
       {

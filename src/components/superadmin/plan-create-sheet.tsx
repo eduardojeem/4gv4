@@ -13,20 +13,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Boxes, Building2, CheckCircle2, ChevronLeft, ChevronRight,
-  Circle, Clock, CreditCard, Crown, Download, Globe,
-  Loader2, Package, ShoppingCart, Sparkles, Star,
-  TrendingUp, Users, Wrench,
-  TicketPercent,
-  ShieldCheck,
-  ClipboardList,
-  Handshake,
-  Truck,
-} from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, CreditCard, Crown, Loader2, Package, Sparkles, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { createSubscriptionPlan } from '@/services/subscription-plans'
+import { effectivePlanFeatures } from '@/lib/saas/plan-modules'
+import { PLAN_FEATURES } from '@/lib/saas/plan-feature-catalog'
+import { emptyLimits } from '@/lib/saas/plan-limits'
+import {
+  PlanFeatureToggles,
+  PlanLimitFields,
+  featurePayload,
+  firstLimitError,
+  toggleWithDependencies,
+} from './plans/plan-form-fields'
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -69,25 +69,6 @@ const TIERS = [
   },
 ]
 
-const FEATURE_LIST = [
-  { label: 'Punto de Venta (POS)',    icon: ShoppingCart },
-  { label: 'Inventario',              icon: Boxes        },
-  { label: 'Inventario avanzado',      icon: Boxes        },
-  { label: 'Gestión de usuarios',     icon: Users        },
-  { label: 'Sucursales múltiples',    icon: Building2    },
-  { label: 'Módulo de Reparaciones',  icon: Wrench       },
-  { label: 'Servicios',               icon: Handshake    },
-  { label: 'Pedidos',                 icon: ClipboardList },
-  { label: 'Entregas',                icon: Truck        },
-  { label: 'CRM / Clientes',          icon: Users        },
-  { label: 'Ecommerce & Marketplace', icon: Globe        },
-  { label: 'Analytics avanzado',      icon: TrendingUp   },
-  { label: 'Reportes exportables',    icon: Download     },
-  { label: 'Créditos y cuotas',       icon: CreditCard   },
-  { label: 'Promociones y descuentos', icon: TicketPercent },
-  { label: 'Seguridad y auditoría',     icon: ShieldCheck },
-  { label: 'Soporte prioritario',     icon: Sparkles     },
-]
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
@@ -122,38 +103,6 @@ function StepIndicator({ step }: { step: number }) {
   )
 }
 
-// ─── Feature Toggle ───────────────────────────────────────────────────────────
-
-function FeatureToggle({ label, icon: Icon, enabled, onToggle }: {
-  label: string; icon: React.ComponentType<{ className?: string }>; enabled: boolean; onToggle: () => void
-}) {
-  return (
-    <button type="button" onClick={onToggle}
-      className={cn(
-        'flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all hover:scale-[1.01] active:scale-[0.99]',
-        enabled
-          ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
-          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900',
-      )}
-    >
-      <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
-        enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'
-      )}>
-        <Icon className="h-3.5 w-3.5" />
-      </div>
-      <span className={cn('flex-1 text-xs font-medium',
-        enabled ? 'text-emerald-800 dark:text-emerald-200' : 'text-slate-600 dark:text-slate-400'
-      )}>
-        {label}
-      </span>
-      {enabled
-        ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-        : <Circle className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
-      }
-    </button>
-  )
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 type Props = {
@@ -185,42 +134,47 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
   // registro. Avisa, no bloquea.
   const revisionNota = checkPlanPriceNote(Number(price) || 0, priceNote)
   const avisoNota = revisionNota.ok === false ? revisionNota : null
-  const [limits, setLimits]         = useState({ users: '5', products: '100', branches: '1', repairs: '20/mes' })
+  const [limits, setLimits]         = useState(emptyLimits)
+  const isFree = (Number(price) || 0) === 0
 
-  // Step 3
-  const [enabledFeatures, setEnabled] = useState<Set<string>>(new Set())
+  // Step 3: arranca con los módulos que el tier trae por defecto.
+  const [features, setFeatures] = useState<Record<string, boolean>>(() => effectivePlanFeatures(selectedTier.value, []))
 
-  function toggle(label: string) {
-    setEnabled((previous) => {
-      const next = new Set(previous)
-      if (next.has(label)) next.delete(label)
-      else next.add(label)
-      return next
-    })
+  function selectTier(tier: typeof TIERS[number]) {
+    setSelectedTier(tier)
+    setFeatures(effectivePlanFeatures(tier.value, []))
+    if (!planName) setPlanName(tier.label)
   }
 
   function reset() {
     setStep(0); setPlanName(''); setDesc(''); setHighlights('')
     setPrice('0'); setPriceNote('por mes'); setTrialDays('14')
-    setLimits({ users: '5', products: '100', branches: '1', repairs: '20/mes' })
-    setEnabled(new Set())
-    if (availableTiers[0]) setSelectedTier(availableTiers[0])
+    setLimits(emptyLimits())
+    const firstTier = availableTiers[0] ?? TIERS[1]
+    setSelectedTier(firstTier)
+    setFeatures(effectivePlanFeatures(firstTier.value, []))
   }
 
   function close() { reset(); onOpenChange(false) }
 
+  const limitError = firstLimitError(limits)
+
   async function create() {
+    if (limitError) {
+      toast.error(limitError)
+      setStep(2)
+      return
+    }
     setLoading(true)
     try {
-      const features = FEATURE_LIST.map((f) => ({ label: f.label, value: enabledFeatures.has(f.label) }))
       await createSubscriptionPlan({
         tier:        selectedTier.value,
         name:        planName.trim() || selectedTier.label,
         price:       Number(price) || 0,
         price_note:  priceNote,
-        description, trial_days: Number(trialDays) || 0,
+        description, trial_days: isFree ? 0 : Number(trialDays) || 0,
         highlights:  highlights.split('\n').map((s) => s.trim()).filter(Boolean),
-        limits, features,
+        limits, features: featurePayload(features),
       })
       toast.success(`Plan ${selectedTier.label} creado`)
       onSuccess(); close()
@@ -229,7 +183,7 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
     } finally { setLoading(false) }
   }
 
-  const enabledCount = enabledFeatures.size
+  const enabledCount = PLAN_FEATURES.filter((feature) => features[feature.key]).length
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -285,7 +239,7 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
                       const isSelected = selectedTier?.value === t.value
                       return (
                         <button key={t.value} type="button"
-                          onClick={() => { setSelectedTier(t); if (!planName) setPlanName(t.label) }}
+                          onClick={() => selectTier(t)}
                           className={cn(
                             'relative flex flex-col gap-3 overflow-hidden rounded-2xl border p-4 text-left transition-all hover:scale-[1.02] active:scale-[0.99]',
                             isSelected
@@ -370,26 +324,13 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
                       <Label htmlFor="c-trial" className="flex items-center gap-1 text-xs">
                         <Clock className="h-3 w-3 text-cyan-500" /> Días de trial
                       </Label>
-                      <Input id="c-trial" type="number" min="0" max="365" value={trialDays} onChange={(e) => setTrialDays(e.target.value)} className="h-9" />
+                      <Input id="c-trial" type="number" min="0" max="365" disabled={isFree} value={isFree ? '0' : trialDays} onChange={(e) => setTrialDays(e.target.value)} className="h-9" />
+                      {isFree && <p className="text-[10px] text-slate-400">Un plan gratis no tiene período de prueba.</p>}
                     </div>
                   </div>
                   <div className="space-y-4">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Límites del sistema</p>
-                    {[
-                      { key: 'users',    label: 'Usuarios'     },
-                      { key: 'products', label: 'Productos'    },
-                      { key: 'branches', label: 'Sucursales'   },
-                      { key: 'repairs',  label: 'Reparaciones' },
-                    ].map(({ key, label }) => (
-                      <div key={key} className="space-y-1.5">
-                        <Label htmlFor={`lim-${key}`} className="text-xs">{label}</Label>
-                        <Input id={`lim-${key}`} value={limits[key as keyof typeof limits]}
-                          onChange={(e) => setLimits((p) => ({ ...p, [key]: e.target.value }))} className="h-9" />
-                      </div>
-                    ))}
-                    <p className="text-[10px] text-slate-400">
-                      Usá <code className="rounded bg-muted px-1">Ilimitado</code> para sin tope.
-                    </p>
+                    <PlanLimitFields limits={limits} onChange={setLimits} className="sm:grid-cols-1" />
                   </div>
                 </div>
               )}
@@ -397,27 +338,13 @@ export function PlanCreateSheet({ open, onOpenChange, onSuccess, existingTiers }
               {/* STEP 3: Features */}
               {step === 3 && (
                 <div className="p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Módulos habilitados</p>
-                      <p className="text-xs text-slate-500">
-                        <span className="font-bold text-emerald-600">{enabledCount}</span> de {FEATURE_LIST.length} seleccionados
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => setEnabled(new Set(FEATURE_LIST.map(f => f.label)))}
-                        className="text-[10px] font-bold text-violet-600 hover:underline">Todos</button>
-                      <span className="text-slate-300">·</span>
-                      <button type="button" onClick={() => setEnabled(new Set())}
-                        className="text-[10px] font-bold text-slate-400 hover:underline">Ninguno</button>
-                    </div>
+                  <div className="mb-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Funciones del plan</p>
+                    <p className="text-xs text-slate-500">
+                      <span className="font-bold text-emerald-600">{enabledCount}</span> de {PLAN_FEATURES.length} · arranca con lo que el tier trae por defecto
+                    </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {FEATURE_LIST.map(({ label, icon }) => (
-                      <FeatureToggle key={label} label={label} icon={icon}
-                        enabled={enabledFeatures.has(label)} onToggle={() => toggle(label)} />
-                    ))}
-                  </div>
+                  <PlanFeatureToggles features={features} onToggle={(key) => setFeatures((prev) => toggleWithDependencies(prev, key))} />
                 </div>
               )}
             </>

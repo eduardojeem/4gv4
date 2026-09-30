@@ -1,11 +1,11 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import { repairPhotoLimit, canExportReports, type PlanCode, type ModuleTrial } from '@/lib/saas/plan-features'
+import { canExportReports, type PlanCode, type ModuleTrial } from '@/lib/saas/plan-features'
 import type { BusinessVertical, ModulePlanAvailability, OperatingModel, OrganizationModule } from '@/lib/organization/business-profile'
 
 export type { PlanCode, ModuleTrial }
-export { repairPhotoLimit, canExportReports }
+export { canExportReports }
 
 export type SubscriptionStatusData = {
   status: string | null
@@ -17,6 +17,10 @@ export type SubscriptionStatusData = {
   planCode: PlanCode
   /** Nombre comercial del plan (para mostrar en avisos). */
   planName: string
+  /** Fotos por reparación que permite el plan (0 = no incluye fotos). */
+  repairPhotoLimit: number
+  /** Plan activo más barato que incluye fotos de reparación. */
+  repairPhotoUpgradePlan: string | null
   /** Módulos habilitados por el plan (fuente: tabla `plans.modules`). */
   modules: string[]
   /** Nombres de los planes activos que incluyen cada módulo. */
@@ -49,6 +53,8 @@ const DEFAULTS: SubscriptionStatusData = {
   periodDaysLeft: null,
   planCode: 'FREE',
   planName: 'Free',
+  repairPhotoLimit: 0,
+  repairPhotoUpgradePlan: null,
   modules: [],
   entitledModules: [],
   enabledModules: null,

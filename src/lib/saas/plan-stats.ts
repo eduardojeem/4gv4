@@ -1,5 +1,11 @@
+import {
+  buildPlanPriceMap,
+  calculateRecurringRevenue,
+  normalizeRevenuePlan,
+} from '@/lib/superadmin/metrics-calculations'
+
 export type PlanPriceRow = { tier: string; price: number | string | null }
-export type SubscriptionRow = { plan: string | null; status: string | null }
+export type SubscriptionRow = { plan: string | null; status: string | null; payment_status?: string | null }
 
 export type PlanStats = {
   orgsByPlan: Record<string, number>
@@ -24,24 +30,27 @@ export function computePlanStats(
   plans: PlanPriceRow[],
   subscriptions: SubscriptionRow[],
 ): PlanStats {
-  const priceByTier = new Map<string, number>()
-  for (const plan of plans) {
-    priceByTier.set(String(plan.tier).toUpperCase(), Number(plan.price) || 0)
-  }
+  // El MRR sale de la misma función que usan Resumen, Suscripciones y Gastos.
+  const { mrr } = calculateRecurringRevenue(
+    subscriptions.map((subscription) => ({
+      plan: subscription.plan,
+      status: subscription.status,
+      paymentStatus: subscription.payment_status,
+    })),
+    buildPlanPriceMap(plans),
+  )
 
   const orgsByPlan = new Map<string, number>()
   const activeByPlan = new Map<string, number>()
-  let mrr = 0
   let activeSubs = 0
   let trialingSubs = 0
 
   for (const subscription of subscriptions) {
-    const tier = (subscription.plan ?? 'FREE').toUpperCase()
+    const tier = normalizeRevenuePlan(subscription.plan)
     orgsByPlan.set(tier, (orgsByPlan.get(tier) ?? 0) + 1)
 
     if (subscription.status === 'active') {
       activeByPlan.set(tier, (activeByPlan.get(tier) ?? 0) + 1)
-      mrr += priceByTier.get(tier) ?? 0
       activeSubs++
     }
 

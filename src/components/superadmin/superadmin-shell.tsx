@@ -8,7 +8,6 @@ import {
   Activity,
   Banknote,
   BarChart3,
-  Bug,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -36,13 +35,13 @@ import {
   FolderTree,
   Tag,
   TicketPercent,
-  Trash2,
   Users,
   Wrench,
   X,
   Megaphone,
   HeartPulse,
   Scale,
+  Wallet,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -151,14 +150,15 @@ const navItems: NavItem[] = [
     title: 'Facturacion',
     href: '/superadmin/billing',
     icon: Banknote,
-    description: 'Ingresos, planes y suscripciones',
+    description: 'Ingresos, costos, planes y suscripciones',
     section: 'billing',
     children: [
-      { title: 'Resumen financiero', href: '/superadmin/billing', icon: Banknote },
-      { title: 'Planes', href: '/superadmin/plans', icon: Sparkles },
+      { title: 'Resumen', href: '/superadmin/billing', icon: Banknote },
       { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard },
+      { title: 'Pagos', href: '/superadmin/invoices', icon: FileText },
+      { title: 'Planes', href: '/superadmin/plans', icon: Sparkles },
       { title: 'Promociones', href: '/superadmin/promo-codes', icon: TicketPercent },
-      { title: 'Historial de pagos', href: '/superadmin/invoices', icon: FileText },
+      { title: 'Gastos', href: '/superadmin/finanzas', icon: Wallet },
     ],
   },
   {
@@ -209,12 +209,9 @@ const navItems: NavItem[] = [
     description: 'Auditoría, comunicaciones y mantenimiento',
     section: 'system',
     children: [
-      { title: 'Emails', href: '/superadmin/emails', icon: Mail },
-      { title: 'Notificaciones', href: '/superadmin/notifications', icon: Bell },
+      { title: 'Comunicaciones', href: '/superadmin/communications', icon: Mail },
       { title: 'Configuración', href: '/superadmin/settings', icon: Settings },
       { title: 'Mantenimiento', href: '/superadmin/maintenance', icon: Wrench },
-      { title: 'Limpieza de archivos', href: '/superadmin/storage-cleanup', icon: Trash2 },
-      { title: 'Diagnóstico', href: '/superadmin/diagnostic', icon: Bug },
     ],
   },
 ]

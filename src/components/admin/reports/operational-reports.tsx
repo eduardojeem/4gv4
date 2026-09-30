@@ -180,10 +180,10 @@ export default function OperationalReports() {
   const { selectedBranchId, selectedBranch } = useBranch()
   const { organization } = useActiveOrganization()
   const { user } = useAuth()
-  const { planCode, organizationName, effectiveModules } = useSubscriptionStatus()
+  const { modules, organizationName, effectiveModules } = useSubscriptionStatus()
   const hasRepairs = effectiveModules.includes('repairs')
   const hasCredits = effectiveModules.includes('credits')
-  const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
+  const canExport = canExportReports(modules)
   const canViewCost = useCanViewCost()
   const reportBrand = organizationName || 'Mi Negocio'
 
@@ -1504,7 +1504,7 @@ export default function OperationalReports() {
               creditReport={creditReport}
             />
           ) : (
-            <Button variant="outline" disabled title="Exportar disponible desde el plan Basic" className="h-9 gap-1.5 font-medium">
+            <Button variant="outline" disabled title="Exportar requiere un plan pago" className="h-9 gap-1.5 font-medium">
               <Download className="h-4 w-4" />
               <span>Exportar</span>
             </Button>

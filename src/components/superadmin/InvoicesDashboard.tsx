@@ -14,7 +14,6 @@ import {
   CreditCard,
   Download,
   ExternalLink,
-  FileText,
   Minus,
   RefreshCw,
   Search,
@@ -32,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
 import { sumMoneyByCurrency, type CurrencyTotal } from '@/lib/superadmin/money-totals'
 import { paymentMethodLabel } from '@/lib/i18n/labels'
+import { PageHeader } from '@/components/superadmin/ui/page-header'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -340,7 +340,7 @@ export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[];
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `facturas-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `pagos-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
@@ -364,89 +364,41 @@ export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[];
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
 
-      {/* Header */}
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
-            <FileText className="h-3.5 w-3.5" />
-            Facturación SaaS
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Historial de pagos</h1>
-          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Comprobantes y pagos recibidos vía Pagopar, Mercado Pago, Bancard y otros proveedores.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => router.refresh()}>
-            <RefreshCw className="h-3.5 w-3.5" />
-            Actualizar
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download className="h-3.5 w-3.5" />
-            Exportar CSV
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        icon={Wallet}
+        title="Pagos"
+        description="Cada cobro de suscripción recibido por Pagopar, Mercado Pago, Bancard u otros proveedores, con su estado."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => router.refresh()}>
+              <RefreshCw className="h-3.5 w-3.5" /> Actualizar
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+              <Download className="h-3.5 w-3.5" /> Exportar CSV
+            </Button>
+          </>
+        }
+      />
 
-      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total recaudado" value={formatCurrencyTotals(stats.totalRevenue)} sub={`${stats.paid} pagos confirmados`} icon={TrendingUp} tone="success" />
-        <StatCard label="Este mes" value={formatCurrencyTotals(stats.thisMonthRevenue)} sub="últimos 30 días" icon={Calendar} tone="info" />
+        <StatCard label="Total cobrado" value={formatCurrencyTotals(stats.totalRevenue)} sub={`${stats.paid} pagos confirmados`} icon={TrendingUp} tone="success" />
+        <StatCard label="Últimos 30 días" value={formatCurrencyTotals(stats.thisMonthRevenue)} sub="pagos confirmados" icon={Calendar} tone="info" />
         <StatCard label="Pendientes" value={formatCurrencyTotals(stats.pendingAmount)} sub={`${stats.pending} pagos en espera`} icon={Clock} tone={stats.pending > 0 ? 'warning' : 'default'} />
         <StatCard label="Tasa de éxito" value={`${stats.successRate}%`} sub={`${stats.failed} pagos fallidos`} icon={CheckCircle2} tone={stats.successRate >= 90 ? 'success' : stats.successRate >= 70 ? 'warning' : 'danger'} />
       </div>
 
-      {/* Provider distribution */}
-      {rows.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            <ProviderDistribution rows={rows} />
-          </div>
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">Resumen rápido</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="flex items-start gap-3 rounded-lg border bg-emerald-50/50 p-3 dark:bg-emerald-950/10">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Pagos exitosos</p>
-                  <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-                    <strong className="text-slate-900 dark:text-slate-100">{stats.paid}</strong> de {stats.total} pagos completados correctamente
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-lg border bg-amber-50/50 p-3 dark:bg-amber-950/10">
-                <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Cobros pendientes</p>
-                  <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-                    <strong className="text-slate-900 dark:text-slate-100">{formatCurrencyTotals(stats.pendingAmount)}</strong> en {stats.pending} pagos esperando confirmación
-                  </p>
-                </div>
-              </div>
-              {stats.failed > 0 && (
-                <div className="flex items-start gap-3 rounded-lg border bg-red-50/50 p-3 dark:bg-red-950/10 sm:col-span-2">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Atención requerida</p>
-                    <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-                      <strong className="text-slate-900 dark:text-slate-100">{stats.failed}</strong> pagos fallidos — revisá los errores y considerá contactar al cliente.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {/* Con un solo proveedor el reparto no dice nada. */}
+      {providerOptions.length > 1 && (
+        <div className="lg:max-w-md">
+          <ProviderDistribution rows={rows} />
         </div>
       )}
 
-      {/* Invoice table */}
       <Card className="overflow-hidden">
         <CardHeader className="border-b pb-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <CardTitle>Historial de pagos</CardTitle>
+              <CardTitle>Pagos registrados</CardTitle>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {filtered.length} de {rows.length} pagos
               </p>

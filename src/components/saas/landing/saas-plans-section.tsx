@@ -21,12 +21,14 @@ import { Badge } from '@/components/ui/badge'
 import { planNotes } from './saas-landing-data'
 import { cn } from '@/lib/utils'
 import {
-  buildPlanFeatureRows,
+  buildPlanFeatureGroups,
   buildPlanLimitRows,
-  formatPlanLimit,
+  publicLimitText,
   selectActivePlans,
+  type PlanLimitValue,
   type SubscriptionPlan,
 } from './saas-plan-presentation'
+import { parsePlanLimit } from '@/lib/saas/plan-limits'
 
 export type { SubscriptionPlan } from './saas-plan-presentation'
 
@@ -37,21 +39,21 @@ const BUSINESS_PROFILES = [
     label: 'Tienda o Taller Técnico',
     icon: Wrench,
     recommendedTier: 'basic',
-    reason: 'Perfecto para gestionar turnos de caja, inventario y órdenes de reparación.',
+    reason: 'Caja, inventario y reparaciones, con carrito online, créditos, finanzas y visitas web.',
   },
   {
     id: 'multibranch_online',
     label: 'Multi-sucursal o Ecommerce',
     icon: Store,
     recommendedTier: 'pro',
-    reason: 'Recomendado para conectar varias sucursales, tienda online y analytics financieros.',
+    reason: 'Varias sucursales, analítica de ventas, visitas web, auditoría y soporte prioritario.',
   },
   {
     id: 'enterprise_chain',
     label: 'Cadena Comercial / Distribuidora',
     icon: Building2,
     recommendedTier: 'enterprise',
-    reason: 'Todo ilimitado, despacho de delivery, SLA 99.9% y soporte técnico dedicado.',
+    reason: 'Acuerdo a medida: límites, sucursales y soporte según tu operación.',
   },
 ]
 
@@ -82,7 +84,19 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
 
   const activePlans = selectActivePlans(initialPlans)
   const limitRows = buildPlanLimitRows(activePlans)
-  const featureRows = buildPlanFeatureRows(activePlans)
+  const featureGroups = buildPlanFeatureGroups(activePlans)
+
+  /** "1 sucursal", "5 sucursales", "Sucursales ilimitadas". */
+  const branchesLabel = (raw: PlanLimitValue) => {
+    const value = parsePlanLimit(raw)
+    if (value === null) return 'Sucursales ilimitadas'
+    if (value === undefined || value === 0) return null
+    return value === 1 ? '1 sucursal' : `${value} sucursales`
+  }
+
+  /** Nombre del plan recomendado según el catálogo, no el código interno. */
+  const planNameForTier = (tier: string) =>
+    activePlans.find((plan) => getTierKey(plan.tier || plan.name) === tier)?.name ?? tier
 
   // Solo el plan a medida se cotiza. Un precio 0 es el plan gratuito y se
   // anuncia como tal: antes caia en el mismo caso que enterprise y el plan de
@@ -227,7 +241,7 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                 <span>{availableProfiles.find((p) => p.id === selectedProfile)?.reason}</span>
               </div>
               <Badge className="bg-cyan-600 text-white shrink-0 font-bold">
-                Plan {availableProfiles.find((p) => p.id === selectedProfile)?.recommendedTier?.toUpperCase()}
+                Plan {planNameForTier(availableProfiles.find((p) => p.id === selectedProfile)?.recommendedTier ?? '')}
               </Badge>
             </motion.div>
           )}
@@ -278,9 +292,9 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                     <h3 className={cn("text-lg font-bold", isPopular ? "text-violet-600 dark:text-violet-400" : "text-slate-900 dark:text-white")}>
                       {plan.name}
                     </h3>
-                    {plan.limits?.branches && (
+                    {plan.limits && branchesLabel(plan.limits.branches) && (
                       <Badge variant="outline" className="text-[10px] font-semibold border-slate-200 dark:border-slate-700">
-                        {formatPlanLimit(plan.limits.branches)}
+                        {branchesLabel(plan.limits.branches)}
                       </Badge>
                     )}
                   </div>
@@ -319,12 +333,12 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                   {plan.limits && (
                     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-400">
                       <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
-                        <span className="block font-bold text-slate-900 dark:text-slate-200">{formatPlanLimit(plan.limits.users)}</span>
+                        <span className="block font-bold text-slate-900 dark:text-slate-200">{publicLimitText('users', plan.limits.users)}</span>
                         <span className="text-[10px] text-slate-600 dark:text-slate-300">Usuarios</span>
                       </div>
                       <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
-                        <span className="block font-bold text-slate-900 dark:text-slate-200">{formatPlanLimit(plan.limits.products)}</span>
-                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Catálogo</span>
+                        <span className="block font-bold text-slate-900 dark:text-slate-200">{publicLimitText('products', plan.limits.products)}</span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Productos</span>
                       </div>
                     </div>
                   )}
@@ -456,32 +470,36 @@ export function SaaSPlansSection({ initialPlans }: { initialPlans?: Subscription
                           2. Módulos y Funciones Incluidas
                         </th>
                       </tr>
-                      {featureRows.map((feat) => (
-                        <tr key={feat.key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                          <th scope="row" className="p-3.5 sm:p-4 text-xs font-medium text-slate-700 dark:text-slate-300">
-                            {feat.label}
+                      {featureGroups.map((group) => [
+                        <tr key={`group-${group.group}`} className="bg-slate-50/80 dark:bg-slate-900/60">
+                          <th colSpan={activePlans.length + 1} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            {group.label}
                           </th>
-                          {activePlans.map((plan) => {
-                            const value = feat.values[plan.id] ?? false
-
-                            return (
+                        </tr>,
+                        ...group.rows.map((feat) => (
+                          <tr key={feat.key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                            <th scope="row" className="p-3.5 sm:p-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {feat.label}
+                              <span className="mt-0.5 block text-[10px] font-normal text-slate-500 dark:text-slate-400">{feat.hint}</span>
+                            </th>
+                            {activePlans.map((plan) => (
                               <td key={plan.id} className="p-3.5 sm:p-4 text-center">
-                                {value === true ? (
+                                {feat.values[plan.id] ? (
                                   <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 mx-auto">
-                                    <Check className="h-3.5 w-3.5" />
+                                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                                    <span className="sr-only">{feat.label} incluido en {plan.name}</span>
                                   </div>
-                                ) : value === false ? (
-                                  <Minus className="mx-auto h-4 w-4 text-slate-300 dark:text-slate-600" />
                                 ) : (
-                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                    {String(value)}
-                                  </span>
+                                  <>
+                                    <Minus className="mx-auto h-4 w-4 text-slate-300 dark:text-slate-600" aria-hidden="true" />
+                                    <span className="sr-only">{feat.label} no incluido en {plan.name}</span>
+                                  </>
                                 )}
                               </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
+                            ))}
+                          </tr>
+                        )),
+                      ])}
                     </tbody>
                   </table>
                 </div>

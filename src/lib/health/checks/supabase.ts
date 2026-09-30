@@ -164,20 +164,25 @@ export async function runSupabaseChecks(admin: Admin, catalog: CatalogResult): P
         },
         async () => {
           const critical = tenantTables.filter((t) => t.severity === 'critical')
-          const warnings = tenantTables.filter((t) => t.status === 'warning')
+          const realWarnings = tenantTables.filter((t) => t.status === 'warning' && t.severity !== 'low')
+          const guardedOnly = tenantTables.filter((t) => t.status === 'warning' && t.severity === 'low')
+          const hasIssues = critical.length > 0 || realWarnings.length > 0
           return {
-            status: critical.length > 0 ? 'error' : warnings.length > 0 ? 'warning' : 'healthy',
-            severity: critical.length > 0 ? 'critical' : warnings.some((t) => t.severity === 'high') ? 'high' : 'medium',
+            status: critical.length > 0 ? 'error' : realWarnings.length > 0 ? 'warning' : 'healthy',
+            severity: critical.length > 0 ? 'critical' : realWarnings.some((t) => t.severity === 'high') ? 'high' : realWarnings.length > 0 ? 'medium' : 'info',
             summary: critical.length > 0
               ? `${critical.length} tabla(s) con posible acceso entre organizaciones`
-              : warnings.length > 0
-                ? `${warnings.length} tabla(s) para revisar`
-                : 'Todas las políticas filtran por organización o usuario',
-            findings: [...critical, ...warnings].slice(0, 40).map((t) => `${t.table}: ${t.reasons[0]}`),
-            recommendation:
-              'Reemplazar ramas como is_admin()/is_manager()/auth.role() = \'authenticated\' por has_org_permission(organization_id, ...) o EXISTS sobre la tabla padre. ' +
-              'Ver supabase/migrations/20260927140000_close_cross_tenant_read_leak.sql como precedente. Verificar cada caso en staging antes de cambiar políticas.',
-            metadata: { critical: critical.length, warnings: warnings.length },
+              : realWarnings.length > 0
+                ? `${realWarnings.length} tabla(s) para revisar`
+                : guardedOnly.length > 0
+                  ? `Todas las políticas están acotadas (${guardedOnly.length} tabla(s) blindadas con política RESTRICTIVE)`
+                  : 'Todas las políticas filtran por organización o usuario',
+            findings: [...critical, ...realWarnings, ...guardedOnly].slice(0, 40).map((t) => `${t.table}: ${t.reasons[0]}`),
+            recommendation: hasIssues
+              ? 'Reemplazar ramas como is_admin()/is_manager()/auth.role() = \'authenticated\' por has_org_permission(organization_id, ...) o EXISTS sobre la tabla padre. ' +
+                'Ver supabase/migrations/20260927140000_close_cross_tenant_read_leak.sql como precedente. Verificar cada caso en staging antes de cambiar políticas.'
+              : undefined,
+            metadata: { critical: critical.length, warnings: realWarnings.length, guarded: guardedOnly.length },
           }
         },
       ),

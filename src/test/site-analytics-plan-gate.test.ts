@@ -34,7 +34,7 @@ vi.mock('@/lib/saas/context', () => ({ getCurrentOrganizationContext: async () =
 const request = () => new NextRequest('http://localhost/api/admin/analytics/website?days=30')
 const plan = (modules: string[], entitledModules: string[] = modules) => ({ modules, entitledModules, moduleTrials: [] })
 
-describe('visitas web desde el plan Pro', () => {
+describe('visitas web con su propio módulo', () => {
   beforeEach(() => {
     role = 'admin'
     planInfo.mockReset()
@@ -42,7 +42,7 @@ describe('visitas web desde el plan Pro', () => {
     fetchSummary.mockResolvedValue({ totals: { page_views: 10 } })
   })
 
-  it('un plan sin analytics recibe 402 y no se consultan las visitas', async () => {
+  it('un plan sin visitas web recibe 402 y no se consultan las visitas', async () => {
     planInfo.mockResolvedValue(plan(['inventory', 'pos', 'crm', 'ecommerce']))
     const { GET } = await import('@/app/api/admin/analytics/website/route')
     const response = await GET(request())
@@ -52,7 +52,7 @@ describe('visitas web desde el plan Pro', () => {
   })
 
   it('Pro con el modulo apagado por la empresa recibe 403', async () => {
-    planInfo.mockResolvedValue(plan(['inventory', 'pos'], ['inventory', 'pos', 'analytics']))
+    planInfo.mockResolvedValue(plan(['inventory', 'pos'], ['inventory', 'pos', 'web_analytics']))
     const { GET } = await import('@/app/api/admin/analytics/website/route')
     const response = await GET(request())
     expect(response.status).toBe(403)
@@ -60,24 +60,33 @@ describe('visitas web desde el plan Pro', () => {
   })
 
   it('Pro ve sus visitas', async () => {
-    planInfo.mockResolvedValue(plan(['inventory', 'pos', 'analytics']))
+    planInfo.mockResolvedValue(plan(['inventory', 'pos', 'web_analytics']))
     const { GET } = await import('@/app/api/admin/analytics/website/route')
     const response = await GET(request())
     expect(response.status).toBe(200)
     expect(fetchSummary).toHaveBeenCalledOnce()
   })
 
+  it('Analytics solo ya no abre las visitas: son módulos separados', async () => {
+    planInfo.mockResolvedValue(plan(['inventory', 'pos', 'analytics']))
+    const { GET } = await import('@/app/api/admin/analytics/website/route')
+    const response = await GET(request())
+    expect(response.status).toBe(402)
+    expect(fetchSummary).not.toHaveBeenCalled()
+  })
+
   it('la pagina, el menu y la guia piden el mismo modulo', () => {
     const page = readFileSync(resolve(process.cwd(), 'src/app/admin/visitas/page.tsx'), 'utf8')
-    expect(page).toContain('module="analytics"')
-    expect(page).toContain('requiredPlan="Pro"')
+    expect(page).toContain('module="web_analytics"')
+    // El plan al que subir sale del catálogo, no de un texto fijo en la página.
+    expect(page).not.toContain('requiredPlan=')
 
     const nav = readFileSync(resolve(process.cwd(), 'src/config/admin-navigation.ts'), 'utf8')
     const visitsItem = nav.slice(nav.indexOf("key: 'website-visits'"), nav.indexOf("key: 'website-visits'") + 400)
-    expect(visitsItem).toContain("module: 'analytics'")
+    expect(visitsItem).toContain("module: 'web_analytics'")
 
     const guide = readFileSync(resolve(process.cwd(), 'src/lib/guide/content.ts'), 'utf8')
     const visitsGuide = guide.slice(guide.indexOf("id: 'website-visits'"), guide.indexOf("id: 'website-visits'") + 600)
-    expect(visitsGuide).toContain("module: 'analytics'")
+    expect(visitsGuide).toContain("module: 'web_analytics'")
   })
 })

@@ -207,7 +207,7 @@ export default async function SuperAdminPage() {
             </p>
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300">
-            <Link href="/superadmin/diagnostic">Diagnosticar</Link>
+            <Link href="/superadmin/system-health">Diagnosticar</Link>
           </Button>
         </div>
       )}
@@ -547,7 +547,7 @@ export default async function SuperAdminPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm"><Link href="/superadmin/monitoring"><Activity className="h-3.5 w-3.5" />Monitoreo técnico</Link></Button>
-          <Button asChild variant="outline" size="sm"><Link href="/superadmin/diagnostic"><Zap className="h-3.5 w-3.5" />Diagnóstico</Link></Button>
+          <Button asChild variant="outline" size="sm"><Link href="/superadmin/system-health"><Zap className="h-3.5 w-3.5" />Salud del sistema</Link></Button>
         </div>
       </section>
 

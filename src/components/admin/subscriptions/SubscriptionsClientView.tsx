@@ -57,6 +57,9 @@ import {
   TONE_TEXT,
 } from '@/lib/saas/subscription-ui'
 import { cn } from '@/lib/utils'
+import { PLAN_FEATURES } from '@/lib/saas/plan-feature-catalog'
+import { PLAN_LIMIT_FIELDS, parsePlanLimit } from '@/lib/saas/plan-limits'
+import { includedPlanFeatures } from '@/lib/saas/plan-modules'
 
 export type SubscriptionsClientViewProps = {
   currentPlan: PlanRecord
@@ -360,27 +363,23 @@ export function SubscriptionsClientView({
 
   const comparisonRows: PlanRow[] = useMemo(() => {
     return plans.map((plan) => {
-      const uLimit = getPlanLimit(plan, 'users')
-      const bLimit = getPlanLimit(plan, 'branches')
-      const cLimit = getPlanLimit(plan, 'cashRegisters')
-      const pLimit = getPlanLimit(plan, 'products')
-
       return {
         code: plan.code,
         name: plan.name,
         priceLabel: money(plan.price_monthly, plan.currency),
         priceMonthly: plan.price_monthly,
-        users: uLimit === null ? 'Ilimitado' : String(uLimit),
-        branches: bLimit === null ? 'Ilimitado' : String(bLimit),
-        cashRegisters: cLimit === null ? 'Ilimitado' : String(cLimit),
-        products: pLimit === null ? 'Ilimitado' : String(pLimit),
-        marketplace: featureValue(plan, 'marketplace'),
-        analytics: featureValue(plan, 'analytics'),
-        credits: featureValue(plan, 'credits'),
+        limits: Object.fromEntries(PLAN_LIMIT_FIELDS.map((field) => [field.key, parsePlanLimit(plan.limits?.[field.key])])),
+        included: includedPlanFeatures(plan.modules, plan.features),
         isPopular: plan.is_popular,
       }
     })
   }, [plans])
+
+  const currentIncluded = useMemo(
+    () => includedPlanFeatures(currentPlan.modules, currentPlan.features),
+    [currentPlan],
+  )
+  const missingModules = PLAN_FEATURES.filter((feature) => feature.module && !currentIncluded[feature.key])
 
   // Lo que ofrece el plan en soporte. Estaba escrito «24/7» a mano, asi que el
   // plan gratuito prometia lo mismo que el mas caro.
@@ -663,46 +662,31 @@ export function SubscriptionsClientView({
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-2 space-y-2.5">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center justify-between rounded-xl border border-border bg-background p-2 shadow-2xs">
-                      <span className="text-[11px] font-medium text-muted-foreground">Tienda Web</span>
-                      {featureValue(currentPlan, 'marketplace') === 'Incluido' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground font-semibold">No</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-border bg-background p-2 shadow-2xs">
-                      <span className="text-[11px] font-medium text-muted-foreground">Analytics</span>
-                      {featureValue(currentPlan, 'analytics') === 'Incluido' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground font-semibold">No</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-border bg-background p-2 shadow-2xs">
-                      <span className="text-[11px] font-medium text-muted-foreground">Créditos</span>
-                      {featureValue(currentPlan, 'credits') === 'Incluido' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground font-semibold">No</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-border bg-background p-2 shadow-2xs">
-                      <span className="text-[11px] font-medium text-muted-foreground">Soporte</span>
-                      <span className="text-[10px] font-bold text-foreground">{supportLevel}</span>
-                    </div>
+                  {/* Las funciones del catálogo que trae tu plan, con el mismo
+                      nombre que en la comparativa. Antes eran tres filas fijas
+                      y los códigos internos («inventory_admin») sueltos. */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {PLAN_FEATURES.filter((feature) => feature.module && currentIncluded[feature.key]).map((feature) => (
+                      <Badge
+                        key={feature.key}
+                        variant="secondary"
+                        title={feature.hint}
+                        className="gap-1 rounded-lg px-2 py-0.5 text-[10px] font-medium"
+                      >
+                        <CheckCircle2 className="h-3 w-3 text-emerald-500" aria-hidden="true" />
+                        {feature.label}
+                      </Badge>
+                    ))}
                   </div>
-
-                  {currentPlan.modules && currentPlan.modules.length > 0 && (
-                    <div className="pt-1 flex flex-wrap gap-1">
-                      {currentPlan.modules.map((m: string) => (
-                        <Badge key={m} variant="secondary" className="text-[10px] font-medium rounded-lg px-2 py-0.5">
-                          {m}
-                        </Badge>
-                      ))}
-                    </div>
+                  {missingModules.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      No incluye: {missingModules.map((feature) => feature.label).join(', ')}.
+                    </p>
                   )}
+                  <div className="flex items-center justify-between rounded-xl border border-border bg-background p-2 shadow-2xs text-xs">
+                    <span className="text-[11px] font-medium text-muted-foreground">Soporte</span>
+                    <span className="text-[10px] font-bold text-foreground">{supportLevel}</span>
+                  </div>
                 </CardContent>
               </Card>
             </div>

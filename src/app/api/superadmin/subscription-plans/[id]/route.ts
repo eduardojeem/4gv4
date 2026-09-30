@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
+import { normalizePlanLimits, type NormalizedPlanLimits } from '@/lib/saas/plan-limits'
 
 type UpdatePlanBody = {
   name?: unknown
@@ -101,7 +102,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     patch.trial_days = Math.floor(td)
   }
 
-  for (const key of ['limits', 'highlights', 'features', 'color_config'] as const) {
+  for (const key of ['highlights', 'features', 'color_config'] as const) {
     if (key in body) {
       const value = optionalJson(body[key])
       if (value === undefined) return NextResponse.json({ error: `Invalid ${key}` }, { status: 400 })
@@ -110,6 +111,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const admin = createAdminSupabase()
+
+  // Los límites se validan como números: el texto de venta se genera de ahí y
+  // los mismos números se copian al plan técnico, que es el que se hace cumplir.
+  let technicalLimits: NormalizedPlanLimits['technical'] | null = null
+  if ('limits' in body) {
+    if (!body.limits || typeof body.limits !== 'object' || Array.isArray(body.limits)) {
+      return NextResponse.json({ error: 'Invalid limits' }, { status: 400 })
+    }
+    const normalized = normalizePlanLimits(body.limits as Record<string, unknown>)
+    if ('error' in normalized) return NextResponse.json({ error: normalized.error }, { status: 400 })
+
+    const { data: current } = await admin.from('subscription_plans').select('limits').eq('id', id).maybeSingle()
+    const currentLimits = current?.limits && typeof current.limits === 'object' ? current.limits : {}
+    patch.limits = { ...currentLimits, ...normalized.display }
+    technicalLimits = normalized.technical
+  }
 
   const { data: plan, error } = await admin
     .from('subscription_plans')
@@ -146,20 +163,29 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
+  const technicalCode = String(plan.tier).toUpperCase()
+  const technicalPatch: Record<string, unknown> = { modules: deriveTechnicalModules(plan.tier, plan.features) }
+  if (technicalLimits) {
+    // Se conservan las claves que el panel no maneja (categories, services...).
+    const { data: technicalPlan } = await admin.from('plans').select('limits').eq('code', technicalCode).maybeSingle()
+    const currentTechnical = technicalPlan?.limits && typeof technicalPlan.limits === 'object' ? technicalPlan.limits : {}
+    technicalPatch.limits = { ...currentTechnical, ...technicalLimits }
+  }
+
   // Ademas del error, se verifica que haya coincidido una fila: un `code` sin
   // plan tecnico dejaba el plan comercial vendible pero sin modulos habilitados,
   // y la actualizacion de cero filas no devuelve error.
   const { error: technicalPlanError, count: technicalPlanCount } = await admin
     .from('plans')
-    .update({ modules: deriveTechnicalModules(plan.tier, plan.features) }, { count: 'exact' })
-    .eq('code', String(plan.tier).toUpperCase())
+    .update(technicalPatch, { count: 'exact' })
+    .eq('code', technicalCode)
 
   if (technicalPlanError || !technicalPlanCount) {
     return NextResponse.json(
       {
         error: technicalPlanError
-          ? `El plan comercial se guardó, pero no se pudieron sincronizar sus módulos: ${technicalPlanError.message}`
-          : `El plan comercial se guardó, pero no existe el plan técnico con código ${String(plan.tier).toUpperCase()}: sus módulos no quedaron actualizados.`,
+          ? `El plan comercial se guardó, pero no se pudieron sincronizar sus módulos y límites: ${technicalPlanError.message}`
+          : `El plan comercial se guardó, pero no existe el plan técnico con código ${technicalCode}: sus módulos y límites no quedaron actualizados.`,
       },
       { status: 500 }
     )
