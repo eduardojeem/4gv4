@@ -12,6 +12,9 @@ export const shouldBypassImageOptimization = (source?: string | null): boolean =
   const value = source.trim()
   if (!value) return true
   if (value.startsWith('data:') || value.startsWith('blob:')) return true
+  // Next/Image rejects local URLs with a cache-busting query unless every
+  // exact search pattern is configured. These assets are already WebP files.
+  if (value.startsWith('/') && /[?#]/.test(value)) return true
   if (value === '/placeholder-product.svg' || /\.svg(?:$|[?#])/i.test(value)) return true
 
   try {

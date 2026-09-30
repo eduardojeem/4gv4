@@ -172,9 +172,13 @@ function coversCommand(policy: CatalogPolicy, command: CatalogPolicy['command'])
   return policy.command === 'ALL' || policy.command === command
 }
 
-function rolesOverlap(left: CatalogPolicy, right: CatalogPolicy): boolean {
-  return left.roles.includes('public') || right.roles.includes('public')
-    || left.roles.some((role) => right.roles.includes(role))
+function restrictiveCoversClientRoles(restrictive: CatalogPolicy, permissive: CatalogPolicy): boolean {
+  if (restrictive.roles.includes('public')) return true
+  if (permissive.roles.includes('public')) return false
+
+  return permissive.roles
+    .filter((role) => role === 'anon' || role === 'authenticated')
+    .every((role) => restrictive.roles.includes(role))
 }
 
 function isScopedForCommand(policy: CatalogPolicy, command: CatalogPolicy['command']): boolean {
@@ -220,7 +224,7 @@ function policyIssues(table: CatalogTable, tenant: boolean): Issue[] {
 
     const guarded = restrictivePolicies.some((restrictive) =>
       coversCommand(restrictive, policy.command)
-      && rolesOverlap(restrictive, policy)
+      && restrictiveCoversClientRoles(restrictive, policy)
       && isScopedForCommand(restrictive, policy.command),
     )
     const isRead = coversCommand(policy, 'SELECT')

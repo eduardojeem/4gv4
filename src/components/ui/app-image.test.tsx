@@ -19,9 +19,14 @@ describe('AppImage', () => {
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-height', '1')
   })
 
-  it('optimiza por defecto una URL real de Supabase Storage', () => {
-    render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg" alt="Producto" />)
+  it('optimiza una URL real de Supabase Storage cuando recibe dimensiones utilizables', () => {
+    render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg" alt="Producto" width={400} height={400} />)
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'false')
+  })
+
+  it('no optimiza a 1x1 cuando el consumidor no declara dimensiones', () => {
+    render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg" alt="Producto" />)
+    expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'true')
   })
 
   it('sigue evitando el optimizador para SVG y data URIs', () => {

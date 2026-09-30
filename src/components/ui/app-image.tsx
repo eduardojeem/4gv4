@@ -10,11 +10,13 @@ export type AppImageProps = Omit<ImageProps, 'height' | 'width'> & {
 }
 
 export const AppImage = forwardRef<HTMLImageElement, AppImageProps>(function AppImage(
-  { alt, height = 1, unoptimized, width = 1, src, ...props },
+  { alt, height, unoptimized, width, src, ...props },
   ref,
 ) {
+  const hasUsableSizing = props.fill === true || (width != null && height != null)
   const resolvedUnoptimized = unoptimized
-    ?? (typeof src === 'string' ? shouldBypassImageOptimization(src) : false)
+    ?? (!hasUsableSizing || (typeof src === 'string' ? shouldBypassImageOptimization(src) : false))
+  const dimensions = props.fill ? {} : { height: height ?? 1, width: width ?? 1 }
 
   return (
     <Image
@@ -22,8 +24,7 @@ export const AppImage = forwardRef<HTMLImageElement, AppImageProps>(function App
       src={src}
       alt={alt}
       ref={ref}
-      height={height}
-      width={width}
+      {...dimensions}
       unoptimized={resolvedUnoptimized}
     />
   )

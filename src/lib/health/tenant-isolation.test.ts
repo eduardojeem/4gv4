@@ -191,6 +191,17 @@ describe('analyzeTable', () => {
     expect(finding.severity).toBe('critical')
   })
 
+  it('no considera guard una RESTRICTIVE que cubre sólo parte de los roles clientes', () => {
+    const finding = analyzeTable(table({
+      policies: [
+        policy({ name: 'wide', roles: ['anon', 'authenticated'], using: AUTHENTICATED_ONLY }),
+        policy({ name: 'auth_guard', roles: ['authenticated'], permissive: false, using: ORG_SCOPED }),
+      ],
+    }))
+    expect(finding.status).toBe('error')
+    expect(finding.severity).toBe('critical')
+  })
+
   it('no considera guard una RESTRICTIVE de otro comando', () => {
     const finding = analyzeTable(table({
       policies: [

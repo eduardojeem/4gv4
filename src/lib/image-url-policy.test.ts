@@ -33,6 +33,7 @@ describe('image URL policy', () => {
   it('bypasses Vercel transformations for sources that are already optimized', () => {
     expect(shouldBypassImageOptimization(vtexImage)).toBe(true)
     expect(shouldBypassImageOptimization('/placeholder-product.svg')).toBe(true)
+    expect(shouldBypassImageOptimization('/images/products/item.webp?v=abc123')).toBe(true)
     expect(shouldBypassImageOptimization('data:image/webp;base64,AAAA')).toBe(true)
     expect(shouldBypassImageOptimization('https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg')).toBe(false)
   })
