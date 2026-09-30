@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
 import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
+import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
 
 /**
  * Taxonomía global de categorías.
@@ -67,6 +68,8 @@ export function GlobalCategoriesManager() {
   const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([])
   const [unmatched, setUnmatched] = useState<UnmatchedEntry[]>([])
   const [creating, setCreating] = useState(false)
+  const [toDeactivate, setToDeactivate] = useState<GlobalCategory | null>(null)
+  const [deactivating, setDeactivating] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -107,6 +110,18 @@ export function GlobalCategoriesManager() {
       return true
     })
   }, [categories, search, filter])
+
+  const childCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const category of categories) {
+      if (category.parent_id && category.is_active) counts.set(category.parent_id, (counts.get(category.parent_id) ?? 0) + 1)
+    }
+    return counts
+  }, [categories])
+
+  // Sin búsqueda ni filtro la lista es el árbol completo: la madre ya está
+  // arriba y el «en Celulares» sobra. Filtrada, sin él no se sabe de dónde cuelga.
+  const showsTree = !search.trim() && filter === 'all'
 
   const parentName = useMemo(() => {
     const byId = new Map(categories.map((category) => [category.id, category.name]))
@@ -205,27 +220,44 @@ export function GlobalCategoriesManager() {
   }
 
   const deactivate = async (category: GlobalCategory) => {
+    setDeactivating(true)
     try {
       const response = await fetch(`/api/superadmin/global-categories?id=${category.id}`, { method: 'DELETE' })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo dar de baja.')
       toast.success(`${category.name} queda fuera de la taxonomía`)
+      setToDeactivate(null)
       await load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo dar de baja.')
+    } finally {
+      setDeactivating(false)
     }
+  }
+
+  const deactivationConsequence = (category: GlobalCategory) => {
+    const linked = category.linked_count ?? 0
+    const children = childCount.get(category.id) ?? 0
+    const parts = [
+      linked > 0
+        ? `La usan ${linked} categoría${linked === 1 ? '' : 's'} de empresas: sus productos dejan de agruparse bajo «${category.name}» en el marketplace.`
+        : 'Ninguna empresa la usa todavía.',
+    ]
+    if (children > 0) parts.push(`Sus ${children} subcategoría${children === 1 ? '' : 's'} siguen activas.`)
+    return parts.join(' ')
   }
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Catálogos globales</p>
+          <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-foreground">
             <FolderTree className="h-6 w-6 text-sky-400" />
-            Categorías globales
+            Categorías
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            La taxonomía con la que el marketplace agrupa las categorías de todas las empresas.
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            La taxonomía con la que el marketplace agrupa las categorías de todas las empresas: «Celulares» de una tienda y «Telefonía» de otra caen en el mismo lugar.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -240,25 +272,33 @@ export function GlobalCategoriesManager() {
         </div>
       </header>
 
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'En la taxonomía', value: categories.length },
-          { label: 'Categorías de empresas', value: summary.tenantTotal },
-          { label: 'Vinculadas', value: summary.tenantLinked },
+      <CatalogStats
+        cells={[
+          { label: 'En la taxonomía', value: categories.filter((category) => category.is_active).length, hint: `${parents.filter((parent) => parent.is_active).length} principales` },
+          { label: 'Sin uso', value: categories.filter((category) => category.is_active && (category.linked_count ?? 0) === 0).length, hint: 'ninguna empresa las usa' },
+          { label: 'Vinculadas', value: `${summary.tenantLinked} de ${summary.tenantTotal}`, hint: 'categorías de empresas' },
           {
             label: 'Sin vincular',
             value: summary.tenantTotal - summary.tenantLinked,
+            hint: 'no se agrupan en el marketplace',
             warn: summary.tenantTotal - summary.tenantLinked > 0,
           },
-        ].map((cell) => (
-          <div key={cell.label} className="rounded-xl border bg-card px-4 py-3">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{cell.label}</dt>
-            <dd className={cn('mt-0.5 text-xl font-bold tabular-nums', cell.warn ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>
-              {cell.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
+        ]}
+      />
+
+      <LinkSuggestionsPanel
+        suggestions={suggestions}
+        itemLabel="categoría"
+        busy={linking}
+        onApply={(ids) => void linkExisting(ids)}
+      />
+
+      <UnmatchedCatalogPanel
+        entries={unmatched}
+        itemLabel="categoría"
+        busy={creating}
+        onCreate={(entries) => void createFromTenant(entries)}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-sm">
@@ -293,20 +333,6 @@ export function GlobalCategoriesManager() {
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} de {categories.length}</span>
       </div>
 
-      <LinkSuggestionsPanel
-        suggestions={suggestions}
-        itemLabel="categoría"
-        busy={linking}
-        onApply={(ids) => void linkExisting(ids)}
-      />
-
-      <UnmatchedCatalogPanel
-        entries={unmatched}
-        itemLabel="categoría"
-        busy={creating}
-        onCreate={(entries) => void createFromTenant(entries)}
-      />
-
       {error ? (
         <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>
       ) : loading ? (
@@ -322,12 +348,25 @@ export function GlobalCategoriesManager() {
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           {visible.map((category) => (
-            <li key={category.id} className="flex flex-wrap items-center gap-3 bg-card px-4 py-3">
+            <li
+              key={category.id}
+              className={cn(
+                'flex flex-wrap items-center gap-3 px-4 py-3',
+                showsTree && !category.parent_id ? 'bg-muted/40' : 'bg-card',
+                showsTree && (category.level ?? 0) >= 1 && 'pl-8',
+                showsTree && (category.level ?? 0) >= 2 && 'pl-14',
+              )}
+            >
               {category.parent_id && <CornerDownRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-              <div className={cn('min-w-0 flex-1', category.parent_id && 'pl-1')}>
+              <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
                   {category.name}
-                  {parentName(category.parent_id) && (
+                  {!category.parent_id && (childCount.get(category.id) ?? 0) > 0 && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {childCount.get(category.id)} subcategoría{childCount.get(category.id) === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  {!showsTree && parentName(category.parent_id) && (
                     <span className="text-xs font-normal text-muted-foreground">en {parentName(category.parent_id)}</span>
                   )}
                   {!category.is_active && (
@@ -370,7 +409,7 @@ export function GlobalCategoriesManager() {
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => void deactivate(category)}
+                    onClick={() => setToDeactivate(category)}
                     aria-label={`Dar de baja ${category.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -385,6 +424,13 @@ export function GlobalCategoriesManager() {
           ))}
         </ul>
       )}
+
+      <CatalogDeactivateDialog
+        item={toDeactivate ? { name: toDeactivate.name, consequence: deactivationConsequence(toDeactivate) } : null}
+        busy={deactivating}
+        onCancel={() => setToDeactivate(null)}
+        onConfirm={() => toDeactivate && void deactivate(toDeactivate)}
+      />
 
       <Dialog open={draft !== null} onOpenChange={(open) => !open && !saving && setDraft(null)}>
         <DialogContent className="max-w-lg">

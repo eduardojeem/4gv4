@@ -64,8 +64,20 @@ describe('catálogo de marcas del superadmin', () => {
 
     expect(await screen.findByText('Samsung')).toBeInTheDocument()
     const sinLogo = screen.getByText('Sin logo oficial').closest('div')!
-    expect(within(sinLogo).getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('Marcas de empresas').closest('div')!).toHaveTextContent('105')
+    // «Vieja» está de baja: no hace falta buscarle logo.
+    expect(within(sinLogo).getByText('1')).toBeInTheDocument()
+    expect(screen.getByText('Vinculadas').closest('div')!).toHaveTextContent('de 105')
+  })
+
+  /** La papelera daba de baja al instante, sin decir a cuántas empresas tocaba. */
+  it('pide confirmación antes de dar de baja y dice a quién afecta', async () => {
+    servidor(marcas)
+    render(<GlobalBrandsManager />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Dar de baja Samsung' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('¿Dar de baja «Samsung»?')
+    expect(dialog).toHaveTextContent(/ninguna empresa pierde datos/)
   })
 
   it('filtra las que todavía no tienen logo', async () => {
@@ -232,8 +244,13 @@ describe('categorías globales del superadmin', () => {
     servidor(categorias)
     render(<GlobalCategoriesManager />)
 
-    expect(await screen.findByText('en Electrónica')).toBeInTheDocument()
+    // En el árbol completo la madre ya está arriba: dice cuántas hijas tiene.
+    expect(await screen.findByText('1 subcategoría')).toBeInTheDocument()
     expect(screen.getByTitle('Ninguna empresa usa esta categoría todavía')).toBeInTheDocument()
+
+    // Filtrada, cada una dice de dónde cuelga.
+    fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o alias'), { target: { value: 'Celu' } })
+    expect(await screen.findByText('en Electrónica')).toBeInTheDocument()
   })
 
   it('filtra por categorías principales', async () => {

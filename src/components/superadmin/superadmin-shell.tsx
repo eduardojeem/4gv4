@@ -179,14 +179,16 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    title: 'Marcas y categorias',
-    href: '/superadmin/brands',
-    icon: Tag,
-    description: 'Marcas oficiales y taxonomia que comparten todas las empresas',
+    // Listas que comparten todas las tiendas. Van juntas porque se trabajan
+    // igual: se definen acá y las tiendas eligen de ellas.
+    title: 'Catálogos globales',
+    href: '/superadmin/categories',
+    icon: FolderTree,
+    description: 'Categorías y marcas que comparten todas las tiendas',
     section: 'content',
     children: [
+      { title: 'Categorías', href: '/superadmin/categories', icon: FolderTree },
       { title: 'Marcas', href: '/superadmin/brands', icon: Tag },
-      { title: 'Categorias', href: '/superadmin/categories', icon: FolderTree },
     ],
   },
   {

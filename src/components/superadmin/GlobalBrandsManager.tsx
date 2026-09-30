@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
 import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
+import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
 
 /**
  * Catálogo global de marcas.
@@ -67,6 +68,8 @@ export function GlobalBrandsManager() {
   const [unmatched, setUnmatched] = useState<UnmatchedEntry[]>([])
   const [creating, setCreating] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [toDeactivate, setToDeactivate] = useState<GlobalBrand | null>(null)
+  const [deactivating, setDeactivating] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -108,8 +111,8 @@ export function GlobalBrandsManager() {
   }, [brands, search, filter])
 
   const stats = useMemo(() => ({
-    total: brands.length,
-    sinLogo: brands.filter((b) => !b.logo_url).length,
+    activas: brands.filter((b) => b.is_active).length,
+    sinLogo: brands.filter((b) => b.is_active && !b.logo_url).length,
     marcasEmpresas: summary.tenantTotal,
     vinculadas: summary.tenantLinked,
   }), [brands, summary])
@@ -233,27 +236,39 @@ export function GlobalBrandsManager() {
   }
 
   const deactivate = async (brand: GlobalBrand) => {
+    setDeactivating(true)
     try {
       const response = await fetch(`/api/superadmin/global-brands?id=${brand.id}`, { method: 'DELETE' })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo dar de baja.')
       toast.success(`${brand.name} queda fuera del catálogo`)
+      setToDeactivate(null)
       await load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo dar de baja.')
+    } finally {
+      setDeactivating(false)
     }
+  }
+
+  const deactivationConsequence = (brand: GlobalBrand) => {
+    const linked = brand.linked_count ?? 0
+    return linked > 0
+      ? `La usan ${linked} empresa${linked === 1 ? '' : 's'}: deja de aparecer para elegir y su logo oficial deja de mostrarse en el marketplace.`
+      : 'Ninguna empresa la usa todavía; deja de aparecer para elegir.'
   }
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Catálogos globales</p>
+          <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-foreground">
             <Tag className="h-6 w-6 text-violet-400" />
-            Catálogo global de marcas
+            Marcas
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            El logo oficial de cada marca. Las empresas eligen de esta lista; las marcas propias van sin logo.
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            El nombre y el logo oficial de cada marca. Las empresas eligen de esta lista; las marcas propias de una tienda van sin logo.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -268,21 +283,19 @@ export function GlobalBrandsManager() {
         </div>
       </header>
 
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'En el catálogo', value: stats.total },
-          { label: 'Sin logo oficial', value: stats.sinLogo, warn: stats.sinLogo > 0 },
-          { label: 'Marcas de empresas', value: stats.marcasEmpresas },
-          { label: 'Vinculadas', value: stats.vinculadas },
-        ].map((cell) => (
-          <div key={cell.label} className="rounded-xl border bg-card px-4 py-3">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{cell.label}</dt>
-            <dd className={cn('mt-0.5 text-xl font-bold tabular-nums', cell.warn ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>
-              {cell.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <CatalogStats
+        cells={[
+          { label: 'En el catálogo', value: stats.activas, hint: 'marcas activas' },
+          { label: 'Sin logo oficial', value: stats.sinLogo, hint: 'se muestran con la inicial', warn: stats.sinLogo > 0 },
+          { label: 'Vinculadas', value: `${stats.vinculadas} de ${stats.marcasEmpresas}`, hint: 'marcas de empresas' },
+          {
+            label: 'Sin vincular',
+            value: stats.marcasEmpresas - stats.vinculadas,
+            hint: 'sin logo oficial en el marketplace',
+            warn: stats.marcasEmpresas - stats.vinculadas > 0,
+          },
+        ]}
+      />
 
       <LinkSuggestionsPanel
         suggestions={suggestions}
@@ -401,7 +414,7 @@ export function GlobalBrandsManager() {
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => void deactivate(brand)}
+                    onClick={() => setToDeactivate(brand)}
                     aria-label={`Dar de baja ${brand.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -416,6 +429,13 @@ export function GlobalBrandsManager() {
           ))}
         </ul>
       )}
+
+      <CatalogDeactivateDialog
+        item={toDeactivate ? { name: toDeactivate.name, consequence: deactivationConsequence(toDeactivate) } : null}
+        busy={deactivating}
+        onCancel={() => setToDeactivate(null)}
+        onConfirm={() => toDeactivate && void deactivate(toDeactivate)}
+      />
 
       <Dialog open={draft !== null} onOpenChange={(open) => !open && !saving && setDraft(null)}>
         <DialogContent className="max-w-lg">
