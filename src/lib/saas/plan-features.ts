@@ -11,17 +11,18 @@ export interface ModuleTrial {
 
 export const MODULE_TRIAL_DAYS = 7
 
-export const REPAIR_PHOTOS_TARGET_PLAN: PlanCode = 'ENTERPRISE'
-export const REPAIR_PHOTOS_TARGET_PLAN_LABEL = 'Plan Enterprise'
-
-/** Límite de fotos por reparación según el plan. Exclusivo para el Plan Enterprise. */
-export function repairPhotoLimit(planCode: PlanCode): number {
+/**
+ * Fotos por reparación que permite un plan, desde `plans.limits.repairPhotos`.
+ *
+ * Antes estaba fijo en código: solo ENTERPRISE, un plan inactivo, así que
+ * nadie podía comprarlo. Si el catálogo todavía no tiene el dato se mantiene
+ * esa regla, para no habilitar fotos por un plan mal cargado.
+ */
+export function repairPhotoLimitFromLimits(planCode: PlanCode, limits: unknown): number {
+  const value = limits && typeof limits === 'object' ? (limits as Record<string, unknown>).repairPhotos : undefined
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+  if (Number.isFinite(parsed) && parsed >= 0) return Math.floor(parsed)
   return planCode === 'ENTERPRISE' ? 6 : 0
-}
-
-/** ¿Puede agregar fotos a las reparaciones? Solo disponible en el plan más alto (ENTERPRISE). */
-export function canUploadRepairPhotos(planCode: PlanCode): boolean {
-  return planCode === 'ENTERPRISE'
 }
 
 /** ¿Puede exportar/descargar reportes? Disponible desde Basic (FREE no). */

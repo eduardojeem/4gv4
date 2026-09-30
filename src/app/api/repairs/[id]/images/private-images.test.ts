@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   assertRepairExists: vi.fn(),
   fetchRepairById: vi.fn(),
+  planInfo: vi.fn(),
+  existingPhotos: 0,
 }))
 
 const selectBuilder = {
@@ -39,7 +41,7 @@ vi.mock('@/app/api/repairs/_lib', () => ({
   fetchRepairById: mocks.fetchRepairById,
 }))
 
-vi.mock('@/lib/saas/plan-features', () => ({ repairPhotoLimit: vi.fn(() => 20) }))
+vi.mock('@/lib/saas/subscription-service', () => ({ getOrganizationPlanInfo: mocks.planInfo }))
 
 import { DELETE, POST } from './route'
 
@@ -62,23 +64,42 @@ describe('/api/repairs/[id]/images private image contract', () => {
       data: { id: 'image-1', image_url: 'repairs/repair-1/photo.jpg' },
       error: null,
     })
+    mocks.existingPhotos = 0
+    mocks.planInfo.mockResolvedValue({ name: 'Pro Max', repairPhotoLimit: 20, repairPhotoUpgradePlan: 'Pro' })
     mocks.from.mockImplementation((table: string) => {
-      if (table === 'organizations') {
-        const organizationBuilder = {
-          select: vi.fn(),
-          eq: vi.fn(),
-          maybeSingle: vi.fn(async () => ({ data: { subscription_plan: 'enterprise' }, error: null })),
-        }
-        organizationBuilder.select.mockReturnValue(organizationBuilder)
-        organizationBuilder.eq.mockReturnValue(organizationBuilder)
-        return organizationBuilder
-      }
       if (table !== 'repair_images') throw new Error(`Unexpected table ${table}`)
       return {
         insert: mocks.insert,
-        select: vi.fn(() => selectBuilder),
+        // Con `head` es el conteo de fotos ya cargadas en la reparación.
+        select: vi.fn((_columns: string, options?: { head?: boolean }) => options?.head
+          ? { eq: vi.fn(async () => ({ count: mocks.existingPhotos, error: null })) }
+          : selectBuilder),
         delete: vi.fn(() => deleteBuilder),
       }
+    })
+  })
+
+  it('respeta el cupo de fotos por reparación del plan', async () => {
+    mocks.planInfo.mockResolvedValue({ name: 'Pro', repairPhotoLimit: 3, repairPhotoUpgradePlan: 'Pro' })
+    mocks.existingPhotos = 3
+    const response = await POST(requestWithJson({
+      images: [{ storagePath: 'organizations/org-1/repair-images/user-1/photo.jpg' }],
+    }), context)
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ error: 'Tu plan permite hasta 3 fotos por reparación.' })
+    expect(mocks.insert).not.toHaveBeenCalled()
+  })
+
+  it('sin fotos en el plan nombra el plan que las incluye', async () => {
+    mocks.planInfo.mockResolvedValue({ name: 'Gratis', repairPhotoLimit: 0, repairPhotoUpgradePlan: 'Pro' })
+    const response = await POST(requestWithJson({
+      images: [{ storagePath: 'organizations/org-1/repair-images/user-1/photo.jpg' }],
+    }), context)
+
+    expect(response.status).toBe(402)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Tu plan Gratis no incluye fotos en las reparaciones. Están disponibles en el plan Pro.',
     })
   })
 

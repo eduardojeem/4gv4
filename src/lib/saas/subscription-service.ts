@@ -1,7 +1,7 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import { buildPlanPriceMap } from '@/lib/superadmin/metrics-calculations'
-import type { ModuleTrial } from './plan-features'
+import { repairPhotoLimitFromLimits, type ModuleTrial } from './plan-features'
 import { buildOrganizationBusinessProfile } from './effective-modules'
 import { deriveTechnicalModules } from './plan-modules'
 import type {
@@ -660,6 +660,10 @@ export async function getOrganizationPlanInfo(
 ): Promise<{
   code: PlanCode
   name: string
+  /** Fotos por reparación que permite el plan (0 = no incluye fotos). */
+  repairPhotoLimit: number
+  /** Plan activo más barato que incluye fotos de reparación. */
+  repairPhotoUpgradePlan: string | null
   modules: string[]
   modulePlanAvailability: Partial<Record<OrganizationModule, ModulePlanAvailability[]>>
   entitledModules: string[]
@@ -686,13 +690,14 @@ export async function getOrganizationPlanInfo(
 
   const { data: availablePlans } = await supabase
     .from('plans')
-    .select('code, name, modules, is_active')
+    .select('code, name, modules, is_active, limits')
 
   const planRows = (availablePlans ?? []) as Array<{
     code: string
     name: string
     modules: unknown
     is_active: boolean | null
+    limits: unknown
   }>
   const plan = planRows.find(row => String(row.code).toUpperCase() === code)
 
@@ -743,9 +748,14 @@ export async function getOrganizationPlanInfo(
 
   // Baja de cortesía: quedó en FREE por impago (la automatización marca payment_status='unpaid').
   const downgradedFromExpiry = code === 'FREE' && sub?.payment_status === 'unpaid'
+  const repairPhotoUpgrade = [...planRows]
+    .sort((a, b) => tierRank(a.code) - tierRank(b.code))
+    .find((row) => row.is_active !== false && repairPhotoLimitFromLimits(normalizePlanCode(row.code), row.limits) > 0)
   return {
     code,
     name: typeof plan?.name === 'string' ? plan.name : code,
+    repairPhotoLimit: repairPhotoLimitFromLimits(code, plan?.limits),
+    repairPhotoUpgradePlan: repairPhotoUpgrade?.name ?? null,
     modules: profile.effectiveModules,
     modulePlanAvailability,
     entitledModules: planModules,

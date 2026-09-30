@@ -70,7 +70,8 @@ describe('visitas web desde el plan Pro', () => {
   it('la pagina, el menu y la guia piden el mismo modulo', () => {
     const page = readFileSync(resolve(process.cwd(), 'src/app/admin/visitas/page.tsx'), 'utf8')
     expect(page).toContain('module="analytics"')
-    expect(page).toContain('requiredPlan="Pro"')
+    // El plan al que subir sale del catálogo, no de un texto fijo en la página.
+    expect(page).not.toContain('requiredPlan=')
 
     const nav = readFileSync(resolve(process.cwd(), 'src/config/admin-navigation.ts'), 'utf8')
     const visitsItem = nav.slice(nav.indexOf("key: 'website-visits'"), nav.indexOf("key: 'website-visits'") + 400)

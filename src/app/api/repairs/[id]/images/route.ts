@@ -5,7 +5,7 @@ import {
   isNextResponse,
   resolveRepairRouteContext,
 } from '@/app/api/repairs/_lib'
-import { repairPhotoLimit } from '@/lib/saas/plan-features'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import {
   REPAIR_IMAGE_BUCKET,
   isOwnedRepairImagePath,
@@ -65,18 +65,28 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     const orgId = ctx.organizationId
     if (orgId) {
-      const { data: org } = await ctx.supabase
-        .from('organizations')
-        .select('subscription_plan')
-        .eq('id', orgId)
-        .maybeSingle()
-
-      const userPlan = (org?.subscription_plan || 'free').toUpperCase() as import('@/lib/saas/plan-features').PlanCode
-      const photoLimit = repairPhotoLimit(userPlan)
+      // Misma fuente que la subida (/api/upload): el plan de la suscripción y
+      // el cupo de fotos que define el catálogo para ese plan.
+      const planInfo = await getOrganizationPlanInfo(orgId)
+      const photoLimit = planInfo.repairPhotoLimit
       if (photoLimit === 0) {
         return NextResponse.json(
-          { error: 'La opción de agregar fotos a las reparaciones está disponible exclusivamente en el Plan Enterprise.' },
+          {
+            error: `Tu plan ${planInfo.name} no incluye fotos en las reparaciones.${planInfo.repairPhotoUpgradePlan ? ` Están disponibles en el plan ${planInfo.repairPhotoUpgradePlan}.` : ''}`,
+          },
           { status: 402 }
+        )
+      }
+
+      const { count: existingPhotos, error: countError } = await ctx.supabase
+        .from('repair_images')
+        .select('id', { count: 'exact', head: true })
+        .eq('repair_id', id)
+      if (countError) throw countError
+      if ((existingPhotos ?? 0) + normalizedImages.length > photoLimit) {
+        return NextResponse.json(
+          { error: `Tu plan permite hasta ${photoLimit} fotos por reparación.` },
+          { status: 400 }
         )
       }
     }

@@ -1504,7 +1504,7 @@ export default function OperationalReports() {
               creditReport={creditReport}
             />
           ) : (
-            <Button variant="outline" disabled title="Exportar disponible desde el plan Basic" className="h-9 gap-1.5 font-medium">
+            <Button variant="outline" disabled title="Exportar requiere un plan pago" className="h-9 gap-1.5 font-medium">
               <Download className="h-4 w-4" />
               <span>Exportar</span>
             </Button>

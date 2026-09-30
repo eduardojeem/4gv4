@@ -570,7 +570,7 @@ export default function ProductReports() {
                   onClick={() => exportData('csv')}
                   disabled={isExporting || !canExport}
                   className="gap-2"
-                  title={!canExport ? 'Exportar disponible desde el plan Basic' : 'Exportar datos como CSV'}
+                  title={!canExport ? 'Exportar requiere un plan pago' : 'Exportar datos como CSV'}
                 >
                   {isExporting ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -586,7 +586,7 @@ export default function ProductReports() {
                   onClick={() => exportData('excel')}
                   disabled={isExporting || !canExport}
                   className="gap-2"
-                  title={!canExport ? 'Exportar disponible desde el plan Basic' : 'Exportar como Excel con múltiples hojas'}
+                  title={!canExport ? 'Exportar requiere un plan pago' : 'Exportar como Excel con múltiples hojas'}
                 >
                   {isExporting ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -602,7 +602,7 @@ export default function ProductReports() {
                   onClick={() => exportData('pdf')}
                   disabled={isExporting || !canExport}
                   className="gap-2"
-                  title={!canExport ? 'Exportar disponible desde el plan Basic' : 'Exportar reporte completo en PDF'}
+                  title={!canExport ? 'Exportar requiere un plan pago' : 'Exportar reporte completo en PDF'}
                 >
                   {isExporting ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />

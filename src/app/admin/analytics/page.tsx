@@ -7,9 +7,8 @@ export default function AnalyticsPage() {
         <div className="space-y-6">
             <PlanGate
                 module="analytics"
-                requiredPlan="Pro"
                 title="Analytics avanzado"
-                description="El dashboard de analítica está disponible desde el plan Pro. Subí tu plan para desbloquear métricas, tendencias y rankings."
+                description="Métricas, tendencias y rankings de tu negocio."
             >
                 <Suspense fallback={<div className="p-4">Cargando analytics...</div>}>
                     <AnalyticsDashboard />

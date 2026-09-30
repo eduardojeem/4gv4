@@ -80,7 +80,7 @@ import {
 } from '@/lib/repairs/warranty'
 import { hasSingleDeviceOnlyData, describeSingleDeviceOnlyData } from '@/lib/repairs/multi-device-guard'
 import { describeDeviceName, describeDeviceSummary, deviceAccent } from '@/lib/repairs/device-label'
-import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { UpgradeHint } from '@/components/admin/PlanGate'
 import { RepairCostCalculator, type CostCalculationMode } from './repairs/RepairCostCalculator'
 import { PAYMENT_METHODS } from './repairs/RepairPaymentDialog'
@@ -298,10 +298,9 @@ export function RepairFormDialogV2({
   onSubmit
 }: RepairFormDialogV2Props) {
   const formId = 'repair-form-dialog-form'
-  const { planCode, planName } = useSubscriptionStatus()
+  const { planName, repairPhotoLimit: photoLimit, repairPhotoUpgradePlan } = useSubscriptionStatus()
   const { selectedBranchId } = useBranch()
   const { settings: sharedSettings } = useSharedSettings()
-  const photoLimit = repairPhotoLimit(planCode)
   const [quickMode, setQuickModeState] = useState<boolean>(false)
 
   useEffect(() => {
@@ -2075,7 +2074,7 @@ export function RepairFormDialogV2({
                         </div>
                       </div>
 
-                      {/* Images — Sección Colapsable / Expandible con indicador de Plan Enterprise */}
+                      {/* Fotos — sección colapsable; el cupo por reparación depende del plan */}
                       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 overflow-hidden transition-all shadow-2xs">
                         <div
                           role="button"
@@ -2100,7 +2099,9 @@ export function RepairFormDialogV2({
                             {/* Badge destacando el plan que requiere la función */}
                             <Badge className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white font-extrabold text-[10px] px-2.5 py-0.5 rounded-full border-0 shadow-xs flex items-center gap-1">
                               <Sparkles className="h-3 w-3" />
-                              {photoLimit !== 0 ? `Plan ${planName || 'Enterprise'} (Activo)` : 'Plan Enterprise'}
+                              {photoLimit > 0
+                                ? `Hasta ${photoLimit} por reparación`
+                                : repairPhotoUpgradePlan ? `Plan ${repairPhotoUpgradePlan}` : 'No incluido'}
                             </Badge>
 
                             {watch(`devices.${index}.images`) && (watch(`devices.${index}.images`)?.length ?? 0) > 0 && (
@@ -2124,8 +2125,8 @@ export function RepairFormDialogV2({
                             {photoLimit === 0 ? (
                               <div className="mt-2">
                                 <UpgradeHint
-                                  requiredPlan="Enterprise"
-                                  message={`Tu plan activo es ${planName}. La opción de agregar fotos a las reparaciones está disponible exclusivamente en el Plan Enterprise.`}
+                                  upgradePlan={repairPhotoUpgradePlan}
+                                  message={`Tu plan ${planName} no incluye fotos en las reparaciones.`}
                                 />
                               </div>
                             ) : (
@@ -2179,7 +2180,7 @@ export function RepairFormDialogV2({
                                   <ImageUploader
                                     images={field.value || []}
                                     onChange={field.onChange}
-                                    maxImages={6}
+                                    maxImages={photoLimit}
                                     maxSize={5242880}
                                     compact
                                     onUploadFiles={onUploadFiles}
