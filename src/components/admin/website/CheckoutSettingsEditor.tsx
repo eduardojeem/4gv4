@@ -8,6 +8,9 @@ import { BankTransferOptionsEditor } from '@/components/admin/website/BankTransf
 import { DeliveryZoneOptionsEditor } from '@/components/admin/website/DeliveryZoneOptionsEditor'
 import { CommerceModeSelector } from '@/components/admin/website/CommerceModeSelector'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
+import { upgradePlanNameFor } from '@/lib/saas/upgrade-plan'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import type { BankTransferOption, CheckoutSettings, PaymentMethodConfig } from '@/types/website-settings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -246,7 +249,18 @@ export function CheckoutSettingsEditor() {
   const baseline: CheckoutSettings = lastSaved ?? settings?.checkout ?? defaultCheckout
   const current: CheckoutSettings = draft ?? baseline
   const hasChanges = draft !== null
-  const commerceMode = current.commerceMode ?? 'cart'
+
+  // Sin el módulo de pedidos el carrito no puede cobrar: se muestra bloqueado
+  // y el editor trabaja con el mismo modo que ve el cliente en la tienda.
+  // Una lista de módulos vacía es "todavía no se sabe", no "sin pedidos".
+  const { modules, effectiveModules, modulePlanAvailability } = useSubscriptionStatus()
+  const ordersEnabled = modules.length === 0 || effectiveModules.includes('orders')
+  const ordersPlan = upgradePlanNameFor('orders', modulePlanAvailability)
+  const cartUnavailableReason = ordersEnabled ? null : ordersPlan ? `Disponible en ${ordersPlan}` : 'No incluido en tu plan'
+  const commerceMode = resolvePublicCommerceMode(current.commerceMode, {
+    ordersEnabled,
+    hasWhatsapp: Boolean(settings?.company_info?.whatsapp?.trim()),
+  })
   const enabledPaymentCount = (Object.keys(PM_META) as PMKey[])
     .filter((key) => current.payment[key].enabled).length
   const hasPaymentMethod = enabledPaymentCount > 0
@@ -350,7 +364,14 @@ export function CheckoutSettingsEditor() {
       <CommerceModeSelector
         value={commerceMode}
         onChange={(mode) => patch('commerceMode', mode)}
+        cartUnavailableReason={cartUnavailableReason}
       />
+      {!ordersEnabled && (
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          Tu plan no incluye pedidos online: tu tienda muestra el catálogo y los clientes te escriben por WhatsApp.
+          {ordersPlan ? ` Con ${ordersPlan} activás el carrito y los pedidos en línea.` : ''}
+        </p>
+      )}
 
       {/* Checklist de Preparación del Checkout */}
       <div

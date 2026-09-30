@@ -3,6 +3,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
+import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
 import type { WebsiteSettings } from '@/types/website-settings'
 import { headers } from 'next/headers'
 
@@ -56,6 +58,10 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
     }
     if (organization) {
       normalized.company_info.slug = organization.slug
+      normalized.checkout.commerceMode = resolvePublicCommerceMode(normalized.checkout.commerceMode, {
+        ordersEnabled: await isOrganizationModuleEnabled(organization.id, 'orders'),
+        hasWhatsapp: Boolean(normalized.company_info.whatsapp?.trim()),
+      })
     }
 
     return normalized

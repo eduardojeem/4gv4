@@ -698,7 +698,13 @@ export async function getOrganizationPlanInfo(
 
   const planModules = Array.isArray(plan?.modules) ? plan.modules.map(String) : []
   const modulePlanAvailability: Partial<Record<OrganizationModule, ModulePlanAvailability[]>> = {}
-  for (const availablePlan of planRows) {
+  // Del plan más barato al más caro: el primero activo es el mínimo para
+  // desbloquear el módulo (ver upgradePlanNameFor).
+  const tierRank = (code: string) => {
+    const rank = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'].indexOf(normalizePlanCode(code))
+    return rank === -1 ? 99 : rank
+  }
+  for (const availablePlan of [...planRows].sort((a, b) => tierRank(a.code) - tierRank(b.code))) {
     if (!Array.isArray(availablePlan.modules)) continue
     for (const moduleCode of availablePlan.modules) {
       if (!ORGANIZATION_MODULES.includes(moduleCode as OrganizationModule)) continue
