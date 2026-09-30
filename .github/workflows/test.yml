@@ -53,6 +53,11 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     needs: test
+    env:
+      # Public placeholders let Next.js prerender client-auth pages in CI.
+      # Production receives the real values from Vercel.
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
 
     steps:
     - name: Checkout code
