@@ -36,6 +36,12 @@ export function getCommercialFeatureValue(features: CommercialPlanFeature[] | nu
   return features?.find(feature => feature.label && normalizedAliases.has(normalized(feature.label)))?.value ?? false
 }
 
+/** Clave del feature (pos, ecommerce, analytics...) a partir de cualquiera de sus nombres. */
+export function commercialFeatureKeyForLabel(label: string): string | null {
+  const target = normalized(label)
+  return Object.entries(aliasesByKey).find(([, group]) => group.some((alias) => normalized(alias) === target))?.[0] ?? null
+}
+
 export function isCommercialFeatureLabel(label: string | undefined, key: string) {
   if (!label) return false
   return (aliasesByKey[key] ?? [key]).some(alias => normalized(alias) === normalized(label))

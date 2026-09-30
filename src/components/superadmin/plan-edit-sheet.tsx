@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getCommercialFeatureValue } from '@/lib/saas/commercial-plan-features'
+import { PLAN_LIMIT_FIELDS, emptyLimits, limitsFromPlan, type PlanLimitKey } from '@/lib/saas/plan-limits'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -230,10 +231,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
   const [trialDays, setTrialDays]   = useState('14')
 
   // Limits tab
-  const [limUsers, setLimUsers]         = useState('5')
-  const [limProducts, setLimProducts]   = useState('100')
-  const [limBranches, setLimBranches]   = useState('1')
-  const [limRepairs, setLimRepairs]     = useState('')
+  const [limits, setLimits] = useState<Record<PlanLimitKey, string>>(() => emptyLimits())
 
   // Features tab
   const [featureMap, setFeatureMap] = useState<Map<string, boolean | string>>(new Map())
@@ -253,10 +251,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
     setPriceNote(plan.price_note ?? 'por mes')
     setPublicSlug(plan.public_slug ?? '')
     setTrialDays(String(plan.trial_days ?? 14))
-    setLimUsers(String(plan.limits?.users ?? '5'))
-    setLimProducts(String(plan.limits?.products ?? '100'))
-    setLimBranches(String(plan.limits?.branches ?? '1'))
-    setLimRepairs(String(plan.limits?.repairs ?? ''))
+    setLimits(limitsFromPlan(plan.limits))
     setIsActive(plan.is_active)
     setIsPopular(plan.is_popular)
     const m = new Map<string, boolean | string>()
@@ -306,12 +301,7 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
         is_active:   isActive,
         is_popular:  isPopular,
         trial_days:  Number(trialDays) || 0,
-        limits: {
-          users:    limUsers,
-          products: limProducts,
-          branches: limBranches,
-          repairs:  limRepairs,
-        },
+        limits,
         highlights: highlights.split('\n').map((l) => l.trim()).filter(Boolean),
         features,
       })
@@ -548,16 +538,20 @@ export function PlanEditSheet({ plan, open, onOpenChange, onSuccess }: Props) {
                 <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 {/* eslint-disable react/no-unescaped-entities */}
                 <p className="text-xs text-blue-700 dark:text-blue-300">
-                  <strong>∞</strong> = sin tope · <strong>#</strong> = número máximo exacto · <strong>✎</strong> = texto libre (ej: "20/mes").
-                  Estos valores son validados en tiempo real en la app.
+                  Escribí un número, o "Ilimitado" (o dejalo vacío) para no poner tope. Al guardar, estos números
+                  pasan a ser el límite real de las tiendas con este plan, y el texto de venta se genera solo.
                 </p>
                 {/* eslint-enable react/no-unescaped-entities */}
               </div>
               <div className="grid grid-cols-2 gap-5">
-                <LimitField label="Usuarios"      value={limUsers}    onChange={setLimUsers}    />
-                <LimitField label="Productos"     value={limProducts} onChange={setLimProducts} />
-                <LimitField label="Sucursales"    value={limBranches} onChange={setLimBranches} />
-                <LimitField label="Reparaciones"  value={limRepairs}  onChange={setLimRepairs}  />
+                {PLAN_LIMIT_FIELDS.map((field) => (
+                  <LimitField
+                    key={field.key}
+                    label={field.label}
+                    value={limits[field.key]}
+                    onChange={(value) => setLimits((prev) => ({ ...prev, [field.key]: value }))}
+                  />
+                ))}
               </div>
             </div>
           )}

@@ -50,6 +50,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { getCommercialFeatureValue, isCommercialFeatureLabel } from '@/lib/saas/commercial-plan-features'
 import { PageHeader } from '@/components/superadmin/ui/page-header'
+import { INFORMATIVE_FEATURE_KEYS } from '@/lib/saas/plan-modules'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -786,6 +787,14 @@ export function PlansPageContent() {
                             </div>
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                               {feat.label}
+                              {(INFORMATIVE_FEATURE_KEYS as readonly string[]).includes(feat.key) && (
+                                <span
+                                  className="ml-1.5 text-[10px] font-medium text-slate-400"
+                                  title="Se muestra en la venta pero no habilita un módulo: depende de los límites, del plan pago o es un servicio."
+                                >
+                                  informativo
+                                </span>
+                              )}
                             </span>
                           </div>
                         </td>

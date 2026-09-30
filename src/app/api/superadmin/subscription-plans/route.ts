@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
+import { normalizePlanLimits } from '@/lib/saas/plan-limits'
 import { computePlanStats, type PlanPriceRow, type SubscriptionRow } from '@/lib/saas/plan-stats'
 
 // ---------------------------------------------------------------------------
@@ -58,6 +59,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'price debe ser un número ≥ 0' }, { status: 400 })
   }
 
+  // Mismo criterio que la edición: los límites entran como números, el texto
+  // de venta se genera y los números se copian al plan técnico.
+  const limitsInput = body.limits && typeof body.limits === 'object' && !Array.isArray(body.limits)
+    ? body.limits as Record<string, unknown>
+    : {}
+  const normalizedLimits = normalizePlanLimits(limitsInput)
+  if ('error' in normalizedLimits) return NextResponse.json({ error: normalizedLimits.error }, { status: 400 })
+
   const admin = createAdminSupabase()
 
   // Check uniqueness
@@ -75,7 +84,7 @@ export async function POST(request: NextRequest) {
       is_popular: false,
       is_active: true,
       trial_days: typeof body.trial_days === 'number' ? Math.floor(body.trial_days) : 14,
-      limits: typeof body.limits === 'object' ? body.limits : {},
+      limits: normalizedLimits.display,
       highlights: Array.isArray(body.highlights) ? body.highlights : [],
       features: Array.isArray(body.features) ? body.features : [],
       color_config: typeof body.color_config === 'object' ? body.color_config : {},
@@ -89,9 +98,15 @@ export async function POST(request: NextRequest) {
   // tecnico (plans) es el que habilita modulos. Si esta sincronizacion no ocurre,
   // el plan queda visible y vendible pero SIN funcionalidades, y antes eso pasaba
   // en silencio: no se miraba ni el error ni si habia coincidido alguna fila.
+  const technicalPatch: Record<string, unknown> = { modules: deriveTechnicalModules(tier, plan.features) }
+  if (Object.keys(normalizedLimits.technical).length > 0) {
+    const { data: technicalPlan } = await admin.from('plans').select('limits').eq('code', tier.toUpperCase()).maybeSingle()
+    const currentTechnical = technicalPlan?.limits && typeof technicalPlan.limits === 'object' ? technicalPlan.limits : {}
+    technicalPatch.limits = { ...currentTechnical, ...normalizedLimits.technical }
+  }
   const { error: modulesError, count: modulesCount } = await admin
     .from('plans')
-    .update({ modules: deriveTechnicalModules(tier, plan.features) }, { count: 'exact' })
+    .update(technicalPatch, { count: 'exact' })
     .eq('code', tier.toUpperCase())
 
   if (modulesError || !modulesCount) {
