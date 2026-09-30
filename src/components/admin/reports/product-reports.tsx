@@ -138,8 +138,8 @@ interface ProductRowWithRelations {
 }
 
 export default function ProductReports() {
-  const { planCode, organizationName } = useSubscriptionStatus()
-  const canExport = canExportReports(planCode) // exportar: Basic en adelante
+  const { modules, organizationName } = useSubscriptionStatus()
+  const canExport = canExportReports(modules)
   const reportBrand = organizationName || 'Mi Negocio'
   const supabase = useMemo(() => createClient(), [])
   const canViewCost = useCanViewCost()
@@ -355,7 +355,7 @@ export default function ProductReports() {
 
   // Función mejorada para exportar datos
   const exportData = useCallback(async (fileFormat: 'csv' | 'excel' | 'pdf') => {
-    if (!canExport) return // exportar disponible desde Basic
+    if (!canExport) return
     setIsExporting(true)
 
     try {

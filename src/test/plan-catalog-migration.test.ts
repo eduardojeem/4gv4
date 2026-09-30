@@ -41,10 +41,11 @@ describe('catálogo Gratis / Pro / Pro Max', () => {
   })
 
   it('Pro Max: todos los módulos', () => {
-    // web_analytics llega por defecto del tier (migración 20261001120000).
+    // web_analytics, finances y reports llegan por defecto del tier
+    // (migraciones 20261001120000 y 20261002120000).
     expect(deriveTechnicalModules('pro', byTier.pro.features).sort()).toEqual([
-      'analytics', 'credits', 'crm', 'delivery', 'ecommerce', 'inventory', 'inventory_admin',
-      'orders', 'pos', 'promotions', 'repairs', 'security', 'services', 'web_analytics',
+      'analytics', 'credits', 'crm', 'delivery', 'ecommerce', 'finances', 'inventory', 'inventory_admin',
+      'orders', 'pos', 'promotions', 'repairs', 'reports', 'security', 'services', 'web_analytics',
     ])
   })
 

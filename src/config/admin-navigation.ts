@@ -134,6 +134,7 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/finances',
                 description: 'Gestión de gastos, nómina y rentabilidad',
                 permissions: ['finances.read'],
+                module: 'finances',
             },
         ],
     },

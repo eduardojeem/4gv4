@@ -5,8 +5,7 @@ type PlanFeature = { label?: string; value?: boolean | string }
 
 /**
  * Features que se muestran en la venta pero no habilitan un módulo: usuarios y
- * sucursales dependen de los límites, exportar reportes de que el plan sea pago
- * y el soporte es un servicio.
+ * sucursales dependen de los límites y el soporte es un servicio.
  */
 export const INFORMATIVE_FEATURE_KEYS = PLAN_FEATURES.filter((feature) => feature.module === null).map((feature) => feature.key)
 
@@ -24,9 +23,9 @@ export function moduleForFeatureLabel(label: string): string | null {
 
 const defaultsByTier: Record<string, string[]> = {
   FREE: ['inventory', 'pos', 'crm', 'repairs', 'services'],
-  BASIC: ['inventory', 'inventory_admin', 'pos', 'crm', 'ecommerce', 'repairs', 'services', 'orders', 'delivery', 'web_analytics'],
-  PRO: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security'],
-  ENTERPRISE: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security'],
+  BASIC: ['inventory', 'inventory_admin', 'pos', 'crm', 'ecommerce', 'repairs', 'services', 'orders', 'delivery', 'web_analytics', 'finances', 'reports'],
+  PRO: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security', 'finances', 'reports'],
+  ENTERPRISE: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'services', 'orders', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security', 'finances', 'reports'],
 }
 
 export function deriveTechnicalModules(tier: string, features: unknown) {

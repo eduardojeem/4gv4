@@ -74,6 +74,8 @@ const moduleLabels: Record<OrganizationModule, string> = {
   delivery: 'Entregas',
   analytics: 'Analítica',
   web_analytics: 'Visitas web',
+  finances: 'Finanzas',
+  reports: 'Reportes exportables',
   promotions: 'Promociones',
   security: 'Seguridad y auditoría',
 }
@@ -91,6 +93,8 @@ const moduleIcons: Record<OrganizationModule, ElementType> = {
   delivery: Truck,
   analytics: TrendingUp,
   web_analytics: MousePointerClick,
+  finances: Coins,
+  reports: FileText,
   promotions: Tag,
   security: LockKeyhole,
 }

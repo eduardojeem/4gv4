@@ -25,7 +25,11 @@ export function repairPhotoLimitFromLimits(planCode: PlanCode, limits: unknown):
   return planCode === 'ENTERPRISE' ? 6 : 0
 }
 
-/** ¿Puede exportar/descargar reportes? Disponible desde Basic (FREE no). */
-export function canExportReports(planCode: PlanCode): boolean {
-  return planCode !== 'FREE'
+/**
+ * ¿Puede exportar/descargar reportes? Lo decide el módulo `reports` del plan
+ * («Reportes exportables» en el editor), no el código: antes era «todo menos
+ * FREE» y tildarlo o destildarlo en el panel no cambiaba nada.
+ */
+export function canExportReports(modules: readonly string[]): boolean {
+  return modules.includes('reports')
 }

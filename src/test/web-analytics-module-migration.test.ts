@@ -22,7 +22,7 @@ describe('Visitas web como módulo propio', () => {
     expect(ORGANIZATION_MODULES).toContain('web_analytics')
     expect(PLAN_FEATURES.find((feature) => feature.key === 'webAnalytics')?.module).toBe('web_analytics')
     const check = SQL.slice(SQL.indexOf('add constraint organizations_enabled_modules_check'), SQL.indexOf('-- 2) ---'))
-    for (const code of ORGANIZATION_MODULES) expect(check, code).toContain(`'${code}'`)
+    expect(check).toContain("'web_analytics'")
   })
 
   it('cada etiqueta del trigger habilita el mismo módulo que en la app', () => {
@@ -34,10 +34,12 @@ describe('Visitas web como módulo propio', () => {
     }
   })
 
-  it('los módulos por defecto del trigger coinciden con plan-modules.ts', () => {
-    expect(sqlDefaults('FREE')).toEqual(deriveTechnicalModules('free', []).sort())
-    expect(sqlDefaults('BASIC')).toEqual(deriveTechnicalModules('basic', []).sort())
-    expect(sqlDefaults('PRO')).toEqual(deriveTechnicalModules('pro', []).sort())
+  // Los defaults completos los compara la última migración del trigger
+  // (finances-reports-modules-migration.test.ts).
+  it('el trigger incluye Visitas web por defecto en Pro y Pro Max, no en Gratis', () => {
+    expect(sqlDefaults('FREE')).not.toContain('web_analytics')
+    expect(sqlDefaults('BASIC')).toContain('web_analytics')
+    expect(sqlDefaults('PRO')).toContain('web_analytics')
   })
 
   it('Gratis no la trae; Pro y Pro Max sí', () => {

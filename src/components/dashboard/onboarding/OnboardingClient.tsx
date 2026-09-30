@@ -218,6 +218,8 @@ const MODULE_LABELS: Record<OrganizationModule, string> = {
   delivery: 'Envíos y repartos',
   analytics: 'Estadísticas',
   web_analytics: 'Visitas web',
+  finances: 'Finanzas',
+  reports: 'Reportes exportables',
   promotions: 'Promociones',
   security: 'Seguridad',
 }

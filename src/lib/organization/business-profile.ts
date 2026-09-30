@@ -27,6 +27,8 @@ export const ORGANIZATION_MODULES = [
   'web_analytics',
   'promotions',
   'security',
+  'finances',
+  'reports',
 ] as const
 
 export type BusinessVertical = (typeof BUSINESS_VERTICALS)[number]

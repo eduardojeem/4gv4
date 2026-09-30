@@ -22,6 +22,8 @@ const MODULOS = [
   'analytics',
   'web_analytics',
   'security',
+  'finances',
+  'reports',
   'repairs',
   'promotions',
   'credits',

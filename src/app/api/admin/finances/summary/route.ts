@@ -32,6 +32,8 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
     const organizationId = await resolveFinanceOrganizationId(
       context,
       query.data.organizationHeader ?? query.data.organizationId,
+      // El panel «Dinero» de Analytics usa este resumen.
+      { alsoAllow: ['analytics'] },
     )
     if (query.data.branchId) {
       await assertFinanceBranchAccess({

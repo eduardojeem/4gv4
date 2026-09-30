@@ -70,9 +70,13 @@ describe('deriveTechnicalModules', () => {
     expect(deriveTechnicalModules('basic', [
       { label: 'Gestión de usuarios', value: false },
       { label: 'Sucursales múltiples', value: false },
-      { label: 'Reportes exportables', value: false },
       { label: 'Soporte prioritario', value: true },
     ]).sort()).toEqual(base.sort())
+  })
+
+  it('Reportes exportables ya no es informativo: apagarlo quita el módulo', () => {
+    expect(deriveTechnicalModules('basic', [])).toContain('reports')
+    expect(deriveTechnicalModules('basic', [{ label: 'Reportes exportables', value: false }])).not.toContain('reports')
   })
 
   it('el inventario avanzado arrastra al básico', () => {
