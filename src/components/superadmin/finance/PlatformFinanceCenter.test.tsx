@@ -28,11 +28,13 @@ const vercel: PlatformExpense = {
 }
 
 describe('PlatformFinanceCenter', () => {
-  it('muestra el resultado y el punto de equilibrio con gastos cargados', () => {
+  it('muestra costos y punto de equilibrio, y deja el resultado al Resumen', () => {
     const summary = summarizePlatformFinance([vercel], { mrr: 400_000, payingOrgs: 2 }, HOY)
-    render(<PlatformFinanceCenter expenses={[vercel]} summary={summary} activeOrgs={3} today={HOY} unavailableReason={null} />)
+    render(<PlatformFinanceCenter expenses={[vercel]} summary={summary} today={HOY} unavailableReason={null} />)
 
-    expect(screen.getByText('2 tiendas pagas de 3 activas')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Gastos' })).toBeInTheDocument()
+    expect(screen.queryByText('Resultado mensual')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Resumen' })).toHaveAttribute('href', '/superadmin/billing')
     expect(screen.getByText('1 tiendas')).toBeInTheDocument()
     expect(screen.getByText('Cubierto: tenés 2')).toBeInTheDocument()
     expect(screen.getAllByText('Vercel').length).toBeGreaterThan(0)
@@ -45,7 +47,6 @@ describe('PlatformFinanceCenter', () => {
       <PlatformFinanceCenter
         expenses={[]}
         summary={summary}
-        activeOrgs={0}
         today={HOY}
         unavailableReason="Falta la tabla de gastos: aplicar supabase/migrations/20260929230000_platform_expenses.sql en Supabase."
       />,

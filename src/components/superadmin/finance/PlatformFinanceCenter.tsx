@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, Pencil, Plus, Scale, Trash2, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import Link from 'next/link'
+import { Loader2, Pencil, Plus, Scale, Trash2, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -117,13 +118,11 @@ function Breakdown({ title, rows }: { title: string; rows: Array<{ key: string; 
 export function PlatformFinanceCenter({
   expenses,
   summary,
-  activeOrgs,
   today,
   unavailableReason,
 }: {
   expenses: PlatformExpense[]
   summary: FinanceSummary
-  activeOrgs: number
   today: string
   unavailableReason: string | null
 }) {
@@ -213,14 +212,19 @@ export function PlatformFinanceCenter({
   }
 
   const previewPyg = form && form.amount ? Number(form.amount) * (form.currency === 'PYG' ? 1 : Number(form.fxRatePyg) || 0) : 0
-  const profitable = summary.netMonthly >= 0
 
   return (
     <div className="space-y-6">
       <PageHeader
         icon={Wallet}
-        title="Gastos y rentabilidad"
-        description="Lo que cuesta operar la plataforma frente a lo que ingresa por suscripciones. Montos en guaraníes; los gastos en dólares usan el tipo de cambio guardado en cada uno."
+        title="Gastos"
+        description={
+          <>
+            Lo que cuesta operar la plataforma, en guaraníes; los gastos en dólares usan el tipo de cambio guardado en cada uno.
+            El resultado y el margen frente al MRR están en{' '}
+            <Link href="/superadmin/billing" className="font-medium text-primary hover:underline">Resumen</Link>.
+          </>
+        }
         actions={
           <Button onClick={() => setForm(emptyForm())} disabled={Boolean(unavailableReason)}>
             <Plus className="h-4 w-4" /> Registrar gasto
@@ -230,20 +234,12 @@ export function PlatformFinanceCenter({
 
       {unavailableReason && <Notice tone="warning">{unavailableReason}</Notice>}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="MRR" value={gs(summary.mrr)} hint={`${summary.payingOrgs} tiendas pagas de ${activeOrgs} activas`} />
-        <Kpi label="Costo mensual" value={gs(summary.recurringMonthlyCost)} hint="Recurrente; anuales divididos en 12" />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Kpi label="Costo mensual" value={gs(summary.recurringMonthlyCost)} hint="Recurrente; los anuales divididos en 12" />
         <Kpi
-          label="Resultado mensual"
-          value={gs(summary.netMonthly)}
-          hint="MRR menos costo recurrente"
-          tone={profitable ? 'good' : 'bad'}
-        />
-        <Kpi
-          label="Margen"
-          value={summary.marginPercent === null ? '—' : `${summary.marginPercent.toLocaleString('es-PY')}%`}
-          hint={summary.marginPercent === null ? 'Sin ingresos todavía' : 'Sobre el MRR'}
-          tone={summary.marginPercent === null ? undefined : profitable ? 'good' : 'bad'}
+          label="Gastos únicos del mes"
+          value={gs(summary.oneTimeThisMonth)}
+          hint="Solo pesan en el mes en que ocurren"
         />
         <Kpi
           label="Costo por tienda paga"
@@ -262,18 +258,6 @@ export function PlatformFinanceCenter({
           }
         />
       </div>
-
-      {summary.oneTimeThisMonth > 0 && (
-        <Card className="rounded-xl">
-          <CardContent className="flex flex-col gap-1 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-              {summary.netThisMonth >= 0 ? <TrendingUp className="h-4 w-4 text-emerald-600" /> : <TrendingDown className="h-4 w-4 text-red-600" />}
-              Este mes hubo {gs(summary.oneTimeThisMonth)} en gastos únicos.
-            </span>
-            <span className="font-semibold tabular-nums">Resultado del mes: {gs(summary.netThisMonth)}</span>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Breakdown

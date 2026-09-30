@@ -5,7 +5,7 @@ import { summarizePlatformFinance, todayInParaguay } from '@/lib/superadmin/plat
 import { PlatformFinanceCenter } from '@/components/superadmin/finance/PlatformFinanceCenter'
 
 export const metadata: Metadata = {
-  title: 'Gastos y rentabilidad | Superadmin',
+  title: 'Gastos | Superadmin',
 }
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +21,6 @@ export default async function PlatformFinancePage() {
     <PlatformFinanceCenter
       expenses={expenses}
       summary={summarizePlatformFinance(expenses, revenue, today)}
-      activeOrgs={revenue.activeOrgs}
       today={today}
       unavailableReason={'reason' in expensesResult ? expensesResult.reason : null}
     />
