@@ -8,6 +8,9 @@ const PRODUCT_ANALYTICS_STORY = readFileSync(
   resolve(process.cwd(), 'src/components/dashboard/products/stats/ProductAnalyticsDashboard.stories.tsx'),
   'utf8',
 )
+const PACKAGE_JSON = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+  scripts?: Record<string, string>
+}
 
 describe('Configuración portable de Storybook', () => {
   it('usa una ruta de recursos estáticos válida en Windows y Linux', () => {
@@ -28,5 +31,9 @@ describe('Configuración portable de Storybook', () => {
   it('usa la API de acciones incluida en Storybook 9', () => {
     expect(PRODUCT_ANALYTICS_STORY).toContain("from 'storybook/actions'")
     expect(PRODUCT_ANALYTICS_STORY).not.toContain("from '@storybook/addon-actions'")
+  })
+
+  it('ejecuta una prueba existente en el control de Storybook', () => {
+    expect(PACKAGE_JSON.scripts?.['test:storybook']).toBe('vitest run src/test/storybook-config.test.ts')
   })
 })
