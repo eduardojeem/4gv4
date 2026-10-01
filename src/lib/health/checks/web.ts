@@ -695,6 +695,7 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
       { id: 'performance.response_time', category: 'performance', name: 'Tiempo de respuesta', description: 'Tiempo hasta recibir el HTML completo desde este servidor (no incluye render en el navegador).', method: htmlMethod },
       async () => {
         const measured = pages.filter((p) => p.response.status > 0 && !p.response.challenged)
+        const challenged = pages.filter((p) => p.response.challenged)
         if (measured.length === 0) return noPages()
         const slow = measured.filter((p) => p.response.durationMs > 1500)
         const verySlow = measured.filter((p) => p.response.durationMs > 4000)
@@ -702,9 +703,17 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         return {
           status: verySlow.length ? 'error' : slow.length ? 'warning' : 'healthy',
           severity: 'low',
-          summary: `Promedio ${avg} ms en ${measured.length} páginas`,
-          findings: measured.map((p) => `${p.path}: ${p.response.durationMs} ms (HTTP ${p.response.status})`),
-          metadata: { averageMs: avg },
+          summary: `Promedio ${avg} ms; ${measured.length}/${pages.length} páginas medidas${challenged.length ? `, ${challenged.length} excluida(s) por desafío de Cloudflare` : ''}`,
+          findings: [
+            ...measured.map((p) => `${p.path}: ${p.response.durationMs} ms (HTTP ${p.response.status})`),
+            ...challenged.map((p) => `${p.path}: ${describeStatus(p.response)}`),
+          ],
+          metadata: {
+            averageMs: avg,
+            measuredPages: measured.length,
+            totalPages: pages.length,
+            excludedByCloudflare: challenged.length,
+          },
         }
       },
     ),

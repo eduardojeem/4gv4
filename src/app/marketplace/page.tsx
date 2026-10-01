@@ -32,13 +32,15 @@ export async function generateMetadata(): Promise<Metadata> {
 // catalogo. Los filtros personales viven en otras rutas y no forman parte de
 // esta salida publica.
 export const revalidate = 30
+const MARKETPLACE_HOME_PRODUCT_LIMIT = 24
+const MARKETPLACE_HOME_OFFER_LIMIT = 48
 
 export default async function MarketplacePage() {
   const [organizations, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
     getMarketplaceOrganizations(),
-    getMarketplaceProductsPage(48),
+    getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT),
     getMarketplaceBrands(30),
-    getMarketplaceOffers(100),
+    getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT),
     getPlatformAnnouncements(),
   ])
   const marketplaceProducts = marketplacePage.products

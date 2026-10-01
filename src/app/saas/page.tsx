@@ -6,8 +6,10 @@ import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
 import { SaaSFeaturesSection } from '@/components/saas/landing/saas-features-section'
 import { SaaSHeroSection } from '@/components/saas/landing/saas-hero-section'
 import { SaaSPlansSection } from '@/components/saas/landing/saas-plans-section'
-import { createClient } from '@/lib/supabase/server'
 import { getPlatformBranding } from '@/lib/platform/branding'
+import { getPublicSubscriptionPlans } from '@/lib/saas/public-plans'
+
+export const revalidate = 300
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
@@ -19,17 +21,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function SaaSLandingPage() {
-  const [supabase, branding] = await Promise.all([
-    createClient(),
+  const [plans, branding] = await Promise.all([
+    getPublicSubscriptionPlans(),
     getPlatformBranding(),
   ])
-  
-  // Obtenemos los planes desde la DB, solo los activos, ordenados por precio
-  const { data: plans } = await supabase
-    .from('subscription_plans')
-    .select('id, tier, name, price, price_note, description, is_popular, is_active, limits, highlights, features, color_config')
-    .eq('is_active', true)
-    .order('price', { ascending: true })
 
   return (
     <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50">
@@ -39,7 +34,7 @@ export default async function SaaSLandingPage() {
         <SaaSHeroSection branding={branding} />
         <SaaSFeaturesSection />
         <SaaSBusinessSection />
-        <SaaSPlansSection initialPlans={plans || []} />
+        <SaaSPlansSection initialPlans={plans} />
         <SaaSCTASection branding={branding} />
       </main>
     </div>
