@@ -11,8 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import imageCompression from 'browser-image-compression'
 import { getImageSourceValidationMessage } from '@/lib/image-url-policy'
+import { optimizeImageFile } from '@/lib/images/client-upload-optimizer'
 
 interface ImageUploaderProps {
   images: string[]
@@ -75,25 +75,6 @@ export function ImageUploader({
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
 
-  const compressImage = async (file: File): Promise<File> => {
-    const options = {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1920,
-      useWebWorker: true,
-      onProgress: (progress: number) => {
-        setUploadProgress(prev => ({ ...prev, [file.name]: progress }))
-      }
-    }
-
-    try {
-      const compressedFile = await imageCompression(file, options)
-      return compressedFile as File
-    } catch (error) {
-      console.error('Error compressing image:', error)
-      return file
-    }
-  }
-
   const uploadImage = useCallback(async (file: File): Promise<UploadedImageValue> => {
     if (onUploadFiles) {
       const uploaded = (await onUploadFiles([file]))[0]
@@ -146,7 +127,9 @@ export function ImageUploader({
 
     try {
       for (const file of acceptedFiles) {
-        const compressedFile = await compressImage(file)
+        const compressedFile = await optimizeImageFile(file, 'product', (progress) => {
+          setUploadProgress(prev => ({ ...prev, [file.name]: progress }))
+        })
         const uploaded = await uploadImage(compressedFile)
         if (uploaded?.storagePath && uploaded.previewUrl) {
           uploadedUrls.push(uploaded.storagePath)

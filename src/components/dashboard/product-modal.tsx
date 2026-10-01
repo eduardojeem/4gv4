@@ -975,7 +975,9 @@ export function ProductModal({
 
     for (const file of files) {
       try {
-        const fileExt = file.name.split('.').pop() || 'jpg'
+        const fileExt = file.type === 'image/webp'
+          ? 'webp'
+          : (file.name.split('.').pop() || 'jpg').toLowerCase()
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`
         const filePath = `products/${fileName}`
 
