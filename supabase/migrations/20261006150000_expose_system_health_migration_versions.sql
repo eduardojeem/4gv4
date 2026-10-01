@@ -7,7 +7,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select coalesce(array_agg(m.version order by m.version), array[]::text[])
+  select coalesce(array_agg(m.version::text order by m.version), array[]::text[])
   from supabase_migrations.schema_migrations m;
 $$;
 

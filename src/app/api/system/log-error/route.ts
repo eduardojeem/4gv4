@@ -19,7 +19,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Payload too large' }, { status: 413 })
     }
 
-    const payload = parseClientErrorPayload(await req.json())
+    const rawBody = await req.text()
+    if (new TextEncoder().encode(rawBody).byteLength > 16_384) {
+      return NextResponse.json({ success: false, error: 'Payload too large' }, { status: 413 })
+    }
+    const payload = parseClientErrorPayload(JSON.parse(rawBody))
     const auth = await resolveRequestAuthUser()
     const userId = auth.authenticated ? auth.user.id : null
     let organizationId: string | null = null
@@ -28,9 +32,10 @@ export async function POST(req: Request) {
         .from('organization_members')
         .select('organization_id')
         .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle()
-      organizationId = data?.organization_id ?? null
+        .limit(2)
+      // Sin un contexto de organización firmado, no elegimos arbitrariamente
+      // entre varias membresías: evitamos atribuir el error al tenant equivocado.
+      organizationId = data?.length === 1 ? data[0].organization_id : null
     }
 
     await recordServerError({
