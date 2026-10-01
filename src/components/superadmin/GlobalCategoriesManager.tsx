@@ -14,6 +14,8 @@ import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPane
 import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
 import { CatalogUsageDialog } from './CatalogUsageDialog'
+import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
+import { VERTICAL_LABELS } from '@/lib/superadmin/landing-filters'
 
 /**
  * Taxonomía global de categorías.
@@ -34,6 +36,8 @@ type GlobalCategory = {
   sort_order: number | null
   is_active: boolean
   linked_count?: number
+  /** Rubros en los que aplica (vacío = todos). Sin la columna en la base, `undefined`. */
+  verticals?: string[]
 }
 
 type Draft = {
@@ -44,9 +48,13 @@ type Draft = {
   description: string
   sort_order: string
   is_active: boolean
+  verticals: string[]
 }
 
-const EMPTY_DRAFT: Draft = { name: '', parent_id: '', aliases: '', description: '', sort_order: '0', is_active: true }
+const EMPTY_DRAFT: Draft = { name: '', parent_id: '', aliases: '', description: '', sort_order: '0', is_active: true, verticals: [] }
+
+/** Los rubros que tienen categorías propias; «Otros» no suma una rama aparte. */
+const VERTICAL_OPTIONS = BUSINESS_VERTICALS.filter((vertical) => vertical !== 'other')
 
 type Filter = 'all' | 'roots' | 'unused' | 'inactive'
 
@@ -74,6 +82,7 @@ export function GlobalCategoriesManager() {
   const [deactivating, setDeactivating] = useState(false)
   const [linkingName, setLinkingName] = useState<string | null>(null)
   const [usageOf, setUsageOf] = useState<GlobalCategory | null>(null)
+  const [verticalFilter, setVerticalFilter] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -101,9 +110,22 @@ export function GlobalCategoriesManager() {
 
   const parents = useMemo(() => categories.filter((category) => !category.parent_id), [categories])
 
+  // ¿La base ya tiene rubros? (columna creada)
+  const hasVerticals = categories.some((category) => Array.isArray(category.verticals))
+  const verticalCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const category of categories) {
+      if (!category.is_active) continue
+      for (const vertical of category.verticals ?? []) counts.set(vertical, (counts.get(vertical) ?? 0) + 1)
+    }
+    return counts
+  }, [categories])
+
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
     return categories.filter((category) => {
+      // Las que no tienen rubro sirven a todos: aparecen con cualquier rubro.
+      if (verticalFilter && category.verticals?.length && !category.verticals.includes(verticalFilter)) return false
       const matchesSearch = !needle ||
         category.name.toLowerCase().includes(needle) ||
         (category.aliases ?? []).some((alias) => alias.toLowerCase().includes(needle))
@@ -113,7 +135,7 @@ export function GlobalCategoriesManager() {
       if (filter === 'inactive') return !category.is_active
       return true
     })
-  }, [categories, search, filter])
+  }, [categories, search, filter, verticalFilter])
 
   const childCount = useMemo(() => {
     const counts = new Map<string, number>()
@@ -125,7 +147,7 @@ export function GlobalCategoriesManager() {
 
   // Sin búsqueda ni filtro la lista es el árbol completo: la madre ya está
   // arriba y el «en Celulares» sobra. Filtrada, sin él no se sabe de dónde cuelga.
-  const showsTree = !search.trim() && filter === 'all'
+  const showsTree = !search.trim() && filter === 'all' && !verticalFilter
 
   const parentName = useMemo(() => {
     const byId = new Map(categories.map((category) => [category.id, category.name]))
@@ -142,6 +164,7 @@ export function GlobalCategoriesManager() {
       description: draft.description.trim() || null,
       sort_order: Number(draft.sort_order) || 0,
       is_active: draft.is_active,
+      ...(hasVerticals ? { verticals: draft.verticals } : {}),
     }
 
     setSaving(true)
@@ -304,7 +327,7 @@ export function GlobalCategoriesManager() {
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={() => setDraft({ ...EMPTY_DRAFT })} className="gap-1.5">
+          <Button onClick={() => setDraft({ ...EMPTY_DRAFT, verticals: verticalFilter ? [verticalFilter] : [] })} className="gap-1.5">
             <Plus className="h-4 w-4" />
             Nueva categoría
           </Button>
@@ -375,6 +398,31 @@ export function GlobalCategoriesManager() {
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} de {categories.length}</span>
       </div>
 
+      {hasVerticals && (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Filtrar por rubro">
+          <span className="text-xs text-muted-foreground">Rubro:</span>
+          <button
+            type="button"
+            aria-pressed={verticalFilter === null}
+            onClick={() => setVerticalFilter(null)}
+            className={cn('rounded-md border px-2 py-0.5 text-xs', verticalFilter === null ? 'border-foreground/40 bg-muted font-semibold' : 'text-muted-foreground hover:bg-muted/60')}
+          >
+            Todos
+          </button>
+          {VERTICAL_OPTIONS.map((vertical) => (
+            <button
+              key={vertical}
+              type="button"
+              aria-pressed={verticalFilter === vertical}
+              onClick={() => setVerticalFilter(verticalFilter === vertical ? null : vertical)}
+              className={cn('rounded-md border px-2 py-0.5 text-xs', verticalFilter === vertical ? 'border-foreground/40 bg-muted font-semibold' : 'text-muted-foreground hover:bg-muted/60')}
+            >
+              {VERTICAL_LABELS[vertical] ?? vertical} <span className="tabular-nums opacity-70">{verticalCounts.get(vertical) ?? 0}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {error ? (
         <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>
       ) : loading ? (
@@ -434,6 +482,7 @@ export function GlobalCategoriesManager() {
                     </button>
                   ) : 'Sin empresas'}
                   {(category.aliases?.length ?? 0) > 0 && ` · también: ${category.aliases!.join(', ')}`}
+                  {hasVerticals && ` · ${category.verticals?.length ? category.verticals.map((vertical) => VERTICAL_LABELS[vertical] ?? vertical).join(', ') : 'todos los rubros'}`}
                 </p>
               </div>
 
@@ -449,6 +498,7 @@ export function GlobalCategoriesManager() {
                     description: category.description ?? '',
                     sort_order: String(category.sort_order ?? 0),
                     is_active: category.is_active,
+                    verticals: category.verticals ?? [],
                   })}
                 >
                   Editar
@@ -540,6 +590,30 @@ export function GlobalCategoriesManager() {
                   Activa
                 </label>
               </div>
+              {hasVerticals && (
+                <fieldset className="space-y-1.5">
+                  <legend className="text-sm font-medium">Rubros</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {VERTICAL_OPTIONS.map((vertical) => (
+                      <label key={vertical} className="flex items-center gap-1.5 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={draft.verticals.includes(vertical)}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            verticals: e.target.checked ? [...draft.verticals, vertical] : draft.verticals.filter((item) => item !== vertical),
+                          })}
+                        />
+                        {VERTICAL_LABELS[vertical] ?? vertical}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sin marcar ninguno, sirve a todos los rubros. Con rubro, solo se sugiere a las tiendas de ese rubro: así «Accesorios» de una tienda de ropa no cae en la de celulares.
+                  </p>
+                </fieldset>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="gc-desc">Descripción</Label>
                 <Textarea id="gc-desc" rows={2} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />

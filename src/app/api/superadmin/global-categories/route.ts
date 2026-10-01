@@ -5,6 +5,7 @@ import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { categorySlug, normalizeCategoryName, sortGlobalCategories, suggestCategoryLinks, type GlobalCategory } from '@/lib/categories/global-catalog'
 import { groupUnmatched } from '@/lib/catalog/unmatched'
+import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
 import { logger } from '@/lib/logger'
 import { handleManualLinkAction, handleUsageRequest } from '@/lib/catalog/manual-link-actions'
 
@@ -19,6 +20,22 @@ import { handleManualLinkAction, handleUsageRequest } from '@/lib/catalog/manual
 
 const COLUMNS = 'id, name, slug, description, parent_id, level, aliases, icon, sort_order, is_active'
 
+/** El catálogo con sus rubros; sin la columna (SQL sin correr), sin ellos. */
+async function selectCatalog(admin: ReturnType<typeof createAdminSupabase>) {
+  const withVerticals = await admin.from('global_categories').select(`${COLUMNS}, verticals`)
+  if (!withVerticals.error) return withVerticals
+  return admin.from('global_categories').select(COLUMNS)
+}
+
+/** Las categorías de las empresas con el rubro de cada empresa. */
+type TenantCategoryRow = {
+  id: string
+  name: string
+  global_category_id?: string | null
+  organizations?: { name?: string; business_vertical?: string | null } | Array<{ name?: string; business_vertical?: string | null }> | null
+}
+const organizationOf = (row: TenantCategoryRow) => (Array.isArray(row.organizations) ? row.organizations[0] : row.organizations) ?? null
+
 const categorySchema = z.object({
   name: z.string({ message: 'Poné el nombre de la categoría.' }).trim().min(2, 'El nombre es muy corto.').max(120),
   slug: z.string().trim().max(140).optional().nullable(),
@@ -28,6 +45,8 @@ const categorySchema = z.object({
   icon: z.string().trim().max(60).optional().nullable(),
   sort_order: z.number().int().min(0).max(9999).optional(),
   is_active: z.boolean().optional(),
+  /** Rubros en los que aplica; vacío = todos. */
+  verticals: z.array(z.enum(BUSINESS_VERTICALS)).max(BUSINESS_VERTICALS.length).optional(),
 })
 
 const updateSchema = categorySchema.partial().extend({ id: z.string().uuid() })
@@ -42,8 +61,8 @@ export async function GET(request: NextRequest) {
 
     const admin = createAdminSupabase()
     const [{ data, error }, { data: tenantCategories }] = await Promise.all([
-      admin.from('global_categories').select(COLUMNS),
-      admin.from('categories').select('id, name, global_category_id, organization_id, organizations(name)'),
+      selectCatalog(admin),
+      admin.from('categories').select('id, name, global_category_id, organization_id, organizations(name, business_vertical)'),
     ])
 
     if (error) throw error
@@ -61,16 +80,12 @@ export async function GET(request: NextRequest) {
 
     // Las categorías de empresas que se vincularían por nombre, una por una:
     // el trabajo pendiente se revisa antes de aplicarlo.
-    const rows = (tenantCategories ?? []) as unknown as Array<{
-      id: string
-      name: string
-      global_category_id?: string | null
-      organizations?: { name?: string } | Array<{ name?: string }> | null
-    }>
+    const rows = (tenantCategories ?? []) as unknown as TenantCategoryRow[]
     const catalogById = new Map(((data ?? []) as GlobalCategory[]).map((category) => [category.id, category]))
-    const suggestions = suggestCategoryLinks(rows, (data ?? []) as GlobalCategory[]).map((link) => {
+    const withVertical = rows.map((row) => ({ ...row, vertical: organizationOf(row)?.business_vertical ?? null }))
+    const suggestions = suggestCategoryLinks(withVertical, (data ?? []) as GlobalCategory[]).map((link) => {
       const row = rows.find((item) => item.id === link.id)!
-      const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
+      const organization = organizationOf(row)
       return {
         id: link.id,
         name: row.name,
@@ -87,10 +102,7 @@ export async function GET(request: NextRequest) {
     const unmatched = groupUnmatched(
       rows
         .filter((row) => !row.global_category_id && !suggested.has(row.id))
-        .map((row) => {
-          const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
-          return { id: row.id, name: row.name, organizationName: organization?.name ?? null }
-        }),
+        .map((row) => ({ id: row.id, name: row.name, organizationName: organizationOf(row)?.name ?? null })),
       normalizeCategoryName,
     )
 
@@ -155,6 +167,7 @@ export async function POST(request: NextRequest) {
         icon: validation.data.icon || null,
         sort_order: validation.data.sort_order ?? 0,
         is_active: validation.data.is_active ?? true,
+        ...(validation.data.verticals ? { verticals: validation.data.verticals } : {}),
       })
       .select(COLUMNS)
       .single()
@@ -209,10 +222,21 @@ async function createFromTenant(user: { id: string; email: string | null }, requ
   const admin = createAdminSupabase()
   let created = 0
   let linked = 0
+  // ¿La base ya tiene rubros? Entonces la categoría nueva nace con los rubros
+  // de las empresas que la usan (una «Calzados» de tiendas de ropa es de ropa).
+  const { error: verticalsMissing } = await admin.from('global_categories').select('verticals').limit(1)
 
   for (const entry of validation.data.entries) {
     const name = entry.name.trim()
     const slug = categorySlug(name)
+
+    let verticals: string[] | undefined
+    if (!verticalsMissing && entry.ids?.length) {
+      const { data: users } = await admin.from('categories').select('organizations(business_vertical)').in('id', entry.ids)
+      verticals = [...new Set(((users ?? []) as unknown as TenantCategoryRow[])
+        .map((row) => organizationOf(row)?.business_vertical)
+        .filter((value): value is string => Boolean(value) && value !== 'general' && value !== 'other'))]
+    }
 
     const { data: inserted, error } = await admin
       .from('global_categories')
@@ -226,6 +250,7 @@ async function createFromTenant(user: { id: string; email: string | null }, requ
         icon: null,
         sort_order: 0,
         is_active: true,
+        ...(verticals ? { verticals } : {}),
       })
       .select('id')
       .single()
@@ -272,12 +297,12 @@ async function createFromTenant(user: { id: string; email: string | null }, requ
 async function linkExisting(user: { id: string; email: string | null }, request: NextRequest, ids?: unknown) {
   const admin = createAdminSupabase()
   const [{ data: catalog }, { data: tenantCategories }] = await Promise.all([
-    admin.from('global_categories').select(COLUMNS),
-    admin.from('categories').select('id, name, global_category_id'),
+    selectCatalog(admin),
+    admin.from('categories').select('id, name, global_category_id, organizations(business_vertical)'),
   ])
 
   const plan = suggestCategoryLinks(
-    (tenantCategories ?? []) as Array<{ id: string; name: string; global_category_id?: string | null }>,
+    ((tenantCategories ?? []) as unknown as TenantCategoryRow[]).map((row) => ({ ...row, vertical: organizationOf(row)?.business_vertical ?? null })),
     (catalog ?? []) as GlobalCategory[],
   )
 
@@ -334,6 +359,7 @@ export async function PUT(request: NextRequest) {
     if (input.icon !== undefined) updates.icon = input.icon || null
     if (input.sort_order !== undefined) updates.sort_order = input.sort_order
     if (input.is_active !== undefined) updates.is_active = input.is_active
+    if (input.verticals !== undefined) updates.verticals = input.verticals
 
     const admin = createAdminSupabase()
     if (input.parent_id !== undefined) {
@@ -347,7 +373,7 @@ export async function PUT(request: NextRequest) {
       updates.level = level
     }
 
-    const { data, error } = await admin.from('global_categories').update(updates).eq('id', id).select(COLUMNS).single()
+    const { data, error } = await admin.from('global_categories').update(updates).eq('id', id).select(input.verticals !== undefined ? `${COLUMNS}, verticals` : COLUMNS).single()
 
     if (error) {
       if (error.code === '23505') {

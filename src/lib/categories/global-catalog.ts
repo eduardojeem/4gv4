@@ -19,6 +19,26 @@ export type GlobalCategory = {
   icon?: string | null
   sort_order?: number | null
   is_active?: boolean | null
+  /**
+   * Rubros en los que aplica. Vacía = todos. `undefined` = la base todavía no
+   * tiene la columna (SQL sin correr): se trata como antes.
+   */
+  verticals?: string[] | null
+}
+
+/** ¿El catálogo ya sabe de rubros? (columna `verticals` creada). */
+export function catalogHasVerticals(catalog: GlobalCategory[]): boolean {
+  return catalog.some((category) => Array.isArray(category.verticals))
+}
+
+/**
+ * Las categorías globales que le sirven a un rubro: las de ese rubro y las de
+ * todos (sin rubro). Así «Accesorios» de una tienda de ropa no cae en
+ * «Accesorios» de celulares.
+ */
+export function catalogForVertical(catalog: GlobalCategory[], vertical: string | null | undefined): GlobalCategory[] {
+  if (!vertical || !catalogHasVerticals(catalog)) return catalog
+  return catalog.filter((category) => !category.verticals?.length || category.verticals.includes(vertical))
 }
 
 export function normalizeCategoryName(value: string | null | undefined): string {
@@ -115,14 +135,16 @@ export type CategoryLinkSuggestion = {
  * parecidos. Solo categorías sueltas: vincular no pisa lo ya decidido.
  */
 export function suggestCategoryLinks(
-  tenantCategories: Array<{ id: string; name: string; global_category_id?: string | null }>,
+  tenantCategories: Array<{ id: string; name: string; global_category_id?: string | null; vertical?: string | null }>,
   catalog: GlobalCategory[],
 ): CategoryLinkSuggestion[] {
   return tenantCategories.flatMap<CategoryLinkSuggestion>((category) => {
     if (category.global_category_id) return []
-    const exact = findGlobalCategoryByName(category.name, catalog)
+    // Solo entre las categorías del rubro de la empresa.
+    const options = catalogForVertical(catalog, category.vertical)
+    const exact = findGlobalCategoryByName(category.name, options)
     if (exact) return [{ id: category.id, global_category_id: exact.id, exact: true }]
-    const similar = findSimilarGlobalCategory(category.name, catalog)
+    const similar = findSimilarGlobalCategory(category.name, options)
     return similar ? [{ id: category.id, global_category_id: similar.id, exact: false }] : []
   })
 }
@@ -132,12 +154,12 @@ export function suggestCategoryLinks(
  * Devuelve solo las que hoy están sueltas: vincular no pisa lo ya decidido.
  */
 export function planCategoryLinks(
-  tenantCategories: Array<{ id: string; name: string; global_category_id?: string | null }>,
+  tenantCategories: Array<{ id: string; name: string; global_category_id?: string | null; vertical?: string | null }>,
   catalog: GlobalCategory[],
 ): Array<{ id: string; global_category_id: string }> {
   return tenantCategories.flatMap((category) => {
     if (category.global_category_id) return []
-    const match = findGlobalCategoryByName(category.name, catalog)
+    const match = findGlobalCategoryByName(category.name, catalogForVertical(catalog, category.vertical))
     return match ? [{ id: category.id, global_category_id: match.id }] : []
   })
 }

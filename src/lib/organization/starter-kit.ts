@@ -1,6 +1,6 @@
 import type { createAdminSupabase } from '@/lib/supabase/admin'
 import { BUSINESS_VERTICALS, type BusinessVertical } from '@/lib/organization/business-profile'
-import { findGlobalCategoryByName, type GlobalCategory } from '@/lib/categories/global-catalog'
+import { catalogForVertical, catalogHasVerticals, findGlobalCategoryByName, type GlobalCategory } from '@/lib/categories/global-catalog'
 import type { CheckoutSettings, TrustBarSettings } from '@/types/website-settings'
 
 /**
@@ -38,10 +38,19 @@ export const STARTER_CATEGORIES: Record<BusinessVertical, string[]> = {
 }
 
 /**
- * Rubros cuya taxonomía global existe. Hoy la del marketplace es de tecnología:
- * «Accesorios» de una tienda de ropa no puede caer en «Accesorios» de celulares.
+ * Sin rubros en el catálogo (SQL de rubros sin correr) la taxonomía es solo de
+ * tecnología: «Accesorios» de una tienda de ropa no puede caer en
+ * «Accesorios» de celulares, así que solo se vinculan las de electrónica.
+ * Con rubros, cada tienda se vincula con las categorías de su rubro.
  */
-const LINKABLE_VERTICALS = new Set<BusinessVertical>(['electronics'])
+const LEGACY_LINKABLE_VERTICALS = new Set<BusinessVertical>(['electronics'])
+
+/** El catálogo con sus rubros; sin la columna todavía, sin ellos. */
+async function loadGlobalCategoriesForStarter(admin: Admin) {
+  const withVerticals = await admin.from('global_categories').select('id, name, slug, aliases, is_active, verticals')
+  if (!withVerticals.error) return withVerticals
+  return admin.from('global_categories').select('id, name, slug, aliases, is_active')
+}
 
 /**
  * Las categorías a crear, con la global a la que se vinculan. Si la empresa ya
@@ -53,10 +62,16 @@ export function planStarterCategories(
   catalog: GlobalCategory[],
 ): Array<{ name: string; global_category_id: string | null }> {
   if (existingNames.length > 0) return []
-  const linkable = LINKABLE_VERTICALS.has(vertical)
+  const byVertical = catalogHasVerticals(catalog)
+  const linkable = byVertical || LEGACY_LINKABLE_VERTICALS.has(vertical)
+  // Las categorías sin rubro sirven a todos, pero el kit de inicio solo
+  // vincula con las del rubro: «Productos» u «Ofertas» no son una categoría.
+  const options = byVertical
+    ? catalogForVertical(catalog, vertical).filter((category) => category.verticals?.includes(vertical))
+    : catalog
   return STARTER_CATEGORIES[vertical].map((name) => ({
     name,
-    global_category_id: linkable ? findGlobalCategoryByName(name, catalog)?.id ?? null : null,
+    global_category_id: linkable ? findGlobalCategoryByName(name, options)?.id ?? null : null,
   }))
 }
 
@@ -139,7 +154,7 @@ export async function ensureMainCashRegister(admin: Admin, organizationId: strin
 export async function seedStarterCategories(admin: Admin, organizationId: string, vertical: BusinessVertical): Promise<number> {
   const [{ data: existing }, { data: catalog }] = await Promise.all([
     admin.from('categories').select('name').eq('organization_id', organizationId),
-    admin.from('global_categories').select('id, name, slug, aliases, is_active'),
+    loadGlobalCategoriesForStarter(admin),
   ])
 
   const plan = planStarterCategories(
