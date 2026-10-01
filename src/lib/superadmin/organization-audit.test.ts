@@ -21,7 +21,9 @@ describe('auditoría de una organización', () => {
   })
 
   it('la auditoría acepta el filtro y la ficha tiene pantalla de carga', () => {
-    expect(leer('src/app/superadmin/audit-logs/page.tsx')).toContain('isOrganizationId(params.org)')
+    // La validación vive en el parser de filtros que usa la página de auditoría.
+    expect(leer('src/app/superadmin/audit-logs/page.tsx')).toContain('parseAuditFilters(await searchParams)')
+    expect(leer('src/lib/superadmin/audit-feed.ts')).toContain('isOrganizationId(params.org)')
     expect(leer('src/app/superadmin/organizations/[id]/page.tsx')).toContain('organizationAuditFilter(String(org.id))')
     expect(leer('src/app/superadmin/organizations/[id]/loading.tsx')).toContain('role="status"')
   })

@@ -102,6 +102,7 @@ import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 import { cn } from '@/lib/utils'
+import { planLabel } from '@/lib/superadmin/plan-names'
 
 export type FullOrganizationDetail = {
   organization: {
@@ -1118,6 +1119,9 @@ export function OrganizationDetailView({ data }: Props) {
   const storefrontPublic = org.storefront_public === true
 
   const effectivePlan = (subscription?.plan || org.plan || 'FREE').toUpperCase()
+  // El nombre que ve el cliente (Pro, Pro Max): «PLAN BASIC» no le dice nada a nadie.
+  const planNames = Object.fromEntries((all_plans ?? []).map((plan) => [String(plan.code).toUpperCase(), plan.name]))
+  const planName = planLabel(effectivePlan, planNames)
   // `subscription?.status || 'active'` afirmaba «suscripcion activa» sobre una
   // organizacion que no tiene fila en `subscriptions`: no hay nada activo, hay
   // una cuenta sin suscripcion registrada.
@@ -1170,9 +1174,11 @@ export function OrganizationDetailView({ data }: Props) {
     }),
     buildLimitRow({
       key: 'repairs',
-      label: 'Reparaciones',
-      hint: 'Órdenes de taller registradas, en cualquier estado.',
-      used: counts.repairs,
+      label: 'Reparaciones del mes',
+      // El cupo del plan es mensual («300/mes»): contra el total histórico
+      // una tienda con meses de uso aparecía sin cupo.
+      hint: 'Órdenes de taller abiertas este mes, en cualquier estado. El cupo se renueva cada mes.',
+      used: repair_summary ? repair_summary.thisMonth : null,
       limit: plan_limits?.repairs,
       atCap: 'No se pueden abrir más órdenes de taller.',
     }),
@@ -1292,7 +1298,7 @@ export function OrganizationDetailView({ data }: Props) {
                     {org.name}
                   </h1>
                   <Badge variant="outline" className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full', PLAN_STYLES[effectivePlan] ?? PLAN_STYLES.FREE)}>
-                    PLAN {effectivePlan}
+                    {planName}
                   </Badge>
                   <Badge variant="outline" className={cn('text-xs font-bold px-2.5 py-0.5 rounded-full uppercase', STATUS_STYLES[effectiveStatus] ?? STATUS_STYLES.active)}>
                     {effectiveStatus}
@@ -1787,7 +1793,7 @@ export function OrganizationDetailView({ data }: Props) {
 
               <div className="space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Plan actual</p>
-                <p className="text-xl font-bold leading-none text-foreground">{effectivePlan}</p>
+                <p className="text-xl font-bold leading-none text-foreground">{planName}</p>
                 <p className="text-[11px] text-muted-foreground">
                   {plan_details?.price_monthly
                     ? `${formatMoney(plan_details.price_monthly, plan_details.currency || currency)} por mes`
@@ -1847,7 +1853,7 @@ export function OrganizationDetailView({ data }: Props) {
                 Qué tiene cargado
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <UsageBar
                 label="Productos"
                 used={counts.quotaProducts}
@@ -1871,8 +1877,17 @@ export function OrganizationDetailView({ data }: Props) {
                 hint={sinTope}
               />
               <UsageBar
-                label="Reparaciones"
-                used={repair_summary?.total ?? 0}
+                label="Cajas"
+                used={counts.cashRegisters ?? 0}
+                limit={plan_limits?.cashRegisters}
+                hint={sinTope}
+                unavailable={counts.cashRegisters === null ? 'No se pudieron contar las cajas' : undefined}
+              />
+              <UsageBar
+                label="Reparaciones este mes"
+                used={repair_summary?.thisMonth ?? 0}
+                total={repair_summary?.total}
+                totalNote="en total, desde el alta"
                 limit={plan_limits?.repairs}
                 hint={sinTope}
                 unavailable={repair_summary === null ? 'No se pudo leer el módulo de taller' : undefined}
@@ -2203,7 +2218,7 @@ export function OrganizationDetailView({ data }: Props) {
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
                   <span className="flex items-center gap-1.5 text-foreground/80">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    Uso del plan {effectivePlan}
+                    Uso del plan {planName}
                   </span>
                   <span className="font-extrabold text-violet-600 dark:text-violet-400">
                     {cobertura.percent === null
@@ -2323,7 +2338,7 @@ export function OrganizationDetailView({ data }: Props) {
 
                             {estado === 'on_outside_plan' && (
                               <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                                Está activo pero el plan {effectivePlan} no lo incluye: revisar.
+                                Está activo pero el plan {planName} no lo incluye: revisar.
                               </p>
                             )}
                           </div>
@@ -2505,7 +2520,7 @@ export function OrganizationDetailView({ data }: Props) {
                 <div className="flex items-center justify-between border-b border-border/60 py-2.5">
                   <span className="font-medium text-muted-foreground">Plan</span>
                   <Badge variant="outline" className={cn('px-2.5 py-0.5 text-xs font-extrabold', PLAN_STYLES[effectivePlan])}>
-                    {effectivePlan}
+                    {planName}
                   </Badge>
                 </div>
 
@@ -2639,7 +2654,7 @@ export function OrganizationDetailView({ data }: Props) {
                 <div>
                   <CardTitle className="flex items-center gap-2 text-sm font-bold">
                     <Layers className="h-4 w-4 text-violet-500" />
-                    Límites del plan {effectivePlan} y uso actual
+                    Límites del plan {planName} y uso actual
                   </CardTitle>
                   <CardDescription className="text-xs">
                     Los topes que el sistema aplica al crear cada recurso. Lo más apretado va primero.
@@ -2766,7 +2781,7 @@ export function OrganizationDetailView({ data }: Props) {
       {/* Edit Organization Modal */}
       <EditOrganizationDialog
         organization={editableOrg}
-        planNames={Object.fromEntries((all_plans ?? []).map((plan) => [String(plan.code).toUpperCase(), plan.name]))}
+        planNames={planNames}
         open={editDialogOpen}
         onClose={() => setEditDialogOpen(false)}
         onSuccess={() => router.refresh()}

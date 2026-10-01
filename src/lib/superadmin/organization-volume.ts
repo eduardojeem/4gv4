@@ -93,6 +93,11 @@ export interface RepairLike {
 
 export interface RepairSummary {
   total: number
+  /**
+   * Las del mes corriente. Es lo que cuenta contra el límite del plan
+   * («300/mes»): compararlo con el total histórico decía «sin cupo» de más.
+   */
+  thisMonth: number
   /** Equipos que siguen en el taller. */
   open: number
   completed: number
@@ -108,7 +113,10 @@ export interface RepairSummary {
   lastRepairAt: string | null
 }
 
-export function summarizeRepairs(repairs: RepairLike[]): RepairSummary {
+export function summarizeRepairs(repairs: RepairLike[], now: Date = new Date()): RepairSummary {
+  // Mismo corte que el cupo al crear una reparación (canCreateRepair).
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  let thisMonth = 0
   let open = 0
   let completed = 0
   let cancelled = 0
@@ -136,10 +144,12 @@ export function summarizeRepairs(repairs: RepairLike[]): RepairSummary {
     }
 
     lastRepairAt = masReciente(lastRepairAt, repair.created_at)
+    if (repair.created_at && new Date(repair.created_at).getTime() >= monthStart) thisMonth += 1
   }
 
   return {
     total: repairs.length,
+    thisMonth,
     open,
     completed,
     cancelled,
