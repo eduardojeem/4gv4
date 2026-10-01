@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ElementType } from 'react'
+import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -50,6 +51,7 @@ import { BRAND_COLORS } from '@/lib/website/brand-colors'
 import {
   BUSINESS_VERTICALS,
   OPERATING_MODELS,
+  ORGANIZATION_MODULES,
   getSuggestedModules,
   type BusinessVertical,
   type OperatingModel,
@@ -205,24 +207,10 @@ const MODEL_METADATA: Record<
   },
 }
 
-const MODULE_LABELS: Record<OrganizationModule, string> = {
-  inventory: 'Inventario',
-  inventory_admin: 'Inventario avanzado',
-  pos: 'Punto de venta (POS)',
-  crm: 'Gestión de clientes',
-  orders: 'Pedidos y ventas',
-  ecommerce: 'Tienda en línea',
-  repairs: 'Taller y reparaciones',
-  services: 'Servicios',
-  credits: 'Créditos y cuotas',
-  delivery: 'Envíos y repartos',
-  analytics: 'Estadísticas',
-  web_analytics: 'Visitas web',
-  finances: 'Finanzas',
-  reports: 'Reportes exportables',
-  promotions: 'Promociones',
-  security: 'Seguridad',
-}
+// Los mismos nombres que el cliente ve en su plan (catálogo de planes).
+const MODULE_LABELS = Object.fromEntries(
+  ORGANIZATION_MODULES.map((module) => [module, moduleDisplayName(module)]),
+) as Record<OrganizationModule, string>
 
 function buildSteps(slug: string): OnboardingStep[] {
   return [

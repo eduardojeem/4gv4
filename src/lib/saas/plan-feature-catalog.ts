@@ -55,3 +55,18 @@ export const PLAN_FEATURES: readonly PlanFeatureDefinition[] = [
 export function planFeatureByKey(key: string): PlanFeatureDefinition | undefined {
   return PLAN_FEATURES.find((feature) => feature.key === key)
 }
+
+/**
+ * El nombre de un módulo tal como lo ve el cliente en su plan. Las pantallas
+ * de módulos (ficha de la organización, edición, perfil del negocio) lo toman
+ * de acá para no tener cada una su propio nombre («Taller & SAT», «Analítica
+ * & KPIs»...) distinto del que figura en el plan.
+ */
+export function moduleDisplayName(module: string): string {
+  return PLAN_FEATURES.find((feature) => feature.module === module)?.label ?? module
+}
+
+/** Qué hace un módulo, en una línea, según el catálogo. */
+export function moduleDisplayHint(module: string): string | null {
+  return PLAN_FEATURES.find((feature) => feature.module === module)?.hint ?? null
+}

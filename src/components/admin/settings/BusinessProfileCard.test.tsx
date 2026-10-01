@@ -54,7 +54,7 @@ describe('BusinessProfileCard', () => {
     expect(screen.getByTestId('current-operating-model')).toHaveTextContent('Venta minorista')
     expect(screen.getByLabelText('Rubro')).toHaveTextContent('Ropa y moda')
     expect(screen.getByLabelText('Forma de trabajo')).toHaveTextContent('Venta minorista')
-    expect(screen.getByText('Reparaciones')).toBeInTheDocument()
+    expect(screen.getByText('Módulo de Reparaciones')).toBeInTheDocument()
     expect(screen.getAllByText(/No incluido en el plan Basic/).length).toBeGreaterThan(0)
   })
 
@@ -95,12 +95,12 @@ describe('BusinessProfileCard', () => {
     await user.click(screen.getByLabelText('Forma de trabajo'))
     await user.click(screen.getByRole('option', { name: 'Negocio mixto' }))
 
-    expect(screen.getByLabelText('Analítica')).toBeChecked()
+    expect(screen.getByLabelText('Analytics avanzado')).toBeChecked()
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     await user.click(screen.getByRole('button', { name: 'Aplicar recomendación' }))
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining('desactivará 2 herramientas'))
-    expect(screen.getByLabelText('Analítica')).toBeChecked()
+    expect(screen.getByLabelText('Analytics avanzado')).toBeChecked()
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
     confirm.mockRestore()
   })
@@ -121,7 +121,7 @@ describe('BusinessProfileCard', () => {
 
     expect(screen.getByText('Recomendado para Ropa y moda')).toBeInTheDocument()
     expect(screen.getByText('Disponible en planes superiores')).toBeInTheDocument()
-    expect(screen.getByText('Analítica — Pro')).toBeInTheDocument()
+    expect(screen.getByText('Analytics avanzado — Pro')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Activar recomendados incluidos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Activar todo lo incluido' })).toBeInTheDocument()
   })

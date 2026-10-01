@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
+import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 
 export type EditableOrganization = {
   id: string
@@ -98,22 +99,22 @@ export const OPERATING_MODELS = [
 ]
 
 export const AVAILABLE_MODULES = [
-  { key: 'pos', label: 'Punto de Venta (POS)', desc: 'Caja rápida y ticket' },
-  { key: 'inventory', label: 'Inventario / Stock', desc: 'Control de existencias' },
-  { key: 'crm', label: 'Clientes / CRM', desc: 'Fidelización e historial' },
-  { key: 'ecommerce', label: 'Tienda Online', desc: 'Catálogo público web' },
-  { key: 'repairs', label: 'Taller & SAT', desc: 'Órdenes de servicio' },
-  { key: 'orders', label: 'Pedidos', desc: 'Gestión y despachos' },
-  { key: 'credits', label: 'Créditos y Cuotas', desc: 'Cobranzas y cuotas' },
-  { key: 'services', label: 'Servicios & Citas', desc: 'Agenda y presupuestos' },
-  { key: 'delivery', label: 'Delivery & Envíos', desc: 'Rastreo y logística' },
-  { key: 'analytics', label: 'Métricas & Reportes', desc: 'Estadísticas y KPI' },
-  { key: 'web_analytics', label: 'Visitas web', desc: 'Tráfico de la tienda online' },
-  { key: 'promotions', label: 'Promociones', desc: 'Cupones y descuentos' },
-  { key: 'inventory_admin', label: 'Stock Avanzado', desc: 'Lotes y transferencias' },
-  { key: 'security', label: 'Auditoría', desc: 'Trazabilidad de acciones' },
-  { key: 'finances', label: 'Finanzas', desc: 'Gastos, nómina y rentabilidad' },
-  { key: 'reports', label: 'Reportes exportables', desc: 'CSV, Excel y PDF' },
+  { key: 'pos', label: moduleDisplayName('pos'), desc: 'Caja rápida y ticket' },
+  { key: 'inventory', label: moduleDisplayName('inventory'), desc: 'Control de existencias' },
+  { key: 'crm', label: moduleDisplayName('crm'), desc: 'Fidelización e historial' },
+  { key: 'ecommerce', label: moduleDisplayName('ecommerce'), desc: 'Catálogo público web' },
+  { key: 'repairs', label: moduleDisplayName('repairs'), desc: 'Órdenes de servicio' },
+  { key: 'orders', label: moduleDisplayName('orders'), desc: 'Gestión y despachos' },
+  { key: 'credits', label: moduleDisplayName('credits'), desc: 'Cobranzas y cuotas' },
+  { key: 'services', label: moduleDisplayName('services'), desc: 'Agenda y presupuestos' },
+  { key: 'delivery', label: moduleDisplayName('delivery'), desc: 'Rastreo y logística' },
+  { key: 'analytics', label: moduleDisplayName('analytics'), desc: 'Estadísticas y KPI' },
+  { key: 'web_analytics', label: moduleDisplayName('web_analytics'), desc: 'Tráfico de la tienda online' },
+  { key: 'promotions', label: moduleDisplayName('promotions'), desc: 'Cupones y descuentos' },
+  { key: 'inventory_admin', label: moduleDisplayName('inventory_admin'), desc: 'Lotes y transferencias' },
+  { key: 'security', label: moduleDisplayName('security'), desc: 'Trazabilidad de acciones' },
+  { key: 'finances', label: moduleDisplayName('finances'), desc: 'Gastos, nómina y rentabilidad' },
+  { key: 'reports', label: moduleDisplayName('reports'), desc: 'CSV, Excel y PDF' },
 ]
 
 export function EditOrganizationDialog({ organization, open, onClose, onSuccess, planNames }: Props & { planNames?: PlanNames }) {

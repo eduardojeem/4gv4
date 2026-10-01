@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, type ElementType } from 'react'
+import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -61,24 +62,10 @@ const modelLabels: Record<OperatingModel, string> = {
   mixed: 'Negocio mixto',
 }
 
-const moduleLabels: Record<OrganizationModule, string> = {
-  inventory: 'Inventario',
-  inventory_admin: 'Inventario avanzado',
-  pos: 'Punto de venta',
-  crm: 'Clientes',
-  orders: 'Pedidos',
-  ecommerce: 'Tienda en línea',
-  repairs: 'Reparaciones',
-  services: 'Servicios',
-  credits: 'Créditos y cuotas',
-  delivery: 'Entregas',
-  analytics: 'Analítica',
-  web_analytics: 'Visitas web',
-  finances: 'Finanzas',
-  reports: 'Reportes exportables',
-  promotions: 'Promociones',
-  security: 'Seguridad y auditoría',
-}
+// Los mismos nombres que el cliente ve en su plan (catálogo de planes).
+const moduleLabels = Object.fromEntries(
+  ORGANIZATION_MODULES.map((module) => [module, moduleDisplayName(module)]),
+) as Record<OrganizationModule, string>
 
 const moduleIcons: Record<OrganizationModule, ElementType> = {
   inventory: Boxes,

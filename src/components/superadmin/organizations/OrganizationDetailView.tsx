@@ -103,6 +103,7 @@ import { RobotGuide } from '@/components/common/RobotGuide'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 import { cn } from '@/lib/utils'
 import { planLabel } from '@/lib/superadmin/plan-names'
+import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 
 export type FullOrganizationDetail = {
   organization: {
@@ -351,7 +352,7 @@ export const MODULE_CATEGORIES = [
     modules: [
       {
         key: 'pos',
-        name: 'Punto de Venta (POS)',
+        name: moduleDisplayName('pos'),
         short: 'POS',
         icon: ShoppingBag,
         color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
@@ -360,7 +361,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'orders',
-        name: 'Gestión de Pedidos',
+        name: moduleDisplayName('orders'),
         short: 'Pedidos',
         icon: ShoppingCart,
         color: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800',
@@ -369,7 +370,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'ecommerce',
-        name: 'Tienda Online Pública',
+        name: moduleDisplayName('ecommerce'),
         short: 'Tienda Web',
         icon: Globe,
         color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800',
@@ -385,7 +386,7 @@ export const MODULE_CATEGORIES = [
     modules: [
       {
         key: 'inventory',
-        name: 'Control de Stock & Existencias',
+        name: moduleDisplayName('inventory'),
         short: 'Stock',
         icon: Boxes,
         color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800',
@@ -394,7 +395,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'inventory_admin',
-        name: 'Inventario Avanzado & Costos',
+        name: moduleDisplayName('inventory_admin'),
         short: 'Stock Pro',
         icon: Layers,
         color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800',
@@ -403,7 +404,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'delivery',
-        name: 'Envíos & Logística de Delivery',
+        name: moduleDisplayName('delivery'),
         short: 'Delivery',
         icon: Truck,
         color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800',
@@ -419,7 +420,7 @@ export const MODULE_CATEGORIES = [
     modules: [
       {
         key: 'crm',
-        name: 'Directorio de Clientes (CRM)',
+        name: moduleDisplayName('crm'),
         short: 'CRM',
         icon: Users,
         color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800',
@@ -428,7 +429,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'credits',
-        name: 'Créditos & Cuotas Propias',
+        name: moduleDisplayName('credits'),
         short: 'Cuotas',
         icon: Coins,
         color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
@@ -437,7 +438,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'promotions',
-        name: 'Promociones & Descuentos',
+        name: moduleDisplayName('promotions'),
         short: 'Promos',
         icon: Tags,
         color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800',
@@ -453,7 +454,7 @@ export const MODULE_CATEGORIES = [
     modules: [
       {
         key: 'repairs',
-        name: 'Taller de Reparaciones & SAT',
+        name: moduleDisplayName('repairs'),
         short: 'Taller SAT',
         icon: Wrench,
         color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
@@ -462,7 +463,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'services',
-        name: 'Servicios & Presupuestos',
+        name: moduleDisplayName('services'),
         short: 'Servicios',
         icon: Sparkles,
         color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800',
@@ -478,7 +479,7 @@ export const MODULE_CATEGORIES = [
     modules: [
       {
         key: 'analytics',
-        name: 'Analítica & KPIs Directivos',
+        name: moduleDisplayName('analytics'),
         short: 'Analítica',
         icon: BarChart3,
         color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800',
@@ -487,7 +488,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'web_analytics',
-        name: 'Visitas web',
+        name: moduleDisplayName('web_analytics'),
         short: 'Visitas',
         icon: MousePointerClick,
         color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
@@ -496,7 +497,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'security',
-        name: 'Auditoría & Trazabilidad',
+        name: moduleDisplayName('security'),
         short: 'Auditoría',
         icon: ShieldCheck,
         color: 'text-foreground/80 bg-muted border-border',
@@ -505,7 +506,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'finances',
-        name: 'Finanzas & Rentabilidad',
+        name: moduleDisplayName('finances'),
         short: 'Finanzas',
         icon: Wallet,
         color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
@@ -514,7 +515,7 @@ export const MODULE_CATEGORIES = [
       },
       {
         key: 'reports',
-        name: 'Reportes exportables',
+        name: moduleDisplayName('reports'),
         short: 'Exportar',
         icon: Receipt,
         color: 'text-slate-600 bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700',
@@ -2189,7 +2190,7 @@ export function OrganizationDetailView({ data }: Props) {
                         Rubro Comercial Principal
                       </Badge>
                       <Badge variant="outline" className="rounded-full text-[10px] font-bold px-2.5 py-0.5 border-border text-foreground/80">
-                        Modelo: {org.operating_model === 'wholesale' ? 'Mayorista' : org.operating_model === 'repair' ? 'Taller & SAT' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}
+                        Modelo: {org.operating_model === 'wholesale' ? 'Mayorista' : org.operating_model === 'repair' ? 'Taller de reparación' : org.operating_model === 'service' ? 'Servicios' : 'Venta Minorista'}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
