@@ -15,7 +15,11 @@ export type AuditRetentionDays = (typeof AUDIT_RETENTION_OPTIONS)[number]
 export const MAINTENANCE_ACTIONS = {
   rotateAuditLog: 'maintenance.rotate_audit_log',
   resetDatabaseStats: 'maintenance.reset_db_stats',
+  /** Borrado directo de la versión anterior; queda para leer el historial. */
   deleteOrphanImages: 'maintenance.delete_orphan_images',
+  trashOrphanImages: 'maintenance.trash_orphan_images',
+  restoreImages: 'maintenance.restore_images',
+  purgeImageTrash: 'maintenance.purge_image_trash',
 } as const
 
 /** Nombres usados antes de esta versión; se muestran en el historial igual. */

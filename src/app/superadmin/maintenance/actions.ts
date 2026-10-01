@@ -10,8 +10,10 @@ import {
   rotateAuditLog,
 } from '@/lib/superadmin/maintenance'
 import {
-  deleteProductImageOrphans,
+  purgeImageTrash,
+  restoreTrashedImages,
   scanProductImageOrphans,
+  trashProductImageOrphans,
   type StorageScanResult,
 } from '@/lib/superadmin/storage-cleanup'
 
@@ -62,20 +64,77 @@ export async function scanStorageAction(): Promise<ActionResult<StorageScanResul
   }
 }
 
-export async function deleteOrphanImagesAction(paths: string[]): Promise<ActionResult<{ deleted: number; skipped: number }>> {
+function validPaths(paths: unknown): string[] | string {
+  if (!Array.isArray(paths) || paths.length === 0) return 'No hay archivos seleccionados'
+  const clean = paths.filter((p): p is string => typeof p === 'string')
+  return clean.length > 500 ? 'Máximo 500 archivos por operación' : clean
+}
+
+/** Nada se borra: las imágenes sin uso van a la papelera y se pueden restaurar. */
+export async function trashOrphanImagesAction(paths: string[]): Promise<ActionResult<{ moved: number; skipped: number }>> {
   const user = await getSuperAdminUser()
   if (!user) return { ok: false, error: 'Acceso denegado' }
-  if (!Array.isArray(paths) || paths.length === 0) return { ok: false, error: 'No hay archivos seleccionados' }
-  if (paths.length > 1000) return { ok: false, error: 'Máximo 1000 archivos por operación' }
+  const clean = validPaths(paths)
+  if (typeof clean === 'string') return { ok: false, error: clean }
   try {
-    const { deleted, skipped } = await deleteProductImageOrphans(paths.filter((p) => typeof p === 'string'))
+    const { moved, skipped } = await trashProductImageOrphans(clean)
     await logSuperAdminAction({
       actorId: user.id,
       actorEmail: user.email,
-      action: MAINTENANCE_ACTIONS.deleteOrphanImages,
+      action: MAINTENANCE_ACTIONS.trashOrphanImages,
+      resource: 'storage.product-images',
+      newValues: { moved_count: moved.length, skipped_count: skipped, sample: moved.slice(0, 20) },
+      severity: 'medium',
+    })
+    revalidatePath('/superadmin/maintenance')
+    return { ok: true, data: { moved: moved.length, skipped } }
+  } catch (error) {
+    return { ok: false, error: message(error) }
+  }
+}
+
+export async function restoreTrashedImagesAction(paths: string[]): Promise<ActionResult<{ restored: number; failed: number }>> {
+  const user = await getSuperAdminUser()
+  if (!user) return { ok: false, error: 'Acceso denegado' }
+  const clean = validPaths(paths)
+  if (typeof clean === 'string') return { ok: false, error: clean }
+  try {
+    const { restored, failed } = await restoreTrashedImages(clean)
+    await logSuperAdminAction({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: MAINTENANCE_ACTIONS.restoreImages,
+      resource: 'storage.product-images',
+      newValues: { restored_count: restored.length, skipped_count: failed.length, sample: restored.slice(0, 20) },
+      severity: 'low',
+    })
+    revalidatePath('/superadmin/maintenance')
+    return { ok: true, data: { restored: restored.length, failed: failed.length } }
+  } catch (error) {
+    return { ok: false, error: message(error) }
+  }
+}
+
+/** Palabra que hay que escribir para borrar definitivamente de la papelera. */
+const PURGE_CONFIRMATION = 'BORRAR'
+
+export async function purgeImageTrashAction(paths: string[], confirmation: string): Promise<ActionResult<{ deleted: number; skipped: number }>> {
+  const user = await getSuperAdminUser()
+  if (!user) return { ok: false, error: 'Acceso denegado' }
+  if (confirmation.trim().toUpperCase() !== PURGE_CONFIRMATION) {
+    return { ok: false, error: `Escribí ${PURGE_CONFIRMATION} para confirmar` }
+  }
+  const clean = validPaths(paths)
+  if (typeof clean === 'string') return { ok: false, error: clean }
+  try {
+    const { deleted, skipped } = await purgeImageTrash(clean)
+    await logSuperAdminAction({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: MAINTENANCE_ACTIONS.purgeImageTrash,
       resource: 'storage.product-images',
       newValues: { deleted_count: deleted.length, skipped_count: skipped, sample: deleted.slice(0, 20) },
-      severity: 'medium',
+      severity: 'high',
     })
     revalidatePath('/superadmin/maintenance')
     return { ok: true, data: { deleted: deleted.length, skipped } }

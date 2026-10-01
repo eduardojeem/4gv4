@@ -1,25 +1,20 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Database,
-  FileImage,
   History,
   Loader2,
   RefreshCw,
   ScrollText,
-  Search,
-  ShieldCheck,
   Trash2,
   Wrench,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -33,25 +28,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { StatCard } from '@/components/superadmin/StatCard'
 import { Notice, PageHeader } from '@/components/superadmin/ui/page-header'
-import {
-  deleteOrphanImagesAction,
-  resetDatabaseStatsAction,
-  rotateAuditLogAction,
-  scanStorageAction,
-} from '@/app/superadmin/maintenance/actions'
+import { resetDatabaseStatsAction, rotateAuditLogAction } from '@/app/superadmin/maintenance/actions'
+import { StorageCleanupPanel } from '@/components/superadmin/maintenance/StorageCleanupPanel'
 import type { MaintenanceOverview } from '@/lib/superadmin/maintenance'
 import type { StorageScanResult } from '@/lib/superadmin/storage-cleanup'
 
 const RETENTION_OPTIONS = [90, 180, 365] as const
 type Retention = (typeof RETENTION_OPTIONS)[number]
-export type MaintenanceTab = 'audit' | 'storage' | 'database' | 'history'
+export type MaintenanceTab = 'storage' | 'audit' | 'database' | 'history'
 
 const ACTION_LABELS: Record<string, string> = {
   'maintenance.rotate_audit_log': 'Rotación de auditoría',
   'maintenance.reset_db_stats': 'Reinicio de estadísticas de la base',
   'maintenance.delete_orphan_images': 'Borrado de imágenes huérfanas',
+  'maintenance.trash_orphan_images': 'Imágenes sin uso movidas a la papelera',
+  'maintenance.restore_images': 'Imágenes restauradas de la papelera',
+  'maintenance.purge_image_trash': 'Papelera de imágenes vaciada',
   rotate_audit_logs: 'Rotación de auditoría (versión anterior)',
   reset_stats: 'Reinicio de estadísticas (versión anterior)',
   storage_cleanup: 'Limpieza de archivos (versión anterior)',
@@ -60,18 +53,6 @@ const ACTION_LABELS: Record<string, string> = {
 
 function formatNumber(value: number) {
   return value.toLocaleString('es-PY')
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit += 1
-  }
-  return `${value.toFixed(1)} ${units[unit]}`
 }
 
 function formatDate(value: string | null) {
@@ -84,6 +65,8 @@ function describeHistory(details: Record<string, unknown> | null): string | null
   const parts: string[] = []
   if (typeof details.retention_days === 'number') parts.push(`conservando ${details.retention_days} días`)
   if (typeof details.deleted_count === 'number') parts.push(`${formatNumber(details.deleted_count)} eliminados`)
+  if (typeof details.moved_count === 'number') parts.push(`${formatNumber(details.moved_count)} a la papelera`)
+  if (typeof details.restored_count === 'number') parts.push(`${formatNumber(details.restored_count)} restauradas`)
   if (typeof details.skipped_count === 'number' && details.skipped_count > 0) parts.push(`${details.skipped_count} omitidos`)
   return parts.length ? parts.join(' · ') : null
 }
@@ -196,162 +179,6 @@ function AuditRotationPanel({ overview }: { overview: MaintenanceOverview }) {
 }
 
 // ---------------------------------------------------------------------------
-// Archivos
-// ---------------------------------------------------------------------------
-
-function StoragePanel() {
-  const router = useRouter()
-  const [scan, setScan] = useState<StorageScanResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [scanning, startScan] = useTransition()
-  const [deleting, startDelete] = useTransition()
-
-  const selectedBytes = useMemo(
-    () => (scan?.candidates ?? []).filter((c) => selected.has(c.path)).reduce((sum, c) => sum + c.size, 0),
-    [scan, selected],
-  )
-
-  const runScan = () =>
-    startScan(async () => {
-      const result = await scanStorageAction()
-      if ('error' in result) {
-        setError(result.error)
-        setScan(null)
-        return
-      }
-      setError(null)
-      setScan(result.data)
-      setSelected(new Set())
-    })
-
-  const toggle = (path: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
-
-  const remove = () =>
-    startDelete(async () => {
-      const result = await deleteOrphanImagesAction([...selected])
-      setConfirmOpen(false)
-      if ('error' in result) {
-        toast.error(result.error)
-        return
-      }
-      toast.success(
-        `Se borraron ${result.data.deleted} archivos${result.data.skipped ? ` (${result.data.skipped} omitidos porque ya están en uso)` : ''}`,
-      )
-      router.refresh()
-      runScan()
-    })
-
-  return (
-    <div className="space-y-4">
-      <Card className="rounded-xl">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base"><FileImage className="h-4 w-4" /> Imágenes de productos sin uso</CardTitle>
-            <CardDescription className="max-w-2xl">
-              Busca imágenes en la carpeta <code>products/</code> que ningún producto, marca, tienda ni contenido del sitio usa. Los logos, el branding y los medios del sitio nunca se proponen, y se ignoran los archivos subidos en los últimos 7 días.
-            </CardDescription>
-          </div>
-          <Button onClick={runScan} disabled={scanning || deleting}>
-            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            {scan ? 'Volver a analizar' : 'Analizar'}
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && <Notice tone="error">{error}</Notice>}
-          {!scan && !error && !scanning && (
-            <p className="rounded-lg border border-dashed p-8 text-center text-sm text-slate-500">
-              Tocá «Analizar» para revisar el bucket. No se borra nada sin tu confirmación.
-            </p>
-          )}
-          {scanning && !scan && (
-            <p className="flex items-center justify-center gap-2 rounded-lg border border-dashed p-8 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> Revisando archivos y referencias…
-            </p>
-          )}
-          {scan && (
-            <>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <StatCard label="Archivos" value={formatNumber(scan.totalFiles)} sub={formatBytes(scan.totalBytes)} icon={FileImage} />
-                <StatCard label="Sin uso" value={formatNumber(scan.candidates.length)} sub={formatBytes(scan.candidateBytes)} icon={Trash2} tone={scan.candidates.length ? 'warning' : 'success'} />
-                <StatCard label="Recientes omitidos" value={formatNumber(scan.skippedRecent)} sub="menos de 7 días" icon={History} />
-                <StatCard label="Referencias" value={formatNumber(scan.referencedPaths)} sub={`${scan.sources.length} tablas revisadas`} icon={ShieldCheck} tone="info" />
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                {scan.folders.map((f) => (
-                  <Badge key={f.folder} variant="outline" className="rounded-full">
-                    {f.folder}/ · {formatNumber(f.files)} · {formatBytes(f.bytes)} {f.protected ? '· protegida' : ''}
-                  </Badge>
-                ))}
-              </div>
-
-              {scan.candidates.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-8 text-center text-sm text-slate-500">No hay imágenes sin uso. 🎉</p>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={selected.size === scan.candidates.length}
-                        onCheckedChange={(value) => setSelected(value ? new Set(scan.candidates.map((c) => c.path)) : new Set())}
-                      />
-                      Seleccionar todas ({formatNumber(scan.candidates.length)})
-                    </label>
-                    <Button variant="destructive" size="sm" disabled={selected.size === 0 || deleting} onClick={() => setConfirmOpen(true)}>
-                      <Trash2 className="h-4 w-4" /> Borrar {selected.size ? `${selected.size} (${formatBytes(selectedBytes)})` : 'seleccionadas'}
-                    </Button>
-                  </div>
-                  <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {scan.candidates.map((file) => (
-                      <li key={file.path}>
-                        <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2 transition-colors ${selected.has(file.path) ? 'border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}>
-                          <Checkbox checked={selected.has(file.path)} onCheckedChange={() => toggle(file.path)} />
-                          {/* Vista previa directa del bucket público: miniatura sin optimizar a propósito. */}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={file.publicUrl} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-md border object-cover" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-mono text-xs">{file.path.replace('products/', '')}</span>
-                            <span className="block text-xs text-slate-500">{formatBytes(file.size)} · {formatDate(file.updatedAt)}</span>
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Borrar {selected.size} imágenes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Antes de borrar se vuelve a verificar cada archivo: si alguno empezó a usarse, se omite. El borrado es definitivo y queda registrado en el historial.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={(e) => { e.preventDefault(); remove() }} disabled={deleting} className="bg-red-600 hover:bg-red-700">
-              {deleting && <Loader2 className="h-4 w-4 animate-spin" />} Borrar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Base de datos
 // ---------------------------------------------------------------------------
 
@@ -419,29 +246,37 @@ function DatabasePanel() {
 
 export function MaintenanceCenter({ overview, initialTab }: { overview: MaintenanceOverview; initialTab: MaintenanceTab }) {
   const router = useRouter()
+  const [scan, setScan] = useState<StorageScanResult | null>(null)
+
+  // La pestaña queda en la URL para volver o compartir el enlace, sin recargar.
+  const rememberTab = (tab: string) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    window.history.replaceState(null, '', url)
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         icon={Wrench}
         title="Mantenimiento"
-        description="Tareas para mantener la plataforma ordenada: limpiar auditoría vieja, borrar imágenes que nadie usa y administrar la base de datos. Cada acción queda registrada."
+        description="Liberar espacio de imágenes que ningún negocio usa, limpiar auditoría vieja y administrar la base de datos. Nada se borra sin confirmación y cada acción queda en el historial."
         actions={<Button variant="outline" size="sm" onClick={() => router.refresh()}><RefreshCw className="h-4 w-4" /> Actualizar</Button>}
       />
 
       {overview.loadErrors.length > 0 && <Notice tone="error">No se pudieron cargar algunos datos: {overview.loadErrors.join(' · ')}</Notice>}
 
-      <Tabs defaultValue={initialTab} className="space-y-4">
+      <Tabs defaultValue={initialTab} onValueChange={rememberTab} className="space-y-4">
         <div className="overflow-x-auto">
           <TabsList className="w-max">
+            <TabsTrigger value="storage">Imágenes</TabsTrigger>
             <TabsTrigger value="audit">Auditoría</TabsTrigger>
-            <TabsTrigger value="storage">Archivos</TabsTrigger>
             <TabsTrigger value="database">Base de datos</TabsTrigger>
             <TabsTrigger value="history">Historial ({overview.history.length})</TabsTrigger>
           </TabsList>
         </div>
+        <TabsContent value="storage"><StorageCleanupPanel scan={scan} onScan={setScan} /></TabsContent>
         <TabsContent value="audit"><AuditRotationPanel overview={overview} /></TabsContent>
-        <TabsContent value="storage"><StoragePanel /></TabsContent>
         <TabsContent value="database"><DatabasePanel /></TabsContent>
         <TabsContent value="history">
           <Card className="rounded-xl">
