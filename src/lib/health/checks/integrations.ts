@@ -250,21 +250,51 @@ export async function runIntegrationChecks(
         category: 'deployment',
         name: 'Manejo de errores y logging',
         description: 'Error boundaries de Next.js y destino de logs de producción.',
-        method: codeAuditMethod(),
+        method: `${codeAuditMethod()} Verificación de tabla system_error_logs en Supabase, alertas de Telegram o servicio externo (Sentry / Axiom / Better Stack).`,
       },
       async () => {
         const boundaries = codeAudit.errorBoundaries
         const hasGlobal = boundaries.some((f) => f.endsWith('global-error.tsx'))
-        const hasExternal = isConfigured('SENTRY_DSN') || isConfigured('NEXT_PUBLIC_SENTRY_DSN')
+        const hasTelegram = isConfigured('TELEGRAM_BOT_TOKEN') && isConfigured('TELEGRAM_CHAT_ID')
+        const hasExternalService =
+          isConfigured('SENTRY_DSN') ||
+          isConfigured('NEXT_PUBLIC_SENTRY_DSN') ||
+          isConfigured('AXIOM_TOKEN') ||
+          isConfigured('LOGTAIL_SOURCE_TOKEN')
+
+        // Chequear presencia de la tabla system_error_logs en Supabase
+        const { error: dbErr } = await admin.from('system_error_logs').select('id').limit(1)
+        const hasDbLogging = !dbErr
+
+        const hasLoggingDestination = hasDbLogging || hasTelegram || hasExternalService
+
+        const destinations: string[] = []
+        if (hasDbLogging) destinations.push('Supabase (system_error_logs)')
+        if (hasTelegram) destinations.push('Alertas en Telegram')
+        if (isConfigured('SENTRY_DSN') || isConfigured('NEXT_PUBLIC_SENTRY_DSN')) destinations.push('Sentry')
+        if (isConfigured('AXIOM_TOKEN')) destinations.push('Axiom')
+        if (isConfigured('LOGTAIL_SOURCE_TOKEN')) destinations.push('Better Stack')
+
+        const summaryDest = destinations.length > 0
+          ? `logs retenidos en ${destinations.join(' + ')}`
+          : 'logs solo en consola de Vercel'
+
         return {
-          status: hasGlobal && hasExternal ? 'healthy' : hasGlobal ? 'warning' : 'error',
+          status: hasGlobal && hasLoggingDestination ? 'healthy' : hasGlobal ? 'warning' : 'error',
           severity: hasGlobal ? 'low' : 'medium',
-          summary: `${boundaries.length} error boundaries · logs ${hasExternal ? 'con servicio externo' : 'solo en consola de Vercel'}`,
+          summary: `${boundaries.length} error boundaries · ${summaryDest}`,
           findings: [
             ...boundaries,
-            ...(hasExternal ? [] : ['Sin servicio de errores (Sentry u otro): los errores de producción solo quedan en los logs efímeros de Vercel.']),
+            ...(destinations.length > 0
+              ? [`✓ Destino de errores configurado: ${destinations.join(', ')}.`]
+              : [
+                  'Sin destino persistente de errores: los errores de producción solo quedan en los logs efímeros de Vercel.',
+                  'Aplica la migración 20261006120000_system_error_logs.sql en Supabase para retener incidencias, o configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID.',
+                ]),
           ],
-          recommendation: hasExternal ? undefined : 'Integrar Sentry (o un Log Drain) para retener errores y alimentar las métricas de errores por endpoint.',
+          recommendation: hasLoggingDestination
+            ? undefined
+            : 'Aplicar la migración de system_error_logs en Supabase o configurar alertas de Telegram para retener errores.',
         }
       },
     ),

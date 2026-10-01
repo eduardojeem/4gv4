@@ -20,6 +20,7 @@ export interface CodeAudit {
   errorBoundaries: string[]
   ga4Files: string[]
   publicSensitiveFiles: string[]
+  migrationVersions: string[]
   paymentProviders: Array<{ provider: string; webhookRoutes: string[] }>
   superAdminLayoutGuarded: boolean
 }

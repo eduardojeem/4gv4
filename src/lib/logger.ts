@@ -63,6 +63,11 @@ export const logger = {
             // In production, log minimal info without sensitive data
             console.error('[ERROR] An error occurred')
         }
+
+        // Registrar en Supabase y enviar alerta a Telegram (si configurado)
+        if (process.env.NODE_ENV !== 'test') {
+            void dispatchError(args)
+        }
     },
 
     /**
@@ -86,3 +91,70 @@ export const logger = {
 }
 
 export default logger
+
+function extractErrorInfo(args: unknown[]): { name: string; message: string; stack?: string } {
+    let name = 'Error'
+    let message = ''
+    let stack: string | undefined
+
+    for (const arg of args) {
+        if (arg instanceof Error) {
+            name = arg.name
+            message = arg.message
+            stack = arg.stack
+            break
+        } else if (typeof arg === 'string' && !message) {
+            message = arg
+        } else if (arg && typeof arg === 'object') {
+            if ('error' in arg && (arg as { error: unknown }).error instanceof Error) {
+                const err = (arg as { error: Error }).error
+                name = err.name
+                message = err.message
+                stack = err.stack
+                break
+            } else if ('message' in arg && typeof (arg as { message: unknown }).message === 'string') {
+                message = (arg as { message: string }).message
+            }
+        }
+    }
+
+    if (!message && args.length > 0) {
+        try {
+            message = String(args[0])
+        } catch {
+            message = 'Error sin descripción'
+        }
+    }
+
+    return { name, message: message || 'Error sin mensaje', stack }
+}
+
+let isDispatching = false
+async function dispatchError(args: unknown[]): Promise<void> {
+    if (isDispatching) return
+    isDispatching = true
+    try {
+        const { name, message, stack } = extractErrorInfo(args)
+        if (isServer) {
+            const { recordServerError } = await import('@/lib/logging/error-reporter')
+            await recordServerError({
+                name,
+                message,
+                stack,
+                source: 'server',
+            })
+        } else {
+            const { recordClientError } = await import('@/lib/logging/error-reporter')
+            recordClientError({
+                name,
+                message,
+                stack,
+                source: 'client',
+            })
+        }
+    } catch {
+        // Silenciar para evitar bucles o caídas en cascada
+    } finally {
+        isDispatching = false
+    }
+}

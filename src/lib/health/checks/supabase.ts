@@ -4,6 +4,8 @@ import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { HEALTH_MIGRATION, type CatalogResult, type HealthCatalog } from '@/lib/health/catalog'
 import { analyzeTable, analyzeViews } from '@/lib/health/tenant-isolation'
 import { auditPublicBuckets } from '@/lib/health/public-bucket-audit'
+import { codeAudit } from '@/lib/health/code-audit'
+import { evaluateMigrationHealth } from '@/lib/health/migration-drift'
 import type {
   HealthCheckResult,
   HealthMetricGroup,
@@ -257,10 +259,29 @@ export async function runSupabaseChecks(admin: Admin, catalog: CatalogResult): P
           if (!data.migrations) {
             return { status: 'not_configured', severity: 'low', summary: 'No hay historial de migraciones de la CLI en esta base.' }
           }
+          if (!data.migrations.versions) {
+            return {
+              status: 'unknown',
+              severity: 'medium',
+              summary: `${data.migrations.count} migraciones registradas; no se pudo comparar el historial completo`,
+              recommendation: 'Aplicar la migración que crea get_system_health_migration_versions() y volver a ejecutar el diagnóstico.',
+            }
+          }
+          const drift = evaluateMigrationHealth(codeAudit.migrationVersions, data.migrations.versions)
+          const findings = [
+            ...drift.missingRemote.map((version) => `${version}: existe en el repositorio pero no en el historial remoto`),
+            ...drift.remoteOnly.map((version) => `${version}: existe en el historial remoto pero no en este checkout`),
+          ]
           return {
-            status: 'healthy',
-            severity: 'info',
-            summary: `${data.migrations.count} migraciones; última ${data.migrations.latest ?? '—'}`,
+            status: drift.status,
+            severity: drift.status === 'warning' ? 'medium' : 'info',
+            summary: drift.status === 'healthy'
+              ? `${data.migrations.count} migraciones sincronizadas; última ${data.migrations.latest ?? '—'}`
+              : `${findings.length} diferencia(s) entre repositorio e historial remoto`,
+            findings,
+            recommendation: drift.status === 'warning'
+              ? 'Revisar supabase migration list y aplicar o reparar el historial antes del próximo despliegue.'
+              : undefined,
           }
         },
       ),

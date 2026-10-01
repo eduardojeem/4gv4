@@ -53,7 +53,7 @@ export interface HealthCatalog {
     signed_in_30d: number
     created_30d: number
   } | null
-  migrations: { count: number; latest: string | null } | null
+  migrations: { count: number; latest: string | null; versions: string[] | null } | null
 }
 
 export type CatalogResult =
@@ -75,7 +75,10 @@ export function isMissingObjectError(error: { code?: string; message?: string } 
 
 export async function loadHealthCatalog(admin: SupabaseClient): Promise<CatalogResult> {
   try {
-    const { data, error } = await admin.rpc('get_system_health_catalog')
+    const [{ data, error }, migrationVersions] = await Promise.all([
+      admin.rpc('get_system_health_catalog'),
+      admin.rpc('get_system_health_migration_versions'),
+    ])
     if (error) {
       return {
         available: false,
@@ -87,7 +90,13 @@ export async function loadHealthCatalog(admin: SupabaseClient): Promise<CatalogR
     if (!data || typeof data !== 'object') {
       return { available: false, reason: 'get_system_health_catalog() no devolvió datos.' }
     }
-    return { available: true, catalog: data as HealthCatalog }
+    const catalog = data as HealthCatalog
+    if (catalog.migrations) {
+      catalog.migrations.versions = migrationVersions.error || !Array.isArray(migrationVersions.data)
+        ? null
+        : migrationVersions.data.map(String)
+    }
+    return { available: true, catalog }
   } catch (error) {
     return { available: false, reason: errorMessage(error) }
   }

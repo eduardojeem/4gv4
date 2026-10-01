@@ -103,6 +103,15 @@ const publicSensitiveFiles = walk(PUBLIC_DIR, (f) => SENSITIVE_PUBLIC_EXT.test(f
   `/${path.relative(PUBLIC_DIR, file).split(path.sep).join('/')}`,
 )
 
+const MIGRATIONS_DIR = path.join(ROOT, 'supabase', 'migrations')
+const migrationVersions = fs.existsSync(MIGRATIONS_DIR)
+  ? fs
+      .readdirSync(MIGRATIONS_DIR)
+      .map((name) => name.match(/^(\d{14})_.*\.sql$/)?.[1])
+      .filter(Boolean)
+      .sort()
+  : []
+
 const paymentsDir = path.join(APP, 'api', 'payments')
 const paymentProviders = fs.existsSync(paymentsDir)
   ? fs
@@ -128,6 +137,7 @@ const manifest = {
   errorBoundaries,
   ga4Files,
   publicSensitiveFiles,
+  migrationVersions,
   paymentProviders,
   superAdminLayoutGuarded,
 }

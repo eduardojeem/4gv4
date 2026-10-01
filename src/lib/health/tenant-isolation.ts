@@ -50,6 +50,11 @@ export const GLOBAL_TABLES = new Set([
   // Atributos de variante compartidos por todas las tiendas (sin organization_id).
   'variant_attributes',
   'variant_attribute_options',
+  // Catálogos maestros mantenidos por SuperAdmin y compartidos por todos los tenants.
+  'global_device_models',
+  'global_products',
+  // Costos operativos de la propia plataforma, no de una organización cliente.
+  'platform_expenses',
 ])
 
 /**

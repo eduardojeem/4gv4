@@ -232,6 +232,20 @@ describe('analyzeTable', () => {
       policies: [policy({ command: 'INSERT', roles: ['public'], with_check: 'true' })],
     })).severity).toBe('high')
   })
+
+  it.each(['global_device_models', 'global_products', 'platform_expenses'])(
+    'trata %s como tabla global de la plataforma',
+    (name) => {
+      const finding = analyzeTable(table({
+        name,
+        has_organization_id: false,
+        policies: [policy({ roles: ['authenticated'], using: AUTHENTICATED_ONLY })],
+      }))
+
+      expect(finding.status).toBe('healthy')
+      expect(finding.reasons).toEqual(['Tabla global con RLS activo.'])
+    },
+  )
 })
 
 describe('analyzeViews', () => {
