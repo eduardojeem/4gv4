@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
 import { logger } from '@/lib/logger'
@@ -228,6 +229,29 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       const value = validated[key]
       if (value !== undefined) {
         updatePayload[key] = value
+      }
+    }
+
+    // Marca: si se tocó, el texto y el vínculo quedan de acuerdo. Si llega
+    // solo uno de los dos, el otro sale de lo guardado.
+    if ('brand' in body || 'brand_id' in body) {
+      const { data: current } = await createAdminSupabase()
+        .from('products')
+        .select('brand, brand_id')
+        .eq('id', id)
+        .eq('organization_id', organization.id)
+        .maybeSingle()
+      try {
+        Object.assign(updatePayload, await resolveProductBrand(createAdminSupabase(), organization.id, {
+          brand: 'brand' in body ? validated.brand : (current as { brand?: string | null } | null)?.brand,
+          // Texto nuevo sin vínculo: se busca la marca por el texto.
+          brand_id: 'brand_id' in body ? validated.brand_id : 'brand' in body ? null : (current as { brand_id?: string | null } | null)?.brand_id,
+        }))
+      } catch (error) {
+        if (error instanceof ProductBrandError) {
+          return NextResponse.json({ success: false, error: error.message, code: 'INVALID_BRAND', field: 'brand_id' }, { status: 400 })
+        }
+        throw error
       }
     }
 

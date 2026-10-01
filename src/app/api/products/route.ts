@@ -3,6 +3,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 import type { AppRole } from '@/lib/auth/role-utils'
@@ -507,6 +508,16 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       }, { status: 409 })
     }
 
+    // Marca: el texto y el vínculo quedan de acuerdo (la importación manda solo el texto).
+    try {
+      Object.assign(validated, await resolveProductBrand(createAdminSupabase(), organization.id, validated))
+    } catch (error) {
+      if (error instanceof ProductBrandError) {
+        return NextResponse.json({ success: false, error: error.message, code: 'INVALID_BRAND', field: 'brand_id' }, { status: 400 })
+      }
+      throw error
+    }
+
     if (validated.has_variants) {
       const rawAttrs = validated.variant_attribute_config ?? []
       const effectiveAttrs = (Array.isArray(rawAttrs) && rawAttrs.length > 0)
@@ -825,6 +836,22 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         { success: false, error: 'Producto no encontrado' },
         { status: 404 }
       )
+    }
+
+    // Marca: si se tocó, el texto y el vínculo quedan de acuerdo.
+    if (validated.brand !== undefined || validated.brand_id !== undefined) {
+      try {
+        Object.assign(validated, await resolveProductBrand(createAdminSupabase(), organization.id, {
+          brand: validated.brand ?? (existingProduct as { brand?: string | null }).brand,
+          // Texto nuevo sin vínculo: se busca la marca por el texto.
+          brand_id: validated.brand_id !== undefined ? validated.brand_id : validated.brand !== undefined ? null : (existingProduct as { brand_id?: string | null }).brand_id,
+        }))
+      } catch (error) {
+        if (error instanceof ProductBrandError) {
+          return NextResponse.json({ success: false, error: error.message, code: 'INVALID_BRAND', field: 'brand_id' }, { status: 400 })
+        }
+        throw error
+      }
     }
 
     // Dos productos con el mismo codigo llevan la misma etiqueta, y en el
