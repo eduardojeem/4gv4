@@ -60,6 +60,21 @@ async function readUsage(admin: ReturnType<typeof createAdminSupabase>): Promise
   return { products, repairs }
 }
 
+/**
+ * La marca del equipo sale del catálogo de Marcas: si lo escrito coincide con
+ * una marca global (por nombre o alias), se guarda con su nombre oficial. Así
+ * «samsung» no queda como otra marca distinta de la de Marcas.
+ */
+async function canonicalBrand(admin: ReturnType<typeof createAdminSupabase>, raw: string): Promise<string | null> {
+  const brand = normalizeDeviceBrand(raw)
+  if (!brand) return null
+  const { data } = await admin.from('global_brands').select('name, aliases').eq('is_active', true)
+  const key = brand.toLocaleLowerCase('es')
+  const match = ((data ?? []) as Array<{ name: string; aliases: string[] | null }>).find((row) =>
+    row.name.toLocaleLowerCase('es') === key || (row.aliases ?? []).some((alias) => alias.toLocaleLowerCase('es') === key))
+  return match?.name ?? brand
+}
+
 function isMissingTable(error: { code?: string; message?: string } | null) {
   return Boolean(error && (error.code === 'PGRST205' || error.code === '42P01' || /does not exist|could not find/i.test(error.message ?? '')))
 }
@@ -70,9 +85,10 @@ export async function GET() {
 
   try {
     const admin = createAdminSupabase()
-    const [{ data, error }, usage] = await Promise.all([
+    const [{ data, error }, usage, { data: brands }] = await Promise.all([
       admin.from('global_device_models').select(COLUMNS).limit(5000),
       readUsage(admin),
+      admin.from('global_brands').select('id, name, logo_url').eq('is_active', true).order('name'),
     ])
     if (isMissingTable(error)) {
       return NextResponse.json({ success: false, missingTable: true, error: 'La tabla global_device_models no existe todavía. Ejecutá su SQL en Supabase.' }, { status: 503 })
@@ -89,6 +105,8 @@ export async function GET() {
       candidates: candidates.slice(0, 300),
       candidatesTotal: candidates.length,
       storesUsing,
+      // Las marcas del catálogo de Marcas: de ahí se elige la del equipo.
+      brands: brands ?? [],
     })
   } catch (error) {
     logger.error('[superadmin/global-device-models] GET', { error })
@@ -113,10 +131,11 @@ export async function POST(request: NextRequest) {
       const rows = validation.data.entries
         .map((entry) => normalized(entry))
         .filter((entry): entry is { brand: string; model: string; aliases: string[] } => Boolean(entry.brand && entry.model))
-        .map((entry) => ({ brand: entry.brand, model: entry.model, device_type: 'smartphone', aliases: [] }))
+        .map((entry) => ({ brand: entry.brand, model: entry.model, device_type: 'smartphone', aliases: [] as string[] }))
 
       let created = 0
       for (const row of rows) {
+        row.brand = (await canonicalBrand(admin, row.brand)) ?? row.brand
         const { error } = await admin.from('global_device_models').insert(row)
         if (!error) created += 1
         else if (error.code !== '23505') logger.error('[superadmin/global-device-models] import', { error: error.message, row })
@@ -137,7 +156,9 @@ export async function POST(request: NextRequest) {
     if (!validation.success) {
       return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
     }
-    const { brand, model, aliases } = normalized(validation.data)
+    const normalizedInput = normalized(validation.data)
+    const { model, aliases } = normalizedInput
+    const brand = normalizedInput.brand ? await canonicalBrand(admin, normalizedInput.brand) : null
     if (!brand || !model) return NextResponse.json({ success: false, error: 'Poné la marca y el modelo.' }, { status: 400 })
 
     const { data, error } = await admin
@@ -195,7 +216,7 @@ export async function PUT(request: NextRequest) {
         aliases: input.aliases ?? (current as { aliases?: string[] } | null)?.aliases ?? [],
       })
       if (!next.brand || !next.model) return NextResponse.json({ success: false, error: 'Poné la marca y el modelo.' }, { status: 400 })
-      Object.assign(updates, next)
+      Object.assign(updates, next, { brand: await canonicalBrand(admin, next.brand) })
     }
     if (input.device_type !== undefined) updates.device_type = input.device_type
     if (input.release_year !== undefined) updates.release_year = input.release_year

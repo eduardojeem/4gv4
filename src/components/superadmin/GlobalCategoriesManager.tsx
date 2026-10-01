@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CornerDownRight, FolderTree, Loader2, Plus, RefreshCw, RotateCcw, Search, Trash2, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
@@ -289,7 +290,7 @@ export function GlobalCategoriesManager() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Catálogos globales</p>
+          <Link href="/superadmin/catalogs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground hover:underline">Catálogos globales</Link>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-foreground">
             <FolderTree className="h-6 w-6 text-sky-400" />
             Categorías

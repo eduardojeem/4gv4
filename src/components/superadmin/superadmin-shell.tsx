@@ -18,6 +18,7 @@ import {
   FileText,
   Globe,
   LayoutDashboard,
+  LayoutGrid,
   LayoutTemplate,
   LogOut,
   Bell,
@@ -184,11 +185,14 @@ const navItems: NavItem[] = [
     // Listas que comparten todas las tiendas. Van juntas porque se trabajan
     // igual: se definen acá y las tiendas eligen de ellas.
     title: 'Catálogos globales',
-    href: '/superadmin/categories',
+    href: '/superadmin/catalogs',
     icon: FolderTree,
     description: 'Categorías, marcas, productos por código de barras y modelos de equipos que comparten todas las tiendas',
     section: 'content',
+    // Resumen primero; después de la base (Categorías, Marcas) a lo que se
+    // apoya en ella (Productos por código, Modelos de equipos).
     children: [
+      { title: 'Resumen', href: '/superadmin/catalogs', icon: LayoutGrid },
       { title: 'Categorías', href: '/superadmin/categories', icon: FolderTree },
       { title: 'Marcas', href: '/superadmin/brands', icon: Tag },
       { title: 'Productos por código', href: '/superadmin/global-products', icon: Barcode },

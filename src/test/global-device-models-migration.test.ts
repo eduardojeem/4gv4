@@ -31,7 +31,9 @@ describe('catálogo global de modelos de equipos', () => {
 
   it('está en el menú dentro de Catálogos globales', () => {
     const shell = leer('src/components/superadmin/superadmin-shell.tsx')
-    const group = shell.slice(shell.indexOf("title: 'Catálogos globales'"), shell.indexOf("title: 'Catálogos globales'") + 900)
+    const start = shell.indexOf("title: 'Catálogos globales'")
+    // Hasta el cierre de sus hijos, sin depender de cuánto ocupa el grupo.
+    const group = shell.slice(start, shell.indexOf('],', start))
     expect(group).toContain("href: '/superadmin/device-models'")
   })
 })

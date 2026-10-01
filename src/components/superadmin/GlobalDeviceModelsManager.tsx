@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, RefreshCw, RotateCcw, Search, Smartphone, Sparkles, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, Loader2, Plus, RefreshCw, RotateCcw, Search, Smartphone, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -132,6 +133,8 @@ export function GlobalDeviceModelsManager() {
   const [candidates, setCandidates] = useState<DeviceModelCandidate[]>([])
   const [candidatesTotal, setCandidatesTotal] = useState(0)
   const [storesUsing, setStoresUsing] = useState(0)
+  // Marcas del catálogo de Marcas: la marca del equipo se elige de ahí.
+  const [catalogBrands, setCatalogBrands] = useState<Array<{ id: string; name: string; logo_url: string | null }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [missingTable, setMissingTable] = useState(false)
@@ -160,6 +163,7 @@ export function GlobalDeviceModelsManager() {
       setCandidates(payload.candidates ?? [])
       setCandidatesTotal(payload.candidatesTotal ?? 0)
       setStoresUsing(payload.storesUsing ?? 0)
+      setCatalogBrands(payload.brands ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.')
     } finally {
@@ -187,6 +191,11 @@ export function GlobalDeviceModelsManager() {
       return true
     })
   }, [models, search, brandFilter, filter])
+
+  const catalogBrandByName = useMemo(
+    () => new Map(catalogBrands.map((brand) => [brand.name.toLocaleLowerCase('es'), brand])),
+    [catalogBrands],
+  )
 
   const grouped = useMemo(() => {
     const groups = new Map<string, Row[]>()
@@ -273,7 +282,7 @@ export function GlobalDeviceModelsManager() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Catálogos globales</p>
+          <Link href="/superadmin/catalogs" className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground hover:underline">Catálogos globales</Link>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-foreground">
             <Smartphone className="h-6 w-6 text-emerald-500" />
             Modelos de equipos
@@ -378,8 +387,18 @@ export function GlobalDeviceModelsManager() {
             <div className="space-y-4">
               {grouped.map(([brand, rows]) => (
                 <section key={brand} className="overflow-hidden rounded-xl border border-border">
-                  <h2 className="flex items-center justify-between bg-muted/40 px-4 py-2 text-sm font-bold text-foreground">
-                    {brand}
+                  <h2 className="flex items-center gap-2 bg-muted/40 px-4 py-2 text-sm font-bold text-foreground">
+                    {catalogBrandByName.get(brand.toLocaleLowerCase('es'))?.logo_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={catalogBrandByName.get(brand.toLocaleLowerCase('es'))!.logo_url!} alt="" className="h-5 w-5 rounded bg-white object-contain" />
+                    )}
+                    <span className="flex-1">{brand}</span>
+                    {!catalogBrandByName.has(brand.toLocaleLowerCase('es')) && (
+                      <Link href="/superadmin/brands" className="flex items-center gap-1 text-xs font-medium text-amber-700 hover:underline dark:text-amber-400">
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                        No está en Marcas
+                      </Link>
+                    )}
                     <span className="text-xs font-normal text-muted-foreground">{rows.length} modelo{rows.length === 1 ? '' : 's'}</span>
                   </h2>
                   <ul className="divide-y divide-border">
@@ -458,8 +477,11 @@ export function GlobalDeviceModelsManager() {
                   <Label htmlFor="dm-brand">Marca *</Label>
                   <Input id="dm-brand" list="dm-brands" value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} placeholder="Samsung" />
                   <datalist id="dm-brands">
-                    {brands.map(([brand]) => <option key={brand} value={brand} />)}
+                    {[...new Set([...catalogBrands.map((brand) => brand.name), ...brands.map(([brand]) => brand)])].map((brand) => <option key={brand} value={brand} />)}
                   </datalist>
+                  {draft.brand.trim() && !catalogBrandByName.has(draft.brand.trim().toLocaleLowerCase('es')) && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">No está en Marcas: conviene crearla ahí primero, con su logo.</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="dm-model">Modelo *</Label>
