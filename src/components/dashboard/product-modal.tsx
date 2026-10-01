@@ -76,6 +76,7 @@ import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
+import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 import { BarcodeScanner } from '@/components/ui/barcode-scanner'
 import { BarcodeAssist, type GlobalProductMatch } from '@/components/dashboard/products/BarcodeAssist'
 import { cleanBarcode } from '@/lib/products/barcode-catalog'
@@ -981,7 +982,11 @@ export function ProductModal({
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`
         const filePath = `products/${fileName}`
 
-        const result = await uploadFile('product-images', filePath, file)
+        const result = await uploadFile('product-images', filePath, file, {
+          upsert: false,
+          cacheControl: PUBLIC_IMAGE_CACHE_CONTROL,
+          contentType: file.type,
+        })
 
         if (result.success && result.url) {
           uploadedUrls.push(result.url)

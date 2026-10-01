@@ -29,6 +29,12 @@ export const REQUIRED_BUCKETS: StorageBucket[] = [
   }
 ]
 
+export interface UploadFileOptions {
+  upsert?: boolean
+  cacheControl?: string
+  contentType?: string
+}
+
 /**
  * Check if a storage bucket exists
  */
@@ -72,13 +78,22 @@ export async function uploadFile(
   bucketName: string, 
   filePath: string, 
   file: File,
-  options?: { upsert?: boolean }
+  options?: UploadFileOptions
 ): Promise<{ success: boolean; url?: string; path?: string; error?: string }> {
   const uploadThroughServer = async () => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('bucket', bucketName)
     formData.append('path', filePath)
+    if (options?.cacheControl !== undefined) {
+      formData.append('cacheControl', options.cacheControl)
+    }
+    if (options?.contentType !== undefined) {
+      formData.append('contentType', options.contentType)
+    }
+    if (options?.upsert !== undefined) {
+      formData.append('upsert', String(options.upsert))
+    }
 
     const response = await fetch('/api/upload', {
       method: 'POST',
