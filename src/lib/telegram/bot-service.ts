@@ -26,8 +26,11 @@ export interface TelegramUpdate {
   callback_query?: TelegramCallbackQuery
 }
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`
+function getTelegramApi(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return null
+  return `https://api.telegram.org/bot${token}`
+}
 
 /**
  * Envía un mensaje de texto formateado con teclado interactivo opcional a Telegram.
@@ -37,10 +40,14 @@ export async function sendTelegramMessage(
   text: string,
   replyMarkup?: Record<string, unknown>,
 ): Promise<boolean> {
-  if (!BOT_TOKEN) return false
+  const api = getTelegramApi()
+  if (!api) {
+    console.error('[telegram-bot] TELEGRAM_BOT_TOKEN no configurado en entorno')
+    return false
+  }
 
   try {
-    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+    const res = await fetch(`${api}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -51,8 +58,13 @@ export async function sendTelegramMessage(
         reply_markup: replyMarkup,
       }),
     })
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('[telegram-bot] Fallo en sendMessage:', err)
+    }
     return res.ok
-  } catch {
+  } catch (err) {
+    console.error('[telegram-bot] Error de red en sendMessage:', err)
     return false
   }
 }
@@ -61,9 +73,10 @@ export async function sendTelegramMessage(
  * Responde a un callback_query para quitar el spinner en el cliente de Telegram.
  */
 export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
-  if (!BOT_TOKEN) return
+  const api = getTelegramApi()
+  if (!api) return
   try {
-    await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+    await fetch(`${api}/answerCallbackQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -361,9 +374,17 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
 }
 
 async function sendWelcomeMessage(chatId: number | string, firstName: string): Promise<void> {
-  const admin = createAdminSupabase()
-  const org = await getTargetOrganization(admin)
-  const storeName = org?.name ? `<b>${escapeHtml(org.name)}</b>` : 'nuestra tienda'
+  let storeName = 'nuestra tienda'
+  let orgSlug: string | null = null
+
+  try {
+    const admin = createAdminSupabase()
+    const org = await getTargetOrganization(admin)
+    if (org?.name) storeName = `<b>${escapeHtml(org.name)}</b>`
+    if (org?.slug) orgSlug = org.slug
+  } catch (err) {
+    console.error('[telegram-bot] Error obteniendo tienda en welcome:', err)
+  }
 
   const text = [
     `👋 ¡Hola <b>${escapeHtml(firstName)}</b>! Bienvenido al asistente virtual de ${storeName}.`,
@@ -378,8 +399,8 @@ async function sendWelcomeMessage(chatId: number | string, firstName: string): P
     inline_keyboard: [
       [
         { text: '📋 Ver Categorías', callback_data: 'cmd_categories' },
-        ...(org?.slug
-          ? [{ text: '🌐 Catálogo Online', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://4g.com.py'}/${org.slug}` }]
+        ...(orgSlug
+          ? [{ text: '🌐 Catálogo Online', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.mitiendapy.com'}/${orgSlug}` }]
           : []),
       ],
     ],

@@ -15,11 +15,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Invalid update payload' }, { status: 400 })
     }
 
-    // Procesar en segundo plano para responder 200 OK inmediatamente a Telegram
-    // (Telegram reintenta enviar el mensaje si la respuesta tarda más de un par de segundos)
-    void processTelegramUpdate(update).catch((err) => {
-      logger.error('Error procesando mensaje de Telegram:', err)
-    })
+    // Esperar la resolución completa antes de responder para que la función Serverless de Vercel no se congele antes de enviar el mensaje
+    await processTelegramUpdate(update)
 
     return NextResponse.json({ ok: true })
   } catch (error) {
