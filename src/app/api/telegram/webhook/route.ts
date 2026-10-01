@@ -1,61 +1,65 @@
+import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { processTelegramUpdate, type TelegramUpdate } from '@/lib/telegram/bot-service'
+import { getWebhookInfo, registerWebhook, webhookSecret } from '@/lib/telegram/telegram-api'
+import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { siteUrl } from '@/lib/site-url'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * Endpoint de Webhook para Telegram Bot
- * Recibe eventos de mensajes y botones interactivos de clientes y responde en tiempo real.
- */
+function sameSecret(received: string | null, expected: string): boolean {
+  if (!received) return false
+  const a = Buffer.from(received)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** Sin el token secreto, cualquiera que conozca la URL podía hacerse pasar por Telegram. */
 export async function POST(req: Request) {
+  const secret = webhookSecret()
+  if (!secret || !sameSecret(req.headers.get('x-telegram-bot-api-secret-token'), secret)) {
+    return NextResponse.json({ ok: false }, { status: 401 })
+  }
+
+  let update: TelegramUpdate
   try {
-    const update = (await req.json()) as TelegramUpdate
-    if (!update || typeof update !== 'object') {
-      return NextResponse.json({ ok: false, error: 'Invalid update payload' }, { status: 400 })
-    }
+    update = (await req.json()) as TelegramUpdate
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Invalid update payload' }, { status: 400 })
+  }
+  if (!update || typeof update !== 'object') {
+    return NextResponse.json({ ok: false, error: 'Invalid update payload' }, { status: 400 })
+  }
 
-    // Esperar la resolución completa antes de responder para que la función Serverless de Vercel no se congele antes de enviar el mensaje
+  try {
+    // Se espera la respuesta entera: en serverless la función se congela al responder.
     await processTelegramUpdate(update)
-
-    return NextResponse.json({ ok: true })
   } catch (error) {
     logger.error('Error en webhook de Telegram:', error)
-    return NextResponse.json({ ok: true }) // Devolver 200 para evitar reintentos infinitos
   }
+  // 200 siempre: Telegram reintenta lo que falla y el cliente recibiría el mensaje repetido.
+  return NextResponse.json({ ok: true })
 }
 
 /**
- * Consulta de estado del webhook o registro automático de URL en Telegram
+ * Estado del webhook, o `?setup=true` para registrarlo con su token secreto y
+ * el menú de comandos. Sólo superadmin: antes cualquiera podía re-registrarlo.
  */
 export async function GET(req: Request) {
-  const token = process.env.TELEGRAM_BOT_TOKEN
-  if (!token) {
+  const user = await getSuperAdminUser()
+  if (!user) return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 403 })
+
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
     return NextResponse.json({ ok: false, error: 'TELEGRAM_BOT_TOKEN no configurado' }, { status: 500 })
   }
 
-  const { searchParams } = new URL(req.url)
-  const shouldSet = searchParams.get('setup') === 'true'
-
-  if (shouldSet) {
-    const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin
-    const webhookUrl = `${origin}/api/telegram/webhook`
-
-    try {
-      const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`)
-      const data = await res.json()
-      return NextResponse.json({ ok: true, webhookUrl, telegram: data })
-    } catch (err) {
-      return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
-    }
+  if (new URL(req.url).searchParams.get('setup') === 'true') {
+    // El dominio canónico, no el host del pedido: un preview no debe robarse el bot.
+    const webhookUrl = siteUrl('/api/telegram/webhook')
+    const result = await registerWebhook(webhookUrl, webhookSecret())
+    return NextResponse.json({ ...result, webhookUrl }, { status: result.ok ? 200 : 502 })
   }
 
-  // Obtener info actual del webhook desde Telegram
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`)
-    const data = await res.json()
-    return NextResponse.json({ ok: true, webhookInfo: data })
-  } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
-  }
+  return NextResponse.json({ ok: true, webhookInfo: await getWebhookInfo() })
 }

@@ -1,14 +1,49 @@
 /**
- * Servicio de Asistente de Clientes para Telegram Bot
- * Permite a los clientes buscar productos, consultar precios, stock y categorías en tiempo real.
+ * Asistente de clientes por Telegram: busca productos, muestra la ficha con
+ * foto, ofertas, categorías y el contacto de la tienda.
+ *
+ * Un solo bot sirve a todas las tiendas. Cada chat elige la suya con el enlace
+ * `t.me/<bot>?start=<slug>` o con /tienda; sin elegir, busca en las tiendas del
+ * marketplace. Nunca cae en una tienda cualquiera.
  */
 
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { formatCurrency } from '@/lib/currency'
+import {
+  categoriesWithProducts,
+  chatStore,
+  listStores,
+  offers,
+  productById,
+  productsInCategory,
+  rememberChatStore,
+  searchProducts,
+  storeById,
+  storeBySlug,
+  storeContact,
+} from '@/lib/telegram/catalog'
+import {
+  NON_TEXT_MESSAGE,
+  SHORT_QUERY_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+  categoriesMessage,
+  contactMessage,
+  escapeHtml,
+  helpMessage,
+  needStoreMessage,
+  productDetailMessage,
+  productListMessage,
+  searchPageCallback,
+  storeChosenMessage,
+  storesMessage,
+  welcomeMessage,
+  type BotStore,
+  type Reply,
+} from '@/lib/telegram/messages'
+import { answerCallbackQuery, sendMessage, sendPhoto } from '@/lib/telegram/telegram-api'
 
 export interface TelegramMessage {
   message_id: number
-  from?: { id: number; first_name?: string; last_name?: string; username?: string }
+  from?: { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string }
   chat: { id: number; type: string }
   text?: string
 }
@@ -26,385 +61,244 @@ export interface TelegramUpdate {
   callback_query?: TelegramCallbackQuery
 }
 
-function getTelegramApi(): string | null {
-  const token = process.env.TELEGRAM_BOT_TOKEN
-  if (!token) return null
-  return `https://api.telegram.org/bot${token}`
+type Admin = ReturnType<typeof createAdminSupabase>
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** `/buscar@MiBot funda a15` → { command: 'buscar', args: 'funda a15' } */
+export function parseCommand(text: string): { command: string; args: string } | null {
+  const match = text.trim().match(/^\/([a-z_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/i)
+  return match ? { command: match[1].toLowerCase(), args: (match[2] ?? '').trim() } : null
 }
 
-/**
- * Envía un mensaje de texto formateado con teclado interactivo opcional a Telegram.
- */
-export async function sendTelegramMessage(
-  chatId: number | string,
-  text: string,
-  replyMarkup?: Record<string, unknown>,
-): Promise<boolean> {
-  const api = getTelegramApi()
-  if (!api) {
-    console.error('[telegram-bot] TELEGRAM_BOT_TOKEN no configurado en entorno')
-    return false
-  }
+/** Lo que pide un botón. Lo que no se reconoce se ignora. */
+export type CallbackAction =
+  | { kind: 'menu'; item: 'cats' | 'help' | 'stores' | 'contact' }
+  | { kind: 'product'; id: string }
+  | { kind: 'category'; id: string; page: number }
+  | { kind: 'search'; page: number; query: string }
+  | { kind: 'offers'; page: number }
+  | { kind: 'store'; id: string | null }
 
-  try {
-    const res = await fetch(`${api}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup: replyMarkup,
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.text()
-      console.error('[telegram-bot] Fallo en sendMessage:', err)
+export function parseCallback(data: string): CallbackAction | null {
+  const [kind, ...rest] = data.split(':')
+  const page = (value: string | undefined) => Math.min(50, Math.max(0, Number.parseInt(value ?? '0', 10) || 0))
+  switch (kind) {
+    case 'm':
+      return ['cats', 'help', 'stores', 'contact'].includes(rest[0])
+        ? { kind: 'menu', item: rest[0] as 'cats' | 'help' | 'stores' | 'contact' }
+        : null
+    case 'p':
+      return UUID.test(rest[0] ?? '') ? { kind: 'product', id: rest[0] } : null
+    case 'c':
+      return UUID.test(rest[0] ?? '') ? { kind: 'category', id: rest[0], page: page(rest[1]) } : null
+    case 'q': {
+      const query = rest.slice(1).join(':')
+      return query ? { kind: 'search', page: page(rest[0]), query } : null
     }
-    return res.ok
-  } catch (err) {
-    console.error('[telegram-bot] Error de red en sendMessage:', err)
-    return false
+    case 'o':
+      return { kind: 'offers', page: page(rest[0]) }
+    case 's':
+      if (rest[0] === 'all') return { kind: 'store', id: null }
+      return UUID.test(rest[0] ?? '') ? { kind: 'store', id: rest[0] } : null
+    default:
+      return null
   }
 }
 
-/**
- * Responde a un callback_query para quitar el spinner en el cliente de Telegram.
- */
-export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
-  const api = getTelegramApi()
-  if (!api) return
-  try {
-    await fetch(`${api}/answerCallbackQuery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        callback_query_id: callbackQueryId,
-        text,
-      }),
-    })
-  } catch {
-    // Silencioso
-  }
+async function reply(chatId: number, message: Reply) {
+  if (message.photo) return sendPhoto(chatId, message.photo, message.text, message.keyboard)
+  return sendMessage(chatId, message.text, message.keyboard)
 }
 
-/**
- * Obtiene la organización asociada al bot o la primera activa registrada.
- */
-async function getTargetOrganization(admin = createAdminSupabase()) {
-  const envOrgId = process.env.TELEGRAM_ORG_ID
-  if (envOrgId) {
-    const { data } = await admin.from('organizations').select('id, name, slug').eq('id', envOrgId).maybeSingle()
-    if (data) return data
+/** Lo que necesita cada respuesta, leído una sola vez por mensaje. */
+class Conversation {
+  private resolved: Promise<{ store: BotStore | null; chosen: boolean }> | null = null
+
+  constructor(
+    readonly admin: Admin,
+    readonly chatId: number,
+    readonly firstName: string,
+  ) {}
+
+  store() {
+    this.resolved ??= chatStore(this.admin, this.chatId)
+    return this.resolved.then((result) => result.store)
   }
 
-  const slug = process.env.TELEGRAM_ORG_SLUG || process.env.DEFAULT_PUBLIC_ORG_SLUG
-  if (slug) {
-    const { data } = await admin.from('organizations').select('id, name, slug').eq('slug', slug).maybeSingle()
-    if (data) return data
+  async chooseStore(store: BotStore | null) {
+    const persisted = await rememberChatStore(this.admin, this.chatId, store)
+    this.resolved = Promise.resolve({ store, chosen: true })
+    return reply(this.chatId, storeChosenMessage(store, persisted))
   }
 
-  // Fallback inteligente: seleccionar la organización con catálogo activo
-  const { data: sampleProduct } = await admin
-    .from('products')
-    .select('organization_id')
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle()
-
-  if (sampleProduct?.organization_id) {
-    const { data } = await admin
-      .from('organizations')
-      .select('id, name, slug')
-      .eq('id', sampleProduct.organization_id)
-      .maybeSingle()
-    if (data) return data
+  async search(query: string, page = 0) {
+    const store = await this.store()
+    const result = await searchProducts(this.admin, store, query, page)
+    const where = store ? ` en ${escapeHtml(store.name)}` : ''
+    return reply(this.chatId, productListMessage({
+      title: `🔎 <b>«${escapeHtml(query)}»</b>${where}${page ? ` · página ${page + 1}` : ''}`,
+      ...result,
+      nextPage: searchPageCallback(page + 1, query),
+      showStore: !store,
+      emptyHint: store
+        ? `No encontré eso en ${escapeHtml(store.name)}. Probá con otra palabra, o buscá en todas las tiendas con /tienda.`
+        : undefined,
+    }))
   }
 
-  const { data } = await admin
-    .from('organizations')
-    .select('id, name, slug')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  return data
-}
-
-/**
- * Busca productos en la base de datos por nombre, marca, descripción, SKU o código de barras.
- */
-export async function searchProducts(searchTerm: string, limit = 5) {
-  const admin = createAdminSupabase()
-  const org = await getTargetOrganization(admin)
-  if (!org) return { org: null, products: [] }
-
-  const cleanQuery = searchTerm.replace(/[.,()!<>=&|%:*\\]/g, '').trim()
-  if (!cleanQuery) return { org, products: [] }
-
-  let query = admin
-    .from('products')
-    .select('id, name, brand, sale_price, offer_price, has_offer, stock_quantity, image_url, description, barcode, sku, category:categories(id, name)')
-    .eq('organization_id', org.id)
-    .eq('is_active', true)
-    .or(`name.ilike.%${cleanQuery}%,brand.ilike.%${cleanQuery}%,description.ilike.%${cleanQuery}%,sku.ilike.%${cleanQuery}%,barcode.ilike.%${cleanQuery}%`)
-    .order('stock_quantity', { ascending: false })
-    .limit(limit)
-
-  const { data, error } = await query
-
-  if (error || !data) {
-    return { org, products: [] }
+  async offers(page = 0) {
+    const store = await this.store()
+    const result = await offers(this.admin, store, page)
+    return reply(this.chatId, productListMessage({
+      title: `🔥 <b>Ofertas${store ? ` de ${escapeHtml(store.name)}` : ''}</b>${page ? ` · página ${page + 1}` : ''}`,
+      ...result,
+      nextPage: `o:${page + 1}`,
+      showStore: !store,
+      emptyHint: 'No hay ofertas publicadas en este momento.',
+    }))
   }
 
-  return { org, products: data as unknown as BotProductItem[] }
-}
-
-/**
- * Lista las categorías principales que tienen productos disponibles.
- */
-export async function getPopularCategories(limit = 6) {
-  const admin = createAdminSupabase()
-  const org = await getTargetOrganization(admin)
-  if (!org) return []
-
-  const { data } = await admin
-    .from('categories')
-    .select('id, name')
-    .eq('organization_id', org.id)
-    .order('name', { ascending: true })
-    .limit(limit)
-
-  return data ?? []
-}
-
-/**
- * Busca productos pertenecientes a una categoría específica.
- */
-export async function getProductsByCategory(categoryId: string, limit = 5) {
-  const admin = createAdminSupabase()
-  const org = await getTargetOrganization(admin)
-  if (!org) return { org: null, products: [] }
-
-  const { data } = await admin
-    .from('products')
-    .select('id, name, brand, sale_price, offer_price, has_offer, stock_quantity, image_url, description, barcode, sku')
-    .eq('organization_id', org.id)
-    .eq('category_id', categoryId)
-    .eq('is_active', true)
-    .order('stock_quantity', { ascending: false })
-    .limit(limit)
-
-  return { org, products: (data ?? []) as unknown as BotProductItem[] }
-}
-
-export type BotProductItem = {
-  id: string
-  name: string
-  brand?: string | null
-  sale_price: number
-  offer_price?: number | null
-  has_offer?: boolean | null
-  stock_quantity?: number | null
-  description?: string | null
-  category?: unknown
-}
-
-/**
- * Formatea el catálogo encontrado en un mensaje elegante para Telegram.
- */
-function buildProductsMessage(
-  title: string,
-  products: BotProductItem[],
-  orgSlug?: string | null,
-): { text: string; markup: Record<string, unknown> } {
-  if (products.length === 0) {
-    return {
-      text: `🔍 <b>No encontramos productos disponibles</b> para tu búsqueda.\n\nPrueba con una palabra más general (ej: <i>cargador</i>, <i>pantalla</i>, <i>funda</i>).`,
-      markup: {
-        inline_keyboard: [
-          [
-            { text: '📋 Ver Categorías', callback_data: 'cmd_categories' },
-            { text: 'ℹ️ Ayuda', callback_data: 'cmd_help' },
-          ],
-        ],
-      },
-    }
+  async categories() {
+    const store = await this.store()
+    if (!store) return reply(this.chatId, needStoreMessage('las categorías'))
+    return reply(this.chatId, categoriesMessage(store, await categoriesWithProducts(this.admin, store)))
   }
 
-  const lines: string[] = [title, '']
-
-  products.forEach((p, index) => {
-    const isOffer = p.has_offer && p.offer_price && p.offer_price > 0
-    const priceText = isOffer
-      ? `<s>${formatCurrency(p.sale_price)}</s> <b>${formatCurrency(p.offer_price!)}</b> 🔥 <i>(En Oferta)</i>`
-      : `<b>${formatCurrency(p.sale_price)}</b>`
-
-    const stock = Number(p.stock_quantity ?? 0)
-    const stockBadge = stock > 0 ? `✅ Disponible (${stock} u.)` : `⚠️ Agotado temporalmente`
-
-    lines.push(`<b>${index + 1}. ${escapeHtml(p.name)}</b>`)
-    if (p.brand) {
-      lines.push(`   🏷️ <i>Marca:</i> ${escapeHtml(p.brand)}`)
-    }
-    lines.push(`   💰 <i>Precio:</i> ${priceText}`)
-    lines.push(`   📦 <i>Stock:</i> ${stockBadge}`)
-    if (p.description) {
-      const shortDesc = p.description.trim().slice(0, 100)
-      lines.push(`   📝 <i>Detalle:</i> ${escapeHtml(shortDesc)}${p.description.length > 100 ? '...' : ''}`)
-    }
-    lines.push('')
-  })
-
-  lines.push('💡 <i>Para consultar otro artículo, escribe su nombre directamente en el chat.</i>')
-
-  const buttons: Array<Array<{ text: string; url?: string; callback_data?: string }>> = [
-    [
-      { text: '📋 Ver Categorías', callback_data: 'cmd_categories' },
-      { text: '🔍 Nueva Búsqueda', callback_data: 'cmd_help' },
-    ],
-  ]
-
-  if (orgSlug) {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://4g.com.py'
-    buttons.unshift([
-      { text: '🌐 Ver Tienda Online', url: `${baseUrl}/${orgSlug}` },
-    ])
+  async category(id: string, page: number) {
+    const store = await this.store()
+    if (!store) return reply(this.chatId, needStoreMessage('las categorías'))
+    const result = await productsInCategory(this.admin, store, id, page)
+    return reply(this.chatId, productListMessage({
+      title: `📂 <b>Productos de la categoría</b>${page ? ` · página ${page + 1}` : ''}`,
+      ...result,
+      nextPage: `c:${id}:${page + 1}`,
+      showStore: false,
+      emptyHint: 'Esta categoría no tiene productos publicados.',
+    }))
   }
 
-  return {
-    text: lines.join('\n'),
-    markup: { inline_keyboard: buttons },
+  async product(id: string) {
+    const product = await productById(this.admin, id)
+    if (!product) return reply(this.chatId, UNAVAILABLE_MESSAGE)
+    return reply(this.chatId, productDetailMessage(product, await storeContact(this.admin, product.store)))
   }
-}
 
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+  async stores(term?: string) {
+    const [store, stores] = await Promise.all([this.store(), listStores(this.admin, term)])
+    return reply(this.chatId, storesMessage(store, stores, term))
+  }
 
-/**
- * Orquestador principal de eventos del Webhook de Telegram.
- */
-export async function processTelegramUpdate(update: TelegramUpdate): Promise<void> {
-  // 1. Manejo de Botones interactivos (Callback Queries)
-  if (update.callback_query) {
-    const cq = update.callback_query
-    const data = cq.data ?? ''
-    const chatId = cq.message?.chat.id
+  /** `/tienda nombre`: con una sola coincidencia (o el slug exacto) la elige directamente. */
+  async findStore(term: string) {
+    const exact = await storeBySlug(this.admin, term.replace(/\s+/g, '-'))
+    if (exact) return this.chooseStore(exact)
+    const stores = await listStores(this.admin, term)
+    if (stores.length === 1) return this.chooseStore(stores[0])
+    return reply(this.chatId, storesMessage(await this.store(), stores, term))
+  }
 
-    if (!chatId) return
+  async contact() {
+    const store = await this.store()
+    if (!store) return reply(this.chatId, needStoreMessage('el contacto'))
+    return reply(this.chatId, contactMessage(store, await storeContact(this.admin, store)))
+  }
 
-    await answerCallbackQuery(cq.id)
-
-    if (data === 'cmd_categories') {
-      const categories = await getPopularCategories()
-      if (categories.length === 0) {
-        await sendTelegramMessage(chatId, '📋 No hay categorías activas en este momento.')
-        return
+  async welcome(startPayload?: string) {
+    if (startPayload) {
+      // El enlace de la tienda: t.me/<bot>?start=<slug>
+      const store = await storeBySlug(this.admin, startPayload)
+      if (store) {
+        await rememberChatStore(this.admin, this.chatId, store)
+        this.resolved = Promise.resolve({ store, chosen: true })
       }
-
-      const keyboard = categories.map((c) => [
-        { text: `📁 ${c.name}`, callback_data: `cat_${c.id}` },
-      ])
-
-      await sendTelegramMessage(
-        chatId,
-        '📂 <b>Categorías de Productos</b>\n\nSelecciona una categoría para ver los productos disponibles:',
-        { inline_keyboard: keyboard },
-      )
-      return
     }
+    return reply(this.chatId, welcomeMessage(this.firstName, await this.store()))
+  }
 
-    if (data.startsWith('cat_')) {
-      const catId = data.replace('cat_', '')
-      const { org, products } = await getProductsByCategory(catId)
-      const { text, markup } = buildProductsMessage('📦 <b>Productos en esta categoría:</b>', products, org?.slug)
-      await sendTelegramMessage(chatId, text, markup)
-      return
+  async help() {
+    return reply(this.chatId, helpMessage(await this.store()))
+  }
+}
+
+async function handleText(chat: Conversation, text: string) {
+  const command = parseCommand(text)
+  if (command) {
+    switch (command.command) {
+      case 'start':
+        return chat.welcome(command.args.split(/\s+/)[0] || undefined)
+      case 'ayuda':
+      case 'help':
+      case 'menu':
+        return chat.help()
+      case 'buscar':
+        return command.args.length >= 2 ? chat.search(command.args) : reply(chat.chatId, SHORT_QUERY_MESSAGE)
+      case 'categorias':
+        return chat.categories()
+      case 'ofertas':
+        return chat.offers()
+      case 'tienda':
+      case 'tiendas':
+        return command.args ? chat.findStore(command.args) : chat.stores()
+      case 'todas':
+        return chat.chooseStore(null)
+      case 'contacto':
+        return chat.contact()
+      default:
+        return chat.help()
     }
+  }
 
-    if (data === 'cmd_help') {
-      await sendWelcomeMessage(chatId, cq.from.first_name)
-      return
+  const lower = text.toLowerCase()
+  if (['hola', 'menu', 'menú', 'ayuda', 'inicio'].includes(lower)) return chat.welcome()
+  if (['categorias', 'categorías'].includes(lower)) return chat.categories()
+  if (lower === 'ofertas') return chat.offers()
+  if (text.length < 2) return reply(chat.chatId, SHORT_QUERY_MESSAGE)
+  return chat.search(text.slice(0, 80))
+}
+
+async function handleCallback(chat: Conversation, action: CallbackAction) {
+  switch (action.kind) {
+    case 'menu':
+      if (action.item === 'cats') return chat.categories()
+      if (action.item === 'stores') return chat.stores()
+      if (action.item === 'contact') return chat.contact()
+      return chat.help()
+    case 'product':
+      return chat.product(action.id)
+    case 'category':
+      return chat.category(action.id, action.page)
+    case 'search':
+      return chat.search(action.query, action.page)
+    case 'offers':
+      return chat.offers(action.page)
+    case 'store': {
+      if (!action.id) return chat.chooseStore(null)
+      const store = await storeById(chat.admin, action.id)
+      return store ? chat.chooseStore(store) : reply(chat.chatId, { text: 'Esa tienda ya no está disponible.' })
     }
+  }
+}
 
+export async function processTelegramUpdate(update: TelegramUpdate): Promise<void> {
+  const callback = update.callback_query
+  if (callback) {
+    // Quitar el reloj del botón siempre, aunque después no haya nada que hacer.
+    await answerCallbackQuery(callback.id)
+    const chatInfo = callback.message?.chat
+    const action = parseCallback(callback.data ?? '')
+    if (!chatInfo || chatInfo.type !== 'private' || !action) return
+    await handleCallback(new Conversation(createAdminSupabase(), chatInfo.id, callback.from.first_name ?? ''), action)
     return
   }
 
-  // 2. Manejo de Mensajes de texto normales
-  if (update.message?.text) {
-    const chatId = update.message.chat.id
-    const text = update.message.text.trim()
-    const firstName = update.message.from?.first_name || 'Cliente'
-
-    // Comandos de inicio y bienvenida
-    if (text === '/start' || text.toLowerCase() === 'hola' || text === '/ayuda' || text === '/menu') {
-      await sendWelcomeMessage(chatId, firstName)
-      return
-    }
-
-    if (text === '/categorias' || text.toLowerCase() === 'categorias') {
-      const categories = await getPopularCategories()
-      const keyboard = categories.map((c) => [
-        { text: `📁 ${c.name}`, callback_data: `cat_${c.id}` },
-      ])
-      await sendTelegramMessage(
-        chatId,
-        '📂 <b>Categorías Disponibles</b>\n\nElige una categoría para explorar sus productos:',
-        { inline_keyboard: keyboard },
-      )
-      return
-    }
-
-    // Búsqueda inteligente de productos por texto
-    if (text.length >= 2) {
-      const { org, products } = await searchProducts(text)
-      const title = `🔎 <b>Resultados para:</b> «${escapeHtml(text)}»`
-      const { text: responseText, markup } = buildProductsMessage(title, products, org?.slug)
-      await sendTelegramMessage(chatId, responseText, markup)
-      return
-    }
-
-    await sendTelegramMessage(
-      chatId,
-      '✍️ Escribe al menos 2 letras del producto que buscas (por ejemplo: <i>cargador</i> o <i>pantalla</i>).',
-    )
+  const message = update.message
+  // Sólo chats privados: en un grupo el bot contestaría cada mensaje de todos.
+  if (!message || message.chat.type !== 'private' || message.from?.is_bot) return
+  const chat = new Conversation(createAdminSupabase(), message.chat.id, message.from?.first_name ?? '')
+  if (!message.text?.trim()) {
+    await reply(chat.chatId, NON_TEXT_MESSAGE)
+    return
   }
-}
-
-async function sendWelcomeMessage(chatId: number | string, firstName: string): Promise<void> {
-  let storeName = 'nuestra tienda'
-  let orgSlug: string | null = null
-
-  try {
-    const admin = createAdminSupabase()
-    const org = await getTargetOrganization(admin)
-    if (org?.name) storeName = `<b>${escapeHtml(org.name)}</b>`
-    if (org?.slug) orgSlug = org.slug
-  } catch (err) {
-    console.error('[telegram-bot] Error obteniendo tienda en welcome:', err)
-  }
-
-  const text = [
-    `👋 ¡Hola <b>${escapeHtml(firstName)}</b>! Bienvenido al asistente virtual de ${storeName}.`,
-    '',
-    'Estoy aquí para ayudarte a encontrar productos, consultar precios y disponibilidad en tiempo real.',
-    '',
-    '🔎 <b>¿Cómo buscar?</b>',
-    'Simplemente escribe lo que buscas en el chat (ejemplo: <i>cargador</i>, <i>iphone</i>, <i>batería</i> o el código del producto).',
-  ].join('\n')
-
-  const markup = {
-    inline_keyboard: [
-      [
-        { text: '📋 Ver Categorías', callback_data: 'cmd_categories' },
-        ...(orgSlug
-          ? [{ text: '🌐 Catálogo Online', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.mitiendapy.com'}/${orgSlug}` }]
-          : []),
-      ],
-    ],
-  }
-
-  await sendTelegramMessage(chatId, text, markup)
+  await handleText(chat, message.text.trim())
 }
