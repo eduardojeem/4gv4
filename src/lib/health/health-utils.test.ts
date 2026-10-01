@@ -3,6 +3,7 @@ import { buildResult, sanitizeMessage, worstStatus } from '@/lib/health/core'
 import { evaluateReadiness, READINESS_ITEMS } from '@/lib/health/readiness'
 import {
   isChallenged,
+  isImageOptimizerUnavailable,
   isExpectedProtectedResponse,
   parseHtml,
   probeFailureStatus,
@@ -121,6 +122,18 @@ describe('isChallenged', () => {
     expect(isChallenged(403, new Headers({ 'cf-mitigated': 'challenge' }))).toBe(true)
     expect(isChallenged(403, new Headers())).toBe(false)
     expect(isChallenged(200, new Headers({ 'cf-mitigated': 'challenge' }))).toBe(false)
+  })
+})
+
+describe('isImageOptimizerUnavailable', () => {
+  it('reconoce el 402 de cuota de Vercel Image Optimization', () => {
+    const headers = new Headers({ 'x-vercel-error': 'OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED' })
+
+    expect(isImageOptimizerUnavailable({ status: 402, headers })).toBe(true)
+  })
+
+  it('no confunde una respuesta normal del optimizador con falta de cuota', () => {
+    expect(isImageOptimizerUnavailable({ status: 200, headers: new Headers() })).toBe(false)
   })
 })
 

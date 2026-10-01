@@ -40,4 +40,14 @@ describe('public page performance contracts', () => {
     expect(checks).toContain('measuredPages: measured.length')
     expect(checks).toContain('excludedByCloudflare: challenged.length')
   })
+
+  it('does not recommend a billable image optimizer when Vercel rejects it', () => {
+    const checks = read('src/lib/health/checks/web.ts')
+
+    expect(checks).toContain('IMAGE_BUDGET_BYTES = 200 * 1024')
+    expect(checks).toContain('isImageOptimizerUnavailable(optimizerResponse)')
+    expect(checks).toContain('optimizador de Vercel no disponible')
+    expect(checks).toContain('Convertir las imágenes pesadas a WebP antes de subirlas')
+    expect(checks).toContain('withinBudget: heavy.length === 0')
+  })
 })

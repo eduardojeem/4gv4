@@ -3,6 +3,7 @@ import { codeAudit, codeAuditMethod, mutatingOperations } from '@/lib/health/cod
 import { isConfigured, runCheck } from '@/lib/health/core'
 import {
   PUBLIC_PAGES,
+  isImageOptimizerUnavailable,
   isExpectedProtectedResponse,
   parseHtml,
   probeFailureStatus,
@@ -13,6 +14,7 @@ import {
 import type { HealthCheckResult, HealthMetricGroup } from '@/lib/health/types'
 
 const PROBE_NOTE = 'Solo se analiza el HTML que entrega el servidor; el contenido que se agrega en el navegador no se ve.'
+const IMAGE_BUDGET_BYTES = 200 * 1024
 
 type PageSnapshot = { path: string; response: ProbeResponse; html: ParsedHtml | null }
 
@@ -764,17 +766,58 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
       },
     ),
     runCheck(
-      { id: 'performance.images', category: 'performance', name: 'Imágenes sin optimizar', description: 'Imágenes raster que no pasan por el optimizador de Next (/_next/image) ni usan formatos modernos.', method: htmlMethod },
+      { id: 'performance.images', category: 'performance', name: 'Entrega de imágenes raster', description: 'Tamaño de imágenes raster servidas directamente y disponibilidad real del optimizador de Next/Vercel.', method: `${htmlMethod} HEAD a los originales y a /_next/image con una muestra.` },
       async () => {
         if (reachable.length === 0) return noPages()
         const raw = [...new Set(reachable.flatMap((p) => p.html.images.map((i) => i.src)))]
           .filter((src) => src && !src.startsWith('data:') && !src.includes('/_next/image') && /\.(png|jpe?g|gif|bmp)(\?|$)/i.test(src))
+
+        if (raw.length === 0) {
+          return {
+            status: 'healthy',
+            severity: 'low',
+            summary: 'Imágenes optimizadas, modernas o vectoriales',
+            findings: [],
+          }
+        }
+
+        const directUrls = raw.slice(0, 20).map((src) => new URL(src, probe.origin).toString())
+        const directResponses = await Promise.all(directUrls.map(async (url) => ({ url, response: await probe.head(url) })))
+        const sized = directResponses
+          .map(({ url, response }) => ({ url, bytes: Number(response.headers.get('content-length') ?? NaN) }))
+          .filter(({ bytes }) => Number.isFinite(bytes))
+        const heavy = sized.filter(({ bytes }) => bytes > IMAGE_BUDGET_BYTES)
+        const optimizerPath = `/_next/image?url=${encodeURIComponent(directUrls[0])}&w=640&q=75`
+        const optimizerResponse = await probe.head(new URL(optimizerPath, probe.origin).toString())
+        const optimizerUnavailable = isImageOptimizerUnavailable(optimizerResponse)
+        const unsized = directUrls.length - sized.length
+
+        const summary = heavy.length > 0
+          ? `${heavy.length} imagen(es) superan 200 KB`
+          : optimizerUnavailable
+            ? `${raw.length} imagen(es) directas dentro del presupuesto; optimizador de Vercel no disponible`
+            : `${raw.length} imagen(es) raster servidas directamente`
+
         return {
-          status: raw.length ? 'warning' : 'healthy',
+          status: heavy.length > 0 ? 'warning' : optimizerUnavailable && sized.length === 0 ? 'unknown' : optimizerUnavailable ? 'healthy' : 'warning',
           severity: 'low',
-          summary: raw.length ? `${raw.length} imagen(es) raster sin optimizar` : 'Imágenes optimizadas o vectoriales',
-          findings: raw.slice(0, 20),
-          recommendation: raw.length ? 'Usar next/image (AppImage) para servir WebP/AVIF redimensionado.' : undefined,
+          summary,
+          findings: [
+            ...sized.map(({ url, bytes }) => `${url}: ${(bytes / 1024).toFixed(0)} KB`),
+            ...(unsized > 0 ? [`${unsized} imagen(es) sin Content-Length verificable.`] : []),
+            ...(optimizerUnavailable ? [`/_next/image respondió ${optimizerResponse.status}: optimizador de Vercel no disponible.`] : []),
+          ],
+          recommendation: heavy.length > 0
+            ? 'Convertir las imágenes pesadas a WebP antes de subirlas y mantener cada archivo público por debajo de 200 KB.'
+            : optimizerUnavailable
+              ? undefined
+              : 'Usar next/image (AppImage) para servir WebP redimensionado.',
+          metadata: {
+            directRasterImages: raw.length,
+            optimizerStatus: optimizerResponse.status,
+            optimizerUnavailable,
+            withinBudget: heavy.length === 0,
+          },
         }
       },
     ),

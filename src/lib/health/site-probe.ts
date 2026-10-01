@@ -29,6 +29,11 @@ export function isChallenged(status: number, headers: Headers): boolean {
   return status === 403 && (headers.get('cf-mitigated') ?? '').toLowerCase() === 'challenge'
 }
 
+export function isImageOptimizerUnavailable(response: Pick<ProbeResponse, 'status' | 'headers'>): boolean {
+  const vercelError = response.headers.get('x-vercel-error') ?? ''
+  return response.status === 402 || vercelError === 'OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED'
+}
+
 /**
  * Un fallo de transporte o un challenge no demuestra que el sitio esté roto.
  * Los HTTP reales 4xx/5xx sí son errores verificables del recurso solicitado.
