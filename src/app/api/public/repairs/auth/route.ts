@@ -47,11 +47,12 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // 2. In-memory Rate limiting (Burst protection)
-    const isAllowed = rateLimiter.check(clientIp, 10, 15 * 60 * 1000)
+    // 2. Rate limiting compartido en producción (Upstash) y local en desarrollo.
+    const rateLimitKey = `repair-auth:${clientIp}`
+    const isAllowed = await rateLimiter.check(rateLimitKey, 10, 15 * 60 * 1000)
     
     if (!isAllowed) {
-      const resetTime = rateLimiter.getResetTime(clientIp)
+      const resetTime = rateLimiter.getResetTime(rateLimitKey)
       
       await logSecurityEvent({
         type: 'rate_limit_exceeded',

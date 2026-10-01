@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { createClient as createServerSupabase } from '@/lib/supabase/server'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 
 type AuthEventAction =
@@ -32,9 +33,10 @@ const ALLOWED_ACTIONS = new Set<AuthEventAction>([
 
 export async function POST(request: NextRequest) {
   try {
+    // health-anonymous-write: login_failed se registra antes de que exista sesión.
     // Rate limit por IP para evitar spam/flooding del log de seguridad.
     const clientIp = getClientIp(request)
-    if (!rateLimiter.check(clientIp, 30, 60_000)) {
+    if (!(await rateLimiter.check(`auth-events:${clientIp}`, 30, 60_000))) {
       return NextResponse.json({ ok: false, error: 'Too many requests' }, { status: 429 })
     }
 
@@ -42,6 +44,12 @@ export async function POST(request: NextRequest) {
 
     if (!body.action || !ALLOWED_ACTIONS.has(body.action)) {
       return NextResponse.json({ ok: false, error: 'Invalid auth event action' }, { status: 400 })
+    }
+
+    const auth = await createServerSupabase()
+    const { data: { user: authenticatedUser } } = await auth.auth.getUser()
+    if (!authenticatedUser && body.action !== 'login_failed') {
+      return NextResponse.json({ ok: false, error: 'Authentication required' }, { status: 401 })
     }
 
     let supabase: ReturnType<typeof createAdminSupabase>
@@ -52,7 +60,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase.rpc('log_auth_event', {
-      p_user_id: body.userId ?? null,
+      // Nunca confiar en el userId enviado por el navegador: un cliente podía
+      // atribuir eventos a otra persona. Los fallos de login son anónimos.
+      p_user_id: authenticatedUser?.id ?? null,
       p_action: body.action,
       p_success: body.success ?? true,
       p_ip_address: clientIp,

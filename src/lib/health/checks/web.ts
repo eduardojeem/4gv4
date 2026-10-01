@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { codeAudit, codeAuditMethod, isMutating } from '@/lib/health/code-audit'
+import { codeAudit, codeAuditMethod, mutatingOperations } from '@/lib/health/code-audit'
 import { isConfigured, runCheck } from '@/lib/health/core'
 import {
   PUBLIC_PAGES,
@@ -282,18 +282,20 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
       },
       async () => {
         const upstash = isConfigured('UPSTASH_REDIS_REST_URL') && isConfigured('UPSTASH_REDIS_REST_TOKEN')
-        const publicWrites = codeAudit.apiRoutes.filter((r) => isMutating(r) && (!r.authGuard || /^\/api\/(public|auth)\//.test(r.route)))
+        const publicWrites = codeAudit.apiRoutes
+          .flatMap(mutatingOperations)
+          .filter((operation) => !operation.authGuard || /^\/api\/(public|auth)\//.test(operation.route))
         const unprotected = publicWrites.filter((r) => !r.rateLimited)
         const anonymousUnprotected = unprotected.filter((r) => !r.authGuard)
         const findings: string[] = []
         if (!upstash) findings.push('UPSTASH_REDIS_REST_URL/TOKEN no configuradas: el limitador usa memoria por instancia y en Vercel no es efectivo.')
-        anonymousUnprotected.forEach((r) => findings.push(`${r.route} (${r.methods.join(', ')}) acepta escrituras sin sesión y sin rate limit.`))
-        unprotected.filter((r) => r.authGuard).forEach((r) => findings.push(`${r.route}: requiere sesión pero no tiene rate limit (prioridad baja).`))
+        anonymousUnprotected.forEach((r) => findings.push(`${r.route} (${r.method}) acepta escrituras sin sesión y sin rate limit.`))
+        unprotected.filter((r) => r.authGuard).forEach((r) => findings.push(`${r.route} (${r.method}): requiere sesión pero no tiene rate limit (prioridad baja).`))
         findings.push('Login, registro de usuario y recuperación de contraseña: límites de Supabase Auth (verificar en Dashboard → Auth → Rate Limits; no hay API configurada para leerlos).')
         return {
           status: !upstash || anonymousUnprotected.length > 0 ? 'warning' : 'healthy',
           severity: 'medium',
-          summary: `${publicWrites.length - unprotected.length}/${publicWrites.length} endpoints públicos de escritura con rate limit${upstash ? ' (Upstash)' : ' (sin Upstash)'}`,
+          summary: `${publicWrites.length - unprotected.length}/${publicWrites.length} operaciones públicas de escritura con rate limit${upstash ? ' (Upstash)' : ' (sin Upstash)'}`,
           findings,
           recommendation: 'Aplicar rateLimiter (src/lib/rate-limiter.ts) a los endpoints listados, especialmente los que aceptan escrituras sin sesión.',
         }
@@ -310,7 +312,10 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
       async () => {
         const siteKey = isConfigured('NEXT_PUBLIC_TURNSTILE_SITE_KEY')
         const secret = isConfigured('TURNSTILE_SECRET_KEY')
-        const protectedRoutes = codeAudit.apiRoutes.filter((r) => r.turnstile).map((r) => r.route)
+        const protectedRoutes = codeAudit.apiRoutes
+          .flatMap((route) => route.methodSecurity?.map((method) => ({ route: route.route, ...method })) ?? [])
+          .filter((operation) => operation.turnstile)
+          .map((operation) => `${operation.route} (${operation.method})`)
         const findings = [
           `Site key: ${siteKey ? 'configurada' : 'faltante'} · Secret: ${secret ? 'configurado' : 'faltante'}`,
           protectedRoutes.length ? `Verifican token: ${protectedRoutes.join(', ')}` : 'Ningún endpoint verifica tokens de Turnstile.',
@@ -335,15 +340,15 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         method: codeAuditMethod(),
       },
       async () => {
-        const anonymousWrites = codeAudit.apiRoutes.filter((r) => isMutating(r) && !r.authGuard)
+        const anonymousWrites = codeAudit.apiRoutes.flatMap(mutatingOperations).filter((operation) => !operation.authGuard)
         const exposed = anonymousWrites.filter((r) => !r.rateLimited && !r.turnstile)
         return {
           status: exposed.length > 0 ? 'warning' : 'healthy',
           severity: 'medium',
-          summary: `${anonymousWrites.length - exposed.length}/${anonymousWrites.length} endpoints anónimos de escritura protegidos`,
+          summary: `${anonymousWrites.length - exposed.length}/${anonymousWrites.length} operaciones anónimas de escritura protegidas`,
           findings: [
-            ...exposed.map((r) => `${r.route} sin rate limit ni Turnstile`),
-            ...anonymousWrites.filter((r) => r.rateLimited && !r.turnstile).map((r) => `${r.route}: solo rate limit`),
+            ...exposed.map((r) => `${r.route} (${r.method}) sin rate limit ni Turnstile`),
+            ...anonymousWrites.filter((r) => r.rateLimited && !r.turnstile).map((r) => `${r.route} (${r.method}): solo rate limit`),
           ],
           recommendation: exposed.length > 0 ? 'Agregar rateLimiter y, en formularios visibles (registro, reseñas, pedidos), Turnstile.' : undefined,
         }

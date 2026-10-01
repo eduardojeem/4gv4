@@ -1,10 +1,20 @@
 {
-  "generatedAt": "2026-10-01T03:19:33.171Z",
+  "generatedAt": "2026-10-01T21:27:34.502Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -18,6 +28,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -30,6 +58,24 @@
         "PATCH",
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -40,6 +86,16 @@
       "route": "/api/admin/cash-monitor/actions",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -52,6 +108,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -63,6 +129,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -73,6 +149,16 @@
       "route": "/api/admin/finances/categories",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -88,6 +174,40 @@
         "PATCH",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -102,6 +222,40 @@
         "PATCH",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -113,6 +267,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -123,6 +287,16 @@
       "route": "/api/admin/finances/export",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -136,6 +310,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -148,6 +340,24 @@
         "PATCH",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -158,6 +368,16 @@
       "route": "/api/admin/finances/obligations/[id]/payments",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -172,6 +392,32 @@
         "POST",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -182,6 +428,16 @@
       "route": "/api/admin/finances/payroll/[id]/approve",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -194,6 +450,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -204,6 +470,16 @@
       "route": "/api/admin/finances/payroll/entries/[id]/commissions",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -216,6 +492,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -226,6 +512,16 @@
       "route": "/api/admin/finances/profitability",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -238,6 +534,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -248,6 +554,16 @@
       "route": "/api/admin/finances/summary",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -260,6 +576,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -270,6 +596,16 @@
       "route": "/api/admin/module-trials",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -283,6 +619,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -293,6 +647,16 @@
       "route": "/api/admin/promote-self",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -306,6 +670,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -316,6 +698,16 @@
       "route": "/api/admin/reviews/[id]",
       "methods": [
         "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -329,6 +721,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -339,6 +749,16 @@
       "route": "/api/admin/security/logs",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -351,6 +771,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -361,6 +791,16 @@
       "route": "/api/admin/setup-storage",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -373,6 +813,16 @@
       "methods": [
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -383,6 +833,16 @@
       "route": "/api/admin/subscriptions/cancel",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -396,6 +856,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -406,6 +884,16 @@
       "route": "/api/admin/subscriptions/payments/pagopar",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -418,7 +906,17 @@
       "methods": [
         "POST"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
@@ -429,7 +927,17 @@
       "methods": [
         "PUT"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
@@ -441,6 +949,32 @@
         "GET",
         "PUT",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -455,6 +989,32 @@
         "PATCH",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -465,6 +1025,16 @@
       "route": "/api/admin/users/[id]/resend-invite",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -477,6 +1047,16 @@
       "methods": [
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -487,6 +1067,16 @@
       "route": "/api/admin/users/import",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -500,6 +1090,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -510,6 +1118,16 @@
       "route": "/api/admin/users/sync",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -522,6 +1140,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -532,6 +1160,16 @@
       "route": "/api/admin/website/logo",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -546,6 +1184,32 @@
         "POST",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -557,6 +1221,24 @@
       "methods": [
         "POST",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -571,7 +1253,33 @@
         "PUT",
         "POST"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
@@ -582,7 +1290,17 @@
       "methods": [
         "PUT"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
@@ -592,6 +1310,16 @@
       "route": "/api/admin/website/sync-company",
       "methods": [
         "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -605,6 +1333,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -617,6 +1363,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -627,6 +1391,16 @@
       "route": "/api/after-sales/sources",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -639,6 +1413,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -649,6 +1433,16 @@
       "route": "/api/after-sales/summary",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -663,6 +1457,32 @@
         "POST",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -676,6 +1496,32 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -686,6 +1532,16 @@
       "route": "/api/auth/assign-role",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -698,7 +1554,17 @@
       "methods": [
         "GET"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": false,
@@ -708,6 +1574,16 @@
       "route": "/api/auth/delivery-location",
       "methods": [
         "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -720,6 +1596,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -731,8 +1617,18 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": true,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": true,
-      "turnstile": false,
+      "turnstile": true,
       "superAdminGuard": false,
       "authGuard": false,
       "serviceRole": true
@@ -741,6 +1637,16 @@
       "route": "/api/auth/sync-role",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -752,6 +1658,16 @@
       "route": "/api/branches",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -767,6 +1683,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -777,6 +1727,16 @@
       "route": "/api/brands/catalog",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -792,6 +1752,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -803,6 +1797,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -813,6 +1817,16 @@
       "route": "/api/close-session",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -826,6 +1840,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -838,6 +1870,24 @@
         "PATCH",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -849,6 +1899,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -859,6 +1919,16 @@
       "route": "/api/communications/messages",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -872,6 +1942,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -883,6 +1971,24 @@
       "methods": [
         "PATCH",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -896,6 +2002,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -906,6 +2030,16 @@
       "route": "/api/credits/batch",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -918,6 +2052,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -929,6 +2073,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -939,6 +2093,16 @@
       "route": "/api/cron/plan-grace-notifications",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -952,6 +2116,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -963,6 +2145,24 @@
       "methods": [
         "PATCH",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -978,6 +2178,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -990,6 +2224,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1000,6 +2252,16 @@
       "route": "/api/customers/[id]/create-account",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1012,6 +2274,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1022,6 +2294,16 @@
       "route": "/api/customers/[id]/history",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1035,6 +2317,24 @@
         "POST",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1045,6 +2345,16 @@
       "route": "/api/customers/[id]/metrics",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1057,6 +2367,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1067,6 +2387,16 @@
       "route": "/api/customers/[id]/sales",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1080,6 +2410,24 @@
         "POST",
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1092,6 +2440,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1102,6 +2468,16 @@
       "route": "/api/customers/[id]/wholesale-status",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1114,6 +2490,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1124,6 +2510,16 @@
       "route": "/api/customers/spend",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1137,6 +2533,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1147,6 +2561,16 @@
       "route": "/api/dashboard/summary",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1159,6 +2583,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1169,6 +2603,16 @@
       "route": "/api/geoip",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1181,6 +2625,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1191,6 +2645,16 @@
       "route": "/api/inventory/stats",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1205,6 +2669,32 @@
         "POST",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1216,6 +2706,24 @@
       "methods": [
         "GET",
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1229,6 +2737,24 @@
         "PATCH",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1240,6 +2766,24 @@
       "methods": [
         "GET",
         "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1254,6 +2798,32 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1264,6 +2834,16 @@
       "route": "/api/marketplace/profile/orders",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1277,6 +2857,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1287,6 +2885,16 @@
       "route": "/api/notifications",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1299,6 +2907,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1310,6 +2928,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1320,6 +2948,16 @@
       "route": "/api/onboarding/status",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1333,6 +2971,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1345,6 +3001,24 @@
         "GET",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1355,6 +3029,16 @@
       "route": "/api/orders/[id]/history",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1367,6 +3051,16 @@
       "methods": [
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1378,6 +3072,16 @@
       "methods": [
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1388,6 +3092,16 @@
       "route": "/api/organization-context",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1401,6 +3115,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1411,6 +3143,16 @@
       "route": "/api/payments/pagopar/webhook",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1423,6 +3165,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1433,6 +3185,16 @@
       "route": "/api/pos/cash-movements",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1446,6 +3208,24 @@
         "POST",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1456,6 +3236,16 @@
       "route": "/api/pos/cash-registers",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1469,6 +3259,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1480,6 +3288,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1490,6 +3308,16 @@
       "route": "/api/prioritization/score",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1505,6 +3333,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1518,6 +3380,32 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1528,6 +3416,16 @@
       "route": "/api/products/barcode-lookup",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1540,6 +3438,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1551,6 +3459,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1561,6 +3479,16 @@
       "route": "/api/products/device-options",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1574,6 +3502,32 @@
         "GET",
         "POST",
         "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1589,6 +3543,40 @@
         "DELETE",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1599,6 +3587,16 @@
       "route": "/api/promotions/check-code",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1611,6 +3609,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": true,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1621,6 +3629,16 @@
       "route": "/api/public/categories",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1633,6 +3651,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1644,8 +3672,18 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": true,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": true,
-      "turnstile": false,
+      "turnstile": true,
       "superAdminGuard": false,
       "authGuard": false,
       "serviceRole": true
@@ -1654,6 +3692,16 @@
       "route": "/api/public/customer-scope",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1668,6 +3716,32 @@
         "POST",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1678,6 +3752,16 @@
       "route": "/api/public/favorites/metadata",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
       ],
       "rateLimited": true,
       "turnstile": false,
@@ -1690,6 +3774,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": true,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1700,6 +3794,16 @@
       "route": "/api/public/orders/me",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1712,7 +3816,17 @@
       "methods": [
         "GET"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": false,
@@ -1722,6 +3836,16 @@
       "route": "/api/public/platform-branding",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1734,6 +3858,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1744,6 +3878,16 @@
       "route": "/api/public/products/[id]",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1756,6 +3900,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1766,6 +3920,16 @@
       "route": "/api/public/promotions/validate",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
       ],
       "rateLimited": true,
       "turnstile": false,
@@ -1778,6 +3942,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1788,6 +3962,16 @@
       "route": "/api/public/repairs/[ticketId]",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1800,6 +3984,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1811,6 +4005,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1821,6 +4025,16 @@
       "route": "/api/public/repairs/auth",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
       ],
       "rateLimited": true,
       "turnstile": false,
@@ -1834,6 +4048,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": true,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": true,
       "turnstile": true,
       "superAdminGuard": false,
@@ -1845,6 +4077,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1855,6 +4097,16 @@
       "route": "/api/public/website/settings",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1868,6 +4120,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1880,6 +4150,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1890,6 +4178,16 @@
       "route": "/api/raffles/[id]/draw",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1902,6 +4200,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1912,6 +4220,16 @@
       "route": "/api/raffles/[id]/tickets/purchase",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1925,6 +4243,24 @@
         "POST",
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1936,6 +4272,24 @@
       "methods": [
         "PATCH",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1949,6 +4303,24 @@
         "POST",
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1959,6 +4331,16 @@
       "route": "/api/repairs/[id]/costs/correction",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1971,6 +4353,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -1981,6 +4373,16 @@
       "route": "/api/repairs/[id]/delivery",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -1994,6 +4396,24 @@
         "POST",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2004,6 +4424,16 @@
       "route": "/api/repairs/[id]/payment",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2016,6 +4446,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2027,6 +4467,16 @@
       "methods": [
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2037,6 +4487,16 @@
       "route": "/api/repairs/analytics",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2051,6 +4511,32 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2064,6 +4550,32 @@
         "POST",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2074,6 +4586,16 @@
       "route": "/api/repairs/inventory",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2086,6 +4608,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2097,6 +4629,24 @@
       "methods": [
         "GET",
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2111,6 +4661,32 @@
         "PUT",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2122,6 +4698,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2132,6 +4718,16 @@
       "route": "/api/repairs/technicians-stats",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2145,6 +4741,24 @@
         "GET",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2157,6 +4771,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2167,6 +4799,16 @@
       "route": "/api/repairs/technicians/[id]/payments/[paymentId]",
       "methods": [
         "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2179,6 +4821,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2189,6 +4841,16 @@
       "route": "/api/repairs/verify-qr",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2201,6 +4863,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2211,6 +4883,16 @@
       "route": "/api/reports/customers",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2226,6 +4908,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2237,16 +4953,36 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": true,
       "turnstile": false,
       "superAdminGuard": false,
-      "authGuard": false,
+      "authGuard": true,
       "serviceRole": true
     },
     {
       "route": "/api/settings/shared",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2259,6 +4995,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2269,6 +5015,16 @@
       "route": "/api/superadmin/analytics",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2281,6 +5037,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2291,6 +5057,16 @@
       "route": "/api/superadmin/audit-logs/export",
       "methods": [
         "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2303,6 +5079,16 @@
       "methods": [
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2314,6 +5100,16 @@
       "methods": [
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2324,6 +5120,16 @@
       "route": "/api/superadmin/emails/test",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2339,6 +5145,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2349,6 +5189,16 @@
       "route": "/api/superadmin/global-brands/logo",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2364,6 +5214,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2377,6 +5261,40 @@
         "POST",
         "PUT",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2392,6 +5310,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2403,6 +5355,24 @@
       "methods": [
         "GET",
         "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2416,6 +5386,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2427,6 +5415,24 @@
       "methods": [
         "PATCH",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2440,6 +5446,24 @@
         "POST",
         "GET"
       ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2452,6 +5476,24 @@
         "GET",
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2462,6 +5504,16 @@
       "route": "/api/superadmin/organizations/[id]/owner",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2475,6 +5527,24 @@
         "GET",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2487,6 +5557,24 @@
         "GET",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2497,6 +5585,16 @@
       "route": "/api/superadmin/platform-branding/logo",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2510,6 +5608,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2522,6 +5638,24 @@
         "PATCH",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2532,6 +5666,16 @@
       "route": "/api/superadmin/promo-codes/[id]/apply",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2545,6 +5689,24 @@
         "GET",
         "POST"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2555,6 +5717,16 @@
       "route": "/api/superadmin/subscription-plans/[id]",
       "methods": [
         "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2567,6 +5739,16 @@
       "methods": [
         "PATCH"
       ],
+      "methodSecurity": [
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
@@ -2578,6 +5760,24 @@
       "methods": [
         "POST",
         "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2592,7 +5792,33 @@
         "POST",
         "DELETE"
       ],
-      "rateLimited": true,
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": true,
       "authGuard": true,
@@ -2606,6 +5832,40 @@
         "PUT",
         "DELETE"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2616,6 +5876,16 @@
       "route": "/api/system/log-error",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": true,
       "turnstile": false,
@@ -2629,16 +5899,44 @@
         "POST",
         "GET"
       ],
-      "rateLimited": false,
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        },
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": true,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": true,
       "turnstile": false,
-      "superAdminGuard": false,
-      "authGuard": false,
+      "superAdminGuard": true,
+      "authGuard": true,
       "serviceRole": false
     },
     {
       "route": "/api/upload",
       "methods": [
         "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2653,6 +5951,32 @@
         "POST",
         "PUT"
       ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
@@ -2666,6 +5990,40 @@
         "PUT",
         "DELETE",
         "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
       ],
       "rateLimited": false,
       "turnstile": false,
@@ -2721,7 +6079,8 @@
     "20261006120000",
     "20261006130000",
     "20261006140000",
-    "20261006150000"
+    "20261006150000",
+    "20261007120000"
   ],
   "paymentProviders": [
     {

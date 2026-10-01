@@ -15,7 +15,7 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   const clientIp = getClientIp(request)
-  if (!rateLimiter.check(`public-promotion:${clientIp}`, 20, 10 * 60 * 1000)) {
+  if (!(await rateLimiter.check(`public-promotion:${clientIp}`, 20, 10 * 60 * 1000))) {
     return NextResponse.json({ success: false, error: 'Demasiados intentos. Intenta nuevamente más tarde.' }, { status: 429 })
   }
 

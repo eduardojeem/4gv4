@@ -104,6 +104,7 @@ describe('webhook', () => {
   })
   afterEach(() => {
     process.env = { ...env }
+    vi.doUnmock('@/lib/rate-limiter')
     vi.resetModules()
   })
 
@@ -112,6 +113,26 @@ describe('webhook', () => {
     expect(derived).toMatch(/^[a-f0-9]{64}$/)
     process.env.TELEGRAM_WEBHOOK_SECRET = 'explicito'
     expect(webhookSecret()).toBe('explicito')
+  })
+
+  it('descarta con 200 los updates validos que exceden el rate limit', async () => {
+    const processTelegramUpdate = vi.fn()
+    vi.doMock('@/lib/telegram/bot-service', () => ({ processTelegramUpdate }))
+    vi.doMock('@/lib/rate-limiter', () => ({
+      getClientIp: () => '149.154.167.220',
+      rateLimiter: { check: vi.fn().mockResolvedValue(false) },
+    }))
+    const { POST } = await import('@/app/api/telegram/webhook/route')
+
+    const response = await POST(new Request('http://x/api/telegram/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ update_id: 1 }),
+      headers: { 'x-telegram-bot-api-secret-token': webhookSecret()! },
+    }))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, rateLimited: true })
+    expect(processTelegramUpdate).not.toHaveBeenCalled()
   })
 
   it('rechaza pedidos sin el token secreto', async () => {

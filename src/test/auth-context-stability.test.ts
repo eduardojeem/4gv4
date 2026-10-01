@@ -15,6 +15,25 @@ const CONTEXTO = leer('src/contexts/auth-context.tsx')
  * Ninguno leía `session`: cero consumidores en todo el proyecto.
  */
 describe('el contexto de auth no se mueve al volver a la pestaña', () => {
+  it('inicializa la sesion solo desde onAuthStateChange', () => {
+    const efectoAuth = CONTEXTO.slice(
+      CONTEXTO.indexOf('// Efecto para manejar cambios de autenticación'),
+      CONTEXTO.indexOf('const value = useMemo<AuthContextType>'),
+    )
+
+    expect(efectoAuth).toContain('supabase.auth.onAuthStateChange(')
+    expect(efectoAuth).not.toContain('.getSession()')
+  })
+
+  it('no bloquea el callback de auth con trabajo asincrono', () => {
+    const efectoAuth = CONTEXTO.slice(
+      CONTEXTO.indexOf('// Efecto para manejar cambios de autenticación'),
+      CONTEXTO.indexOf('const value = useMemo<AuthContextType>'),
+    )
+
+    expect(efectoAuth).not.toMatch(/onAuthStateChange\(\s*async\s*\(/)
+  })
+
   it('el valor del contexto no incluye la sesión', () => {
     const value = CONTEXTO.slice(
       CONTEXTO.indexOf('const value = useMemo<AuthContextType>'),

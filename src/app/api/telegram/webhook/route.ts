@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { processTelegramUpdate, type TelegramUpdate } from '@/lib/telegram/bot-service'
 import { getWebhookInfo, registerWebhook, webhookSecret } from '@/lib/telegram/telegram-api'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { getClientIp, rateLimiter } from '@/lib/rate-limiter'
 import { siteUrl } from '@/lib/site-url'
 import { logger } from '@/lib/logger'
 
@@ -20,6 +21,13 @@ export async function POST(req: Request) {
   const secret = webhookSecret()
   if (!secret || !sameSecret(req.headers.get('x-telegram-bot-api-secret-token'), secret)) {
     return NextResponse.json({ ok: false }, { status: 401 })
+  }
+
+  const allowed = await rateLimiter.check(`telegram-webhook:${getClientIp(req)}`, 120, 60_000)
+  if (!allowed) {
+    // Telegram reintenta las respuestas no-2xx. Confirmamos y descartamos el
+    // exceso para no convertir el rate limit en una tormenta de reintentos.
+    return NextResponse.json({ ok: true, rateLimited: true })
   }
 
   let update: TelegramUpdate

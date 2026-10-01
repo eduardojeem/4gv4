@@ -104,7 +104,6 @@ const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-const AUTH_SESSION_TIMEOUT_MS = 5000
 const AUTH_PROFILE_TIMEOUT_MS = 4000
 
 /** Solo un negocio con id, nombre y dirección sirve para enlazar al panel. */
@@ -568,75 +567,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true
 
-    const getSession = async () => {
+    const registerInitialSession = async (nextSession: Session) => {
       try {
-        const nextSession = await withTimeout(
-          supabase.auth
-            .getSession()
-            .then(({ data: { session } }) => session)
-            .catch(() => null),
-          AUTH_SESSION_TIMEOUT_MS,
-          null
-        )
-        if (!isMounted) return
+        const { getSessionIdFromAccessToken, isSessionRegistered, markSessionRegistered } = await import('@/lib/session-id')
+        const sessionId = await getSessionIdFromAccessToken(nextSession.access_token)
+        if (!sessionId || isSessionRegistered(sessionId)) return
 
+        const ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
+        const isMobile = /Mobile|Android|iPhone/i.test(ua)
+        const isTablet = /iPad|Tablet/i.test(ua)
+        const browser = ua.match(/(Chrome|Firefox|Safari|Edge|Brave|Opera)\/?\s*(\d+)/)?.[1] || 'Unknown'
+        const os = ua.match(/(Windows|Mac OS|Linux|Android|iOS)/)?.[1] || 'Unknown'
+        const { error } = await supabase.from('user_sessions').upsert({
+          user_id: nextSession.user.id,
+          session_id: sessionId,
+          user_agent: ua,
+          device_type: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+          browser,
+          os,
+          is_active: true,
+          last_activity: new Date().toISOString(),
+        }, { onConflict: 'session_id' })
+
+        if (!error) markSessionRegistered(sessionId)
+      } catch {}
+    }
+
+    const handleAuthChange = async (event: string, nextSession: Session | null) => {
+      if (!isMounted) return
+
+      const nextUser = nextSession?.user
+
+      if (shouldReuseAuthenticatedUser(
+        event,
+        nextUser?.id ?? null,
+        latestUserRef.current?.id ?? null,
+        Boolean(nextSession?.access_token && nextSession.access_token === sessionRef.current?.access_token),
+      )) {
+        if (nextSession && sessionRef.current?.access_token !== nextSession.access_token) {
+          sessionRef.current = nextSession
+          setSession(nextSession)
+        }
+        if (event === 'INITIAL_SESSION') setLoading(false)
+        return
+      }
+
+      try {
         setSession(nextSession)
 
-        if (nextSession?.user) {
+        if (nextUser) {
           const userProfile = await withTimeout(
-            fetchUserProfile(nextSession.user.id),
+            fetchUserProfile(nextUser.id),
             AUTH_PROFILE_TIMEOUT_MS,
             getDefaultAuthProfile()
           )
           if (!isMounted) return
-          setUser(buildAuthUser(nextSession.user, resolveStableProfile(nextSession.user, userProfile)))
+          setUser(buildAuthUser(nextUser, resolveStableProfile(nextUser, userProfile)))
 
-          // Register/refresh current session for session management
-          try {
-            const { getSessionIdFromAccessToken, isSessionRegistered, markSessionRegistered } = await import('@/lib/session-id')
-            const sessionId = await getSessionIdFromAccessToken(nextSession.access_token)
-            // Ya registrada en esta pestaña: no repetir el upsert en cada carga.
-            if (sessionId && !isSessionRegistered(sessionId)) {
-              const ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
-              const isMobile = /Mobile|Android|iPhone/i.test(ua)
-              const isTablet = /iPad|Tablet/i.test(ua)
-              const browser = ua.match(/(Chrome|Firefox|Safari|Edge|Brave|Opera)\/?\s*(\d+)/)?.[1] || 'Unknown'
-              const os = ua.match(/(Windows|Mac OS|Linux|Android|iOS)/)?.[1] || 'Unknown'
-
-              void (async () => {
-                try {
-                  const { error } = await supabase.from('user_sessions').upsert({
-                    user_id: nextSession.user.id,
-                    session_id: sessionId,
-                    user_agent: ua,
-                    device_type: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
-                    browser,
-                    os,
-                    is_active: true,
-                    last_activity: new Date().toISOString(),
-                  }, { onConflict: 'session_id' })
-                  if (!error) markSessionRegistered(sessionId)
-                } catch {}
-              })()
-            }
-          } catch {}
+          if (event === 'INITIAL_SESSION' && nextSession) {
+            void registerInitialSession(nextSession)
+          }
         } else {
           setUser(null)
         }
       } catch {
         if (!isMounted) return
-        setSession(null)
-        // Session retrieval failed — user will be set by onAuthStateChange if available
-        setUser(null)
+        if (nextUser) {
+          const fallbackProfile = resolveStableProfile(nextUser, getDefaultAuthProfile())
+          setUser(buildAuthUser(nextUser, fallbackProfile))
+        } else {
+          setUser(null)
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
     }
 
-    getSession()
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, nextSession) => {
+      (event, nextSession) => {
         if (!isMounted) return
 
         // Flujo de recuperación de contraseña (enlace implícito con #access_token).
@@ -649,52 +657,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const nextUser = nextSession?.user
-
-        // Al volver a la pestaña Supabase puede emitir TOKEN_REFRESHED o
-        // SIGNED_IN para la misma sesión. Conservar el perfil evita reconstruir
-        // el contexto y remostrar loaders; USER_UPDATED y otro usuario sí lo
-        // recargan. La sesión se actualiza igualmente para mantener el token.
-        if (shouldReuseAuthenticatedUser(
-          event,
-          nextUser?.id ?? null,
-          latestUserRef.current?.id ?? null,
-          Boolean(nextSession?.access_token && nextSession.access_token === sessionRef.current?.access_token),
-        )) {
-          if (nextSession && sessionRef.current?.access_token !== nextSession.access_token) {
-            sessionRef.current = nextSession
-            setSession(nextSession)
-          }
-          return
-        }
-
-        try {
-          setSession(nextSession)
-
-          if (nextUser) {
-            const userProfile = await withTimeout(
-              fetchUserProfile(nextUser.id),
-              AUTH_PROFILE_TIMEOUT_MS,
-              getDefaultAuthProfile()
-            )
-            if (!isMounted) return
-            setUser(buildAuthUser(nextUser, resolveStableProfile(nextUser, userProfile)))
-          } else {
-            setUser(null)
-          }
-        } catch {
-          if (!isMounted) return
-          if (nextUser) {
-            const fallbackProfile = resolveStableProfile(nextUser, getDefaultAuthProfile())
-            setUser(buildAuthUser(nextUser, fallbackProfile))
-          } else {
-            setUser(null)
-          }
-        } finally {
-          if (isMounted) {
-            setLoading(false)
-          }
-        }
+        // El callback queda sincrónico para que Supabase pueda liberar su
+        // coordinación interna antes de cargar perfil o registrar la sesión.
+        void handleAuthChange(event, nextSession)
       }
     )
 

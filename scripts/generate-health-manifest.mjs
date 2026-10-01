@@ -43,22 +43,66 @@ function routeFromFile(file) {
 }
 
 const METHOD_RE = /export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b/g
-const RATE_LIMIT_RE = /rate-?limit|ratelimit|checkRateLimit|withRateLimit|rateLimiter/i
-const TURNSTILE_RE = /turnstile/i
+const EFFECTIVE_RATE_LIMIT_RE = /await\s+(?:\(\s*)?(?:rateLimiter\.check|checkRateLimit)\s*\(|withRateLimit\s*\(/i
+const TURNSTILE_RE = /turnstile|captchaToken/i
 const SUPERADMIN_GUARD_RE = /getSuperAdminUser|requireSuperAdmin|withSuperAdminAuth/
 const AUTH_GUARD_RE =
   /getSuperAdminUser|requireSuperAdmin|with[A-Za-z]*Auth\b|require(Staff|Auth|Admin|User|Permission|Org[A-Za-z]*)|auth\.getUser|assert[A-Za-z]*Access|CRON_SECRET|validate[A-Za-z]*Token|getAuthenticated[A-Za-z]*|resolve[A-Za-z]*(Auth|Actor|User|RouteContext)[A-Za-z]*\(/
+const ANONYMOUS_WRITE_RE = /health-anonymous-write/
 const SERVICE_ROLE_RE = /createAdminSupabase|SUPABASE_SERVICE_ROLE_KEY/
+
+function localFunctionBlock(source, name) {
+  const declaration = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(source)
+  if (!declaration) return ''
+  const start = source.indexOf('{', declaration.index)
+  if (start < 0) return ''
+
+  let depth = 0
+  for (let index = start; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') depth -= 1
+    if (depth === 0) return source.slice(declaration.index, index + 1)
+  }
+  return ''
+}
+
+function expandLocalHandlers(source, methodSource) {
+  const calledNames = [...methodSource.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)].map((match) => match[1])
+  return [...new Set(calledNames)].reduce(
+    (expanded, name) => `${expanded}\n${localFunctionBlock(source, name)}`,
+    methodSource,
+  )
+}
+
+function analyzeMethodSecurity(source) {
+  const matches = [...source.matchAll(new RegExp(METHOD_RE.source, 'g'))]
+  return matches.map((match, index) => {
+    const start = match.index ?? 0
+    const end = matches[index + 1]?.index ?? source.length
+    const methodSource = expandLocalHandlers(source, source.slice(start, end))
+    return {
+      method: match[1],
+      rateLimited: EFFECTIVE_RATE_LIMIT_RE.test(methodSource),
+      turnstile: TURNSTILE_RE.test(methodSource),
+      superAdminGuard: SUPERADMIN_GUARD_RE.test(methodSource),
+      authGuard: AUTH_GUARD_RE.test(methodSource) && !ANONYMOUS_WRITE_RE.test(methodSource),
+      serviceRole: SERVICE_ROLE_RE.test(methodSource),
+    }
+  })
+}
 
 const routeFiles = walk(path.join(APP, 'api'), (f) => /[\\/]route\.(ts|tsx|js)$/.test(f))
 const apiRoutes = routeFiles
   .map((file) => {
     const source = read(file)
-    const methods = [...new Set([...source.matchAll(METHOD_RE)].map((m) => m[1]))]
+    const methodSecurity = analyzeMethodSecurity(source)
+    const methods = [...new Set(methodSecurity.map((entry) => entry.method))]
+    const mutatingMethods = methodSecurity.filter((entry) => entry.method !== 'GET')
     return {
       route: routeFromFile(file),
       methods,
-      rateLimited: RATE_LIMIT_RE.test(source),
+      methodSecurity,
+      rateLimited: mutatingMethods.length > 0 && mutatingMethods.every((entry) => entry.rateLimited),
       turnstile: TURNSTILE_RE.test(source),
       superAdminGuard: SUPERADMIN_GUARD_RE.test(source),
       authGuard: AUTH_GUARD_RE.test(source),
