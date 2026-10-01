@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
 
 export type EditableOrganization = {
   id: string
@@ -115,7 +116,7 @@ export const AVAILABLE_MODULES = [
   { key: 'reports', label: 'Reportes exportables', desc: 'CSV, Excel y PDF' },
 ]
 
-export function EditOrganizationDialog({ organization, open, onClose, onSuccess }: Props) {
+export function EditOrganizationDialog({ organization, open, onClose, onSuccess, planNames }: Props & { planNames?: PlanNames }) {
   const router = useRouter()
 
   const [name, setName] = useState('')
@@ -335,7 +336,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                   <li className="flex items-center justify-between gap-2 border-b border-border pb-2">
                     <span className="text-muted-foreground font-medium">Plan SaaS:</span>
                     <span className="font-bold">
-                      {organization.plan} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{plan}</strong>
+                      {planLabel(organization.plan, planNames)} <ArrowRight className="inline h-3 w-3 text-muted-foreground mx-1" /> <strong className="text-violet-600 dark:text-violet-400">{planLabel(plan, planNames)}</strong>
                     </span>
                   </li>
                 )}
@@ -526,7 +527,7 @@ export function EditOrganizationDialog({ organization, open, onClose, onSuccess 
                   <SelectContent className="rounded-xl">
                     {PLAN_OPTIONS.map((p) => (
                       <SelectItem key={p} value={p} className="text-xs font-bold">
-                        PLAN {p}
+                        {planLabel(p, planNames)}
                       </SelectItem>
                     ))}
                   </SelectContent>

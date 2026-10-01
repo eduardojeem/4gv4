@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
-  Boxes,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -21,11 +20,10 @@ import {
   Receipt,
   RefreshCw,
   Search,
-  Shield, Sparkles,
+  Sparkles,
   User,
   Users,
-  Wrench,
-  X
+  Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +37,7 @@ import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagin
 import { cn } from '@/lib/utils'
 import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import { countOrganizationsWithoutSubscription, getSubscriptionTiming } from '@/lib/superadmin/organization-directory'
+import { planLabel, type PlanNames } from '@/lib/superadmin/plan-names'
 import { describeLastAccess } from '@/lib/superadmin/last-access'
 import { EditOrganizationDialog, type EditableOrganization } from './EditOrganizationDialog'
 
@@ -294,11 +293,13 @@ function OrganizationGridCard({
   referenceTime,
   onEdit,
   onCopyUrl,
+  planNames,
 }: {
   org: SuperAdminOrganization
   referenceTime: string
   onEdit: () => void
   onCopyUrl: (slug: string) => void
+  planNames?: PlanNames
 }) {
   const now = new Date(referenceTime).getTime()
   const detailHref = `/superadmin/organizations/${encodeURIComponent(org.slug)}`
@@ -350,7 +351,7 @@ function OrganizationGridCard({
           </button>
         </div>
         <Badge variant="outline" className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
-          {org.plan}
+          {planLabel(org.plan, planNames)}
         </Badge>
       </div>
 
@@ -489,361 +490,6 @@ function OrganizationGridCard({
 // Organization Focus Panel (Command Center)
 // ---------------------------------------------------------------------------
 
-function OrganizationFocusPanel({
-  organization,
-  onCopyUrl,
-  onClearFilter,
-  onEdit,
-}: {
-  organization: SuperAdminOrganization
-  onCopyUrl: (slug: string) => Promise<void>
-  onClearFilter: () => void
-  onEdit?: () => void
-}) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'billing'>('overview')
-  const timing = getSubscriptionTiming(
-    organization.subscription_status,
-    organization.trial_ends_at,
-    organization.current_period_ends_at
-  )
-
-  const copyId = () => {
-    navigator.clipboard.writeText(organization.id)
-    toast.success('ID copiado al portapapeles')
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Top Banner Navigation */}
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-cyan-200 bg-gradient-to-r from-cyan-50/80 via-card to-blue-50/80 p-3.5 dark:border-cyan-800/60 dark:from-cyan-950/40 dark:to-blue-950/40 shadow-xs">
-        <div className="flex items-center gap-2 text-xs font-bold text-cyan-900 dark:text-cyan-200">
-          <Sparkles className="h-4 w-4 text-cyan-600" />
-          <span>Mostrando Ficha de Organización Seleccionada</span>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onClearFilter}
-          className="h-8 gap-1.5 rounded-xl text-xs font-bold border-cyan-300 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 cursor-pointer"
-        >
-          <X className="h-3.5 w-3.5" />
-          Ver todas las organizaciones
-        </Button>
-      </div>
-
-      {/* Main Focus Card */}
-      <section className="overflow-hidden rounded-3xl border border-border bg-card/95 shadow-md">
-
-        {/* Header Hero */}
-        <div className="flex flex-col gap-5 border-b border-border bg-muted/40 p-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className={cn(
-              'flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-black shadow-md ring-2 ring-background',
-              PLAN_AVATAR_BG[organization.plan] ?? PLAN_AVATAR_BG.FREE
-            )}>
-              {getInitials(organization.name)}
-            </div>
-
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl sm:text-2xl font-black text-foreground tracking-tight">
-                  {organization.name}
-                </h2>
-                <Badge variant="outline" className={cn('rounded-full px-2.5 py-0.5 text-xs font-extrabold shadow-2xs', PLAN_COLORS[organization.plan] ?? PLAN_COLORS.FREE)}>
-                  PLAN {organization.plan}
-                </Badge>
-                <SubscriptionBadge org={organization} />
-                <PaymentBadge status={organization.payment_status} />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-                <button
-                  type="button"
-                  onClick={() => void onCopyUrl(organization.slug)}
-                  className="inline-flex items-center gap-1 font-mono font-bold text-foreground/80 hover:text-cyan-600 transition-colors cursor-pointer"
-                  title="Copiar URL pública"
-                >
-                  <span>/{organization.slug}/inicio</span>
-                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-                <span className="text-muted-foreground/60">·</span>
-                <button
-                  type="button"
-                  onClick={copyId}
-                  className="inline-flex items-center gap-1 font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                  title="Copiar UUID de organización"
-                >
-                  <span className="truncate max-w-[120px] sm:max-w-[200px]">ID: {organization.id}</span>
-                  <Copy className="h-3 w-3 text-muted-foreground" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Toolbar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <EnterSupportButton organizationId={organization.id} organizationName={organization.name} />
-            {onEdit && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onEdit}
-                className="gap-1.5 rounded-xl text-xs font-bold border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 cursor-pointer"
-              >
-                <Wrench className="h-3.5 w-3.5 text-violet-600" />
-                Editar Organización
-              </Button>
-            )}
-            <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-md cursor-pointer">
-              <Link href={`/superadmin/organizations/${encodeURIComponent(organization.slug)}`}>
-                <Building2 className="h-3 w-3" />
-                Expediente Completo
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer">
-              <a href={`/${organization.slug}/inicio`} target="_blank" rel="noreferrer">
-                <Globe className="h-3.5 w-3.5 text-cyan-600" />
-                Abrir tienda
-                <ExternalLink className="h-3 w-3 text-muted-foreground" />
-              </a>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-xl text-xs font-bold border-border cursor-pointer">
-              <Link href={`/superadmin/users?organization=${organization.id}`}>
-                <Users className="h-3.5 w-3.5 text-violet-600" />
-                Usuarios
-              </Link>
-            </Button>
-            <Button asChild size="sm" className="gap-1.5 rounded-xl text-xs font-bold bg-foreground text-background cursor-pointer">
-              <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(organization.slug)}`}>
-                <CreditCard className="h-3.5 w-3.5 text-amber-500" />
-                Suscripción
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        {organization.cancel_at_period_end && (
-          <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-6 py-3 text-xs font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
-            <Clock className="h-4 w-4 shrink-0" />
-            La suscripción de este tenant está programada para cancelarse al finalizar el periodo actual.
-          </div>
-        )}
-
-        {/* Focus KPI Bar */}
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4 border-b border-border">
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Owner de la Empresa</p>
-            <p className="truncate text-sm font-extrabold text-foreground">{organization.owner_name || 'Sin nombre registrado'}</p>
-            <p className="truncate text-xs text-muted-foreground font-medium">{organization.owner_email || 'Sin email registrado'}</p>
-          </div>
-
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Equipo & Personal</p>
-            <p className="text-sm font-extrabold text-foreground">
-              {organization.staff_active} de {organization.staff_total} activos
-            </p>
-            <p className="text-xs text-muted-foreground font-medium">{organization.staff_invited} invitados · {organization.staff_suspended} suspendidos</p>
-          </div>
-
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Clientes Registrados</p>
-            <p className="text-sm font-extrabold text-foreground">{organization.customers_total} usuarios finales</p>
-            <p className="text-xs text-muted-foreground font-medium">Cuentas de portal público</p>
-          </div>
-
-          <div className="p-5 space-y-1">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Ciclo de Facturación</p>
-            <p className={cn('text-sm font-extrabold', timing?.urgent ? 'text-red-600 dark:text-red-400' : 'text-foreground')}>
-              {timing?.label ?? 'Sin fecha de renovación'}
-            </p>
-            <p className="text-xs text-muted-foreground font-medium">Hasta {formatDate(organization.current_period_ends_at || organization.trial_ends_at)}</p>
-          </div>
-        </div>
-
-        {/* Tabbed Detail Section */}
-        <div className="p-6 space-y-4">
-          <div className="flex items-center gap-1 rounded-2xl border border-border bg-muted p-1 w-fit">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={cn(
-                'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
-                activeTab === 'overview'
-                  ? 'bg-card text-foreground shadow-2xs'
-                  : 'text-foreground/80 hover:text-foreground'
-              )}
-            >
-              <Building2 className="h-3.5 w-3.5 text-cyan-500" />
-              Ficha & Capacidad
-            </button>
-            <button
-              onClick={() => setActiveTab('members')}
-              className={cn(
-                'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
-                activeTab === 'members'
-                  ? 'bg-card text-foreground shadow-2xs'
-                  : 'text-foreground/80 hover:text-foreground'
-              )}
-            >
-              <Users className="h-3.5 w-3.5 text-violet-500" />
-              Miembros ({organization.members_total})
-            </button>
-            <button
-              onClick={() => setActiveTab('billing')}
-              className={cn(
-                'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer',
-                activeTab === 'billing'
-                  ? 'bg-card text-foreground shadow-2xs'
-                  : 'text-foreground/80 hover:text-foreground'
-              )}
-            >
-              <CreditCard className="h-3.5 w-3.5 text-amber-500" />
-              Suscripción & Accesos
-            </button>
-          </div>
-
-          {activeTab === 'overview' && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 pt-2">
-              {/* Rubro & Módulos Habilitados Card */}
-              <div className="rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/60 via-card to-cyan-50/40 p-5 dark:border-violet-900/60 dark:from-violet-950/30 dark:to-cyan-950/20 space-y-4 sm:col-span-2 lg:col-span-3 shadow-2xs">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-card text-2xl shadow-sm border border-violet-200/80 dark:border-violet-900/50">
-                      {VERTICAL_META[organization.business_vertical || 'general']?.icon || '🏬'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black uppercase tracking-wider text-foreground">
-                          {VERTICAL_META[organization.business_vertical || 'general']?.label || 'Comercio General'}
-                        </span>
-                        <Badge variant="outline" className="text-[10px] font-bold">
-                          Modelo: {organization.operating_model === 'wholesale' ? 'Mayorista' : organization.operating_model === 'repair' ? 'Taller' : organization.operating_model === 'service' ? 'Servicios' : 'Minorista'}
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Configuración vertical de catálogo, flujos de venta y módulos operativos del negocio.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs font-extrabold px-3 py-1 bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
-                      {(organization.enabled_modules || ['pos', 'inventory', 'crm', 'ecommerce']).length} módulos activos
-                    </Badge>
-                    <Button asChild size="sm" variant="outline" className="h-8 rounded-xl text-xs font-bold gap-1 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800 hover:bg-violet-50">
-                      <Link href={`/superadmin/organizations/${encodeURIComponent(organization.slug)}`}>
-                        <Boxes className="h-3.5 w-3.5" />
-                        Ver Matriz Completa
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
-                  {(organization.enabled_modules && organization.enabled_modules.length > 0
-                    ? organization.enabled_modules
-                    : ['pos', 'inventory', 'crm', 'ecommerce']
-                  ).map((m) => {
-                    const meta = MODULE_META[m] || { label: m, short: m, color: 'bg-muted text-foreground/80 border-border' }
-                    return (
-                      <span
-                        key={m}
-                        className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border shadow-2xs', meta.color)}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                        {meta.label || m}
-                      </span>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Fecha de Creación</span>
-                <p className="text-sm font-bold text-foreground">{formatDate(organization.created_at)}</p>
-                <p className="text-xs text-muted-foreground">Registrado en la base de datos</p>
-              </div>
-
-              <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Última Actualización</span>
-                <p className="text-sm font-bold text-foreground">{formatDate(organization.updated_at)}</p>
-                <p className="text-xs text-muted-foreground">Último cambio de configuración</p>
-              </div>
-
-              <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">Proveedor de Cobros</span>
-                <p className="text-sm font-bold text-foreground">{organization.subscription_provider || 'Manual / Transferencia'}</p>
-                <p className="text-xs text-muted-foreground">Pasarela asignada</p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'members' && (
-            <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-extrabold text-foreground">Desglose de Personal</h4>
-                  <p className="text-xs text-muted-foreground">Usuarios con permisos de administración o ventas.</p>
-                </div>
-                <Button asChild size="sm" variant="outline" className="h-7 text-xs font-bold rounded-lg">
-                  <Link href={`/superadmin/users?organization=${organization.id}`}>
-                    Ver lista en módulo Usuarios
-                    <ExternalLink className="h-3 w-3 ml-1" />
-                  </Link>
-                </Button>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3 pt-2">
-                <div className="p-3 rounded-xl bg-card border border-border text-center">
-                  <span className="text-xs font-semibold text-muted-foreground">Activos</span>
-                  <p className="text-xl font-black text-emerald-600">{organization.staff_active}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-card border border-border text-center">
-                  <span className="text-xs font-semibold text-muted-foreground">Invitados pendientes</span>
-                  <p className="text-xl font-black text-amber-600">{organization.staff_invited}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-card border border-border text-center">
-                  <span className="text-xs font-semibold text-muted-foreground">Suspendidos</span>
-                  <p className="text-xl font-black text-red-600">{organization.staff_suspended}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'billing' && (
-            <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-3">
-              <h4 className="text-sm font-extrabold text-foreground">Acciones de Facturación Directas</h4>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button asChild size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5">
-                  <Link href={`/superadmin/subscriptions?q=${encodeURIComponent(organization.slug)}`}>
-                    <CreditCard className="h-3.5 w-3.5 text-amber-500" />
-                    Historial de Pagos & Facturas
-                  </Link>
-                </Button>
-                <Button asChild size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5">
-                  <Link href="/superadmin/plans">
-                    <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                    Comparar y Ajustar Planes
-                  </Link>
-                </Button>
-                <Button asChild size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5">
-                  <Link href="/superadmin/audit-logs">
-                    <Shield className="h-3.5 w-3.5 text-cyan-500" />
-                    Auditar Eventos del Tenant
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-      </section>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Stat card
-// ---------------------------------------------------------------------------
-
 function StatCard({
   label, value, sub, icon: Icon, tone = 'default',
 }: {
@@ -885,9 +531,12 @@ type ViewMode = 'table' | 'grid'
 export function OrganizationsDashboard({
   organizations,
   referenceTime,
+  planNames,
 }: {
   organizations: SuperAdminOrganization[]
   referenceTime: string
+  /** Nombre comercial por código de plan (FREE → Gratis...). */
+  planNames?: PlanNames
 }) {
   const router = useRouter()
   const [viewMode, setViewMode] = useState<ViewMode>('table')
@@ -975,7 +624,6 @@ export function OrganizationsDashboard({
     [filtered, state.page, state.size]
   )
 
-  const focusedOrganization = query.trim() && filtered.length === 1 ? filtered[0] ?? null : null
 
   function exportCsv() {
     const rows = [
@@ -1019,15 +667,6 @@ export function OrganizationsDashboard({
   const thClass = 'px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground'
   const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-foreground transition-colors'
 
-  // Robot Mascot Mood & Insight
-  void (focusedOrganization
-    ? focusedOrganization.subscription_status === 'active' ? 'healthy' : 'warning'
-    : stats.activeSubscriptions >= stats.total * 0.7 ? 'healthy' : 'warning');
-
-  void (focusedOrganization
-    ? `Empresa: ${focusedOrganization.name} (${focusedOrganization.plan}) · ${focusedOrganization.staff_active} colaboradores activos y ${focusedOrganization.customers_total} clientes.`
-    : `Gestionando ${organizations.length} empresas en la plataforma. ${stats.paid} organizaciones en planes pagos y ${stats.activeSubscriptions} suscripciones activas.`);
-
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
 
@@ -1064,36 +703,13 @@ export function OrganizationsDashboard({
       </header>
 
       
-      {/* Focused Organization Command Center */}
-      {focusedOrganization && (
-        <OrganizationFocusPanel
-          organization={focusedOrganization}
-          onCopyUrl={copyUrl}
-          onClearFilter={() => setQuery('')}
-          onEdit={() => setEditingOrg({
-            id: focusedOrganization.id,
-            name: focusedOrganization.name,
-            slug: focusedOrganization.slug,
-            plan: focusedOrganization.plan,
-            subscription_status: focusedOrganization.subscription_status,
-            business_vertical: focusedOrganization.business_vertical,
-            operating_model: focusedOrganization.operating_model,
-            enabled_modules: focusedOrganization.enabled_modules,
-            cancel_at_period_end: focusedOrganization.cancel_at_period_end,
-          })}
-        />
-      )}
-
-      {/* KPI Cards when not focused or when viewing all */}
-      {!focusedOrganization && (
-        <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-4">
           <StatCard label="Total Empresas" value={organizations.length} sub={`${filtered.length} coincidentes`} icon={Building2} />
-          <StatCard label="Planes Pagos" value={stats.paid} sub="BASIC, PRO o ENTERPRISE" icon={Sparkles} tone="info" />
+          <StatCard label="Planes pagos" value={stats.paid} sub={['BASIC', 'PRO', 'ENTERPRISE'].map((code) => planLabel(code, planNames)).join(', ')} icon={Sparkles} tone="info" />
           <StatCard label="Suscripciones Activas" value={stats.activeSubscriptions} sub="al día con cobros" icon={CheckCircle2} tone="success" />
           <StatCard label="En Período de Prueba" value={stats.trialing} sub="trials activos" icon={Clock} tone={stats.trialing > 0 ? 'warning' : 'default'} />
           <StatCard label="Nuevas (30 días)" value={stats.newThisMonth} sub="recientemente creadas" icon={CalendarDays} tone={stats.newThisMonth > 0 ? 'info' : 'default'} />
         </div>
-      )}
 
       {/* Main Table / Grid Card */}
       <Card className="rounded-3xl border border-border bg-card/95 shadow-sm overflow-hidden">
@@ -1177,7 +793,7 @@ export function OrganizationsDashboard({
                       planFilter === p ? 'bg-foreground text-background shadow-2xs' : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
-                    {p}
+                    {planLabel(p, planNames)}
                   </button>
                 ))}
               </div>
@@ -1289,7 +905,7 @@ export function OrganizationsDashboard({
                             </div>
                             <div className="min-w-0">
                               <Link
-                                href={`/superadmin/organizations?q=${encodeURIComponent(org.slug)}`}
+                                href={`/superadmin/organizations/${encodeURIComponent(org.slug)}`}
                                 className="truncate text-xs font-extrabold text-foreground hover:text-cyan-600 transition-colors block"
                               >
                                 {org.name}
@@ -1323,7 +939,7 @@ export function OrganizationsDashboard({
                         {/* Plan */}
                         <td className="px-3 py-2">
                           <Badge variant="outline" className={cn('rounded-full text-[10px] font-bold px-2 py-0', PLAN_COLORS[org.plan] ?? PLAN_COLORS.FREE)}>
-                            {org.plan}
+                            {planLabel(org.plan, planNames)}
                           </Badge>
                         </td>
 
@@ -1420,6 +1036,7 @@ export function OrganizationsDashboard({
                     key={org.id}
                     org={org}
                     referenceTime={referenceTime}
+                    planNames={planNames}
                     onCopyUrl={(slug) => void copyUrl(slug)}
                     onEdit={() => setEditingOrg({
                       id: org.id,
@@ -1458,6 +1075,7 @@ export function OrganizationsDashboard({
       {/* Edit Organization Modal */}
       <EditOrganizationDialog
         organization={editingOrg}
+        planNames={planNames}
         open={Boolean(editingOrg)}
         onClose={() => setEditingOrg(null)}
         onSuccess={() => router.refresh()}

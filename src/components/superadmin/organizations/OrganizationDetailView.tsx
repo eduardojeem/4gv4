@@ -2766,6 +2766,7 @@ export function OrganizationDetailView({ data }: Props) {
       {/* Edit Organization Modal */}
       <EditOrganizationDialog
         organization={editableOrg}
+        planNames={Object.fromEntries((all_plans ?? []).map((plan) => [String(plan.code).toUpperCase(), plan.name]))}
         open={editDialogOpen}
         onClose={() => setEditDialogOpen(false)}
         onSuccess={() => router.refresh()}

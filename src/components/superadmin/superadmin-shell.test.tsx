@@ -67,7 +67,17 @@ describe('SuperAdminShell', () => {
       </SuperAdminShell>
     )
 
-    expect(screen.getByRole('button', { name: 'Organizaciones' })).toHaveAttribute('aria-expanded', 'true')
+    // Organizaciones es una sola sección (directorio, alta y ficha): es un
+    // enlace, no un grupo. El grupo de la ruta actual es Usuarios.
+    navigationState.pathname = '/superadmin/users'
+    view.rerender(
+      <SuperAdminShell userEmail="admin@example.com">
+        <p>Contenido</p>
+      </SuperAdminShell>
+    )
+    expect(screen.queryByRole('button', { name: 'Organizaciones' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /Organizaciones/ }).some((link) => link.getAttribute('href') === '/superadmin/organizations')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Usuarios' })).toHaveAttribute('aria-expanded', 'true')
     const billingGroup = screen
       .getAllByRole('button', { name: 'Facturacion' })
       .find((button) => button.getAttribute('aria-expanded') === 'false')
@@ -75,7 +85,7 @@ describe('SuperAdminShell', () => {
     expect(billingGroup).toBeDefined()
     await user.click(billingGroup!)
 
-    expect(screen.getByRole('button', { name: 'Organizaciones' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Usuarios' })).toHaveAttribute('aria-expanded', 'false')
     expect(billingGroup).toHaveAttribute('aria-expanded', 'true')
 
     navigationState.pathname = '/superadmin/monitoring'

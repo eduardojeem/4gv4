@@ -2,6 +2,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { OrganizationsDashboard, type SuperAdminOrganization } from '@/components/superadmin/organizations/organizations-dashboard'
 import { chunkValues, fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { getEffectiveOrganizationPlan, summarizeOrganizationMembers } from '@/lib/superadmin/organization-directory'
+import { loadPlanNames } from '@/lib/superadmin/plan-names'
 
 type OrganizationRow = {
   id: string
@@ -96,7 +97,7 @@ export default async function SuperAdminOrganizationsPage() {
   const ownerIds = organizations.map((organization) => organization.owner_id).filter(Boolean) as string[]
 
   const organizationIdChunks = chunkValues(organizationIds)
-  const [members, subscriptions, profiles, lastSignIns, activityByOrganization] = await Promise.all([
+  const [members, subscriptions, profiles, lastSignIns, activityByOrganization, planNames] = await Promise.all([
     organizationIds.length
       ? Promise.all(organizationIdChunks.map((ids) =>
           fetchAllRows<MemberRow>((from, to) =>
@@ -128,6 +129,7 @@ export default async function SuperAdminOrganizationsPage() {
       : Promise.resolve([]),
     loadLastSignIns(admin).catch(() => null),
     loadActivity(admin, organizationIds),
+    loadPlanNames(admin).catch(() => ({})),
   ])
 
   const membersByOrganization = new Map<string, MemberRow[]>()
@@ -196,6 +198,7 @@ export default async function SuperAdminOrganizationsPage() {
     <OrganizationsDashboard
       organizations={dashboardOrganizations}
       referenceTime={new Date().toISOString()}
+      planNames={planNames}
     />
   )
 }

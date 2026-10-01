@@ -132,11 +132,9 @@ const navItems: NavItem[] = [
     icon: Building2,
     description: 'Clientes y tenants del sistema',
     section: 'tenants',
-    children: [
-      { title: 'Todas las organizaciones', href: '/superadmin/organizations', icon: Building2 },
-      { title: 'Nueva organizacion', href: '/superadmin/organizations/create', icon: Sparkles },
-      { title: 'Configuracion tenants', href: '/superadmin/organizations/settings', icon: Settings },
-    ],
+    // Una sola sección: el directorio abre la ficha de cada organización y el
+    // alta («Nueva organización»). «Configuración tenants» repetía, solo para
+    // leer, la configuración del sistema y los planes.
   },
   {
     title: 'Usuarios',
