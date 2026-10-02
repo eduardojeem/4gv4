@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
+import { optimizeServerImage } from '@/lib/images/server-upload-optimizer'
+import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 import {
   MAX_WEBSITE_MEDIA_COUNT,
   getWebsiteMediaLibrary,
@@ -92,12 +94,18 @@ async function postHandler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const subfolder = section === 'logo' ? 'logos' : section === 'promotions' ? 'promotions' : section === 'brands' ? 'brands' : 'media'
-  const storagePath = `website/${subfolder}/${organizationId}/${randomUUID()}.${extension}`
   const buffer = Buffer.from(await file.arrayBuffer())
+  const profile = section === 'logo' || section === 'brands' ? 'logo' : 'banner'
+  const optimized = await optimizeServerImage(buffer, file.type, file.name, profile)
+  const storagePath = `website/${subfolder}/${organizationId}/${randomUUID()}.${optimized.extension}`
 
   const { error: uploadError } = await admin.storage
     .from('product-images')
-    .upload(storagePath, buffer, { contentType: file.type, upsert: false })
+    .upload(storagePath, optimized.buffer, {
+      contentType: optimized.mimeType,
+      cacheControl: PUBLIC_IMAGE_CACHE_CONTROL,
+      upsert: false,
+    })
 
   if (uploadError) {
     return NextResponse.json(
@@ -107,7 +115,7 @@ async function postHandler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const { data: { publicUrl } } = admin.storage.from('product-images').getPublicUrl(storagePath)
-  const fullUrl = `${publicUrl}?v=${Date.now()}`
+  const fullUrl = publicUrl
 
   const addResult = await addWebsiteMediaItem(
     organizationId,
@@ -115,7 +123,7 @@ async function postHandler(request: NextRequest, context: AdminAuthContext) {
       url: fullUrl,
       path: storagePath,
       name: customName,
-      size: file.size,
+      size: optimized.buffer.byteLength,
       section,
     },
     admin

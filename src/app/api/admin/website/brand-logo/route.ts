@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
+import { optimizeServerImage } from '@/lib/images/server-upload-optimizer'
+import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 
 const MAX_SIZE = 5 * 1024 * 1024
 const EXTENSIONS: Record<string, string> = {
@@ -46,18 +48,23 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     )
   }
 
-  const storagePath = `website/brands/${organizationId}/${brandId}-${randomUUID()}.${extension}`
   const buffer = Buffer.from(await file.arrayBuffer())
+  const optimized = await optimizeServerImage(buffer, file.type, file.name, 'logo')
+  const storagePath = `website/brands/${organizationId}/${brandId}-${randomUUID()}.${optimized.extension}`
   const { error } = await admin.storage
     .from('product-images')
-    .upload(storagePath, buffer, { contentType: file.type, upsert: false })
+    .upload(storagePath, optimized.buffer, {
+      contentType: optimized.mimeType,
+      cacheControl: PUBLIC_IMAGE_CACHE_CONTROL,
+      upsert: false,
+    })
 
   if (error) {
     return NextResponse.json({ success: false, error: `No se pudo subir el logo: ${error.message}` }, { status: 500 })
   }
 
   const { data: { publicUrl } } = admin.storage.from('product-images').getPublicUrl(storagePath)
-  const finalUrl = `${publicUrl}?v=${Date.now()}`
+  const finalUrl = publicUrl
 
   await addWebsiteMediaItem(
     organizationId,
@@ -65,7 +72,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       url: finalUrl,
       path: storagePath,
       name: `Logo marca ${brandId}`,
-      size: file.size,
+      size: optimized.buffer.byteLength,
       section: 'brands',
     },
     admin

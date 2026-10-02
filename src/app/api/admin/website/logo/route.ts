@@ -3,11 +3,14 @@ import { randomUUID } from 'node:crypto'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
+import { optimizeServerImage } from '@/lib/images/server-upload-optimizer'
+import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'image/svg+xml': 'svg',
 }
 const MAX_SIZE = 2 * 1024 * 1024 // 2 MB
 
@@ -50,12 +53,17 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     )
   }
 
-  const storagePath = `website/logos/${organizationId}/${randomUUID()}.${extension}`
   const buffer = Buffer.from(await file.arrayBuffer())
+  const optimized = await optimizeServerImage(buffer, file.type, file.name, 'logo')
+  const storagePath = `website/logos/${organizationId}/${randomUUID()}.${optimized.extension}`
 
   const { error: uploadError } = await admin.storage
     .from('product-images')
-    .upload(storagePath, buffer, { contentType: file.type, upsert: false })
+    .upload(storagePath, optimized.buffer, {
+      contentType: optimized.mimeType,
+      cacheControl: PUBLIC_IMAGE_CACHE_CONTROL,
+      upsert: false,
+    })
 
   if (uploadError) {
     return NextResponse.json(
@@ -65,7 +73,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
   }
 
   const { data: { publicUrl } } = admin.storage.from('product-images').getPublicUrl(storagePath)
-  const finalUrl = `${publicUrl}?v=${Date.now()}`
+  const finalUrl = publicUrl
 
   await addWebsiteMediaItem(
     organizationId,
@@ -73,7 +81,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       url: finalUrl,
       path: storagePath,
       name: 'Logo de la empresa',
-      size: file.size,
+      size: optimized.buffer.byteLength,
       section: 'logo',
     },
     admin
