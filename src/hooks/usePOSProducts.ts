@@ -9,6 +9,8 @@ import { useProductRealTimeSync } from './useRealTimeSync'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { mapProductForPOS, type PosProductRow } from '@/app/dashboard/pos/lib/pos-product-mapper'
+import { addToOutbox } from '@/lib/pos-offline/outbox'
+import { isNetworkError, offlineBlockReason } from '@/lib/pos-offline/sync'
 
 type DbProductRow = Database['public']['Tables']['products']['Row']
 type DbCategoryRow = Database['public']['Tables']['categories']['Row']
@@ -428,15 +430,52 @@ export function usePOSProducts() {
         p_store_credit_amount: saleData.store_credit_amount || 0,
       }
 
-      const response = await fetch('/api/pos/process-sale', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-idempotency-key': idempotencyKey,
-          ...branchHeaders(selectedBranchId),
-        },
-        body: JSON.stringify(payload),
-      })
+      // Sin internet la venta se guarda en este equipo y se manda sola al
+      // volver la conexión, con la misma clave (ver src/lib/pos-offline).
+      const saveOffline = async () => {
+        const blocked = offlineBlockReason(saleData)
+        if (blocked) throw new Error(`Sin conexión. ${blocked}`)
+        const quantities = new Map<string, number>()
+        for (const item of saleItems) quantities.set(item.product_id, (quantities.get(item.product_id) ?? 0) + Number(item.quantity || 0))
+        const names = (saleData.items || cart).map((item) => (item as { name?: string }).name).filter(Boolean)
+        await addToOutbox({
+          id: idempotencyKey,
+          branchId: selectedBranchId ?? null,
+          payload,
+          total: Number(saleData.total) || 0,
+          itemCount: [...quantities.values()].reduce((sum, quantity) => sum + quantity, 0),
+          summary: names.slice(0, 3).join(', ') + (names.length > 3 ? ` y ${names.length - 3} más` : ''),
+        })
+        pendingSaleAttempt.current = null
+        // El stock que se ve baja ya, para no vender dos veces lo último que quedaba.
+        setProducts((current) => {
+          const next = current.map((product) => {
+            const sold = quantities.get(product.id)
+            return sold ? { ...product, stock_quantity: Math.max(0, Number(product.stock_quantity || 0) - sold) } : product
+          })
+          setProductsCache(selectedBranchId, next)
+          return next
+        })
+        return { success: true, offline: true, offlineId: idempotencyKey, data: { total: Number(saleData.total) || undefined } }
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return await saveOffline()
+
+      let response: Response
+      try {
+        response = await fetch('/api/pos/process-sale', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-idempotency-key': idempotencyKey,
+            ...branchHeaders(selectedBranchId),
+          },
+          body: JSON.stringify(payload),
+        })
+      } catch (networkError) {
+        if (isNetworkError(networkError)) return await saveOffline()
+        throw networkError
+      }
 
       const result = await response.json().catch(() => null) as {
         success?: boolean

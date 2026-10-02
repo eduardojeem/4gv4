@@ -192,6 +192,18 @@ const productBaseSchema = z.object({
   // cambia, igual que con los datos del celular.
   hide_price: z.boolean().optional(),
 
+  // Precio en otra moneda. Con moneda, el precio local lo calcula la base con
+  // el tipo de cambio (ver src/lib/products/foreign-price.ts).
+  price_currency: z.string()
+    .trim()
+    .regex(/^[A-Za-z]{3}$/, 'La moneda no es válida')
+    .transform((valor) => valor.toUpperCase())
+    .nullable()
+    .optional(),
+  foreign_sale_price: z.number().nonnegative('El precio en moneda extranjera no puede ser negativo').nullable().optional(),
+  foreign_wholesale_price: z.number().nonnegative('El precio mayorista en moneda extranjera no puede ser negativo').nullable().optional(),
+  foreign_purchase_price: z.number().nonnegative('El costo en moneda extranjera no puede ser negativo').nullable().optional(),
+
   ...productVariantsFields,
 })
 

@@ -74,6 +74,10 @@ import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError, getQuickItemMargin } from './lib/quick-item'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { useHeldSales, HeldSale } from './hooks/useHeldSales'
+import { useQuoteToCart } from './hooks/useQuoteToCart'
+import { useOfflineSales } from './hooks/useOfflineSales'
+import { OfflineSalesBar } from './components/OfflineSalesBar'
+import { quoteCode } from '@/lib/quotes/quote-math'
 import { HeldSalesModal } from './components/HeldSalesModal'
 import { POSShortcutsBar } from './components/POSShortcutsBar'
 import { POSWorkspace } from './components/POSWorkspace'
@@ -365,7 +369,7 @@ function POSPageContent() {
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<ProductWithVariants | null>(null)
 
   // Hooks para variantes y promociones
-  const { getProductWithVariants, convertVariantToCartItem } = useProductVariants()
+  const { getProductWithVariants, convertVariantToCartItem, products: variantCatalog, loading: variantsLoading } = useProductVariants()
   const { applyPromotionByCode, calculateCartSummary: _calculateCartSummary } = usePromotionEngine()
   const { allPromotions } = usePromotions()
 
@@ -622,6 +626,36 @@ function POSPageContent() {
     })
     
   }, [convertVariantToCartItem, addVariantToCartHook])
+
+  // Presupuesto que se cobra (/dashboard/pos?quoteId=…): se carga al carrito
+  // con los precios acordados y, al cobrar, queda enlazado a la venta.
+  const getQuoteVariant = useCallback((productId: string, variantId: string) => (
+    getProductWithVariants(productId)?.variants?.find((variant) => variant.id === variantId) ?? null
+  ), [getProductWithVariants])
+  const addQuoteVariant = useCallback((variant: { id: string }, quantity: number) => {
+    addVariantToCart(variant as ProductVariant, quantity)
+  }, [addVariantToCart])
+  const clearQuoteParam = useCallback(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('quoteId')
+    window.history.replaceState(window.history.state, '', url)
+  }, [])
+  // Ventas sin conexión: se guardan en el equipo y se mandan solas al volver internet.
+  const offlineSales = useOfflineSales()
+
+  const { activeQuote, clearActiveQuote, markConverted: markQuoteConverted } = useQuoteToCart({
+    quoteId: searchParams.get('quoteId'),
+    ready: !productsLoading && inventoryProducts.length > 0 && !variantsLoading && variantCatalog.length > 0,
+    inventoryProducts,
+    getVariant: getQuoteVariant,
+    addProduct: addToCartHook,
+    addVariant: addQuoteVariant,
+    updateItemDiscount,
+    setIsWholesale,
+    setSelectedCustomer,
+    clearCart,
+    onLoaded: clearQuoteParam,
+  })
 
   // updateQuantity is now provided by useOptimizedCart
 
@@ -1040,7 +1074,8 @@ function POSPageContent() {
     setPaymentStatus,
     setPaymentError,
     processInventorySale,
-    onSuccess: (receipt: ReceiptData) => {
+    onSuccess: (receipt: ReceiptData, meta?: { saleId?: string }) => {
+      void markQuoteConverted(meta?.saleId)
       setLastSaleData(receipt)
       setCurrentReceipt(receipt)
       setShowReceiptModal(true)
@@ -1072,7 +1107,7 @@ function POSPageContent() {
     deliveryOutcome, selectedCustomer, customers, cashierName,
     setPaymentStatus, setPaymentError, processInventorySale,
     clearCart, setSelectedCustomer, clearRepairs, setGeneralDiscount, resetCheckoutState,
-    setIsCheckoutOpen, formatCurrency, measureSaleProcessing,
+    setIsCheckoutOpen, formatCurrency, measureSaleProcessing, markQuoteConverted,
     setCustomerRepairs,
   ])
 
@@ -1310,6 +1345,22 @@ function POSPageContent() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Contenido principal */}
         <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
+          <OfflineSalesBar
+            online={offlineSales.online}
+            outbox={offlineSales.outbox}
+            pending={offlineSales.pending}
+            failed={offlineSales.failed}
+            syncing={offlineSales.syncing}
+            onSync={() => void offlineSales.sync()}
+            onRetry={(id) => void offlineSales.retry(id)}
+            onDiscard={(id) => void offlineSales.discard(id)}
+          />
+          {activeQuote && (
+            <div role="status" className="flex items-center justify-between gap-3 border-b border-violet-200 bg-violet-50 px-4 py-1.5 text-sm text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
+              <span>Cobrando el presupuesto <b>{quoteCode(activeQuote.number)}</b>: al completar la venta queda marcado como vendido.</span>
+              <button type="button" className="text-xs underline" onClick={clearActiveQuote}>No vincular</button>
+            </div>
+          )}
           {/* Header desktop optimizado */}
   <POSHeader
     className="hidden lg:flex items-center justify-between bg-card/70 backdrop-blur-md border-b border-border/60 px-4 py-1.5 sticky top-0 z-20 shadow-xs"

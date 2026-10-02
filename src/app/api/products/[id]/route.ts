@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
+import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPriceColumns } from '@/lib/products/foreign-price'
 import { logger } from '@/lib/logger'
 import {
   type AppRole,
@@ -232,6 +233,10 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       }
     }
 
+    if (await productsHaveForeignPriceColumns(supabase as never)) {
+      Object.assign(updatePayload, foreignPriceColumns(validated, (key) => key in body))
+    }
+
     // Marca: si se tocó, el texto y el vínculo quedan de acuerdo. Si llega
     // solo uno de los dos, el otro sale de lo guardado.
     if ('brand' in body || 'brand_id' in body) {
@@ -277,6 +282,10 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         .maybeSingle()
 
       if (error) {
+        const foreignPriceError = foreignPriceErrorMessage(error)
+        if (foreignPriceError) {
+          return NextResponse.json({ success: false, error: foreignPriceError, code: 'EXCHANGE_RATE_MISSING', field: 'price_currency' }, { status: 400 })
+        }
         console.error('[PRODUCTS PUT] Supabase update error:', error.message, error.code, error.details)
         logger.error('Failed to update product by id', { productId: id, error: error.message })
         throw error

@@ -62,6 +62,7 @@ import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { generateEAN13 } from '@/lib/validations/product-validation'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
+import { ForeignPriceSection } from '@/components/dashboard/currency/ForeignPriceSection'
 import { CategoryModal } from '@/components/categories/CategoryModal'
 import { buildCategoryOptions, getCategoryIndent } from '@/lib/categories/category-tree'
 import { NewProductChecklist } from '@/components/dashboard/products/NewProductChecklist'
@@ -244,6 +245,24 @@ export const PRODUCT_TABS = [
 
 export type ProductModalTabId = typeof PRODUCT_TABS[number]['id']
 
+
+/** Los precios en otra moneda del producto, para cargar el formulario. */
+function foreignPriceDefaults(product: object) {
+  const source = product as {
+    price_currency?: string | null
+    foreign_sale_price?: number | string | null
+    foreign_wholesale_price?: number | string | null
+    foreign_purchase_price?: number | string | null
+  }
+  const amount = (value: number | string | null | undefined) => (value === null || value === undefined || value === '' ? null : Number(value))
+  return {
+    price_currency: source.price_currency || null,
+    foreign_sale_price: amount(source.foreign_sale_price),
+    foreign_wholesale_price: amount(source.foreign_wholesale_price),
+    foreign_purchase_price: amount(source.foreign_purchase_price),
+  }
+}
+
 export function ProductModal({
   product,
   isOpen,
@@ -333,6 +352,10 @@ export function ProductModal({
       device_brand: '',
       device_models: [],
       supplier_id: '',
+      price_currency: null,
+      foreign_sale_price: null,
+      foreign_wholesale_price: null,
+      foreign_purchase_price: null,
       purchase_price: 0,
       sale_price: 0,
       wholesale_price: 0,
@@ -362,6 +385,8 @@ export function ProductModal({
   })
 
   const { formState: { isSubmitting, errors, isValid, isDirty }, setValue, watch } = form
+  // Con precio en otra moneda, los precios locales los calcula el tipo de cambio.
+  const isForeignPriced = Boolean(watch('price_currency'))
   const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === productId
   const submitState = getProductSubmitState({
     isEditing: Boolean(product),
@@ -552,6 +577,7 @@ export function ProductModal({
         purchase_price: product.purchase_price || 0,
         sale_price: product.sale_price || 0,
         wholesale_price: product.wholesale_price || 0,
+        ...foreignPriceDefaults(product),
         offer_price: product.offer_price || 0,
         has_offer: product.has_offer || false,
         installments_enabled: productDetails.installments_enabled === true,
@@ -592,6 +618,10 @@ export function ProductModal({
         device_brand: '',
         device_models: [],
         supplier_id: '',
+        price_currency: null,
+        foreign_sale_price: null,
+        foreign_wholesale_price: null,
+        foreign_purchase_price: null,
         purchase_price: 0,
         sale_price: 0,
         wholesale_price: 0,
@@ -800,6 +830,11 @@ export function ProductModal({
       unit_measure: data.unit_measure?.trim() || 'unidad',
       wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
       offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
+      // Sin moneda extranjera, los precios en otra moneda se limpian.
+      price_currency: data.price_currency || null,
+      foreign_sale_price: data.price_currency ? Number(data.foreign_sale_price ?? 0) : null,
+      foreign_wholesale_price: data.price_currency && Number(data.foreign_wholesale_price) > 0 ? Number(data.foreign_wholesale_price) : null,
+      foreign_purchase_price: data.price_currency && Number(data.foreign_purchase_price) > 0 ? Number(data.foreign_purchase_price) : null,
       warranty_months: Number(data.warranty_months ?? 0),
       warranty_info: data.warranty_info?.trim() || null,
       return_window_days: Number(data.return_window_days ?? 0),
@@ -863,6 +898,7 @@ export function ProductModal({
       // en creación queda en el default de la base.
       if (!canViewCost) {
         delete (cleanedData as Record<string, unknown>).purchase_price
+        delete (cleanedData as Record<string, unknown>).foreign_purchase_price
       }
 
       // Ensure we're not sending an ID for new products
@@ -1944,6 +1980,8 @@ export function ProductModal({
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Precios Base</h3>
                     </div>
 
+                    <ForeignPriceSection form={form} canViewCost={canViewCost} hasVariants={Boolean(watch('has_variants'))} />
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {canViewCost && (
                       <FormField
@@ -1961,6 +1999,8 @@ export function ProductModal({
                                 step="0.01"
                                 className="text-lg"
                                 {...field}
+                                readOnly={isForeignPriced}
+                                title={isForeignPriced ? "Se calcula con el tipo de cambio" : undefined}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1984,6 +2024,8 @@ export function ProductModal({
                                 step="0.01"
                                 className="text-lg font-semibold"
                                 {...field}
+                                readOnly={isForeignPriced}
+                                title={isForeignPriced ? "Se calcula con el tipo de cambio" : undefined}
                               />
                             </FormControl>
                             <FormMessage />
@@ -2071,6 +2113,8 @@ export function ProductModal({
                                       className="text-lg font-semibold"
                                       placeholder="0"
                                       {...field}
+                                readOnly={isForeignPriced}
+                                title={isForeignPriced ? "Se calcula con el tipo de cambio" : undefined}
                                       value={field.value ?? ""}
                                     />
                                   </FormControl>

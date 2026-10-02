@@ -24,6 +24,8 @@ const BLOCKED_SECTIONS: string[] = [
 const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
   vendedor: [
     '/dashboard/pos',
+    '/dashboard/quotes',
+    '/dashboard/inventory-count',
     '/dashboard/products',
     '/dashboard/categories',
     '/dashboard/customers',
@@ -35,6 +37,7 @@ const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
   ],
   tecnico: [
     '/dashboard/pos',
+    '/dashboard/inventory-count',
     '/dashboard/products',
     '/dashboard/categories',
     '/dashboard/customers',

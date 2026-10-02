@@ -30,6 +30,7 @@ describe('dashboard navigation information architecture', () => {
     ])
     expect(dashboardNavGroups[1].items.map((item) => item.key)).toEqual([
       'orders',
+      'quotes',
       'customers',
       'credits',
       'after-sales',

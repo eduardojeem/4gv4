@@ -56,6 +56,14 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionRequirement> = {
     permissions: ['customers.read'],
     requireAll: false
   },
+  '/dashboard/quotes': {
+    permissions: ['pos.read'],
+    requireAll: false
+  },
+  '/dashboard/inventory-count': {
+    permissions: ['products.read'],
+    requireAll: false
+  },
   '/dashboard/orders': {
     permissions: ['orders.read'],
     requireAll: false

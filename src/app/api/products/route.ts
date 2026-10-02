@@ -6,6 +6,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
+import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPriceColumns } from '@/lib/products/foreign-price'
 import type { AppRole } from '@/lib/auth/role-utils'
 import { stripProductCost, canViewProductCost, PRODUCT_COST_PERMISSION } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
@@ -677,13 +678,19 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
         images: validated.images,
         image_url: validated.image_url,
         barcode: validated.barcode,
-        unit_measure: validated.unit_measure
+        unit_measure: validated.unit_measure,
+        ...(await productsHaveForeignPriceColumns(supabase as never) ? foreignPriceColumns(validated) : {}),
       })
       .select()
       .single()
     
     if (error) {
       logger.error('Failed to create product', { error: error.message, code: error.code })
+
+      const foreignPriceError = foreignPriceErrorMessage(error)
+      if (foreignPriceError) {
+        return NextResponse.json({ success: false, error: foreignPriceError, code: 'EXCHANGE_RATE_MISSING', field: 'price_currency' }, { status: 400 })
+      }
       
       // Handle unique constraint violations
       if (error.code === '23505') {

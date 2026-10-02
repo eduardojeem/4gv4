@@ -32,6 +32,9 @@ export interface PaymentAttempt {
 
 export interface ProcessSaleResult {
   success: boolean
+  /** Sin conexión: quedó guardada en el equipo y se manda sola al volver internet. */
+  offline?: boolean
+  offlineId?: string
   saleId?: string | number
   data?: {
     id?: string
@@ -94,7 +97,8 @@ export interface SaleProcessorDependencies {
   processInventorySale: (payload: SaleData) => Promise<ProcessSaleResult>
 
   // Callbacks post-venta
-  onSuccess: (receiptData: ReceiptData) => void
+  /** `saleId`: la venta guardada, para enlazarla (p. ej. con el presupuesto que se cobró). */
+  onSuccess: (receiptData: ReceiptData, meta?: { saleId?: string }) => void
   onAfterSale: () => void
 
   // Formateo
@@ -369,7 +373,9 @@ export function usePOSSaleProcessor() {
             creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
             receiptNumber: saleResult?.saleId
               ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
-              : receiptData.receiptNumber,
+              : saleResult?.offline && saleResult.offlineId
+                ? `PEND-${saleResult.offlineId.slice(0, 8).toUpperCase()}`
+                : receiptData.receiptNumber,
             tax: Number.isFinite(Number(saleResult?.data?.tax))
               ? Number(saleResult.data.tax)
               : receiptData.tax,
@@ -380,7 +386,9 @@ export function usePOSSaleProcessor() {
 
           setPaymentStatus('success')
           toast.success(
-            `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(persistedReceipt.total)})`,
+            saleResult?.offline
+            ? `Sin conexión: venta guardada en este equipo (${formatCurrency(persistedReceipt.total)}). Se envía sola cuando vuelva internet.`
+            : `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(persistedReceipt.total)})`,
             { duration: 4500 }
           )
           addPaymentAttempt({
@@ -390,7 +398,7 @@ export function usePOSSaleProcessor() {
             message: 'Pago exitoso',
           })
 
-          onSuccess(persistedReceipt)
+          onSuccess(persistedReceipt, { saleId: saleResult?.saleId ? String(saleResult.saleId) : undefined })
           setTimeout(() => {
             onAfterSale()
             setPaymentStatus('idle')
@@ -592,7 +600,9 @@ export function usePOSSaleProcessor() {
           creditInfo: receiptData.creditInfo ? withPersistedCreditSchedule(receiptData.creditInfo, saleResult?.data?.creditSchedule) : undefined,
           receiptNumber: saleResult?.saleId
             ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
-            : receiptData.receiptNumber,
+            : saleResult?.offline && saleResult.offlineId
+              ? `PEND-${saleResult.offlineId.slice(0, 8).toUpperCase()}`
+              : receiptData.receiptNumber,
           tax: Number.isFinite(Number(saleResult?.data?.tax))
             ? Number(saleResult.data.tax)
             : receiptData.tax,
@@ -603,7 +613,9 @@ export function usePOSSaleProcessor() {
 
         setPaymentStatus('success')
         toast.success(
-          `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(persistedReceipt.total)})`,
+          saleResult?.offline
+            ? `Sin conexión: venta guardada en este equipo (${formatCurrency(persistedReceipt.total)}). Se envía sola cuando vuelva internet.`
+            : `¡Venta completada! Comprobante #${persistedReceipt.receiptNumber || 'POS'} generado (${formatCurrency(persistedReceipt.total)})`,
           { duration: 4500 }
         )
         addPaymentAttempt({
@@ -613,7 +625,7 @@ export function usePOSSaleProcessor() {
           message: 'Pago exitoso',
         })
 
-        onSuccess(persistedReceipt)
+        onSuccess(persistedReceipt, { saleId: saleResult?.saleId ? String(saleResult.saleId) : undefined })
         setTimeout(() => {
           onAfterSale()
           setPaymentStatus('idle')

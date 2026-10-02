@@ -27,6 +27,8 @@ export const APP_ROUTE_SLUGS = [
   'empresas', 'forbidden', 'inicio', 'login', 'marketplace', 'mis-reparaciones',
   'ofertas', 'perfil', 'productos', 'products', 'register', 'saas', 'servicios',
   'setup', 'setup-access', 'superadmin', 'track',
+  // Enlaces que se mandan al cliente: presupuesto y turno reservado.
+  'presupuesto', 'turno',
 ] as const
 
 /** Subdominios que suele usar la infraestructura de un dominio. */

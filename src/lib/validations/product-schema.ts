@@ -36,6 +36,12 @@ export const productSchema = z
     // Publicar el producto sin mostrar el precio (la tienda ofrece «Preguntar»).
     hide_price: z.boolean().optional(),
 
+    // Precio en otra moneda (USD...). Con moneda, los precios locales se calculan con el tipo de cambio.
+    price_currency: z.string().optional().nullable(),
+    foreign_sale_price: z.coerce.number().min(0, "El precio no puede ser negativo").optional().nullable(),
+    foreign_wholesale_price: z.coerce.number().min(0, "El precio no puede ser negativo").optional().nullable(),
+    foreign_purchase_price: z.coerce.number().min(0, "El costo no puede ser negativo").optional().nullable(),
+
     // Pricing
     purchase_price: z
       .coerce

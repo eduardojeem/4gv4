@@ -6,6 +6,7 @@ import {
   AlertCircle, ArrowRight,
   Building2,
   Check, Clock,
+  Coins,
   ExternalLink,
   Globe,
   Info, Loader2,
@@ -25,6 +26,7 @@ import {
   Laptop
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ExchangeRatesManager } from '@/components/dashboard/currency/ExchangeRatesManager'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -83,6 +85,16 @@ export default function AdminSettingsPage() {
   const { theme: activeTheme, colorScheme: activeColorScheme, setTheme, setColorScheme } = useTheme()
   const t = getAdminSettingsText('es')
   const [activeTab, setActiveTab] = useState('company')
+
+  // Los enlaces «Tipo de cambio» del resto del panel llegan con #monedas.
+  useEffect(() => {
+    if (window.location.hash !== '#monedas') return
+    const timer = window.setTimeout(() => {
+      setActiveTab('operations')
+      window.setTimeout(() => document.getElementById('monedas')?.scrollIntoView({ behavior: 'smooth' }), 150)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
   const [currencyChangeConfirmed, setCurrencyChangeConfirmed] = useState(false)
 
   const validationErrors = useMemo<FieldErrors>(() => {
@@ -736,6 +748,25 @@ export default function AdminSettingsPage() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card id="monedas" className="border-border/80 shadow-sm">
+            <CardHeader className="border-b bg-muted/20 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Coins className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg font-semibold tracking-tight">Monedas y tipo de cambio</CardTitle>
+                  <CardDescription className="mt-0.5 text-xs sm:text-sm">
+                    Para poner precios en dólares u otra moneda y que se conviertan solos a tu moneda.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-5">
+              <ExchangeRatesManager />
             </CardContent>
           </Card>
         </TabsContent>
