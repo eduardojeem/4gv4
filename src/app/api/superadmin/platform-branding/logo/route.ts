@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { optimizeServerImage, type OptimizedServerImage } from '@/lib/images/server-upload-optimizer'
+import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 
 const CONTENT_TYPES: Record<string, string> = {
   png: 'image/png',
@@ -73,18 +75,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const optimized: OptimizedServerImage = extension === 'ico'
+      ? {
+          buffer,
+          mimeType: CONTENT_TYPES.ico,
+          extension: 'ico',
+          fileName: file.name,
+        }
+      : await optimizeServerImage(buffer, CONTENT_TYPES[extension], file.name, 'logo')
+
     const admin = createAdminSupabase()
     const sanitizedType = ['logo_light', 'logo_dark', 'favicon', 'announcement'].includes(assetType) ? assetType : 'logo_light'
-    const storagePath = `branding/platform/${sanitizedType}-${randomUUID()}.${extension}`
+    const storagePath = `branding/platform/${sanitizedType}-${randomUUID()}.${optimized.extension}`
 
     const { error: uploadError } = await admin.storage
       .from('product-images')
-      .upload(storagePath, buffer, {
-        // Derivado de la firma real: si se guardara el tipo declarado, un PNG
-        // subido como `image/svg+xml` se serviria como SVG y volveria a abrir
-        // el vector de XSS que se acaba de cerrar.
-        contentType: CONTENT_TYPES[extension],
-        upsert: true,
+      .upload(storagePath, optimized.buffer, {
+        contentType: optimized.mimeType,
+        cacheControl: PUBLIC_IMAGE_CACHE_CONTROL,
+        upsert: false,
       })
 
     if (uploadError) {
@@ -98,7 +107,7 @@ export async function POST(request: NextRequest) {
       .from('product-images')
       .getPublicUrl(storagePath)
 
-    const finalUrl = `${publicUrl}?v=${Date.now()}`
+    const finalUrl = publicUrl
 
     await logSuperAdminAction({
       actorId: me.id,

@@ -5,6 +5,8 @@ import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { brandSlug } from '@/lib/brands/global-catalog'
 import { logger } from '@/lib/logger'
+import { optimizeServerImage } from '@/lib/images/server-upload-optimizer'
+import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 
 /**
  * Subida del logo oficial de una marca del catálogo.
@@ -48,13 +50,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'El logo no puede superar 2 MB.' }, { status: 400 })
     }
 
+    const optimized = await optimizeServerImage(
+      Buffer.from(await file.arrayBuffer()),
+      file.type,
+      file.name,
+      'logo',
+    )
     const slug = brandSlug(name) || 'marca'
-    const path = `${FOLDER}/${slug}-${randomUUID()}.${extension}`
+    const path = `${FOLDER}/${slug}-${randomUUID()}.${optimized.extension}`
 
     const admin = createAdminSupabase()
     const { error } = await admin.storage
       .from(BUCKET)
-      .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false })
+      .upload(path, optimized.buffer, {
+        contentType: optimized.mimeType,
+        cacheControl: PUBLIC_IMAGE_CACHE_CONTROL,
+        upsert: false,
+      })
 
     if (error) throw error
 
