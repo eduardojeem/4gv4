@@ -59,11 +59,22 @@ describe('ninguna ruta lee params sin esperarlo', () => {
       // `(context as {...}).params?.id`: lee el parámetro de la promesa sin esperarla.
       if (/\)\??\.params\?\.\w+/.test(codigo)) return true
       // O lo guarda en una variable y lo lee igual, sin resolverla antes.
-      const castea = /as \{[^}]*params\?:/.test(codigo)
+      // Solo importa el `params` extraído del contexto de ruta. Un body JSON
+      // puede tener legítimamente una propiedad de negocio llamada `params`.
+      const castea = /const\s+params\s*=\s*\(?(?:routeContext|context)\s+as\s+\{[\s\S]{0,500}?params\?:/.test(codigo)
       const espera = /await Promise\.resolve\(params\)|await routeParam|await params/.test(codigo)
       return castea && !espera
     })
     expect(culpables).toEqual([])
+  })
+
+  it('no confunde los parámetros de negocio del body con params de Next', () => {
+    const codigo = readFileSync(
+      resolve(process.cwd(), 'src/app/api/superadmin/database/maintenance/route.ts'),
+      'utf8',
+    )
+    expect(codigo).toContain('body?.params?.days')
+    expect(codigo).not.toMatch(/const\s+params\s*=\s*\(?(?:routeContext|context)\s+as\s+\{[\s\S]{0,500}?params\?:/)
   })
 
   it('las rutas del sorteo usan el helper', () => {
