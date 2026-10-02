@@ -12,10 +12,15 @@ export const shouldBypassImageOptimization = (source?: string | null): boolean =
   const value = source.trim()
   if (!value) return true
   if (value.startsWith('data:') || value.startsWith('blob:')) return true
-  if (value === '/placeholder-product.svg' || /\.svg(?:$|[?#])/i.test(value)) return true
+  if (value === '/placeholder-product.svg' || /\.(?:svg|gif)(?:$|[?#])/i.test(value)) return true
 
   try {
-    return ALREADY_OPTIMIZED_IMAGE_HOSTS.has(new URL(value).hostname)
+    const url = new URL(value)
+    if (ALREADY_OPTIMIZED_IMAGE_HOSTS.has(url.hostname)) return true
+
+    return url.hostname.endsWith('.supabase.co')
+      && url.pathname.includes('/storage/v1/object/public/product-images/')
+      && /\.webp$/i.test(url.pathname)
   } catch {
     return false
   }

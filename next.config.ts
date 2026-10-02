@@ -112,8 +112,8 @@ const nextConfig: NextConfig = {
     formats: ['image/webp'],
     qualities: [75],
     minimumCacheTTL: 31536000, // 1 año
-    deviceSizes: [640, 768, 1024, 1280, 1536, 1920],
-    imageSizes: [32, 48, 64, 96, 128, 256, 384],
+    deviceSizes: [640, 768, 1280, 1536],
+    imageSizes: [32, 64, 128, 256, 384],
     remotePatterns: REMOTE_IMAGE_HOSTS.map((hostname) => ({
       protocol: 'https' as const,
       hostname,

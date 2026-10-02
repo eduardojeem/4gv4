@@ -45,4 +45,25 @@ describe('image URL policy', () => {
     expect(shouldBypassImageOptimization('data:image/webp;base64,AAAA')).toBe(true)
     expect(shouldBypassImageOptimization('https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg')).toBe(false)
   })
+
+  it('bypasses normalized Supabase WebP but keeps legacy raster compatibility', () => {
+    const base = 'https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images'
+    expect(shouldBypassImageOptimization(`${base}/products/item.webp`)).toBe(true)
+    expect(shouldBypassImageOptimization(`${base}/products/item.webp?download=1`)).toBe(true)
+    expect(shouldBypassImageOptimization(`${base}/products/item.jpg`)).toBe(false)
+    expect(shouldBypassImageOptimization(`${base}/products/item.png`)).toBe(false)
+  })
+
+  it('keeps external and local raster assets eligible for optimization', () => {
+    expect(shouldBypassImageOptimization('https://images.example.com/item.webp')).toBe(false)
+    expect(shouldBypassImageOptimization('/images/item.webp')).toBe(false)
+    expect(shouldBypassImageOptimization('/images/item.png')).toBe(false)
+  })
+
+  it('bypasses GIF, SVG, data and blob sources', () => {
+    expect(shouldBypassImageOptimization('/animation.gif?version=2')).toBe(true)
+    expect(shouldBypassImageOptimization('/brand.svg#logo')).toBe(true)
+    expect(shouldBypassImageOptimization('data:image/png;base64,AAAA')).toBe(true)
+    expect(shouldBypassImageOptimization('blob:https://www.mitiendapy.com/id')).toBe(true)
+  })
 })

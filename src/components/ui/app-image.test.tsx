@@ -24,6 +24,11 @@ describe('AppImage', () => {
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'false')
   })
 
+  it('evita el optimizador para un WebP normalizado de Supabase Storage', () => {
+    render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/products/item.webp" alt="WebP" />)
+    expect(screen.getByRole('img', { name: 'WebP' })).toHaveAttribute('data-unoptimized', 'true')
+  })
+
   it('sigue evitando el optimizador para SVG y data URIs', () => {
     const { rerender } = render(<AppImage src="/placeholder-product.svg" alt="Producto" />)
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'true')
