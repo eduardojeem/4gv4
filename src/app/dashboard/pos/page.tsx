@@ -77,7 +77,6 @@ import { useHeldSales, HeldSale } from './hooks/useHeldSales'
 import { useQuoteToCart } from './hooks/useQuoteToCart'
 import { useOfflineSales } from './hooks/useOfflineSales'
 import { OfflineSalesBar } from './components/OfflineSalesBar'
-import { quoteCode } from '@/lib/quotes/quote-math'
 import { HeldSalesModal } from './components/HeldSalesModal'
 import { POSShortcutsBar } from './components/POSShortcutsBar'
 import { POSWorkspace } from './components/POSWorkspace'
@@ -638,6 +637,7 @@ function POSPageContent() {
   const clearQuoteParam = useCallback(() => {
     const url = new URL(window.location.href)
     url.searchParams.delete('quoteId')
+    url.searchParams.delete('appointmentId')
     window.history.replaceState(window.history.state, '', url)
   }, [])
   // Ventas sin conexión: se guardan en el equipo y se mandan solas al volver internet.
@@ -645,6 +645,7 @@ function POSPageContent() {
 
   const { activeQuote, clearActiveQuote, markConverted: markQuoteConverted } = useQuoteToCart({
     quoteId: searchParams.get('quoteId'),
+    appointmentId: searchParams.get('appointmentId'),
     ready: !productsLoading && inventoryProducts.length > 0 && !variantsLoading && variantCatalog.length > 0,
     inventoryProducts,
     getVariant: getQuoteVariant,
@@ -1357,7 +1358,7 @@ function POSPageContent() {
           />
           {activeQuote && (
             <div role="status" className="flex items-center justify-between gap-3 border-b border-violet-200 bg-violet-50 px-4 py-1.5 text-sm text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
-              <span>Cobrando el presupuesto <b>{quoteCode(activeQuote.number)}</b>: al completar la venta queda marcado como vendido.</span>
+              <span>Cobrando {activeQuote.kind === 'quote' ? 'el presupuesto' : 'el turno'} <b>{activeQuote.code}</b>: al completar la venta queda {activeQuote.kind === 'quote' ? 'marcado como vendido' : 'como atendido y cobrado'}.</span>
               <button type="button" className="text-xs underline" onClick={clearActiveQuote}>No vincular</button>
             </div>
           )}

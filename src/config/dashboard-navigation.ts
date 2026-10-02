@@ -5,6 +5,7 @@ import {
   Boxes,
   ChartNoAxesCombined,
   ClipboardCheck,
+  CalendarClock,
   ClipboardList,
   FileText,
   ScanBarcode,
@@ -51,6 +52,7 @@ export const dashboardNavGroups: DashboardNavGroup[] = [
     items: [
       { key: 'overview', label: 'Resumen', href: '/dashboard', icon: Gauge, description: 'Estado general del negocio', mobilePriority: 10 },
       { key: 'pos', label: 'Punto de venta', mobileLabel: 'POS', href: '/dashboard/pos', icon: ShoppingCart, description: 'Registrar una venta', permission: 'pos.read', module: 'pos', mobilePriority: 20 },
+      { key: 'agenda', label: 'Agenda', href: '/dashboard/agenda', icon: CalendarClock, description: 'Turnos por profesional y reservas online', permission: 'pos.read', module: 'services', mobilePriority: 25 },
       { key: 'cash-register', label: 'Caja', href: '/dashboard/pos/caja', icon: Banknote, description: 'Apertura, movimientos y cierre', permission: 'pos.read', module: 'pos', mobilePriority: 70 },
     ],
   },

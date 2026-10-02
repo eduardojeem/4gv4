@@ -58,7 +58,7 @@ describe('presupuesto → POS', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(quoteResponse()))
     const { hook, calls } = setup()
 
-    await waitFor(() => expect(hook.result.current.activeQuote).toEqual({ id: 'q1', number: 12 }))
+    await waitFor(() => expect(hook.result.current.activeQuote).toEqual({ kind: 'quote', id: 'q1', number: 12, code: 'P-00012' }))
     expect(calls.clearCart).toHaveBeenCalledWith(true)
     expect(calls.setIsWholesale).toHaveBeenCalledWith(false)
     expect(calls.setSelectedCustomer).toHaveBeenCalledWith('c1')

@@ -1,0 +1,250 @@
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
+import { CalendarCheck2, CheckCircle2, Clock, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { formatCurrency } from '@/lib/currency'
+import { cn } from '@/lib/utils'
+import { addDays, weekdayOf, WEEKDAY_LABELS } from '@/lib/agenda/time'
+
+type Info = {
+  storeName: string
+  currency: string
+  today: string
+  maxDaysAhead: number
+  requireConfirmation: boolean
+  message: string | null
+  openDays: number[]
+  services: Array<{ id: string; name: string; duration: number; price: number | null }>
+  professionals: Array<{ id: string; name: string; color: string }>
+}
+
+const ANY = 'any'
+
+function Step({ number, title, children, done }: { number: number; title: string; children: React.ReactNode; done?: boolean }) {
+  return (
+    <section className="space-y-3 rounded-2xl border bg-card p-4 sm:p-5">
+      <h2 className="flex items-center gap-2 text-base font-semibold">
+        <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs', done ? 'bg-emerald-500 text-white' : 'bg-primary text-primary-foreground')}>{number}</span>
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
+export function PublicBooking({ slug }: { slug: string }) {
+  const [info, setInfo] = useState<Info | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [serviceId, setServiceId] = useState<string | null>(null)
+  const [professionalId, setProfessionalId] = useState<string>(ANY)
+  const [date, setDate] = useState<string | null>(null)
+  const [slots, setSlots] = useState<{ key: string; list: Array<{ startsAt: string; time: string }> } | null>(null)
+  const [startsAt, setStartsAt] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [notes, setNotes] = useState('')
+  const [website, setWebsite] = useState('')
+  const [sending, setSending] = useState(false)
+  const [booked, setBooked] = useState<{ token: string; status: string } | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/public/agenda/${encodeURIComponent(slug)}`)
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}))
+        if (!response.ok) setError(body.error || 'No se pudo cargar la agenda')
+        else setInfo(body)
+      })
+      .catch(() => setError('No se pudo cargar la agenda'))
+  }, [slug])
+
+  const slotKey = serviceId && date ? `${serviceId}|${professionalId}|${date}` : null
+  useEffect(() => {
+    if (!slotKey || !serviceId || !date) return
+    const params = new URLSearchParams({ date, service: serviceId })
+    if (professionalId !== ANY) params.set('professional', professionalId)
+    let cancelled = false
+    fetch(`/api/public/agenda/${encodeURIComponent(slug)}?${params}`)
+      .then((response) => response.json())
+      .then((body) => { if (!cancelled) setSlots({ key: slotKey, list: Array.isArray(body.slots) ? body.slots : [] }) })
+      .catch(() => { if (!cancelled) setSlots({ key: slotKey, list: [] }) })
+    return () => { cancelled = true }
+  }, [slotKey, serviceId, date, professionalId, slug])
+
+  const days = useMemo(() => {
+    if (!info) return []
+    return Array.from({ length: Math.min(info.maxDaysAhead, 30) + 1 }, (_, index) => addDays(info.today, index))
+      .filter((day) => info.openDays.includes(weekdayOf(day)))
+  }, [info])
+
+  const service = info?.services.find((item) => item.id === serviceId) ?? null
+  const visibleSlots = slots && slots.key === slotKey ? slots.list : null
+
+  const book = async () => {
+    if (!serviceId || !startsAt) return
+    setSending(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/public/agenda/${encodeURIComponent(slug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: serviceId,
+          professional_id: professionalId === ANY ? null : professionalId,
+          starts_at: startsAt,
+          name,
+          phone,
+          notes: notes || null,
+          website,
+        }),
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setError(body.error || 'No se pudo reservar')
+        // El horario se ocupó: se vuelven a pedir los libres.
+        if (response.status === 409) {
+          setStartsAt(null)
+          setSlots(null)
+        }
+        return
+      }
+      setBooked(body)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (error && !info) return <p className="rounded-xl border p-6 text-center text-sm text-muted-foreground">{error}</p>
+  if (!info) return <p className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando turnos…</p>
+
+  if (booked) {
+    return (
+      <div className="space-y-4 rounded-2xl border bg-card p-6 text-center">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
+        <h2 className="text-xl font-bold">{booked.status === 'pending' ? '¡Pedido de turno enviado!' : '¡Turno reservado!'}</h2>
+        <p className="text-sm text-muted-foreground">
+          {booked.status === 'pending'
+            ? `${info.storeName} te va a confirmar por WhatsApp.`
+            : `Te esperamos en ${info.storeName}.`}
+        </p>
+        <Button asChild><Link href={`/turno/${booked.token}`}>Ver mi turno</Link></Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {info.message && <p className="rounded-xl bg-primary/5 p-3 text-sm">{info.message}</p>}
+
+      <Step number={1} title="¿Qué servicio?" done={Boolean(serviceId)}>
+        {info.services.length === 0 ? <p className="text-sm text-muted-foreground">Por ahora no hay servicios para reservar online.</p> : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {info.services.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={serviceId === item.id}
+                onClick={() => { setServiceId(item.id); setStartsAt(null) }}
+                className={cn('rounded-xl border p-3 text-left transition-colors', serviceId === item.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
+              >
+                <p className="font-medium">{item.name}</p>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" /> {item.duration} min
+                  {item.price !== null && item.price > 0 && <> · {formatCurrency(item.price, { currency: info.currency })}</>}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </Step>
+
+      {serviceId && info.professionals.length > 1 && (
+        <Step number={2} title="¿Con quién?" done>
+          <div className="flex flex-wrap gap-2">
+            {[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }, ...info.professionals].map((professional) => (
+              <button
+                key={professional.id}
+                type="button"
+                aria-pressed={professionalId === professional.id}
+                onClick={() => { setProfessionalId(professional.id); setStartsAt(null) }}
+                className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm', professionalId === professional.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: professional.color }} /> {professional.name}
+              </button>
+            ))}
+          </div>
+        </Step>
+      )}
+
+      {serviceId && (
+        <Step number={info.professionals.length > 1 ? 3 : 2} title="¿Qué día?" done={Boolean(date)}>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {days.map((day) => (
+              <button
+                key={day}
+                type="button"
+                aria-pressed={date === day}
+                onClick={() => { setDate(day); setStartsAt(null) }}
+                className={cn('flex min-w-16 shrink-0 flex-col items-center rounded-xl border px-3 py-2 text-sm', date === day ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted/50')}
+              >
+                <span className="text-xs">{day === info.today ? 'Hoy' : WEEKDAY_LABELS[weekdayOf(day)].slice(0, 3)}</span>
+                <span className="text-lg font-bold">{Number(day.slice(8))}</span>
+                <span className="text-[10px] opacity-80">{['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][Number(day.slice(5, 7)) - 1]}</span>
+              </button>
+            ))}
+          </div>
+          {date && (
+            visibleSlots === null ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Buscando horarios…</p>
+              : visibleSlots.length === 0 ? <p className="text-sm text-muted-foreground">No quedan horarios libres ese día. Probá con otro.</p>
+                : (
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {visibleSlots.map((slot) => (
+                      <button
+                        key={slot.startsAt}
+                        type="button"
+                        aria-pressed={startsAt === slot.startsAt}
+                        onClick={() => setStartsAt(slot.startsAt)}
+                        className={cn('rounded-lg border py-2 text-sm font-medium tabular-nums', startsAt === slot.startsAt ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted/50')}
+                      >
+                        {slot.time}
+                      </button>
+                    ))}
+                  </div>
+                )
+          )}
+        </Step>
+      )}
+
+      {startsAt && service && (
+        <Step number={info.professionals.length > 1 ? 4 : 3} title="Tus datos">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="booking-name">Nombre</Label>
+              <Input id="booking-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="booking-phone">WhatsApp</Label>
+              <Input id="booking-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0981 123 456" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="booking-notes">Algo que debamos saber (opcional)</Label>
+            <Textarea id="booking-notes" rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} />
+          </div>
+          {/* Trampa para bots: invisible para las personas. */}
+          <input type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" value={website} onChange={(event) => setWebsite(event.target.value)} />
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+          <Button className="w-full" size="lg" onClick={() => void book()} disabled={sending || name.trim().length < 2 || phone.replace(/\D/g, '').length < 6}>
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck2 className="h-4 w-4" />}
+            {info.requireConfirmation ? 'Pedir el turno' : 'Reservar el turno'}
+          </Button>
+          {info.requireConfirmation && <p className="text-center text-xs text-muted-foreground">La tienda te confirma por WhatsApp.</p>}
+        </Step>
+      )}
+    </div>
+  )
+}

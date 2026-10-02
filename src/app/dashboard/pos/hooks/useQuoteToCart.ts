@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { Product } from '../types'
 import { CONVERTIBLE_STATUSES, discountToHonorQuote, posUnitPrice, quoteCode, type QuoteStatus } from '@/lib/quotes/quote-math'
+import { appointmentCode } from '@/lib/agenda/agenda-api'
 
 type QuoteItem = {
   product_id: string | null
@@ -12,10 +13,11 @@ type QuoteItem = {
   discount_rate: number
 }
 
-type LoadedQuote = {
+type LoadedDocument = {
   id: string
   number: number
-  status: QuoteStatus
+  code: string
+  convertible: boolean
   customer_id: string | null
   price_mode: 'retail' | 'wholesale'
   items: QuoteItem[]
@@ -23,7 +25,48 @@ type LoadedQuote = {
 
 type Variant = { id: string; price: number; wholesale_price?: number | null }
 
-export type ActiveQuote = { id: string; number: number }
+export type ActiveQuote = { kind: 'quote' | 'appointment'; id: string; number: number; code: string }
+
+type AppointmentRow = {
+  id: string
+  number: number
+  status: string
+  sale_id: string | null
+  customer_id: string | null
+  service_product_id: string | null
+  service_name: string
+  price: number
+}
+
+/** Un presupuesto o un turno, como lista de líneas para el carrito. */
+async function fetchDocument(kind: ActiveQuote['kind'], id: string): Promise<{ document: LoadedDocument } | { error: string }> {
+  const response = await fetch(kind === 'quote' ? `/api/quotes/${id}` : `/api/agenda/${id}`, { cache: 'no-store' })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) return { error: body.error || (kind === 'quote' ? 'No se pudo abrir el presupuesto' : 'No se pudo abrir el turno') }
+  if (kind === 'quote') {
+    const quote = body.quote as { id: string; number: number; status: QuoteStatus; customer_id: string | null; price_mode: 'retail' | 'wholesale'; items: QuoteItem[] }
+    return { document: { ...quote, code: quoteCode(quote.number), convertible: CONVERTIBLE_STATUSES.includes(quote.status) } }
+  }
+  const appointment = body.appointment as AppointmentRow
+  return {
+    document: {
+      id: appointment.id,
+      number: appointment.number,
+      code: appointmentCode(appointment.number),
+      convertible: !appointment.sale_id && ['pending', 'confirmed', 'completed'].includes(appointment.status),
+      customer_id: appointment.customer_id,
+      price_mode: 'retail',
+      items: [{
+        product_id: appointment.service_product_id,
+        variant_id: null,
+        description: appointment.service_name,
+        quantity: 1,
+        unit_price: Number(appointment.price),
+        discount_rate: 0,
+      }],
+    },
+  }
+}
 
 /**
  * Carga un presupuesto en el carrito del POS (`/dashboard/pos?quoteId=…`).
@@ -35,6 +78,7 @@ export type ActiveQuote = { id: string; number: number }
  */
 export function useQuoteToCart({
   quoteId,
+  appointmentId = null,
   ready,
   inventoryProducts,
   getVariant,
@@ -47,6 +91,8 @@ export function useQuoteToCart({
   onLoaded,
 }: {
   quoteId: string | null
+  /** Un turno de la agenda que se cobra (`?appointmentId=...`). */
+  appointmentId?: string | null
   ready: boolean
   inventoryProducts: Product[]
   getVariant: (productId: string, variantId: string) => Variant | null
@@ -67,21 +113,24 @@ export function useQuoteToCart({
     cart.current = { inventoryProducts, getVariant, addProduct, addVariant, updateItemDiscount, setIsWholesale, setSelectedCustomer, clearCart, onLoaded }
   })
 
+  const kind: ActiveQuote['kind'] | null = quoteId ? 'quote' : appointmentId ? 'appointment' : null
+  const documentId = quoteId ?? appointmentId
+  const documentKey = kind && documentId ? `${kind}:${documentId}` : null
+
   useEffect(() => {
-    if (!quoteId || !ready || loadedFor.current === quoteId) return
-    loadedFor.current = quoteId
+    if (!documentKey || !kind || !documentId || !ready || loadedFor.current === documentKey) return
+    loadedFor.current = documentKey
 
     const run = async () => {
-      const response = await fetch(`/api/quotes/${quoteId}`, { cache: 'no-store' })
-      const body = await response.json().catch(() => ({}))
+      const result = await fetchDocument(kind, documentId)
       const { inventoryProducts, getVariant, addProduct, addVariant, updateItemDiscount, setIsWholesale, setSelectedCustomer, clearCart, onLoaded } = cart.current
-      if (!response.ok) {
-        toast.error(body.error || 'No se pudo abrir el presupuesto')
+      if ('error' in result) {
+        toast.error(result.error)
         return
       }
-      const quote = body.quote as LoadedQuote
-      if (!CONVERTIBLE_STATUSES.includes(quote.status)) {
-        toast.error(`El presupuesto ${quoteCode(quote.number)} ya no se puede cobrar`)
+      const quote = result.document
+      if (!quote.convertible) {
+        toast.error(kind === 'quote' ? `El presupuesto ${quote.code} ya no se puede cobrar` : `El turno ${quote.code} ya se cobró o está cancelado`)
         return
       }
 
@@ -128,33 +177,35 @@ export function useQuoteToCart({
         loaded += 1
       }
 
-      setActiveQuote({ id: quote.id, number: quote.number })
+      setActiveQuote({ kind, id: quote.id, number: quote.number, code: quote.code })
       onLoaded?.()
       const skipped = [
         free ? `${free} línea${free === 1 ? '' : 's'} libre${free === 1 ? '' : 's'} para agregar a mano` : null,
         missing ? `${missing} producto${missing === 1 ? '' : 's'} que ya no está${missing === 1 ? '' : 'n'} en el catálogo` : null,
       ].filter(Boolean)
-      toast.success(`Presupuesto ${quoteCode(quote.number)} cargado`, {
-        description: [`${loaded} producto${loaded === 1 ? '' : 's'} con los precios presupuestados.`, skipped.length ? `Revisá: ${skipped.join(' y ')}.` : null].filter(Boolean).join(' '),
+      toast.success(`${kind === 'quote' ? 'Presupuesto' : 'Turno'} ${quote.code} cargado`, {
+        description: [`${loaded} ${kind === 'quote' ? 'producto' : 'servicio'}${loaded === 1 ? '' : 's'} con los precios acordados.`, skipped.length ? `Revisá: ${skipped.join(' y ')}.` : null].filter(Boolean).join(' '),
         duration: 6000,
       })
     }
 
     void run()
-  }, [quoteId, ready])
+  }, [documentKey, kind, documentId, ready])
 
   /** Llamar con el id de la venta recién hecha. */
   const markConverted = useCallback(async (saleId: string | undefined) => {
     const quote = activeQuote
     if (!quote || !saleId) return
     setActiveQuote(null)
-    const response = await fetch(`/api/quotes/${quote.id}`, {
+    const isQuote = quote.kind === 'quote'
+    const response = await fetch(isQuote ? `/api/quotes/${quote.id}` : `/api/agenda/${quote.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'convert', sale_id: saleId }),
+      body: JSON.stringify(isQuote ? { action: 'convert', sale_id: saleId } : { action: 'link_sale', sale_id: saleId }),
     })
-    if (response.ok) toast.success(`Presupuesto ${quoteCode(quote.number)} marcado como vendido`)
-    else toast.error(`La venta se hizo, pero no se pudo marcar el presupuesto ${quoteCode(quote.number)} como vendido`)
+    const label = isQuote ? `El presupuesto ${quote.code}` : `El turno ${quote.code}`
+    if (response.ok) toast.success(`${label} quedó ${isQuote ? 'como vendido' : 'atendido y cobrado'}`)
+    else toast.error(`La venta se hizo, pero no se pudo actualizar ${label.toLowerCase()}`)
   }, [activeQuote])
 
   return { activeQuote, clearActiveQuote: () => setActiveQuote(null), markConverted }

@@ -26,6 +26,7 @@ describe('dashboard navigation information architecture', () => {
     expect(dashboardNavGroups[0].items.map((item) => item.key)).toEqual([
       'overview',
       'pos',
+      'agenda',
       'cash-register',
     ])
     expect(dashboardNavGroups[1].items.map((item) => item.key)).toEqual([
