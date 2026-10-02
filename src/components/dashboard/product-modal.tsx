@@ -3441,6 +3441,7 @@ export function ProductModal({
                                 maxSize={5242880}
                                 disabled={isSubmitting}
                                 onUploadFiles={handleUploadFiles}
+                                optimizationProfile="product"
                                 onRemoveImage={cleanupNewImage}
                                 onUploadingChange={setIsUploadingImages}
                               />

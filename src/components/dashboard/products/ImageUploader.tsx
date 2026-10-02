@@ -11,8 +11,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
+import imageCompression from 'browser-image-compression'
 import { getImageSourceValidationMessage } from '@/lib/image-url-policy'
 import { optimizeImageFile } from '@/lib/images/client-upload-optimizer'
+import type { ImageUploadProfileName } from '@/lib/images/upload-profiles'
 
 interface ImageUploaderProps {
   images: string[]
@@ -38,6 +40,7 @@ interface ImageUploaderProps {
   tips?: string[]
   tipsTitle?: string
   allowUrlInput?: boolean
+  optimizationProfile?: ImageUploadProfileName
 }
 
 export interface UploadedImageValue {
@@ -66,6 +69,7 @@ export function ImageUploader({
   tips,
   tipsTitle,
   allowUrlInput = true,
+  optimizationProfile,
 }: ImageUploaderProps) {
   const listaDeConsejos = tips ?? CONSEJOS_POR_DEFECTO
   const [uploading, setUploading] = useState(false)
@@ -127,9 +131,20 @@ export function ImageUploader({
 
     try {
       for (const file of acceptedFiles) {
-        const compressedFile = await optimizeImageFile(file, 'product', (progress) => {
+        const onProgress = (progress: number) => {
           setUploadProgress(prev => ({ ...prev, [file.name]: progress }))
-        })
+        }
+        const compressedFile = optimizationProfile
+          ? await optimizeImageFile(file, optimizationProfile, onProgress)
+          : await imageCompression(file, {
+              maxSizeMB: 1,
+              maxWidthOrHeight: 1920,
+              useWebWorker: true,
+              onProgress,
+            }).catch((error) => {
+              console.error('Error compressing image:', error)
+              return file
+            })
         const uploaded = await uploadImage(compressedFile)
         if (uploaded?.storagePath && uploaded.previewUrl) {
           uploadedUrls.push(uploaded.storagePath)
@@ -152,7 +167,7 @@ export function ImageUploader({
       onUploadingChange?.(false)
       setUploadProgress({})
     }
-  }, [disabled, images, maxImages, maxSize, onChange, onUploadingChange, uploadImage])
+  }, [disabled, images, maxImages, maxSize, onChange, onUploadingChange, optimizationProfile, uploadImage])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
