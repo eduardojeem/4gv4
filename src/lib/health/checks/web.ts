@@ -11,6 +11,7 @@ import {
   type ProbeResponse,
   type SiteProbe,
 } from '@/lib/health/site-probe'
+import { median, percentile } from '@/lib/health/statistics'
 import type { HealthCheckResult, HealthMetricGroup } from '@/lib/health/types'
 
 const PROBE_NOTE = 'Solo se analiza el HTML que entrega el servidor; el contenido que se agrega en el navegador no se ve.'
@@ -701,7 +702,11 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         if (measured.length === 0) return noPages()
         const slow = measured.filter((p) => p.response.durationMs > 1500)
         const verySlow = measured.filter((p) => p.response.durationMs > 4000)
-        const avg = Math.round(measured.reduce((s, p) => s + p.response.durationMs, 0) / measured.length)
+        const samples = measured.map((page) => page.response.durationMs)
+        const avg = Math.round(samples.reduce((sum, duration) => sum + duration, 0) / samples.length)
+        const medianMs = median(samples)
+        const p95Ms = percentile(samples, 95)
+        const maxMs = Math.max(...samples)
         return {
           status: verySlow.length ? 'error' : slow.length ? 'warning' : 'healthy',
           severity: 'low',
@@ -712,6 +717,9 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
           ],
           metadata: {
             averageMs: avg,
+            medianMs,
+            p95Ms,
+            maxMs,
             measuredPages: measured.length,
             totalPages: pages.length,
             excludedByCloudflare: challenged.length,
@@ -769,8 +777,12 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
       { id: 'performance.images', category: 'performance', name: 'Entrega de imágenes raster', description: 'Tamaño de imágenes raster servidas directamente y disponibilidad real del optimizador de Next/Vercel.', method: `${htmlMethod} HEAD a los originales y a /_next/image con una muestra.` },
       async () => {
         if (reachable.length === 0) return noPages()
-        const raw = [...new Set(reachable.flatMap((p) => p.html.images.map((i) => i.src)))]
-          .filter((src) => src && !src.startsWith('data:') && !src.includes('/_next/image') && /\.(png|jpe?g|gif|bmp)(\?|$)/i.test(src))
+        const observed = [...new Set(reachable.flatMap((p) => p.html.images.map((image) => image.src)))]
+          .filter((src) => src && !src.startsWith('data:'))
+        const optimized = observed.filter((src) => src.includes('/_next/image'))
+        const raw = observed.filter(
+          (src) => !src.includes('/_next/image') && /\.(png|jpe?g|gif|bmp)(\?|$)/i.test(src),
+        )
 
         if (raw.length === 0) {
           return {
@@ -778,19 +790,28 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
             severity: 'low',
             summary: 'Imágenes optimizadas, modernas o vectoriales',
             findings: [],
+            metadata: {
+              optimizedImages: optimized.length,
+              directRasterImages: 0,
+              heavyImages: 0,
+              unverifiableImages: 0,
+              optimizerStatus: null,
+              optimizerUnavailable: false,
+            },
           }
         }
 
         const directUrls = raw.slice(0, 20).map((src) => new URL(src, probe.origin).toString())
         const directResponses = await Promise.all(directUrls.map(async (url) => ({ url, response: await probe.head(url) })))
-        const sized = directResponses
-          .map(({ url, response }) => ({ url, bytes: Number(response.headers.get('content-length') ?? NaN) }))
+        const measuredImages = directResponses
+          .map(({ url, response }) => ({ url, response, bytes: Number(response.headers.get('content-length') ?? NaN) }))
+        const sized = measuredImages
           .filter(({ bytes }) => Number.isFinite(bytes))
         const heavy = sized.filter(({ bytes }) => bytes > IMAGE_BUDGET_BYTES)
         const optimizerPath = `/_next/image?url=${encodeURIComponent(directUrls[0])}&w=640&q=75`
         const optimizerResponse = await probe.head(new URL(optimizerPath, probe.origin).toString())
         const optimizerUnavailable = isImageOptimizerUnavailable(optimizerResponse)
-        const unsized = directUrls.length - sized.length
+        const unverifiable = measuredImages.filter(({ response, bytes }) => !response.ok || !Number.isFinite(bytes))
 
         const summary = heavy.length > 0
           ? `${heavy.length} imagen(es) superan 200 KB`
@@ -799,12 +820,20 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
             : `${raw.length} imagen(es) raster servidas directamente`
 
         return {
-          status: heavy.length > 0 ? 'warning' : optimizerUnavailable && sized.length === 0 ? 'unknown' : optimizerUnavailable ? 'healthy' : 'warning',
+          status: heavy.length > 0
+            ? 'warning'
+            : unverifiable.length === directUrls.length
+              ? 'unknown'
+              : unverifiable.length > 0
+                ? 'warning'
+              : optimizerUnavailable
+                ? 'healthy'
+                : 'warning',
           severity: 'low',
           summary,
           findings: [
             ...sized.map(({ url, bytes }) => `${url}: ${(bytes / 1024).toFixed(0)} KB`),
-            ...(unsized > 0 ? [`${unsized} imagen(es) sin Content-Length verificable.`] : []),
+            ...(unverifiable.length > 0 ? [`${unverifiable.length} imagen(es) sin tamaño verificable.`] : []),
             ...(optimizerUnavailable ? [`/_next/image respondió ${optimizerResponse.status}: optimizador de Vercel no disponible.`] : []),
           ],
           recommendation: heavy.length > 0
@@ -814,6 +843,9 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
               : 'Usar next/image (AppImage) para servir WebP redimensionado.',
           metadata: {
             directRasterImages: raw.length,
+            optimizedImages: optimized.length,
+            heavyImages: heavy.length,
+            unverifiableImages: unverifiable.length,
             optimizerStatus: optimizerResponse.status,
             optimizerUnavailable,
             withinBudget: heavy.length === 0,
@@ -833,6 +865,8 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
     ),
   ])
 
+  const responseMetadata = checks.find((check) => check.id === 'performance.response_time')?.metadata
+  const imageMetadata = checks.find((check) => check.id === 'performance.images')?.metadata
   const metrics: HealthMetricGroup[] = [
     {
       id: 'web',
@@ -846,6 +880,38 @@ export async function runWebChecks(probe: SiteProbe): Promise<{ checks: HealthCh
         value: p.response.challenged ? 'desafío Cloudflare' : p.response.status ? `${p.response.durationMs} ms` : 'sin respuesta',
         hint: `HTTP ${p.response.status || '—'}`,
       })),
+    },
+    {
+      id: 'performance',
+      title: 'Estadísticas de respuesta',
+      metrics: [
+        { label: 'Muestras', value: responseMetadata?.measuredPages == null ? null : Number(responseMetadata.measuredPages), unavailableReason: responseMetadata?.measuredPages == null ? 'Sin páginas verificables.' : undefined },
+        { label: 'Mediana', value: responseMetadata?.medianMs == null ? null : `${responseMetadata.medianMs} ms`, unavailableReason: responseMetadata?.medianMs == null ? 'Sin muestras verificables.' : undefined },
+        { label: 'p95', value: responseMetadata?.p95Ms == null ? null : `${responseMetadata.p95Ms} ms`, unavailableReason: responseMetadata?.p95Ms == null ? 'Sin muestras verificables.' : undefined },
+        { label: 'Máximo', value: responseMetadata?.maxMs == null ? null : `${responseMetadata.maxMs} ms`, unavailableReason: responseMetadata?.maxMs == null ? 'Sin muestras verificables.' : undefined },
+        { label: 'Promedio', value: responseMetadata?.averageMs == null ? null : `${responseMetadata.averageMs} ms`, unavailableReason: responseMetadata?.averageMs == null ? 'Sin muestras verificables.' : undefined },
+      ],
+    },
+    {
+      id: 'images',
+      title: 'Entrega de imágenes',
+      metrics: [
+        { label: 'Optimizadas por Next', value: imageMetadata?.optimizedImages == null ? null : Number(imageMetadata.optimizedImages), unavailableReason: imageMetadata?.optimizedImages == null ? 'Sin páginas verificables.' : undefined },
+        { label: 'Raster directas', value: imageMetadata?.directRasterImages == null ? null : Number(imageMetadata.directRasterImages), unavailableReason: imageMetadata?.directRasterImages == null ? 'Sin páginas verificables.' : undefined },
+        { label: 'Pesadas (> 200 KB)', value: imageMetadata?.heavyImages == null ? null : Number(imageMetadata.heavyImages), unavailableReason: imageMetadata?.heavyImages == null ? 'Sin páginas verificables.' : undefined },
+        { label: 'No verificables', value: imageMetadata?.unverifiableImages == null ? null : Number(imageMetadata.unverifiableImages), unavailableReason: imageMetadata?.unverifiableImages == null ? 'Sin páginas verificables.' : undefined },
+        {
+          label: 'Optimizador',
+          value: !imageMetadata
+            ? null
+            : imageMetadata.optimizerStatus == null
+              ? 'sin muestra necesaria'
+            : imageMetadata.optimizerUnavailable
+              ? `no disponible (HTTP ${imageMetadata.optimizerStatus})`
+              : `disponible (HTTP ${imageMetadata.optimizerStatus})`,
+          unavailableReason: !imageMetadata ? 'Sin páginas verificables.' : undefined,
+        },
+      ],
     },
   ]
 
