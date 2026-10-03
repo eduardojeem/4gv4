@@ -470,13 +470,16 @@ export function RecentActivity() {
   }, [organization?.id, recentSinceIso, selectedBranchId])
   
   useEffect(() => {
+    // El montaje es asíncrono: si el efecto se limpia antes de terminar
+    // (doble montaje de React o cambio de organización) no hay que suscribir.
+    let cancelled = false
     const subscribe = async () => {
       const { config } = await import('@/lib/config')
       if (!config.supabase.isConfigured) return
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
-      if (!organization?.id) return
-      
+      if (cancelled || !organization?.id) return
+
       const toTime = (iso?: string): string => {
         if (!iso) return ''
         const d = new Date(iso)
@@ -492,8 +495,10 @@ export function RecentActivity() {
       
       // Solo customers está publicada en supabase_realtime; ventas y
       // reparaciones se ven al recargar la actividad.
+      // El cliente es compartido y `.channel(nombre)` devuelve el canal vivo con
+      // ese nombre: uno ya suscrito no acepta más `.on()`. Nombre único por montaje.
       const channel = supabase
-        .channel('dashboard-activity')
+        .channel(`dashboard-activity:${organization.id}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers', filter: `organization_id=eq.${organization.id}` }, (payload: unknown) => {
           const row = (payload as { new: CustomerRow }).new
           const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
@@ -511,11 +516,13 @@ export function RecentActivity() {
         .subscribe()
       
       return () => {
-        channel.unsubscribe()
+        // unsubscribe() deja el canal registrado en el cliente; removeChannel lo saca.
+        void supabase.removeChannel(channel)
       }
     }
     const cleanupPromise = subscribe()
     return () => {
+      cancelled = true
       void cleanupPromise.then(cleanup => {
         if (typeof cleanup === 'function') cleanup()
       })

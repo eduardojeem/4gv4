@@ -113,22 +113,29 @@ export function RecentActivity() {
 
     // Suscripción a cambios en tiempo real
     let channel: RealtimeChannel | null = null
+    let removeChannel: ((channel: RealtimeChannel) => unknown) | null = null
     const setupRealtime = async () => {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
-      
+      // Si se desmontó mientras cargaba el cliente, no suscribir.
+      if (!isMounted) return
+
       // Solo tablas publicadas en supabase_realtime: un enlace a una tabla no
-      // publicada hace fallar el canal completo.
-      channel = supabase.channel('profile-activity')
+      // publicada hace fallar el canal completo. El cliente es compartido y
+      // `.channel(nombre)` reusa un canal vivo con ese nombre (ya suscrito no
+      // acepta `.on()`): nombre único por montaje.
+      removeChannel = (ch) => supabase.removeChannel(ch)
+      channel = supabase.channel(`profile-activity:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, () => load())
         .subscribe()
     }
-    
+
     setupRealtime()
 
     return () => {
       isMounted = false
-      if (channel) channel.unsubscribe()
+      // unsubscribe() deja el canal registrado en el cliente; removeChannel lo saca.
+      if (channel && removeChannel) void removeChannel(channel)
     }
   }, [])
 
