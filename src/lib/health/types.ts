@@ -19,6 +19,14 @@ export type HealthStatus = 'healthy' | 'warning' | 'error' | 'not_configured' | 
 
 export type HealthSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
+export type HealthChangeKind =
+  | 'new_issue'
+  | 'worsened'
+  | 'improved'
+  | 'resolved'
+  | 'unchanged'
+  | 'not_comparable'
+
 export type HealthCategory =
   | 'legal'
   | 'security'
@@ -54,6 +62,30 @@ export interface HealthCheckResult {
   checkedAt: string
   /** Datos adicionales seguros (nunca secretos). */
   metadata?: Record<string, string | number | boolean | null>
+}
+
+export interface HealthCheckChange {
+  checkId: string
+  kind: HealthChangeKind
+  currentStatus: HealthStatus
+  previousStatus: HealthStatus | null
+  currentSeverity: HealthSeverity
+  previousSeverity: HealthSeverity | null
+}
+
+export interface ExecutiveHealthSummary {
+  critical: number
+  warnings: number
+  newOrWorsened: number
+  resolved: number
+}
+
+export interface HealthComparison {
+  previousRunId: string | null
+  previousCheckedAt: string | null
+  changes: HealthCheckChange[]
+  counts: Record<HealthChangeKind, number>
+  executiveSummary: ExecutiveHealthSummary
 }
 
 export interface HealthMetric {
