@@ -135,7 +135,7 @@ export function MarketplaceOrgMarquee({ organizations, className }: MarketplaceO
         </div>
 
         {/* Track 2 (Exact duplicate for seamless 100% infinite loop) */}
-        <div className="flex shrink-0 items-center gap-4" aria-hidden="true">
+        <div className="flex shrink-0 items-center gap-4" aria-hidden="true" inert>
           {baseList.map((org, idx) => (
             <CompanyCard
               key={`track2-${org.id}-${idx}`}

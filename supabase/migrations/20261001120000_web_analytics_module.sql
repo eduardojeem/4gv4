@@ -21,7 +21,8 @@ alter table public.organizations drop constraint if exists organizations_enabled
 alter table public.organizations add constraint organizations_enabled_modules_check check (
   enabled_modules is null or enabled_modules <@ array[
     'inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'ecommerce', 'repairs', 'services',
-    'credits', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security'
+    'credits', 'delivery', 'analytics', 'web_analytics', 'promotions', 'security',
+    'finances', 'reports'
   ]::text[]
 );
 

@@ -18,11 +18,11 @@ function sqlDefaults(code: 'FREE' | 'BASIC' | 'PRO') {
 }
 
 describe('Visitas web como módulo propio', () => {
-  it('existe en la app, en el catálogo de planes y en el CHECK de la base', () => {
+  it('el CHECK transitorio acepta todos los módulos que la app ya puede persistir', () => {
     expect(ORGANIZATION_MODULES).toContain('web_analytics')
     expect(PLAN_FEATURES.find((feature) => feature.key === 'webAnalytics')?.module).toBe('web_analytics')
     const check = SQL.slice(SQL.indexOf('add constraint organizations_enabled_modules_check'), SQL.indexOf('-- 2) ---'))
-    expect(check).toContain("'web_analytics'")
+    for (const code of ORGANIZATION_MODULES) expect(check, code).toContain(`'${code}'`)
   })
 
   it('cada etiqueta del trigger habilita el mismo módulo que en la app', () => {

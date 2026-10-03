@@ -1,8 +1,6 @@
 name: Deploy
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
@@ -33,18 +31,18 @@ jobs:
     - name: Run tests
       run: npm run test
 
+    - name: Validate Vercel deployment credentials
+      run: |
+        if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+          echo "::error::Missing VERCEL_TOKEN, VERCEL_ORG_ID, or VERCEL_PROJECT_ID production secret."
+          exit 1
+        fi
+
     - name: Pull Vercel Production environment
-      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
       run: npx --yes vercel@61.0.0 pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
     - name: Build application with Vercel Production environment
-      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
       run: npx --yes vercel@61.0.0 build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
     - name: Deploy to Vercel
-      if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
       run: npx --yes vercel@61.0.0 deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
-
-    - name: Confirm Vercel Git integration handoff
-      if: env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == ''
-      run: echo "Vercel Git integration will deploy this commit; add all three Vercel secrets to enable CLI deployment."

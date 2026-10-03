@@ -229,7 +229,7 @@ function OrgProductCard({
                 tabIndex={tabIndex}
                 suppressHydrationWarning
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex h-7.5 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white dark:text-[#4ADE80]"
+                className="inline-flex h-7.5 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#075E54] transition-colors hover:bg-[#075E54] hover:text-white dark:text-[#4ADE80]"
               >
                 <MessageCircle className="h-3 w-3" />
                 <span>Preguntar</span>
@@ -539,7 +539,7 @@ function OrgProductSection({
               </div>
 
               {/* Pista 2 (Duplicado idéntico para bucle continuo 100% suave) */}
-              <div className="flex shrink-0 items-center gap-3.5 sm:gap-4" aria-hidden="true">
+              <div className="flex shrink-0 items-center gap-3.5 sm:gap-4" aria-hidden="true" inert>
                 {baseList.map((product, idx) => (
                   <OrgProductCard
                     key={`track2-${product.id}-${idx}`}

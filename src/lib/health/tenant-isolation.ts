@@ -50,10 +50,11 @@ export const GLOBAL_TABLES = new Set([
   // Atributos de variante compartidos por todas las tiendas (sin organization_id).
   'variant_attributes',
   'variant_attribute_options',
-  // Catálogos maestros mantenidos por SuperAdmin y compartidos por todos los tenants.
+  // Catálogos maestros mantenidos por SuperAdmin y compartidos por todos los
+  // tenants (modelos de dispositivos, productos globales); sin datos de tiendas.
   'global_device_models',
   'global_products',
-  // Costos operativos de la propia plataforma, no de una organización cliente.
+  // Gastos del operador del SaaS; solo SuperAdmin, no pertenecen a un tenant.
   'platform_expenses',
 ])
 
@@ -177,9 +178,30 @@ function coversCommand(policy: CatalogPolicy, command: CatalogPolicy['command'])
   return policy.command === 'ALL' || policy.command === command
 }
 
-function rolesOverlap(left: CatalogPolicy, right: CatalogPolicy): boolean {
-  return left.roles.includes('public') || right.roles.includes('public')
-    || left.roles.some((role) => right.roles.includes(role))
+function restrictiveCoversClientRoles(restrictive: CatalogPolicy, permissive: CatalogPolicy): boolean {
+  if (restrictive.roles.includes('public')) return true
+  if (permissive.roles.includes('public')) {
+    const coversAnon = restrictive.roles.includes('anon')
+    const coversAuthenticated = restrictive.roles.includes('authenticated')
+    if (coversAnon && coversAuthenticated) return true
+
+    // `public` es el rol por defecto que Postgres asigna cuando una policy no
+    // declara TO. Muchas policies antiguas siguen usando `public`, pero su
+    // expresion exige auth.uid()/user_roles y por tanto anon nunca puede
+    // satisfacerlas. En ese caso una RESTRICTIVE para authenticated cubre todo
+    // el conjunto de clientes que realmente puede pasar la policy permisiva.
+    const expression = permissive.command === 'INSERT' ? permissive.with_check : permissive.using
+    const requiresSession = Boolean(expression && (
+      /auth\.uid\s*\(\)|auth\.role\s*\(\)\s*=\s*'authenticated'/i.test(expression)
+      || GLOBAL_ROLE_FN.test(expression)
+      || GLOBAL_ROLE_TABLE.test(expression)
+    ))
+    return coversAuthenticated && requiresSession
+  }
+
+  return permissive.roles
+    .filter((role) => role === 'anon' || role === 'authenticated')
+    .every((role) => restrictive.roles.includes(role))
 }
 
 function isScopedForCommand(policy: CatalogPolicy, command: CatalogPolicy['command']): boolean {
@@ -225,7 +247,7 @@ function policyIssues(table: CatalogTable, tenant: boolean): Issue[] {
 
     const guarded = restrictivePolicies.some((restrictive) =>
       coversCommand(restrictive, policy.command)
-      && rolesOverlap(restrictive, policy)
+      && restrictiveCoversClientRoles(restrictive, policy)
       && isScopedForCommand(restrictive, policy.command),
     )
     const isRead = coversCommand(policy, 'SELECT')

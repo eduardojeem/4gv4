@@ -76,6 +76,7 @@ export function MarketplaceSearchBox({
           autoFocus={autoFocus ? true : undefined}
           type="search"
           name="q"
+          aria-label="Buscar en el marketplace"
           placeholder={placeholder}
           suppressHydrationWarning
           className={cn(

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parseAuditFilters } from './audit-feed'
 import { isOrganizationId, organizationAuditFilter } from './organization-audit'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
@@ -21,6 +22,8 @@ describe('auditoría de una organización', () => {
   })
 
   it('la auditoría acepta el filtro y la ficha tiene pantalla de carga', () => {
+    expect(parseAuditFilters({ source: 'tenant', org: ID }).organizationId).toBe(ID)
+    expect(parseAuditFilters({ source: 'tenant', org: 'hca-celular' }).organizationId).toBeNull()
     // La validación vive en el parser de filtros que usa la página de auditoría.
     expect(leer('src/app/superadmin/audit-logs/page.tsx')).toContain('parseAuditFilters(await searchParams)')
     expect(leer('src/lib/superadmin/audit-feed.ts')).toContain('isOrganizationId(params.org)')

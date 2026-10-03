@@ -59,9 +59,11 @@ describe('ninguna ruta lee params sin esperarlo', () => {
       // `(context as {...}).params?.id`: lee el parámetro de la promesa sin esperarla.
       if (/\)\??\.params\?\.\w+/.test(codigo)) return true
       // O lo guarda en una variable y lo lee igual, sin resolverla antes.
-      // Solo importa el `params` extraído del contexto de ruta. Un body JSON
-      // puede tener legítimamente una propiedad de negocio llamada `params`.
-      const castea = /const\s+params\s*=\s*\(?(?:routeContext|context)\s+as\s+\{[\s\S]{0,500}?params\?:/.test(codigo)
+      // Solo el segundo argumento del handler es contexto de ruta. Un JSON de
+      // entrada puede tener legitimamente una propiedad `params` (por ejemplo,
+      // las opciones de mantenimiento de base de datos) y no es una promesa de
+      // Next que haya que resolver.
+      const castea = /\b(?:routeContext|context)\s+as \{[^}]*params\?:/.test(codigo)
       const espera = /await Promise\.resolve\(params\)|await routeParam|await params/.test(codigo)
       return castea && !espera
     })

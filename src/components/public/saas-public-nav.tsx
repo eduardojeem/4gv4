@@ -217,7 +217,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
             <Button
               asChild
               size="sm"
-              className="hidden gap-2 sm:inline-flex rounded-xl font-bold text-xs h-9 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-700/25 border-0 transition-all duration-200 active:scale-[0.97]"
+              className="hidden gap-2 sm:inline-flex rounded-xl font-bold text-xs h-9 px-3.5 bg-emerald-700 hover:bg-emerald-600 text-white shadow-md shadow-emerald-700/25 border-0 transition-all duration-200 active:scale-[0.97]"
             >
               <Link href={branding.secondaryCtaHref}>
                 <Store className="h-4 w-4 text-white" />
@@ -413,7 +413,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
                 <Link
                   href={branding.secondaryCtaHref}
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center justify-between rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2.5 text-sm font-bold shadow-sm transition-colors"
+                  className="flex items-center justify-between rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-2.5 text-sm font-bold shadow-sm transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <Store className="h-4 w-4 text-white" />

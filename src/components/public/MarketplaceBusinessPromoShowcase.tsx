@@ -419,7 +419,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                             <Button
                               asChild
                               size="sm"
-                              className="h-8 text-xs font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                              className="h-8 text-xs font-bold gap-1 bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs"
                             >
                               <Link href={`/${currentOrg.slug}/productos/${product.id}`}>
                                 <span>Tienda</span>
@@ -459,7 +459,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
               </span>
               <Link
                 href={`/${currentOrg.slug}/productos`}
-                className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                className="font-bold text-emerald-800 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
               >
                 Ver los {currentOrg.products_count} productos
                 <ArrowRight className="h-3.5 w-3.5" />

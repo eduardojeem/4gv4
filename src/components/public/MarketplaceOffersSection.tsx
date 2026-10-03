@@ -75,7 +75,7 @@ export function MarketplaceOffersSection({ groups }: Props) {
               >
                 <Building2 className="h-4 w-4" />
                 <span>{group.organizationName}</span>
-                <span className={cn('rounded-full px-2 py-0.5 text-[11px]', active ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300')}>
+                <span className={cn('rounded-full px-2 py-0.5 text-[11px]', active ? 'bg-black/25 text-white' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300')}>
                   {group.products.length}
                 </span>
               </button>

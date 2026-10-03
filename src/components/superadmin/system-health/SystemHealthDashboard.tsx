@@ -136,10 +136,13 @@ export function SystemHealthDashboard({
   }, [report])
 
   const readiness = useMemo(() => evaluateReadiness(report?.checks ?? []), [report])
-  const issues = useMemo(
-    () => (report?.checks ?? []).filter((c) => c.status === 'error' || c.status === 'warning'),
+  const pending = useMemo(
+    () => (report?.checks ?? []).filter((c) => c.status !== 'healthy'),
     [report],
   )
+  const verifiedCount = report
+    ? report.counts.healthy + report.counts.warning + report.counts.error
+    : 0
   const recentIncidents = useMemo(
     () => (initialHistory.available ? initialHistory.entries.filter((e) => e.status === 'error' || e.status === 'warning').slice(0, 8) : []),
     [initialHistory],
@@ -211,6 +214,9 @@ export function SystemHealthDashboard({
                     </span>
                   ))}
                 </div>
+                <p className="text-xs font-semibold opacity-90">
+                  {verifiedCount}/{report.checks.length} controles verificados
+                </p>
                 <p className="text-xs opacity-80">Origen auditado: {report.target} · Entorno: {report.environment}</p>
               </CardContent>
             </Card>
@@ -279,14 +285,14 @@ export function SystemHealthDashboard({
 
                 <Card className="rounded-xl">
                   <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-4 w-4" /> Problemas priorizados</CardTitle>
-                    <CardDescription>Ordenados por estado y severidad técnica.</CardDescription>
+                    <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-4 w-4" /> Pendientes priorizados</CardTitle>
+                    <CardDescription>Incluye errores, advertencias y controles que todavía no tienen evidencia.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-1">
-                    {issues.length === 0 ? (
-                      <p className="py-6 text-center text-sm text-slate-500">Sin advertencias ni errores en esta comprobación.</p>
+                    {pending.length === 0 ? (
+                      <p className="py-6 text-center text-sm text-slate-500">Todos los controles fueron verificados y están correctos.</p>
                     ) : (
-                      issues.slice(0, 10).map((check) => <CheckRow key={check.id} check={check} onOpen={setSelected} />)
+                      pending.slice(0, 10).map((check) => <CheckRow key={check.id} check={check} onOpen={setSelected} />)
                     )}
                   </CardContent>
                 </Card>
