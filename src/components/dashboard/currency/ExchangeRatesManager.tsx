@@ -26,17 +26,21 @@ export type ExchangeRatesState = {
 export function useExchangeRates() {
   const [state, setState] = useState<ExchangeRatesState | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const reload = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
       if (response.ok) setState(await response.json())
+    } catch {
+      setError('No se pudieron cargar los tipos de cambio')
     } finally {
       setLoading(false)
     }
   }, [])
   useEffect(() => { void reload() }, [reload])
-  return { state, loading, reload }
+  return { state, loading, error, reload }
 }
 
 function formatRate(rate: number, local: string) {
