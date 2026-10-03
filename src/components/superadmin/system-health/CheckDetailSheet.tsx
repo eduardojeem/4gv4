@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import type { HealthCheckResult } from '@/lib/health/types'
@@ -59,6 +60,10 @@ export function CheckDetailSheet({
 
             <div className="space-y-5 px-4 pb-8">
               <Field label="Resultado">{check.summary}</Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Impacto potencial">{SEVERITY_META[check.severity].label}</Field>
+                <Field label="Módulo">{CATEGORY_LABEL[check.category]}</Field>
+              </div>
               <Field label="Qué se comprobó">
                 <span className="text-slate-600 dark:text-slate-300">{check.method}</span>
               </Field>
@@ -81,6 +86,27 @@ export function CheckDetailSheet({
                   <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
                     {check.recommendation}
                   </p>
+                </Field>
+              )}
+              {check.guidedActions && check.guidedActions.length > 0 && (
+                <Field label="Acciones guiadas">
+                  <ul className="space-y-2">
+                    {check.guidedActions.map((action) => (
+                      <li key={`${action.type}-${action.target}`} className="rounded-lg border p-3">
+                        <p className="text-sm font-semibold">{action.label}</p>
+                        <code className="mt-1 block break-all text-xs text-slate-600 dark:text-slate-300">{action.target}</code>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => void navigator.clipboard?.writeText(action.target)}
+                        >
+                          Copiar
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
                 </Field>
               )}
               <div className="grid grid-cols-2 gap-4">

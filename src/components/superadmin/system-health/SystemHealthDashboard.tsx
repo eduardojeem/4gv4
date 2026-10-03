@@ -23,6 +23,7 @@ import { runSystemHealthAction } from '@/app/superadmin/system-health/actions'
 import { evaluateReadiness } from '@/lib/health/readiness'
 import type {
   HealthCategory,
+  HealthChangeKind,
   HealthCheckResult,
   HealthHistoryResult,
   HealthReport,
@@ -30,6 +31,8 @@ import type {
 } from '@/lib/health/types'
 import { CheckDetailSheet, SeverityBadge, StatusBadge } from './CheckDetailSheet'
 import { HealthHistoryPanel } from './HealthHistoryPanel'
+import { ExecutiveHealthSummary } from './ExecutiveHealthSummary'
+import { OperationalHealthPanels } from './OperationalHealthPanels'
 import { CATEGORY_LABEL, CATEGORY_ORDER, STATUS_META, formatDateTime } from './health-meta'
 
 type SeverityRules = Record<string, string[]>
@@ -58,7 +61,16 @@ function aggregate(checks: HealthCheckResult[]): HealthStatus {
   return statuses.includes('unknown') ? 'unknown' : 'not_configured'
 }
 
-function CheckRow({ check, onOpen }: { check: HealthCheckResult; onOpen: (check: HealthCheckResult) => void }) {
+const CHANGE_LABEL: Record<HealthChangeKind, string | null> = {
+  new_issue: 'Nuevo',
+  worsened: 'Empeoró',
+  improved: 'Mejoró',
+  resolved: 'Resuelto',
+  unchanged: null,
+  not_comparable: 'Sin comparación anterior',
+}
+
+function CheckRow({ check, change, onOpen }: { check: HealthCheckResult; change?: HealthChangeKind; onOpen: (check: HealthCheckResult) => void }) {
   const meta = STATUS_META[check.status]
   const Icon = meta.icon
   return (
@@ -72,6 +84,7 @@ function CheckRow({ check, onOpen }: { check: HealthCheckResult; onOpen: (check:
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{check.name}</span>
           {check.status !== 'healthy' && check.severity !== 'info' && <SeverityBadge severity={check.severity} />}
+          {change && CHANGE_LABEL[change] && <Badge variant="outline" className="rounded-full text-[10px]">{CHANGE_LABEL[change]}</Badge>}
         </span>
         <span className="block break-words text-xs text-slate-500 dark:text-slate-400">{check.summary}</span>
       </span>
@@ -160,6 +173,10 @@ export function SystemHealthDashboard({
     { label: 'Aislamiento', id: 'tenancy.policies' },
   ]
   const checkById = useMemo(() => new Map((report?.checks ?? []).map((c) => [c.id, c])), [report])
+  const changeById = useMemo(
+    () => new Map((report?.comparison.changes ?? []).map((change) => [change.checkId, change.kind])),
+    [report],
+  )
 
   return (
     <div className="space-y-6">
@@ -246,6 +263,8 @@ export function SystemHealthDashboard({
             </div>
           </div>
 
+          <ExecutiveHealthSummary report={report} />
+
           <Tabs defaultValue="overview" className="space-y-4">
             <div className="overflow-x-auto">
               <TabsList className="w-max">
@@ -260,6 +279,7 @@ export function SystemHealthDashboard({
 
             {/* ---------------------------------------------------- Resumen */}
             <TabsContent value="overview" className="space-y-4">
+              <OperationalHealthPanels report={report} />
               <Card className="rounded-xl">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Checklist de lanzamiento</CardTitle>
@@ -292,7 +312,7 @@ export function SystemHealthDashboard({
                     {pending.length === 0 ? (
                       <p className="py-6 text-center text-sm text-slate-500">Todos los controles fueron verificados y están correctos.</p>
                     ) : (
-                      pending.slice(0, 10).map((check) => <CheckRow key={check.id} check={check} onOpen={setSelected} />)
+                      pending.slice(0, 10).map((check) => <CheckRow key={check.id} check={check} change={changeById.get(check.id)} onOpen={setSelected} />)
                     )}
                   </CardContent>
                 </Card>
