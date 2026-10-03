@@ -46,9 +46,16 @@ export function buildServiceHealthEntries(
   const runtime = runtimeServiceConfiguration()
 
   return SERVICE_DEFINITIONS.map((definition) => {
-    const configured = configuration[definition.id] ?? runtime[definition.id] ?? 'missing'
     const check = checksById.get(definition.checkId)
-    const status = configured === 'missing' ? 'not_configured' : check?.status ?? 'unknown'
+    const configuredFromEnvironment = configuration[definition.id] ?? runtime[definition.id] ?? 'missing'
+    const configured = definition.id === 'cloudflare' && check?.status === 'healthy'
+      ? 'configured'
+      : configuredFromEnvironment
+    const status = definition.id === 'cloudflare'
+      ? check?.status ?? 'unknown'
+      : configured === 'missing'
+        ? 'not_configured'
+        : check?.status ?? 'unknown'
     return {
       id: definition.id,
       name: definition.name,

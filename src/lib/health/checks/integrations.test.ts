@@ -56,6 +56,18 @@ describe('buildServiceHealthEntries', () => {
     expect(serialized).not.toContain(marker)
     expect(serialized).toContain('UPSTASH_REDIS_REST_URL')
   })
+
+  it('recognizes Cloudflare from verified proxy headers without requiring optional API credentials', () => {
+    const services = buildServiceHealthEntries(
+      [check('cloudflare.edge', 'healthy', 'Tráfico pasando por Cloudflare')],
+      { cloudflare: 'missing' },
+    )
+
+    expect(services.find((service) => service.id === 'cloudflare')).toMatchObject({
+      configured: 'configured',
+      status: 'healthy',
+    })
+  })
 })
 
 describe('buildScheduledTaskHealth', () => {
