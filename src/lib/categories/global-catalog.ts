@@ -74,8 +74,9 @@ export function findGlobalCategoryByName(
 
 /** Padres primero y, dentro de cada nivel, por orden y nombre: como se lee un árbol. */
 export function sortGlobalCategories(catalog: GlobalCategory[]): GlobalCategory[] {
+  const uniqueCatalog = [...new Map(catalog.map((category) => [category.id, category])).values()]
   const byParent = new Map<string, GlobalCategory[]>()
-  for (const category of catalog) {
+  for (const category of uniqueCatalog) {
     const key = category.parent_id ?? 'root'
     byParent.set(key, [...(byParent.get(key) ?? []), category])
   }
@@ -84,17 +85,33 @@ export function sortGlobalCategories(catalog: GlobalCategory[]): GlobalCategory[
     [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name, 'es'))
 
   const result: GlobalCategory[] = []
+  const visiting = new Set<string>()
+  const visited = new Set<string>()
   const walk = (parent: string) => {
     for (const category of order(byParent.get(parent) ?? [])) {
+      if (visited.has(category.id) || visiting.has(category.id)) continue
+      visiting.add(category.id)
       result.push(category)
       walk(category.id)
+      visiting.delete(category.id)
+      visited.add(category.id)
     }
   }
   walk('root')
 
-  // Una categoría cuyo padre ya no está no puede desaparecer de la lista.
-  const seen = new Set(result.map((category) => category.id))
-  return [...result, ...order(catalog.filter((category) => !seen.has(category.id)))]
+  // Categorías huérfanas o atrapadas en un ciclo tampoco pueden desaparecer.
+  for (const category of order(uniqueCatalog)) {
+    if (visited.has(category.id)) continue
+    if (!visiting.has(category.id)) {
+      visiting.add(category.id)
+      result.push(category)
+    }
+    walk(category.id)
+    visiting.delete(category.id)
+    visited.add(category.id)
+  }
+
+  return result
 }
 
 /** Igual pero sin plurales: «Pendrive» y «Pendrives» son la misma categoría. */
