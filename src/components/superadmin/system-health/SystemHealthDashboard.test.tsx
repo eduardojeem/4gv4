@@ -11,6 +11,7 @@ vi.mock('@/app/superadmin/system-health/actions', () => ({
 }))
 
 import { SystemHealthDashboard } from './SystemHealthDashboard'
+import { HealthHistoryPanel } from './HealthHistoryPanel'
 
 const emptyHistory = { available: true, entries: [] }
 
@@ -142,5 +143,23 @@ describe('SystemHealthDashboard', () => {
       />,
     )
     expect(await screen.findByText('Historial no disponible: aplicar la migración.')).toBeInTheDocument()
+  })
+
+  it('agrupa filas intercaladas por ejecución y permite expandir el detalle', async () => {
+    const history = {
+      available: true,
+      entries: [
+        { id: 1, runId: 'run-a', checkedAt: '2026-09-27T10:00:02.000Z', checkId: 'a-error', category: 'security' as const, status: 'error' as const, severity: 'high' as const, message: 'Error A', durationMs: 20 },
+        { id: 2, runId: 'run-b', checkedAt: '2026-09-27T11:00:00.000Z', checkId: 'b-ok', category: 'supabase' as const, status: 'healthy' as const, severity: 'info' as const, message: 'Correcto B', durationMs: 10 },
+        { id: 3, runId: 'run-a', checkedAt: '2026-09-27T10:00:00.000Z', checkId: 'a-warning', category: 'performance' as const, status: 'warning' as const, severity: 'medium' as const, message: 'Advertencia A', durationMs: 30 },
+      ],
+    }
+    render(<HealthHistoryPanel initial={history} />)
+    const runs = await screen.findAllByText(/Ejecución run-/)
+    expect(runs[0]).toHaveTextContent('run-b')
+    expect(runs[1]).toHaveTextContent('run-a')
+    fireEvent.click(runs[1])
+    expect(screen.getByText('Error A')).toBeInTheDocument()
+    expect(screen.getByText('Advertencia A')).toBeInTheDocument()
   })
 })
