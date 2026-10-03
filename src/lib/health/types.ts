@@ -62,6 +62,14 @@ export interface HealthCheckResult {
   checkedAt: string
   /** Datos adicionales seguros (nunca secretos). */
   metadata?: Record<string, string | number | boolean | null>
+  guidedActions?: HealthGuidedAction[]
+}
+
+export interface HealthGuidedAction {
+  type: 'file' | 'env' | 'command' | 'dashboard' | 'documentation'
+  label: string
+  target: string
+  description?: string
 }
 
 export interface HealthCheckChange {
@@ -144,6 +152,15 @@ export interface HealthReport {
   tenantTables: TenantTableFinding[]
   counts: Record<HealthStatus, number>
   overall: HealthStatus
+  comparison: HealthComparison
+  executiveSummary: ExecutiveHealthSummary
+  deployment: HealthMetricGroup | null
+  serviceHealth: ServiceHealthEntry[]
+  scheduledTasks: ScheduledTaskHealth[]
+  scope: {
+    complete: boolean
+    unavailableSources: string[]
+  }
   historyPersisted: boolean
   historyError?: string
 }
