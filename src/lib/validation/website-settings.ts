@@ -92,6 +92,7 @@ export const CompanyInfoSchema = z.object({
     .optional(),
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
   storefrontStyle: z.enum(STOREFRONT_STYLE_PREFERENCES).optional(),
+  storefrontVariant: z.string().max(50).optional().or(z.literal('')),
   headerColor: z.string().max(50).optional().or(z.literal('')),
   showTopBar: z.boolean().optional(),
   whatsapp: z.string().max(50).optional().or(z.literal('')),
@@ -447,6 +448,27 @@ export const ServicesSectionSchema = z.object({
   subtitle: z.string().max(200).optional()
 })
 
+export const BookingSectionSchema = z.object({
+  enabled: z.boolean(),
+  title: z.string().trim().max(80),
+  subtitle: z.string().trim().max(200),
+  showTeam: z.boolean(),
+})
+
+export const MAX_GALLERY_IMAGES = 12
+
+export const GallerySectionSchema = z.object({
+  enabled: z.boolean(),
+  title: z.string().trim().max(80),
+  subtitle: z.string().trim().max(200),
+  images: z.array(z.object({
+    id: z.string().min(1).max(100),
+    url: z.string().trim().min(1).max(500),
+    path: z.string().max(500).optional(),
+    caption: z.string().trim().max(80).optional(),
+  })).max(MAX_GALLERY_IMAGES, `Máximo ${MAX_GALLERY_IMAGES} fotos`),
+})
+
 export const ProcessFlowsSchema = z.array(ProcessFlowSchema)
   .max(6, 'Máximo 6 procesos permitidos')
 
@@ -595,7 +617,7 @@ export const MediaItemSchema = z.object({
   path: z.string().trim().max(1000),
   name: z.string().trim().max(200),
   size: z.number().int().nonnegative().optional(),
-  section: z.enum(['logo', 'promotions', 'announcements', 'brands', 'general']).optional(),
+  section: z.enum(['logo', 'promotions', 'announcements', 'brands', 'gallery', 'team', 'general']).optional(),
   createdAt: z.string().max(100).optional(),
 })
 
@@ -616,6 +638,8 @@ export const WebsiteSettingsSchema = z.object({
   brands_section: BrandsSectionSchema.optional(),
   product_credit_defaults: ProductCreditDefaultsSchema.optional(),
   services_section: ServicesSectionSchema.optional(),
+  booking_section: BookingSectionSchema.optional(),
+  gallery_section: GallerySectionSchema.optional(),
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
@@ -642,6 +666,8 @@ export const SETTING_SCHEMAS = {
   brands_section: BrandsSectionSchema,
   product_credit_defaults: ProductCreditDefaultsSchema,
   services_section: ServicesSectionSchema,
+  booking_section: BookingSectionSchema,
+  gallery_section: GallerySectionSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,

@@ -19,7 +19,8 @@ type Info = {
   requireConfirmation: boolean
   message: string | null
   openDays: number[]
-  services: Array<{ id: string; name: string; duration: number; price: number | null }>
+  /** professionalIds: quién hace el servicio (vacío si no hay profesionales). */
+  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[] }>
   professionals: Array<{ id: string; name: string; color: string }>
 }
 
@@ -37,11 +38,13 @@ function Step({ number, title, children, done }: { number: number; title: string
   )
 }
 
-export function PublicBooking({ slug }: { slug: string }) {
+export function PublicBooking({ slug, initialServiceId }: { slug: string; initialServiceId?: string }) {
   const [info, setInfo] = useState<Info | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [serviceId, setServiceId] = useState<string | null>(null)
-  const [professionalId, setProfessionalId] = useState<string>(ANY)
+  const [chosenServiceId, setServiceId] = useState<string | null>(initialServiceId ?? null)
+  // Un servicio que llega por la URL (desde la portada) solo cuenta si la agenda lo ofrece.
+  const serviceId = info?.services.some((item) => item.id === chosenServiceId) ? chosenServiceId : null
+  const [chosenProfessionalId, setProfessionalId] = useState<string>(ANY)
   const [date, setDate] = useState<string | null>(null)
   const [slots, setSlots] = useState<{ key: string; list: Array<{ startsAt: string; time: string }> } | null>(null)
   const [startsAt, setStartsAt] = useState<string | null>(null)
@@ -51,6 +54,10 @@ export function PublicBooking({ slug }: { slug: string }) {
   const [website, setWebsite] = useState('')
   const [sending, setSending] = useState(false)
   const [booked, setBooked] = useState<{ token: string; status: string } | null>(null)
+  // Solo quienes hacen el servicio elegido; si el elegido antes no lo hace, vuelve a «Cualquiera».
+  const serviceProfessionalIds = info?.services.find((item) => item.id === serviceId)?.professionalIds
+  const serviceProfessionals = (info?.professionals ?? []).filter((professional) => !serviceProfessionalIds || serviceProfessionalIds.includes(professional.id))
+  const professionalId = serviceProfessionals.some((professional) => professional.id === chosenProfessionalId) ? chosenProfessionalId : ANY
 
   useEffect(() => {
     fetch(`/api/public/agenda/${encodeURIComponent(slug)}`)
@@ -162,10 +169,10 @@ export function PublicBooking({ slug }: { slug: string }) {
         )}
       </Step>
 
-      {serviceId && info.professionals.length > 1 && (
+      {serviceId && serviceProfessionals.length > 1 && (
         <Step number={2} title="¿Con quién?" done>
           <div className="flex flex-wrap gap-2">
-            {[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }, ...info.professionals].map((professional) => (
+            {[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }, ...serviceProfessionals].map((professional) => (
               <button
                 key={professional.id}
                 type="button"
@@ -181,7 +188,7 @@ export function PublicBooking({ slug }: { slug: string }) {
       )}
 
       {serviceId && (
-        <Step number={info.professionals.length > 1 ? 3 : 2} title="¿Qué día?" done={Boolean(date)}>
+        <Step number={serviceProfessionals.length > 1 ? 3 : 2} title="¿Qué día?" done={Boolean(date)}>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {days.map((day) => (
               <button
@@ -220,7 +227,7 @@ export function PublicBooking({ slug }: { slug: string }) {
       )}
 
       {startsAt && service && (
-        <Step number={info.professionals.length > 1 ? 4 : 3} title="Tus datos">
+        <Step number={serviceProfessionals.length > 1 ? 4 : 3} title="Tus datos">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="booking-name">Nombre</Label>

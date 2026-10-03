@@ -369,6 +369,74 @@ export const VERTICAL_RECOMMENDATIONS: Record<string, VerticalRecommendation> = 
     proTip: 'Creá «Sets de Regalo» para fechas especiales (Día de la Madre, San Valentín, Navidad). Son las temporadas de mayor facturación del año.',
   },
 
+  barbershop: {
+    id: 'barbershop',
+    title: 'Barbería y Peluquería',
+    subtitle: 'Turnos online, agenda por profesional, cobro en caja y venta de productos',
+    badge: 'Turnos y Servicios',
+    description:
+      'Para barberías, peluquerías y salones. El centro es la agenda: tus clientes reservan desde la tienda, cada profesional tiene su columna y el turno se cobra en el POS con un clic.',
+    startingSteps: [
+      {
+        step: 1,
+        title: 'Cargar tus servicios con precio y duración',
+        description: 'Corte, corte + barba, perfilado, color… Usá los servicios sugeridos y ajustá precios y minutos.',
+        actionLabel: 'Configurar Agenda',
+        actionHref: '/dashboard/agenda/configuracion',
+      },
+      {
+        step: 2,
+        title: 'Agregar a tu equipo y el horario de atención',
+        description: 'Cada barbero o estilista tiene su agenda. Marcá los días y tramos en que atienden.',
+        actionLabel: 'Configurar Agenda',
+        actionHref: '/dashboard/agenda/configuracion',
+      },
+      {
+        step: 3,
+        title: 'Activar las reservas online',
+        description: 'Tus clientes eligen servicio, día y horario desde tu tienda, y el turno aparece solo en la agenda.',
+        actionLabel: 'Activar Reservas',
+        actionHref: '/dashboard/agenda/configuracion',
+      },
+      {
+        step: 4,
+        title: 'Publicar la tienda con la plantilla «Servicios»',
+        description: 'Portada con «Reservar turno», carta de servicios con precios y tu equipo.',
+        actionLabel: 'Configurar Tienda',
+        actionHref: '/admin/website',
+      },
+    ],
+    dailyRoutine: {
+      opening: 'Abrir caja en el POS y revisar la agenda del día: confirmar los turnos pendientes por WhatsApp.',
+      sales: 'Al terminar cada servicio, cobrarlo desde el turno: el POS carga el servicio con el precio acordado.',
+      midday: 'Reacomodar huecos de la agenda con clientes sin turno y responder reservas nuevas.',
+      closing: 'Cierre de caja, marcar ausentes («no vino») y revisar los turnos de mañana.',
+    },
+    keySettings: [
+      {
+        title: 'Agenda y Reservas Online',
+        reason: 'Sin llamadas ni mensajes de ida y vuelta: el cliente reserva solo y vos ves todo ordenado por profesional.',
+        href: '/dashboard/agenda/configuracion',
+      },
+      {
+        title: 'Historial de Clientes',
+        reason: 'Sabés qué corte o color se hizo cada cliente y cada cuánto viene, para recordarle su próximo turno.',
+        href: '/dashboard/clients',
+      },
+      {
+        title: 'Tienda con plantilla «Servicios»',
+        reason: 'La portada invita a reservar y muestra precios claros, lo que más preguntan los clientes.',
+        href: '/admin/website',
+      },
+    ],
+    pitfallsToAvoid: [
+      'Cargar los servicios sin duración real: la agenda ofrece horarios que después no alcanzan.',
+      'Dejar las reservas online sin confirmar: el cliente no sabe si su turno quedó firme.',
+      'Cobrar en efectivo sin pasar por el POS: perdés el control de lo que factura cada profesional.',
+    ],
+    proTip: 'Pedí confirmación de turnos por WhatsApp el día anterior: bajan muchísimo los ausentes.',
+  },
+
   general: {
     id: 'general',
     title: 'Comercio General y Multirrubro',

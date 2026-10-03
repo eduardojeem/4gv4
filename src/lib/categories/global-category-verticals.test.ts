@@ -37,7 +37,9 @@ describe('rubros en las categorías globales', () => {
 
   it('la migración cubre los nombres del kit de inicio de cada rubro con rama propia', () => {
     const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261006130000_global_category_verticals.sql'), 'utf8')
-    for (const vertical of BUSINESS_VERTICALS) expect(sql).toContain(`'${vertical}'`)
+    // Los rubros que se suman después amplían la restricción en su propia migración.
+    const latest = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261010120000_barbershop_vertical.sql'), 'utf8')
+    for (const vertical of BUSINESS_VERTICALS) expect(sql + latest).toContain(`'${vertical}'`)
     const covered = (vertical: 'clothing' | 'cosmetics' | 'food' | 'hardware') =>
       STARTER_CATEGORIES[vertical].filter((name) => !new RegExp(`[{,]${name}[,}]|'${name}'`).test(sql))
     expect(covered('clothing')).toEqual([])
@@ -46,5 +48,13 @@ describe('rubros en las categorías globales', () => {
     // «Herramientas» ya existía: la migración le suma el rubro ferretería.
     expect(covered('hardware')).toEqual(['Herramientas'])
     expect(sql).toContain("set verticals = '{electronics,hardware}'")
+  })
+
+  it('la barbería tiene categorías globales para todo su kit de inicio', () => {
+    const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261010120000_barbershop_vertical.sql'), 'utf8')
+    const missing = STARTER_CATEGORIES.barbershop.filter((name) => !new RegExp(`[{,]${name}[,}]|'${name}'`).test(sql))
+    expect(missing).toEqual([])
+    // Las dos restricciones de rubro (organizaciones y categorías globales) lo aceptan.
+    expect(sql.match(/'barbershop', 'other'/g)).toHaveLength(2)
   })
 })

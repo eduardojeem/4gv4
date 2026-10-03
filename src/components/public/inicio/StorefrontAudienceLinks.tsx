@@ -60,7 +60,8 @@ export function StorefrontAudienceLinks() {
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
-  if (style === 'classic') return null
+  // Comprar por público solo tiene sentido en ropa y deporte.
+  if (style !== 'fashion' && style !== 'sport') return null
 
   const sport = style === 'sport'
 

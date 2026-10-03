@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowLeft, Copy, Globe, Loader2, Plus, Save, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatCurrency } from '@/lib/currency'
 import type { AgendaProfessional, AgendaService, AgendaSettings } from '@/lib/agenda/agenda-server'
 import { WEEKDAY_LABELS } from '@/lib/agenda/time'
+import { missingSuggestedServices } from '@/lib/agenda/suggested-services'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { SuggestedServicesCard } from '@/components/dashboard/agenda/SuggestedServicesCard'
+import { ProfessionalServicesPicker } from '@/components/dashboard/agenda/ProfessionalServicesPicker'
+import { ProfessionalPhotoButton } from '@/components/dashboard/agenda/ProfessionalPhotoButton'
+
+const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería' }
 
 const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6']
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
@@ -31,12 +38,18 @@ export function AgendaSettingsPanel() {
   const [available, setAvailable] = useState(true)
   const [saving, setSaving] = useState(false)
   const [newName, setNewName] = useState('')
+  const { businessVertical } = useSubscriptionStatus()
+  // Lo guardado, para crear servicios sugeridos sin guardar de rebote lo que se está editando.
+  const savedSettingsRef = useRef<AgendaSettings | null>(null)
 
   const load = useCallback(async () => {
     const response = await fetch('/api/agenda/settings', { cache: 'no-store' })
     const body = await response.json().catch(() => ({}))
     setAvailable(body.available !== false)
-    if (body.available) setConfig(body)
+    if (body.available) {
+      savedSettingsRef.current = body.settings
+      setConfig(body)
+    }
   }, [])
   useEffect(() => { void load() }, [load])
 
@@ -100,7 +113,8 @@ export function AgendaSettingsPanel() {
     })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) return toast.error(body.error || 'No se pudo guardar')
-    setConfig({ ...config, professionals: config.professionals.map((item) => (item.id === professional.id ? body.professional : item)) })
+    // La respuesta no trae sus servicios: se conservan los que ya tenía.
+    setConfig({ ...config, professionals: config.professionals.map((item) => (item.id === professional.id ? { ...item, ...body.professional } : item)) })
   }
 
   return (
@@ -153,15 +167,33 @@ export function AgendaSettingsPanel() {
 
         <div className="space-y-5">
           <Card className="rounded-xl">
-            <CardHeader><CardTitle className="text-base">Quién atiende</CardTitle><CardDescription>Cada profesional tiene su columna. Sin profesionales, la agenda es una sola.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-base">Quién atiende</CardTitle><CardDescription>Cada profesional tiene su columna. Con la cámara subís su foto y con la tijera elegís qué servicios hace (si no elegís, hace todos). Foto y especialidad se ven en tu tienda. Sin profesionales, la agenda es una sola.</CardDescription></CardHeader>
             <CardContent className="space-y-2">
               {config.professionals.map((professional) => (
-                <div key={professional.id} className="flex items-center gap-2">
+                <div key={professional.id} className="flex flex-wrap items-center gap-2 border-b pb-2 last:border-0">
                   <input type="color" value={professional.color} aria-label={`Color de ${professional.name}`} className="h-8 w-8 cursor-pointer rounded border" onChange={(event) => void updateProfessional(professional, { color: event.target.value })} />
+                  <ProfessionalPhotoButton professional={professional} onUploaded={async (url) => { await updateProfessional(professional, { photo_url: url }) }} />
                   <Input defaultValue={professional.name} className="h-8" onBlur={(event) => { if (event.target.value.trim() && event.target.value.trim() !== professional.name) void updateProfessional(professional, { name: event.target.value.trim() }) }} />
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Switch checked={professional.is_active} onCheckedChange={(on) => void updateProfessional(professional, { is_active: on })} aria-label="Activo" /> Activo
                   </label>
+                  <ProfessionalServicesPicker
+                    professional={professional}
+                    services={config.services}
+                    onSaved={(serviceIds) => setConfig({ ...config, professionals: config.professionals.map((item) => (item.id === professional.id ? { ...item, service_ids: serviceIds } : item)) })}
+                  />
+                  {/* Se muestra en la tienda debajo del nombre. */}
+                  <Input
+                    defaultValue={professional.specialty ?? ''}
+                    maxLength={80}
+                    placeholder="Especialidad (ej.: Barbero · fades)"
+                    aria-label={`Especialidad de ${professional.name}`}
+                    className="h-8 basis-full sm:ml-20"
+                    onBlur={(event) => {
+                      const specialty = event.target.value.trim()
+                      if (specialty !== (professional.specialty ?? '')) void updateProfessional(professional, { specialty: specialty || null })
+                    }}
+                  />
                 </div>
               ))}
               <div className="flex gap-2 pt-1">
@@ -179,6 +211,13 @@ export function AgendaSettingsPanel() {
             <CardContent className="space-y-3 text-sm">
               <label className="flex items-center justify-between gap-3">Aceptar reservas desde la tienda <Switch checked={settings.online_booking} onCheckedChange={(on) => setSettings({ online_booking: on })} /></label>
               <label className="flex items-center justify-between gap-3">Confirmarlas yo antes (si no, quedan confirmadas solas) <Switch checked={settings.require_confirmation} onCheckedChange={(on) => setSettings({ require_confirmation: on })} /></label>
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  Avisarme por email cuando un cliente reserva, cambia o cancela
+                  <span className="block text-xs text-muted-foreground">Llega al email de contacto de la tienda. Igual lo ves en la campanita de la Agenda.</span>
+                </span>
+                <Switch checked={settings.notify_email !== false} onCheckedChange={(on) => setSettings({ notify_email: on })} />
+              </label>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Anticipación mínima</Label>
@@ -212,7 +251,20 @@ export function AgendaSettingsPanel() {
           <CardTitle className="text-base">Servicios</CardTitle>
           <CardDescription>Son los productos con unidad «servicio». Decí cuánto dura cada uno y si se puede reservar online.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {(() => {
+            const missing = missingSuggestedServices(businessVertical, config.services.map((service) => service.name))
+            return missing.length > 0 && savedSettingsRef.current ? (
+              <SuggestedServicesCard
+                key={missing.map((service) => service.name).join('|')}
+                suggestions={missing}
+                currency={config.currency}
+                savedSettings={savedSettingsRef.current}
+                rubroLabel={RUBRO_LABELS[businessVertical] ?? 'tu rubro'}
+                onAdded={load}
+              />
+            ) : null
+          })()}
           {config.services.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no tenés servicios. Cargalos en <Link href="/dashboard/products" className="underline">Productos</Link> con la unidad «servicio» (ej.: «Corte de cabello», «Lavado completo»).</p>
           ) : (

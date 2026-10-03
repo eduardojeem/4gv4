@@ -34,97 +34,19 @@ import {
   Trash2,
   Images
 } from 'lucide-react'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
-import { STOREFRONT_STYLE_LABELS, STOREFRONT_STYLE_OPTIONS, resolveStorefrontStyle } from '@/lib/website/storefront-style'
+import { StorefrontAppearanceEditor } from '@/components/admin/website/StorefrontAppearanceEditor'
 import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
 import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
-import { getBrandTheme } from '@/lib/constants/brand-theme'
-import { BRAND_COLORS } from '@/lib/website/brand-colors'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 import { cn } from '@/lib/utils'
 import { getPublicationIssues } from '@/lib/website/publication'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-
-// ── Brand-color catalog — single source of truth for swatches and live preview ──
-
-const BRAND_PREVIEW: Record<string, { header: string; cta: string; dot: string }> = {
-  blue: { header: 'bg-blue-600 text-white border-blue-500', cta: 'bg-blue-600 hover:bg-blue-700 text-white', dot: 'bg-blue-500' },
-  green: { header: 'bg-green-600 text-white border-green-500', cta: 'bg-green-600 hover:bg-green-700 text-white', dot: 'bg-green-500' },
-  purple: { header: 'bg-purple-600 text-white border-purple-500', cta: 'bg-purple-600 hover:bg-purple-700 text-white', dot: 'bg-purple-500' },
-  orange: { header: 'bg-orange-600 text-white border-orange-500', cta: 'bg-orange-600 hover:bg-orange-700 text-white', dot: 'bg-orange-500' },
-  red: { header: 'bg-red-600 text-white border-red-500', cta: 'bg-red-600 hover:bg-red-700 text-white', dot: 'bg-red-500' },
-  indigo: { header: 'bg-indigo-600 text-white border-indigo-500', cta: 'bg-indigo-600 hover:bg-indigo-700 text-white', dot: 'bg-indigo-500' },
-  teal: { header: 'bg-teal-600 text-white border-teal-500', cta: 'bg-teal-600 hover:bg-teal-700 text-white', dot: 'bg-teal-500' },
-  rose: { header: 'bg-rose-600 text-white border-rose-500', cta: 'bg-rose-600 hover:bg-rose-700 text-white', dot: 'bg-rose-500' },
-  amber: { header: 'bg-amber-600 text-white border-amber-500', cta: 'bg-amber-600 hover:bg-amber-700 text-white', dot: 'bg-amber-500' },
-  emerald: { header: 'bg-emerald-600 text-white border-emerald-500', cta: 'bg-emerald-600 hover:bg-emerald-700 text-white', dot: 'bg-emerald-500' },
-  cyan: { header: 'bg-cyan-600 text-white border-cyan-500', cta: 'bg-cyan-600 hover:bg-cyan-700 text-white', dot: 'bg-cyan-500' },
-  sky: { header: 'bg-sky-600 text-white border-sky-500', cta: 'bg-sky-600 hover:bg-sky-700 text-white', dot: 'bg-sky-500' },
-  custom: { header: 'bg-primary text-white border-primary/50', cta: 'bg-primary hover:bg-primary/90 text-primary-foreground', dot: 'bg-primary' },
-}
-
-const HEADER_STYLE_HINT: Record<string, string> = {
-  solid: 'Header de fondo blanco minimalista, ideal para logos oscuros.',
-  accent: 'Fondo con el color de marca seleccionado. Diseño llamativo.',
-  dark: 'Header oscuro premium, contraste de alta gama.',
-  glass: 'Efecto cristal translúcido con desenfoque de fondo (glassmorphism).',
-}
-
-const HEADER_PREVIEW_STYLES: Record<string, {
-  header: string
-  topBar: string
-  icon: string
-  subtitle: string
-  activeLink: string
-  inactiveLink: string
-}> = {
-  accent: {
-    header: 'bg-primary text-primary-foreground',
-    topBar: 'border-white/10 bg-white/5 text-primary-foreground/90',
-    icon: 'bg-white text-primary',
-    subtitle: 'text-white/80',
-    activeLink: 'bg-white text-primary shadow-sm',
-    inactiveLink: 'text-white/80',
-  },
-  dark: {
-    header: 'bg-slate-950 text-white border-slate-900',
-    topBar: 'border-slate-900 bg-slate-900/30 text-slate-400',
-    icon: 'bg-primary text-primary-foreground',
-    subtitle: 'text-muted-foreground',
-    activeLink: 'bg-accent text-foreground',
-    inactiveLink: 'text-muted-foreground',
-  },
-  solid: {
-    header: 'bg-background text-foreground border-border/80',
-    topBar: 'border-border/30 bg-muted/40 text-muted-foreground',
-    icon: 'bg-primary text-primary-foreground',
-    subtitle: 'text-muted-foreground',
-    activeLink: 'bg-accent text-foreground',
-    inactiveLink: 'text-muted-foreground',
-  },
-  glass: {
-    header: 'bg-background/80 text-foreground border-b border-border/40 backdrop-blur-lg',
-    topBar: 'border-border/30 bg-muted/40 text-muted-foreground',
-    icon: 'bg-primary text-primary-foreground',
-    subtitle: 'text-muted-foreground',
-    activeLink: 'bg-accent text-foreground',
-    inactiveLink: 'text-muted-foreground',
-  },
-}
-
-function toColorPickerValue(value?: string): string {
-  if (!value || !isValidBrandHexColor(value)) return '#2563EB'
-  if (value.length === 7) return value
-
-  const [red, green, blue] = value.slice(1).split('')
-  return `#${red}${red}${green}${green}${blue}${blue}`
-}
 
 export function CompanyInfoForm() {
   const { settings, isLoading, error, isSaving, refetch } = useAdminWebsiteSettings()
@@ -148,16 +70,10 @@ export function CompanyInfoForm() {
     field?.focus()
   }, [errors])
 
-  const preview = BRAND_PREVIEW[formData.brandColor || 'blue'] ?? BRAND_PREVIEW.blue
-  const headerPreview = HEADER_PREVIEW_STYLES[formData.headerStyle || 'glass'] ?? HEADER_PREVIEW_STYLES.glass
-  const brandTheme = getBrandTheme(formData.brandColor)
   const { businessVertical } = useSubscriptionStatus()
-  const storefrontStylePreference = formData.storefrontStyle || 'auto'
-  const automaticStorefrontStyle = STOREFRONT_STYLE_LABELS[resolveStorefrontStyle('auto', businessVertical)]
-  const hasValidCustomBrand = formData.brandColor === 'custom' && isValidBrandHexColor(formData.customBrandColor)
-  const customBrandStyle = hasValidCustomBrand
-    ? { '--brand-primary': formData.customBrandColor } as React.CSSProperties
-    : undefined
+  // La vista con productos reales solo existe para una tienda ya publicada (lo guardado, no el borrador).
+  const savedCompany = settings?.company_info
+  const publishedStorePath = savedCompany?.storefrontPublic === true && savedCompany.slug ? `/${savedCompany.slug}` : null
 
   // Report unsaved changes to the tabs page so switching tabs can warn first.
   const dirtyCtx = useWebsiteEditorDirty()
@@ -353,6 +269,18 @@ export function CompanyInfoForm() {
     } finally {
       setIsSyncing(false)
     }
+  }
+
+  const handleAppearanceChange = (patch: Partial<CompanyInfo>) => {
+    if ('brandColor' in patch || 'customBrandColor' in patch) {
+      setErrors((current) => {
+        if (!current.customBrandColor) return current
+        const next = { ...current }
+        delete next.customBrandColor
+        return next
+      })
+    }
+    setDraft((current) => ({ ...(current ?? formData), ...patch }))
   }
 
   const handleChange = (field: keyof CompanyInfo | string, value: string) => {
@@ -613,292 +541,14 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Personalización visual */}
-      <SectionCard collapsible icon={Sparkles} title="Personalización visual" description="Colores, encabezado y apariencia. Desplegá para personalizar.">
-        <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
-          {/* Config */}
-          <div className="space-y-6 lg:col-span-7">
-            <div className="flex items-start gap-2.5 border-l-2 border-primary/40 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div className="space-y-1">
-                <span className="font-semibold text-foreground">Qué cambia en tu sitio</span>
-                <p className="leading-relaxed">
-                  El color define los botones y el fondo del inicio. El aspecto cambia cómo se ven el inicio y los productos. El estilo modifica el encabezado, y la barra superior muestra tus datos de contacto.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <Label className="text-sm font-semibold">Color de marca principal</Label>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Se aplica a botones, enlaces activos, encabezados destacados y al fondo del inicio.
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                {BRAND_COLORS.map((c) => {
-                  const isSelected = (formData.brandColor || 'blue') === c.key
-                  return (
-                    <button
-                      key={c.key}
-                      type="button"
-                      onClick={() => handleChange('brandColor', c.key)}
-                      aria-label={`Usar color ${c.name}`}
-                      aria-pressed={isSelected}
-                      className={`relative flex h-16 flex-col items-center justify-center rounded-md border p-2 transition-colors ${
-                        isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
-                      }`}
-                    >
-                      <span aria-hidden="true" className={`h-6 w-6 rounded-full shadow-inner ${c.swatch}`} />
-                      <span className={`mt-1.5 text-[10px] font-medium ${isSelected ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                        {c.name}
-                      </span>
-                      {isSelected && (
-                        <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                          <Check aria-hidden="true" className="h-2.5 w-2.5" />
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft((current) => ({
-                      ...(current ?? formData),
-                      brandColor: 'custom',
-                      customBrandColor: formData.customBrandColor || '#2563EB',
-                    }))
-                    setErrors((current) => {
-                      const next = { ...current }
-                      delete next.customBrandColor
-                      return next
-                    })
-                  }}
-                  aria-label="Usar un color personalizado"
-                  aria-pressed={formData.brandColor === 'custom'}
-                  className={`relative flex h-16 flex-col items-center justify-center rounded-md border p-2 transition-colors ${
-                    formData.brandColor === 'custom'
-                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                      : 'border-border hover:border-foreground/30'
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="h-6 w-6 rounded-full border shadow-inner"
-                    style={{ backgroundColor: toColorPickerValue(formData.customBrandColor) }}
-                  />
-                  <span className={`mt-1.5 text-[10px] font-medium ${formData.brandColor === 'custom' ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                    Personalizado
-                  </span>
-                  {formData.brandColor === 'custom' && (
-                    <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                      <Check aria-hidden="true" className="h-2.5 w-2.5" />
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {formData.brandColor === 'custom' && (
-                <div className="grid gap-3 border-l-2 border-primary/40 pl-4 sm:grid-cols-[72px_minmax(0,1fr)] sm:items-end">
-                  <div className="space-y-2">
-                    <Label htmlFor="customBrandColorPicker" className="text-xs">Selector</Label>
-                    <input
-                      id="customBrandColorPicker"
-                      type="color"
-                      value={toColorPickerValue(formData.customBrandColor)}
-                      onChange={(event) => handleChange('customBrandColor', event.target.value.toUpperCase())}
-                      aria-describedby="customBrandColorHelp"
-                      className="h-11 w-full cursor-pointer rounded-md border border-input bg-background p-1"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customBrandColor">Código HEX</Label>
-                    <Input
-                      id="customBrandColor"
-                      value={formData.customBrandColor || ''}
-                      onChange={(event) => handleChange('customBrandColor', event.target.value)}
-                      onBlur={(event) => handleChange('customBrandColor', event.target.value.trim().toUpperCase())}
-                      placeholder="#2563EB"
-                      maxLength={7}
-                      spellCheck={false}
-                      aria-invalid={!!errors.customBrandColor}
-                      aria-describedby={errors.customBrandColor ? 'customBrandColorHelp customBrandColorError' : 'customBrandColorHelp'}
-                      className="h-11 font-mono uppercase"
-                    />
-                  </div>
-                  <div className="sm:col-start-2">
-                    <p id="customBrandColorHelp" className="text-xs text-muted-foreground">
-                      Usá 3 o 6 caracteres, por ejemplo #0F8 o #00FF88.
-                    </p>
-                    {errors.customBrandColor && (
-                      <p id="customBrandColorError" role="alert" className="mt-1 text-xs text-destructive">
-                        {errors.customBrandColor}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <div>
-                <p id="storefrontStyleLabel" className="text-sm font-semibold">Aspecto de la tienda</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Cambia la portada del inicio, las categorías y las tarjetas de productos. No oculta ninguna sección.
-                </p>
-              </div>
-              <div role="group" aria-labelledby="storefrontStyleLabel" className="grid gap-2 sm:grid-cols-2">
-                {STOREFRONT_STYLE_OPTIONS.map((option) => {
-                  const isSelected = storefrontStylePreference === option.value
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => handleChange('storefrontStyle', option.value)}
-                      aria-pressed={isSelected}
-                      className={`relative flex flex-col items-start gap-1 rounded-md border p-3 pr-8 text-left transition-colors ${
-                        isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
-                      }`}
-                    >
-                      <span className={`text-sm ${isSelected ? 'font-bold text-primary' : 'font-semibold text-foreground'}`}>
-                        {option.label}
-                        {option.value === 'auto' && (
-                          <>
-                            {' '}
-                            <span className="font-normal text-muted-foreground">(por tu rubro: {automaticStorefrontStyle})</span>
-                          </>
-                        )}
-                      </span>
-                      <span className="text-xs leading-relaxed text-muted-foreground">{option.description}</span>
-                      {isSelected && (
-                        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                          <Check aria-hidden="true" className="h-2.5 w-2.5" />
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="grid gap-4 pt-2 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="headerStyle" className="text-sm font-semibold">Estilo del header</Label>
-                <Select value={formData.headerStyle || 'glass'} onValueChange={(v) => handleChange('headerStyle', v)}>
-                  <SelectTrigger id="headerStyle" className="h-11">
-                    <SelectValue placeholder="Seleccionar estilo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="glass">Cristal (translúcido)</SelectItem>
-                    <SelectItem value="solid">Sólido blanco</SelectItem>
-                    <SelectItem value="accent">Color de marca</SelectItem>
-                    <SelectItem value="dark">Negro elegante</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  {HEADER_STYLE_HINT[formData.headerStyle || 'glass']}
-                </p>
-              </div>
-
-              <PublicVisibilityCard
-                title="Barra Superior de Contacto"
-                badgeLabel="Encabezado"
-                description="Muestra la barra superior con número de WhatsApp, teléfono comercial y horarios arriba del menú de navegación."
-                enabled={formData.showTopBar !== false}
-                onToggle={(checked) => setDraft((current) => ({ ...(current ?? formData), showTopBar: checked }))}
-                compact
-              />
-            </div>
-          </div>
-
-          {/* Live preview */}
-          <div className="flex flex-col justify-between rounded-lg border bg-muted/20 p-4 lg:col-span-5">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <div>
-                  <span className="block text-xs font-semibold text-foreground">Vista previa del sitio</span>
-                  <span className="block text-[10px] text-muted-foreground">Encabezado e inicio</span>
-                </div>
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-500" />
-                  En vivo
-                </span>
-              </div>
-
-              <div
-                className="overflow-hidden rounded-lg border bg-background shadow-sm"
-                data-color-scheme={formData.brandColor === 'custom' ? undefined : (formData.brandColor || 'blue')}
-                data-custom-brand={hasValidCustomBrand ? '' : undefined}
-                style={customBrandStyle}
-              >
-                {formData.showTopBar !== false && (
-                  <div className={`flex select-none items-center justify-between gap-2 border-b px-3 py-1 text-[9px] font-medium transition-colors ${headerPreview.topBar}`}>
-                    <div className="flex items-center gap-2">
-                      <span>Tel: {formData.phone || '+595...'}</span>
-                      <span className="hidden sm:inline">| Email: {formData.email || 'info@...'}</span>
-                    </div>
-                    <span className="truncate">Horario: {formData.hours?.weekdays || '8:00 - 18:00'}</span>
-                  </div>
-                )}
-
-                <div
-                  className={`flex select-none items-center justify-between border-b px-3 py-2 transition-all ${headerPreview.header}`}
-                >
-                  <div className="flex items-center gap-2">
-                    {formData.logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={formData.logoUrl} alt="Logo" className="h-6 w-6 rounded object-contain" />
-                    ) : (
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[8px] font-extrabold ${headerPreview.icon}`}>4G</span>
-                    )}
-                    <div className="leading-tight">
-                      <span className="block text-[10px] font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
-                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>{formData.slogan || 'Reparación y servicios'}</span>
-                    </div>
-                  </div>
-
-                  <div className="hidden items-center gap-1.5 text-[8px] font-semibold sm:flex">
-                    <span className={`rounded-md px-2 py-1 ${headerPreview.activeLink}`}>Inicio</span>
-                    <span className={`rounded-md px-2 py-1 ${headerPreview.inactiveLink}`}>Productos</span>
-                    <span className={`rounded-md px-2 py-1 ${headerPreview.inactiveLink}`}>Servicios</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className={`rounded-md px-2.5 py-1 text-[9px] font-bold shadow-sm transition-all ${
-                      formData.headerStyle === 'accent' ? 'bg-white text-primary hover:bg-white/90' : preview.cta
-                    }`}
-                  >
-                    Contacto
-                  </button>
-                </div>
-
-                <div className={`bg-gradient-to-br ${brandTheme.hero} px-4 py-5 text-white`}>
-                  <span className="inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[8px] font-semibold ring-1 ring-white/20">
-                    Servicio técnico confiable
-                  </span>
-                  <h4 className="mt-2 max-w-[260px] text-base font-bold leading-tight">
-                    Tecnología lista para acompañarte
-                  </h4>
-                  <p className={`mt-1 max-w-[290px] text-[9px] leading-relaxed ${brandTheme.text200}`}>
-                    Venta, reparación y soporte para tus dispositivos.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className={`rounded-md bg-white px-3 py-1.5 text-[9px] font-bold ${brandTheme.ctaBtn}`}>
-                      Ver productos
-                    </span>
-                    <span className="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-[9px] font-semibold text-white">
-                      Contactar
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p className="mt-3 text-center text-[10px] italic text-muted-foreground">
-              La vista usa los mismos colores de marca que el sitio público.
-            </p>
-          </div>
-        </div>
+      <SectionCard collapsible icon={Sparkles} title="Personalización visual" description="Plantilla, color y encabezado de tu tienda.">
+        <StorefrontAppearanceEditor
+          value={formData}
+          onChange={handleAppearanceChange}
+          customColorError={errors.customBrandColor}
+          businessVertical={businessVertical}
+          storePath={publishedStorePath}
+        />
       </SectionCard>
 
       {/* Contacto */}

@@ -52,6 +52,8 @@ const MAX_ITEMS = 20
 const SECTION_LABELS: Record<WebsiteMediaSection, string> = {
   logo: 'Logo',
   promotions: 'Carrusel / Banner',
+  gallery: 'Galería de trabajos',
+  team: 'Equipo',
   announcements: 'Aviso',
   brands: 'Marca',
   general: 'General',
@@ -361,7 +363,7 @@ export function WebsiteMediaLibraryDialog({
                 >
                   Todas ({items.length})
                 </button>
-                {(['logo', 'promotions', 'announcements', 'brands', 'general'] as WebsiteMediaSection[]).map((sec) => {
+                {(['logo', 'promotions', 'announcements', 'brands', 'gallery', 'team', 'general'] as WebsiteMediaSection[]).map((sec) => {
                   const secCount = items.filter((it) => it.section === sec).length
                   if (secCount === 0 && activeTab !== sec) return null
                   return (

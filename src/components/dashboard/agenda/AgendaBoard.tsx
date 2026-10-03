@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/currency'
 import { APPOINTMENT_STATUS_LABELS } from '@/lib/agenda/agenda-api'
 import { addDays, minutesOf, timeOf, todayIn, utcToZoned, weekdayOf, WEEKDAY_LABELS } from '@/lib/agenda/time'
 import { AppointmentDialog, STATUS_COLORS, type DialogState } from '@/components/dashboard/agenda/AppointmentDialog'
+import { AppointmentEventsBell } from '@/components/dashboard/agenda/AppointmentEventsBell'
 import type { AgendaData, Appointment } from '@/components/dashboard/agenda/types'
 
 const HOUR_HEIGHT = 64
@@ -82,6 +83,7 @@ export function AgendaBoard() {
   }, [])
 
   useEffect(() => { void load(date, view) }, [load, date, view])
+  const reloadBoard = useCallback(() => { void load(date, view) }, [load, date, view])
 
   const today = data ? todayIn(data.timeZone) : null
   const activeProfessionals = useMemo(() => (data?.professionals ?? []).filter((professional) => professional.is_active), [data])
@@ -148,6 +150,8 @@ export function AgendaBoard() {
           <p className="mt-1 text-sm text-muted-foreground">Turnos del día por profesional. Tocá un horario libre para agendar.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Lo que hicieron los clientes desde la tienda; si llega algo nuevo, se recarga el tablero. */}
+          <AppointmentEventsBell timeZone={data.timeZone} onNew={reloadBoard} />
           {data.settings.online_booking ? (
             <Button variant="outline" size="sm" asChild>
               <a href={`/${data.storeSlug}/turnos`} target="_blank" rel="noreferrer"><Globe className="h-4 w-4 text-emerald-600" /> Reservas online activas</a>

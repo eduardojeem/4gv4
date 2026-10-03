@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
-import { PublicHeader } from '@/components/public/PublicHeader'
+import { StorefrontHeader, StorefrontMobileNav } from '@/components/public/StorefrontShell'
 import { PublicFooter } from '@/components/public/PublicFooter'
 import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
 import { SkipToContentLink } from '@/components/ui/skip-link'
 import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
 import { CustomerLinkBanner } from '@/components/public/CustomerLinkBanner'
-import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
@@ -45,6 +44,8 @@ export default async function OrganizationPublicLayout({
   // Sin modulo de taller la tienda no ofrece seguimiento de reparaciones.
   const repairsModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
   const servicesModuleEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'services')
+  // En la plantilla «Servicios», la tienda de productos es un acceso secundario: solo si vende productos.
+  const catalogEnabled = await isOrganizationModuleEnabled(storefrontOrganization.id, 'inventory')
   const settings = await fetchWebsiteSettings()
   if (settings?.company_info) {
     if (!servicesModuleEnabled) {
@@ -78,15 +79,16 @@ export default async function OrganizationPublicLayout({
             )}
             scope={`tienda:${storefrontOrganization.slug}`}
           />
-            <PublicHeader
+            <StorefrontHeader
               initialSettings={settings}
               repairsModuleEnabled={repairsModuleEnabled}
               servicesModuleEnabled={servicesModuleEnabled}
+              catalogEnabled={catalogEnabled}
             />
             <CustomerLinkBanner storeName={settings?.company_info?.name || storefrontOrganization.name} />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
-            <StoreMobileBottomNav offersEnabled={settings?.offers_section?.enabled !== false} />
+            <StorefrontMobileNav initialSettings={settings} offersEnabled={settings?.offers_section?.enabled !== false} />
             <WhatsAppFloatButton />
             <SiteAnalyticsTracker />
           </div>

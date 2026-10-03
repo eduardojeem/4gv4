@@ -33,6 +33,13 @@ interface HeroCampaignProps {
   tracking?: StorefrontTracking
 }
 
+/** Textos por defecto de la portada cuando el dueño no cargó los suyos: «prendas» solo en Moda. */
+const DEFAULT_HERO_COPY: Partial<Record<StorefrontStyle, { badge: string; title: string; subtitle: string; cta: string }>> = {
+  tech: { badge: 'Tecnología', title: 'Lo último en tecnología', subtitle: 'Equipos, accesorios y servicio técnico con garantía y envíos a todo el país.', cta: 'Ver productos' },
+  modern: { badge: 'Nuevo', title: 'Diseño que se nota', subtitle: 'Productos elegidos con cuidado para tu día a día.', cta: 'Ver productos' },
+}
+const FASHION_HERO_COPY = { badge: 'Nueva colección & Tendencias', title: 'Tu estilo, tu mejor versión', subtitle: 'Prendas de alta calidad, envíos a todo el país y las mejores marcas para toda la familia.', cta: 'Ver la colección' }
+
 const subscribeToHydration = () => () => undefined
 const getClientHydrationSnapshot = () => true
 const getServerHydrationSnapshot = () => false
@@ -81,6 +88,7 @@ export function HeroCampaign({
   const photos = mounted ? pickCampaignProducts(data ?? [], failedImageIds) : []
   void (STOREFRONT_RADIUS_CLASS[style]);
   const isSport = style === 'sport'
+  const defaults = DEFAULT_HERO_COPY[style] ?? FASHION_HERO_COPY
 
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault()
@@ -98,7 +106,7 @@ export function HeroCampaign({
           {/* Lado izquierdo: Textos y CTAs estilo Giulio Cesare */}
           <div className="flex flex-col items-start lg:col-span-5">
             <span className={STOREFRONT_EYEBROW_CLASS[style]}>
-              {heroContent.badge || 'Nueva colección & Tendencias'}
+              {heroContent.badge || defaults.badge}
             </span>
 
             <h1
@@ -108,12 +116,11 @@ export function HeroCampaign({
                 STOREFRONT_HEADING_CLASS[style]
               )}
             >
-              {heroContent.title || 'Tu estilo, tu mejor versión'}
+              {heroContent.title || defaults.title}
             </h1>
 
             <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {heroContent.subtitle ||
-                'Prendas de alta calidad, envíos a todo el país y las mejores marcas para toda la familia.'}
+              {heroContent.subtitle || defaults.subtitle}
             </p>
 
             {/* Botones estilo píldora rounded-full idénticos a Giulio Cesare */}
@@ -130,7 +137,7 @@ export function HeroCampaign({
                   </a>
                 ) : (
                   <Link href={`${tenantPrefix}${primaryAction.href}`} className="inline-flex items-center gap-2">
-                    <span>{heroContent.ctaPrimaryText || (primaryAction.kind === 'services' ? 'Ver servicios' : 'Ver la colección')}</span>
+                    <span>{heroContent.ctaPrimaryText || (primaryAction.kind === 'services' ? 'Ver servicios' : defaults.cta)}</span>
                     <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-1" />
                   </Link>
                 )}

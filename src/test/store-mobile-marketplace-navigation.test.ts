@@ -24,7 +24,7 @@ describe('StoreMobileBottomNav offers access', () => {
   it('only displays the offers shortcut when the public offers section is enabled', () => {
     expect(navSource).toContain('offersEnabled ? [{')
     expect(layoutSource).toContain(
-      '<StoreMobileBottomNav offersEnabled={settings?.offers_section?.enabled !== false} />'
+      '<StorefrontMobileNav initialSettings={settings} offersEnabled={settings?.offers_section?.enabled !== false} />'
     )
   })
 })

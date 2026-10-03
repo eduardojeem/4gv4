@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
@@ -76,7 +77,8 @@ export function PublicHeader({
     }
   }, [pathname, searchParams])
 
-  const companyInfo = effectiveSettings?.company_info
+  // En la vista previa del editor, el header muestra el borrador sin guardar.
+  const companyInfo = useStorefrontCompanyInfo(effectiveSettings?.company_info)
   // Only show the organization's own phone — never the platform-level env fallback.
   const phoneDisplay = companyInfo?.phone || ''
   const phoneClean = phoneDisplay?.replace(/\D/g, '')

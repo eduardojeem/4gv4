@@ -26,7 +26,7 @@ export const APP_ROUTE_SLUGS = [
   'admin', 'api', 'auth', 'carrito', 'cliente', 'dashboard', 'debug',
   'empresas', 'forbidden', 'inicio', 'login', 'marketplace', 'mis-reparaciones',
   'ofertas', 'perfil', 'productos', 'products', 'register', 'saas', 'servicios',
-  'setup', 'setup-access', 'superadmin', 'track',
+  'setup', 'setup-access', 'superadmin', 'track', 'turnos',
   // Enlaces que se mandan al cliente: presupuesto y turno reservado.
   'presupuesto', 'turno',
 ] as const

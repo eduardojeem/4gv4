@@ -30,6 +30,7 @@ export function isBusinessVertical(value: unknown): value is BusinessVertical {
 export const STARTER_CATEGORIES: Record<BusinessVertical, string[]> = {
   electronics: ['Celulares', 'Accesorios', 'Cargadores', 'Carcasas y Fundas', 'Audio y Video', 'Repuestos'],
   clothing: ['Mujer', 'Hombre', 'Niños', 'Calzados', 'Accesorios'],
+  barbershop: ['Cortes', 'Barba', 'Color', 'Tratamientos', 'Productos'],
   cosmetics: ['Maquillaje', 'Cuidado de la piel', 'Cuidado del cabello', 'Perfumes', 'Accesorios'],
   food: ['Comidas', 'Bebidas', 'Postres', 'Combos'],
   hardware: ['Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Construcción'],

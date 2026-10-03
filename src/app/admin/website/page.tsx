@@ -5,6 +5,8 @@ import { WebsiteEditorDirtyContext } from '@/components/admin/website/website-ed
 import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
 import { ServicesManager } from '@/components/admin/website/ServicesManager'
+import { BookingSectionEditor } from '@/components/admin/website/BookingSectionEditor'
+import { GalleryEditor } from '@/components/admin/website/GalleryEditor'
 import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
 import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSettingsEditor'
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
@@ -248,6 +250,8 @@ export default function WebsiteAdminPage() {
             <ServicesManager orgSlug={orgSlug} servicesModuleEnabled={servicesModuleEnabled} />
           </section>
         )}
+        {tab === 'gallery' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="gallery" /><GalleryEditor /></section>}
+        {tab === 'booking' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="booking" /><BookingSectionEditor orgSlug={orgSlug} /></section>}
         {tab === 'process' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="process" /><ProcessStepsEditor /></section>}
         {tab === 'checkout' && <section aria-label="Editor de sección"><WebsiteSectionIntro section="checkout" /><CheckoutSettingsEditor /></section>}
         </div>

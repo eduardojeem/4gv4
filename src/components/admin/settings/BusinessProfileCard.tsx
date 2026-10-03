@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useState, type ElementType } from 'react'
-import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
+import { moduleDisplayHint, moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
+import { dashboardNavGroups } from '@/config/dashboard-navigation'
 import {
   AlertTriangle,
   ArrowUpRight,
   Boxes,
-  Building2, CheckCircle2,
+  Building2, CalendarClock, CheckCircle2, LayoutList,
   Coins,
   CreditCard,
   FileText,
@@ -47,6 +48,7 @@ import { cn } from '@/lib/utils'
 const verticalLabels: Record<BusinessVertical, string> = {
   general: 'Comercio general',
   clothing: 'Ropa y moda',
+  barbershop: 'Barbería y peluquería',
   cosmetics: 'Cosmética y belleza',
   electronics: 'Electrónica y tecnología',
   food: 'Alimentos',
@@ -62,6 +64,18 @@ const modelLabels: Record<OperatingModel, string> = {
   mixed: 'Negocio mixto',
 }
 
+/** Qué cambia con cada forma de trabajo, para elegir sin adivinar. */
+const modelHints: Record<OperatingModel, string> = {
+  retail: 'Vendés productos al cliente final: caja, catálogo y tienda online.',
+  wholesale: 'Vendés por volumen: listas de precios, créditos y pedidos grandes.',
+  service: 'Vendés tu tiempo: agenda de turnos, reservas online y cobro del servicio en caja.',
+  repair: 'Recibís equipos: órdenes de taller, diagnóstico, repuestos y seguimiento.',
+  mixed: 'Combinás venta de productos con servicios o taller.',
+}
+
+/** Rubros que trabajan con turnos: al elegirlos se propone «Prestación de servicios». */
+const SERVICE_FIRST_VERTICALS = new Set<BusinessVertical>(['barbershop'])
+
 // Los mismos nombres que el cliente ve en su plan (catálogo de planes).
 const moduleLabels = Object.fromEntries(
   ORGANIZATION_MODULES.map((module) => [module, moduleDisplayName(module)]),
@@ -75,7 +89,7 @@ const moduleIcons: Record<OrganizationModule, ElementType> = {
   orders: ShoppingBag,
   ecommerce: Globe,
   repairs: Wrench,
-  services: FileText,
+  services: CalendarClock,
   credits: Coins,
   delivery: Truck,
   analytics: TrendingUp,
@@ -117,6 +131,23 @@ export function BusinessProfileCard() {
     })
     return plans.length > 0 ? [{ module, plans }] : []
   })
+  // El menú del panel que se vería con lo marcado (los permisos del rol se aplican aparte).
+  const visibleMenu = useMemo(
+    () => dashboardNavGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => !item.module || (enabled.includes(item.module) && entitled.has(item.module))),
+      }))
+      .filter((group) => group.items.length > 0),
+    [enabled, entitled],
+  )
+  const changeVertical = (next: BusinessVertical) => {
+    setVertical(next)
+    if (SERVICE_FIRST_VERTICALS.has(next) && model !== 'service' && model !== 'mixed') {
+      setModel('service')
+      toast.info('Te propusimos «Prestación de servicios»: es como trabaja este rubro. Podés cambiarla.')
+    }
+  }
   const dirty = vertical !== profile.businessVertical
     || model !== profile.operatingModel
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
@@ -248,7 +279,7 @@ export function BusinessProfileCard() {
             <Label htmlFor="business-vertical" className="text-xs font-medium text-foreground">
               Rubro
             </Label>
-            <Select value={vertical} onValueChange={value => setVertical(value as BusinessVertical)}>
+            <Select value={vertical} onValueChange={value => changeVertical(value as BusinessVertical)}>
               <SelectTrigger id="business-vertical" aria-label="Rubro" className="h-10 border-border/80 bg-background transition-colors hover:border-border">
                 <SelectValue />
               </SelectTrigger>
@@ -275,7 +306,7 @@ export function BusinessProfileCard() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-muted-foreground">Ajusta el flujo entre ventas directas, órdenes o servicios.</p>
+            <p className="text-[11px] text-muted-foreground">{modelHints[model]}</p>
           </div>
         </div>
 
@@ -471,6 +502,9 @@ export function BusinessProfileCard() {
                       <IconComponent className={cn('h-4 w-4 shrink-0', checked ? 'text-primary' : 'text-muted-foreground')} />
                       {moduleLabels[module]}
                     </span>
+                    {moduleDisplayHint(module) && (
+                      <span className="mt-1 block text-xs leading-snug text-foreground/80">{moduleDisplayHint(module)}</span>
+                    )}
                     <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
                       {availabilityText}
                     </span>
@@ -492,6 +526,39 @@ export function BusinessProfileCard() {
             })}
           </div>
         </div>
+
+        {/* Vista previa del menú: lo que el equipo va a ver en el panel con esta configuración. */}
+        <section aria-labelledby="visible-menu-title" className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <LayoutList className="h-3.5 w-3.5" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 id="visible-menu-title" className="text-sm font-semibold text-foreground">Así queda tu menú</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Lo que vas a ver en el panel con las herramientas marcadas. Cada persona ve además según su rol.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {visibleMenu.map((group) => (
+              <div key={group.label} className="rounded-lg border bg-background/80 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                <ul className="mt-2 space-y-1.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <li key={item.key} className="flex items-center gap-2 text-sm text-foreground">
+                        <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                        <span className="truncate">{item.label}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* Footer actions */}
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">

@@ -261,6 +261,10 @@ export function ProductCard(props: ProductCardProps) {
           storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
           storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
+          storefrontStyle === 'tech' && 'rounded-xl border border-cyan-500/20 shadow-xs hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/10',
+          storefrontStyle === 'market' && 'rounded-md border border-border/70 shadow-2xs hover:border-primary/60 hover:shadow-xs',
+          storefrontStyle === 'modern' && 'rounded-2xl border border-border/40 shadow-xs hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
+          storefrontStyle === 'services' && 'rounded-2xl border border-border/50 shadow-xs hover:border-primary/40 hover:shadow-lg',
           !isInStock && 'opacity-60 grayscale-[30%]'
         )}
       >
@@ -372,7 +376,11 @@ export function ProductCard(props: ProductCardProps) {
             'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
             storefrontStyle === 'classic' && 'font-semibold',
             storefrontStyle === 'fashion' && 'font-bold group-hover:text-primary transition-colors',
-            storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight'
+            storefrontStyle === 'sport' && 'font-bold uppercase tracking-tight',
+            storefrontStyle === 'tech' && 'font-semibold tracking-tight group-hover:text-primary transition-colors',
+            storefrontStyle === 'market' && 'font-bold text-xs sm:text-sm',
+            storefrontStyle === 'modern' && 'font-bold tracking-tight text-foreground/90',
+            storefrontStyle === 'services' && 'font-semibold'
           )}>
             {product.name}
           </h3>
@@ -394,6 +402,9 @@ export function ProductCard(props: ProductCardProps) {
             <p
               className={cn(
                 'text-lg font-bold leading-tight',
+                // En un súper el precio decide: más grande. En deporte, con la misma tipografía de los títulos.
+                storefrontStyle === 'market' && 'text-xl font-black tracking-tight',
+                storefrontStyle === 'sport' && 'font-black italic tracking-tight',
                 hasOffer || isWholesaleDiscount
                   ? 'text-rose-600 dark:text-rose-400'
                   : 'text-foreground'

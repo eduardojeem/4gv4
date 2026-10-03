@@ -9,7 +9,14 @@ import { ArrowRight, Sparkles } from 'lucide-react'
 import { resolveProductImageUrl } from '@/lib/images'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { usePublicCategories } from '@/hooks/usePublicCategories'
-import type { StorefrontStyle } from '@/lib/website/storefront-style'
+import { STOREFRONT_HEADING_CLASS, STOREFRONT_RADIUS_CLASS, type StorefrontStyle } from '@/lib/website/storefront-style'
+import { cn } from '@/lib/utils'
+
+const COLLECTION_COPY: Partial<Record<StorefrontStyle, { eyebrow: string; title: string; text: string; cta: string }>> = {
+  fashion: { eyebrow: 'Colecciones', title: 'Comprá por categoría', text: 'Encontrá el corte, modelo y color ideal para tu estilo.', cta: 'Ver colección' },
+  sport: { eyebrow: 'Equipate', title: 'Comprá por categoría', text: 'Todo lo que necesitás para entrenar, ordenado por tipo.', cta: 'Ver todo' },
+}
+const DEFAULT_COLLECTION_COPY = { eyebrow: 'Explorá nuestras categorías', title: 'Categorías destacadas', text: 'Recorré la tienda por tipo de producto.', cta: 'Ver categoría' }
 import type { PublicProduct } from '@/types/public'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
 
@@ -33,7 +40,7 @@ interface CollectionItem {
   count?: number
 }
 
-export function CategoryCollections({ style: _style }: { style: Exclude<StorefrontStyle, 'classic'> }) {
+export function CategoryCollections({ style }: { style: Exclude<StorefrontStyle, 'classic'> }) {
   const mounted = useHydrated()
 
   const pathname = usePathname()
@@ -57,6 +64,8 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
     )
   }
 
+  const copy = COLLECTION_COPY[style] ?? DEFAULT_COLLECTION_COPY
+  const sport = style === 'sport'
   const covers = categoryCoverImages(products ?? [])
   const validDbCategories = categories.filter((c) => (c.productCount ?? 0) > 0)
   if (validDbCategories.length === 0) return null
@@ -70,7 +79,7 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
     return {
       id: cat.id,
       name: cat.name,
-      tag: cat.name.toLowerCase().includes('corporat') ? 'Empresas' : 'Colección',
+      tag: cat.name.toLowerCase().includes('corporat') ? 'Empresas' : undefined,
       href: `${tenantPrefix}/productos?category_id=${encodeURIComponent(cat.id)}`,
       imageUrl: cover ? resolveProductImageUrl(cover) : null,
       count: cat.productCount,
@@ -84,16 +93,16 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
         <div className="mb-8 sm:mb-12 flex flex-col items-center text-center">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-primary mb-2">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Explorá nuestras colecciones
+            {copy.eyebrow}
           </span>
           <h2
             id="categorias-principales-titulo"
-            className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground"
+            className={cn('text-2xl sm:text-3xl lg:text-4xl text-foreground', STOREFRONT_HEADING_CLASS[style])}
           >
-            Colecciones Destacadas
+            {copy.title}
           </h2>
           <p className="mt-2 text-xs sm:text-sm text-muted-foreground max-w-lg">
-            Encontrá el corte, modelo y color ideal para tu estilo en nuestras líneas exclusivas.
+            {copy.text}
           </p>
         </div>
 
@@ -104,7 +113,7 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
               <div key={col.id} className="group relative">
                 <Link
                   href={col.href}
-                  className="relative block aspect-[4/5] overflow-hidden rounded-2xl border border-border/60 bg-muted/40 shadow-sm transition-all duration-500 hover:shadow-xl hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className={cn('relative block aspect-[4/5] overflow-hidden border border-border/60', STOREFRONT_RADIUS_CLASS[style], ' bg-muted/40 shadow-sm transition-all duration-500 hover:shadow-xl hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary')}
                 >
                   {col.imageUrl && (
                     <Image
@@ -131,7 +140,7 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
 
                   {/* Contenido en blanco abajo */}
                   <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 flex flex-col justify-end text-white z-10">
-                    <h3 className="text-base sm:text-lg font-bold leading-tight text-white group-hover:text-white transition-colors line-clamp-1">
+                    <h3 className={cn('line-clamp-1 text-base leading-tight text-white sm:text-lg', sport ? 'w-fit -skew-x-6 bg-primary px-2 py-0.5 font-black uppercase italic text-primary-foreground' : style === 'fashion' ? 'font-serif tracking-wide' : 'font-bold')}>
                       {col.name}
                     </h3>
 
@@ -142,7 +151,7 @@ export function CategoryCollections({ style: _style }: { style: Exclude<Storefro
                     )}
 
                     <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-white/90 group-hover:text-white group-hover:translate-x-1 transition-all" aria-hidden="true">
-                      <span>Ver colección</span>
+                      <span>{copy.cta}</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>

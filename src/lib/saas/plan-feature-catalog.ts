@@ -40,7 +40,7 @@ export const PLAN_FEATURES: readonly PlanFeatureDefinition[] = [
   { key: 'inventory', label: 'Inventario', module: 'inventory', group: 'operacion', hint: 'Productos y stock' },
   { key: 'inventoryAdmin', label: 'Inventario avanzado', module: 'inventory_admin', group: 'operacion', hint: 'Proveedores, stock por sucursal y movimientos' },
   { key: 'repairs', label: 'Módulo de Reparaciones', module: 'repairs', group: 'operacion', hint: 'Órdenes de taller y seguimiento' },
-  { key: 'services', label: 'Servicios', module: 'services', group: 'operacion', hint: 'Servicios que no son productos' },
+  { key: 'services', label: 'Servicios', module: 'services', group: 'operacion', hint: 'Agenda de turnos, reservas online y catálogo de servicios' },
   { key: 'crm', label: 'CRM / Gestión de clientes', module: 'crm', group: 'operacion', hint: 'Fichas e historial de clientes' },
   { key: 'analytics', label: 'Analytics avanzado', module: 'analytics', group: 'gestion', hint: 'Ventas, márgenes, rankings y comparativas (Analytics)' },
   { key: 'webAnalytics', label: 'Visitas web', module: 'web_analytics', group: 'gestion', hint: 'Visitas de la tienda online, productos más vistos y contactos por WhatsApp' },

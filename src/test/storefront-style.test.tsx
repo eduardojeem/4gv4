@@ -52,8 +52,11 @@ import { validateSetting } from '@/lib/validation/website-settings'
 import {
   STOREFRONT_STYLE_PREFERENCES,
   resolveStorefrontStyle,
+  suggestStorefrontAppearance,
   type StorefrontStyle,
 } from '@/lib/website/storefront-style'
+import { parseStorefrontPreviewDraft } from '@/lib/website/storefront-preview-message'
+import { buildServiceMenu } from '@/components/public/inicio/ServicesHome'
 import type { PublicProduct } from '@/types/public'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
@@ -321,7 +324,7 @@ describe('«Aspecto de la tienda» en Sitio Web', () => {
   it('dice qué aspecto elige Automático para el rubro', () => {
     state.vertical = 'clothing'
     render(<CompanyInfoForm />)
-    expect(screen.getByRole('button', { name: /Automático \(por tu rubro: Moda\)/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^Automático Según tu rubro: Moda/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('guardar envía el aspecto elegido', async () => {
@@ -333,5 +336,156 @@ describe('«Aspecto de la tienda» en Sitio Web', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.anything()))
     const call = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/admin/website/sync-company')
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ storefrontStyle: 'sport' })
+  })
+
+  it('permite elegir temas avanzados (Tecnología, Supermercado, Moderno)', async () => {
+    render(<CompanyInfoForm />)
+    const techBtn = screen.getByRole('button', { name: /^Tecnología/ })
+    fireEvent.click(techBtn)
+    expect(techBtn).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.anything()))
+    const call = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/admin/website/sync-company')
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ storefrontStyle: 'tech' })
+  })
+
+  it('la sugerencia aplica plantilla, color y encabezado de una vez', async () => {
+    state.vertical = 'clothing'
+    render(<CompanyInfoForm />)
+    expect(screen.getByText(/Tu rubro es indumentaria/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar sugerencia' }))
+    expect(screen.queryByRole('button', { name: 'Aplicar sugerencia' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.anything()))
+    const call = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/admin/website/sync-company')
+    // Automático ya da Moda para ropa: se queda en Automático para seguir al rubro.
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ storefrontStyle: 'auto', brandColor: 'rose', headerStyle: 'solid' })
+  })
+
+  it('el encabezado y la barra de contacto se eligen con un clic', async () => {
+    render(<CompanyInfoForm />)
+    const encabezado = within(screen.getByRole('group', { name: 'Estilo del encabezado' }))
+    fireEvent.click(encabezado.getByRole('button', { name: /^Oscuro/ }))
+    expect(encabezado.getByRole('button', { name: /^Oscuro/ })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('switch', { name: 'Barra de contacto' }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.anything()))
+    const call = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/admin/website/sync-company')
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ headerStyle: 'dark', showTopBar: false })
+  })
+
+  it('sin tienda publicada, el modal compara plantillas sin abrir una página que no existe', () => {
+    render(<CompanyInfoForm />)
+    fireEvent.click(screen.getByRole('button', { name: /Diseñar en mi tienda/ }))
+    const modal = within(screen.getByRole('dialog'))
+    expect(modal.getByText('Tu tienda todavía no está publicada')).toBeInTheDocument()
+    expect(modal.queryByTitle('Vista previa de tu tienda')).not.toBeInTheDocument()
+  })
+
+  it('con la tienda publicada, el modal muestra la tienda real y aplica la plantilla elegida', async () => {
+    const settings = state.adminSettings as { company_info: Record<string, unknown> }
+    settings.company_info = { ...settings.company_info, storefrontPublic: true }
+    render(<CompanyInfoForm />)
+    fireEvent.click(screen.getByRole('button', { name: /Diseñar en mi tienda/ }))
+    const modal = within(screen.getByRole('dialog'))
+    expect(modal.getByTitle('Vista previa de tu tienda')).toHaveAttribute('src', '/urbana/inicio')
+
+    fireEvent.click(modal.getByRole('radio', { name: /^Supermercado/ }))
+    fireEvent.click(modal.getByRole('button', { name: 'Aplicar cambios' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /^Supermercado/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('en el modal también se editan color, encabezado y barra, y se aplican juntos', async () => {
+    render(<CompanyInfoForm />)
+    fireEvent.click(screen.getByRole('button', { name: /Diseñar en mi tienda/ }))
+    const modal = within(screen.getByRole('dialog'))
+    expect(modal.getByRole('button', { name: 'Sin cambios' })).toBeDisabled()
+
+    fireEvent.click(modal.getByRole('tab', { name: 'Color y encabezado' }))
+    fireEvent.click(modal.getByRole('button', { name: /Usar color Esmeralda/ }))
+    fireEvent.click(within(modal.getByRole('group', { name: 'Estilo del encabezado' })).getByRole('button', { name: /^Color de marca/ }))
+    fireEvent.click(modal.getByRole('switch', { name: 'Barra de contacto' }))
+    fireEvent.click(modal.getByRole('button', { name: 'Aplicar cambios' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/admin/website/sync-company', expect.anything()))
+    const call = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/admin/website/sync-company')
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ brandColor: 'emerald', headerStyle: 'accent', showTopBar: false })
+  })
+
+  it('Cancelar descarta lo probado en el modal', () => {
+    render(<CompanyInfoForm />)
+    fireEvent.click(screen.getByRole('button', { name: /Diseñar en mi tienda/ }))
+    const modal = within(screen.getByRole('dialog'))
+    fireEvent.click(modal.getByRole('radio', { name: /^Servicios/ }))
+    fireEvent.click(modal.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.getByRole('button', { name: /^Servicios/ })).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+
+describe('sugerencia de aspecto', () => {
+  it('el rubro manda', () => {
+    expect(suggestStorefrontAppearance({ businessVertical: 'electronics', name: 'Boutique Ana' })).toMatchObject({ style: 'tech', headerStyle: 'dark' })
+    expect(suggestStorefrontAppearance({ businessVertical: 'food' })).toMatchObject({ style: 'market', brandColor: 'emerald' })
+  })
+
+  it('con un rubro genérico, busca pistas en el nombre y la descripción (con acentos)', () => {
+    expect(suggestStorefrontAppearance({ businessVertical: 'general', name: 'Celulares Pepe' }).style).toBe('tech')
+    expect(suggestStorefrontAppearance({ businessVertical: 'other', description: 'Somos un café de especialidad' })).toMatchObject({
+      style: 'modern',
+      reason: 'Tu negocio menciona «café».',
+    })
+    expect(suggestStorefrontAppearance({ businessVertical: 'general', name: 'Cafetería' }).style).toBe('classic')
+  })
+
+  it('peluquerías y barberías van a la plantilla de Servicios', () => {
+    expect(suggestStorefrontAppearance({ businessVertical: 'general', name: 'Barbería Don Pepe' })).toMatchObject({ style: 'services', headerStyle: 'dark' })
+    expect(suggestStorefrontAppearance({ businessVertical: 'other', description: 'Peluquería y uñas esculpidas' }).style).toBe('services')
+  })
+
+  it('sin pistas, sugiere la plantilla clásica', () => {
+    expect(suggestStorefrontAppearance({ businessVertical: 'general', name: 'Comercial López' })).toMatchObject({ style: 'classic', brandColor: 'blue' })
+  })
+})
+
+describe('mensajes de la vista previa', () => {
+  const valido = { type: 'STOREFRONT_PREVIEW_UPDATE', style: 'sport', brandColor: 'red', headerStyle: 'dark', showTopBar: true }
+
+  it('acepta un borrador completo', () => {
+    expect(parseStorefrontPreviewDraft(valido)).toEqual({ style: 'sport', brandColor: 'red', headerStyle: 'dark', showTopBar: true })
+  })
+
+  it('rechaza cualquier valor fuera de lo permitido', () => {
+    expect(parseStorefrontPreviewDraft({ ...valido, style: 'auto' })).toBeNull()
+    expect(parseStorefrontPreviewDraft({ ...valido, brandColor: 'url(javascript:1)' })).toBeNull()
+    expect(parseStorefrontPreviewDraft({ ...valido, headerStyle: 'neon' })).toBeNull()
+    expect(parseStorefrontPreviewDraft({ ...valido, type: 'OTRO' })).toBeNull()
+    expect(parseStorefrontPreviewDraft({ ...valido, brandColor: 'custom', customBrandColor: 'red;}' })).toMatchObject({ customBrandColor: undefined })
+  })
+})
+
+describe('carta de la plantilla Servicios', () => {
+  it('con turnos online, cada servicio se reserva directo y muestra duración', () => {
+    const menu = buildServiceMenu(
+      { currency: 'PYG', professionals: [], services: [{ id: 's1', name: 'Corte', duration: 45, price: 50000 }, { id: 's2', name: 'Color', duration: 90, price: null }] },
+      [],
+      '/salon-ana'
+    )
+    expect(menu[0]).toMatchObject({ name: 'Corte', duration: '45 min', bookingHref: '/salon-ana/turnos?servicio=s1' })
+    expect(menu[1]).toMatchObject({ duration: '1 h 30 min', price: undefined })
+  })
+
+  it('sin turnos online, usa los servicios del sitio web activos y sin botón de reserva', () => {
+    const menu = buildServiceMenu(null, [
+      { id: 'a', title: 'Manicura', description: 'Esmaltado', icon: '', color: '', benefits: [], price: 'Desde 40.000', duration: '40 min' },
+      { id: 'b', title: 'Oculto', description: '', icon: '', color: '', benefits: [], active: false },
+    ], '/salon-ana')
+    expect(menu).toEqual([{ id: 'a', name: 'Manicura', detail: 'Esmaltado', duration: '40 min', price: 'Desde 40.000' }])
   })
 })

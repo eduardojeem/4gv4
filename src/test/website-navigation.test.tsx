@@ -4,11 +4,11 @@ import { WebsiteNavigation } from '@/components/admin/website/WebsiteNavigation'
 import { ServicesPublicationStatus } from '@/components/admin/website/ServicesPublicationStatus'
 
 describe('website navigation', () => {
-  it('groups all ten sections and requests navigation from the mobile selector', () => {
+  it('groups all twelve sections and requests navigation from the mobile selector', () => {
     const change = vi.fn()
     render(<WebsiteNavigation value="company" onChange={change} />)
-    // Diez con el aviso emergente, que se agregó después.
-    expect(screen.getAllByRole('option')).toHaveLength(10)
+    // Doce: el aviso emergente, las reservas online y la galería se agregaron después.
+    expect(screen.getAllByRole('option')).toHaveLength(12)
     fireEvent.change(screen.getByLabelText('Editar sección'), { target: { value: 'services' } })
     expect(change).toHaveBeenCalledWith('services')
     expect(screen.getByLabelText('Editar sección')).toHaveValue('company')

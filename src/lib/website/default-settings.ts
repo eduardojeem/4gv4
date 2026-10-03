@@ -83,6 +83,47 @@ export function getWebsiteDefaultsForVertical(
     }
   }
 
+  if (vertical === 'barbershop') {
+    return {
+      company_info: {
+        // La plantilla queda en «Automático», que para este rubro es «Servicios».
+        servicesPageEnabled: true,
+        repairTrackingEnabled: false,
+        processSectionEnabled: true,
+      },
+      hero_content: {
+        enabled: true,
+        badge: 'Reservá tu turno',
+        title: 'Tu estilo, en las mejores manos',
+        subtitle: 'Cortes, barba y color. Elegí el servicio, el día y el horario que te quede cómodo.',
+        trustBadges: ['Turnos online', 'Profesionales con experiencia', 'Productos para tu cuidado'],
+        ctaPrimaryText: 'Reservar turno',
+        ctaSecondaryText: 'Consultar por WhatsApp',
+        trackRepairText: '¿Hiciste una compra? Rastreá tu pedido',
+      },
+      hero_stats: {
+        // Apagadas: son números de ejemplo y una tienda nueva no tiene ni una
+        // venta. Se muestran cuando la tienda carga los suyos y las activa.
+        enabled: false,
+        repairs: '5.000+',
+        satisfaction: '4.9★',
+        avgTime: '30 min',
+      },
+      booking_section: {
+        enabled: true,
+        title: 'Reservá tu turno',
+        subtitle: 'Elegí el servicio, quién te atiende y el horario. Te confirmamos por WhatsApp.',
+        showTeam: true,
+      },
+      process_steps: [
+        { id: 'step-1', number: 1, title: 'Elegí tu servicio', description: 'Corte, barba, color o tratamiento, con precio y duración a la vista.' },
+        { id: 'step-2', number: 2, title: 'Reservá tu turno', description: 'Elegí el día, el horario y quién te atiende.' },
+        { id: 'step-3', number: 3, title: 'Te confirmamos', description: 'Recibís la confirmación y un recordatorio por WhatsApp.' },
+        { id: 'step-4', number: 4, title: 'Vení y relajate', description: 'Llegá unos minutos antes y nosotros nos ocupamos del resto.' },
+      ],
+    }
+  }
+
   if (vertical === 'food') {
     return {
       company_info: {
@@ -379,6 +420,19 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
         { count: 12, rate: 20 },
       ],
     },
+    // Apagada salvo en rubros que viven de turnos (ver getWebsiteDefaultsForVertical).
+    booking_section: {
+      enabled: false,
+      title: 'Reservá tu turno',
+      subtitle: 'Elegí el servicio, el día y el horario que te quede cómodo.',
+      showTeam: true,
+    },
+    gallery_section: {
+      enabled: true,
+      title: 'Nuestros trabajos',
+      subtitle: 'Algunos de los cortes, colores y peinados que hicimos.',
+      images: [],
+    },
     services_section: {
       badge: 'Lo que hacemos',
       title: 'Nuestros servicios',
@@ -455,6 +509,8 @@ export function applyWebsiteSettingsDefaults(
   const brandsSection = (settings.brands_section || {}) as Partial<WebsiteSettings['brands_section']>
   const productCreditDefaults = (settings.product_credit_defaults || {}) as Partial<WebsiteSettings['product_credit_defaults']>
   const servicesSection = (settings.services_section || {}) as Partial<WebsiteSettings['services_section']>
+  const bookingSection = (settings.booking_section || {}) as Partial<WebsiteSettings['booking_section']>
+  const gallerySection = (settings.gallery_section || {}) as Partial<WebsiteSettings['gallery_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
 
   return {
@@ -524,6 +580,15 @@ export function applyWebsiteSettingsDefaults(
     services_section: {
       ...defaults.services_section,
       ...servicesSection
+    },
+    booking_section: {
+      ...defaults.booking_section!,
+      ...bookingSection,
+    },
+    gallery_section: {
+      ...defaults.gallery_section!,
+      ...gallerySection,
+      images: Array.isArray(gallerySection?.images) ? gallerySection.images : [],
     },
     services: Array.isArray(settings.services) ? settings.services : defaults.services,
     testimonials: Array.isArray(settings.testimonials) ? settings.testimonials : defaults.testimonials,

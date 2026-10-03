@@ -304,6 +304,8 @@ export async function POST(request: Request) {
     { key: 'hero_content', value: verticalDefaults.hero_content },
     { key: 'hero_stats', value: verticalDefaults.hero_stats },
     { key: 'process_steps', value: verticalDefaults.process_steps },
+    // Barberías y otros rubros de turnos arrancan con la reserva en el inicio.
+    { key: 'booking_section', value: verticalDefaults.booking_section },
     { key: 'checkout', value: starterCheckout },
     { key: 'trust_bar', value: buildStarterTrustBar(starterCheckout) },
   ].filter((row) => row.value !== undefined)

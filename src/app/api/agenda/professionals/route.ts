@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { PROFESSIONAL_COLUMNS } from '@/lib/agenda/agenda-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,9 +15,12 @@ const professionalSchema = z.object({
   phone: z.string().trim().max(40).nullable().optional(),
   is_active: z.boolean().optional(),
   sort_order: z.number().int().min(0).max(1000).optional(),
+  // Se muestran en la tienda: foto (URL https o ruta propia) y especialidad.
+  photo_url: z.string().trim().max(500).refine((value) => value === '' || value.startsWith('https://') || value.startsWith('/'), 'La foto no es válida').nullable().optional(),
+  specialty: z.string().trim().max(80).nullable().optional(),
 })
 
-const COLUMNS = 'id, name, color, phone, is_active, sort_order'
+const COLUMNS = PROFESSIONAL_COLUMNS
 
 export const POST = withTenantAuth(guard, async (request, { organization }) => {
   const parsed = professionalSchema.safeParse(await request.json().catch(() => null))
@@ -43,11 +47,61 @@ export const PATCH = withTenantAuth(guard, async (request, { organization }) => 
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('agenda_professionals')
-    .update({ ...parsed.data, ...('phone' in parsed.data ? { phone: parsed.data.phone || null } : {}) })
+    .update({
+      ...parsed.data,
+      ...('phone' in parsed.data ? { phone: parsed.data.phone || null } : {}),
+      ...('photo_url' in parsed.data ? { photo_url: parsed.data.photo_url || null } : {}),
+      ...('specialty' in parsed.data ? { specialty: parsed.data.specialty || null } : {}),
+    })
     .eq('id', id.data)
     .eq('organization_id', organization.id)
     .select(COLUMNS)
     .maybeSingle()
   if (error || !data) return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
   return NextResponse.json({ professional: data })
+})
+
+const servicesSchema = z.object({
+  id: z.string().uuid(),
+  // Vacío = hace todos los servicios.
+  service_ids: z.array(z.string().uuid()).max(500),
+})
+
+/** Qué servicios hace un profesional: se reemplaza la lista entera. */
+export const PUT = withTenantAuth(guard, async (request, { organization }) => {
+  const parsed = servicesSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos' }, { status: 400 })
+  const supabase = await createClient()
+  const { id, service_ids } = parsed.data
+
+  const { data: professional } = await supabase
+    .from('agenda_professionals')
+    .select('id')
+    .eq('id', id)
+    .eq('organization_id', organization.id)
+    .maybeSingle()
+  if (!professional) return NextResponse.json({ error: 'Profesional no encontrado' }, { status: 404 })
+
+  const { error: deleteError } = await supabase
+    .from('agenda_professional_services')
+    .delete()
+    .eq('professional_id', id)
+    .eq('organization_id', organization.id)
+  if (deleteError) {
+    logger.error('No se pudieron actualizar los servicios del profesional', { error: deleteError.message })
+    const missing = /does not exist|schema cache/i.test(deleteError.message)
+    return NextResponse.json({ error: missing ? 'Falta aplicar la migración de servicios por profesional.' : 'No se pudo guardar' }, { status: 500 })
+  }
+
+  const unique = Array.from(new Set(service_ids))
+  if (unique.length) {
+    const { error } = await supabase
+      .from('agenda_professional_services')
+      .insert(unique.map((productId) => ({ organization_id: organization.id, professional_id: id, product_id: productId })))
+    if (error) {
+      logger.error('No se pudieron guardar los servicios del profesional', { error: error.message })
+      return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
+    }
+  }
+  return NextResponse.json({ professional: { id, service_ids: unique } })
 })

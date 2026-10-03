@@ -111,7 +111,7 @@ export function OrganizationReviews({ hasRepairs = false }: { hasRepairs?: boole
   }
 
   return (
-    <section id="resenas" className="border-t bg-muted/35 py-14 md:py-20">
+    <section id="resenas" className="scroll-mt-20 border-t bg-muted/35 py-14 md:py-20">
       <div className="container mx-auto max-w-6xl px-4">
         <header className="mx-auto max-w-2xl text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">

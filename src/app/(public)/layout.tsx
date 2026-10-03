@@ -1,12 +1,11 @@
 import { Metadata } from 'next'
-import { PublicHeader } from '@/components/public/PublicHeader'
+import { StorefrontHeader, StorefrontMobileNav } from '@/components/public/StorefrontShell'
 import { PublicFooter } from '@/components/public/PublicFooter'
 import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
 import { SkipToContentLink } from '@/components/ui/skip-link'
 import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
-import { StoreMobileBottomNav } from '@/components/public/StoreMobileBottomNav'
 import { StorefrontStyleProvider } from '@/components/public/storefront-style-context'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { SiteAnalyticsTracker } from '@/components/analytics/SiteAnalyticsTracker'
@@ -61,6 +60,9 @@ export default async function PublicLayout({
   const repairsModuleEnabled = storefrontOrganization
     ? await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')
     : true
+  const catalogEnabled = storefrontOrganization
+    ? await isOrganizationModuleEnabled(storefrontOrganization.id, 'inventory')
+    : true
   // El aspecto que eligio el dueño o, en «Automático», el de su rubro.
   const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization?.business_vertical)
 
@@ -85,10 +87,10 @@ export default async function PublicLayout({
             )}
             scope={`tienda:${storefrontOrganization?.slug ?? settings?.company_info?.slug ?? 'tienda'}`}
           />
-            <PublicHeader initialSettings={settings} />
+            <StorefrontHeader initialSettings={settings} catalogEnabled={catalogEnabled} />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
-            <StoreMobileBottomNav />
+            <StorefrontMobileNav initialSettings={settings} />
             <WhatsAppFloatButton />
             {storefrontOrganization && <SiteAnalyticsTracker tenantSlug={storefrontOrganization.slug} />}
           </div>

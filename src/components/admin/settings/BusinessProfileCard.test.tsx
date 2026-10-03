@@ -125,4 +125,29 @@ describe('BusinessProfileCard', () => {
     expect(screen.getByRole('button', { name: 'Activar recomendados incluidos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Activar todo lo incluido' })).toBeInTheDocument()
   })
+
+  it('una barbería propone prestación de servicios y muestra la agenda en el menú', async () => {
+    const user = userEvent.setup()
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        entitledModules: ['inventory', 'pos', 'crm', 'services'],
+        enabledModules: ['inventory', 'pos', 'crm', 'services'],
+        effectiveModules: ['inventory', 'pos', 'crm', 'services'],
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    await user.click(screen.getByLabelText('Rubro'))
+    await user.click(screen.getByRole('option', { name: 'Barbería y peluquería' }))
+    expect(screen.getByLabelText('Forma de trabajo')).toHaveTextContent('Prestación de servicios')
+    expect(screen.getByText(/agenda de turnos, reservas online y cobro del servicio en caja/)).toBeInTheDocument()
+
+    // Qué incluye la herramienta y cómo queda el menú.
+    expect(screen.getAllByText('Agenda de turnos, reservas online y catálogo de servicios').length).toBeGreaterThan(0)
+    const menu = screen.getByRole('region', { name: 'Así queda tu menú' })
+    expect(menu).toHaveTextContent('Agenda')
+    expect(menu).not.toHaveTextContent('Reparaciones')
+  })
 })

@@ -10,7 +10,7 @@ const RUTA = leer('src/app/api/onboarding/complete/route.ts')
 const PAGINA = leer('src/app/admin/onboarding/page.tsx')
 const CLIENTE = leer('src/components/dashboard/onboarding/OnboardingClient.tsx')
 const MENU = leer('src/components/dashboard/sidebar.tsx')
-const FORM_WEB = leer('src/components/admin/website/CompanyInfoForm.tsx')
+const FORM_WEB = leer('src/components/admin/website/StorefrontAppearanceEditor.tsx')
 
 /**
  * La RPC hacia `set value = excluded.value` sobre `company_info`: un reemplazo

@@ -34,6 +34,18 @@ describe('StorefrontAudienceLinks', () => {
 
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('a supermarket or salon has no Mujer/Hombre/Niños paths', () => {
+    for (const style of ['market', 'services', 'tech'] as const) {
+      const { container, unmount } = render(
+        <StorefrontStyleProvider style={style}>
+          <StorefrontAudienceLinks />
+        </StorefrontStyleProvider>,
+      )
+      expect(container).toBeEmptyDOMElement()
+      unmount()
+    }
+  })
 })
 
 describe('getFeaturedProductLimit', () => {
@@ -41,6 +53,8 @@ describe('getFeaturedProductLimit', () => {
     expect(getFeaturedProductLimit('fashion')).toBe(8)
     expect(getFeaturedProductLimit('sport')).toBe(8)
     expect(getFeaturedProductLimit('classic')).toBe(16)
+    expect(getFeaturedProductLimit('market')).toBe(16)
+    expect(getFeaturedProductLimit('services')).toBe(4)
   })
 })
 

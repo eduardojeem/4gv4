@@ -38,6 +38,7 @@ export interface StorefrontCapabilities {
 const BUSINESS_LABELS: Record<BusinessVertical, string> = {
   general: 'Comercio general',
   clothing: 'Moda e indumentaria',
+  barbershop: 'Barbería y peluquería',
   cosmetics: 'Cosmética y belleza',
   electronics: 'Tecnología y electrónica',
   food: 'Alimentos y gastronomía',

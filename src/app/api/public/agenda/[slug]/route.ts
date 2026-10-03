@@ -1,60 +1,58 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { getClientIp, rateLimiter } from '@/lib/rate-limiter'
-import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
-import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
-import { appointmentErrorMessage, busyIntervals, loadAgendaConfig } from '@/lib/agenda/agenda-server'
-import { availableSlots, pickSlotResource } from '@/lib/agenda/slots'
-import { addDays, dayRangeUtc, todayIn, utcToZoned } from '@/lib/agenda/time'
+import { appointmentErrorMessage, professionalsForService } from '@/lib/agenda/agenda-server'
+import { notifyAppointmentEvent } from '@/lib/agenda/appointment-events'
+import { pickSlotResource } from '@/lib/agenda/slots'
+import { addDays, todayIn, utcToZoned } from '@/lib/agenda/time'
+import { publicSlotsFor, resolvePublicAgenda, type PublicAgenda } from '@/lib/agenda/public-agenda-server'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * Reserva online de turnos desde la tienda (/<slug>/turnos).
  *
- * Solo si la tienda es pública, tiene el módulo de servicios y activó la
- * reserva online. Los horarios se recalculan al reservar: lo que el cliente
- * vio hace un rato puede haberse ocupado, y el trigger de la base frena a dos
- * que reservan el mismo horario a la vez.
+ * Los horarios se recalculan al reservar: lo que el cliente vio hace un rato
+ * puede haberse ocupado, y el trigger de la base frena a dos que reservan el
+ * mismo horario a la vez.
  */
-async function resolveAgenda(slug: string) {
-  const admin = createAdminSupabase() as unknown as SupabaseClient
-  const organization = await resolvePublicStorefrontOrganizationBySlug(slug)
-  if (!organization || !(await isOrganizationModuleEnabled(organization.id, 'services'))) return null
-  const config = await loadAgendaConfig(admin, organization.id, { onlyActive: true })
-  if (!config?.settings.online_booking) return null
-  return { admin, organization, config }
-}
+const resolveAgenda = resolvePublicAgenda
+const slotsFor = (agenda: PublicAgenda, date: string, serviceId: string, professionalId: string | null) =>
+  publicSlotsFor(agenda, date, serviceId, professionalId)
 
-async function slotsFor(agenda: NonNullable<Awaited<ReturnType<typeof resolveAgenda>>>, date: string, serviceId: string, professionalId: string | null) {
-  const { admin, organization, config } = agenda
-  const service = config.services.find((item) => item.product_id === serviceId && item.online)
+/** Cuántos días se miran para «próximo turno libre»: más allá ya no es «próximo». */
+const NEXT_SLOT_DAYS = 7
+
+/**
+ * El primer horario libre del servicio más corto (el que entra antes), para
+ * mostrarlo en la portada. Null si no hay nada en la próxima semana.
+ */
+async function nextFreeSlot(agenda: PublicAgenda) {
+  const { config } = agenda
+  const service = config.services
+    .filter((item) => item.online)
+    .sort((a, b) => a.duration_minutes - b.duration_minutes)[0]
   if (!service) return null
   const today = todayIn(config.timeZone)
-  if (date < today || date > addDays(today, config.settings.max_days_ahead)) return { service, slots: [] }
-  const professionalIds = professionalId
-    ? config.professionals.filter((professional) => professional.id === professionalId).map((professional) => professional.id)
-    : config.professionals.map((professional) => professional.id)
-  if (professionalId && professionalIds.length === 0) return null
-  const range = dayRangeUtc(date, config.timeZone)
-  const busy = await busyIntervals(admin, organization.id, range.start, range.end)
-  return {
-    service,
-    slots: availableSlots({
+  const lastDay = Math.min(NEXT_SLOT_DAYS, config.settings.max_days_ahead)
+  for (let offset = 0; offset <= lastDay; offset += 1) {
+    const date = addDays(today, offset)
+    const result = await slotsFor(agenda, date, service.product_id, null)
+    const slot = result?.slots[0]
+    if (!slot) continue
+    const professional = config.professionals.find((item) => item.id === slot.professionalIds[0])
+    return {
       date,
-      timeZone: config.timeZone,
-      openingHours: config.settings.opening_hours,
-      slotMinutes: config.settings.slot_minutes,
-      durationMinutes: service.duration_minutes,
-      busy,
-      professionalIds,
-      now: Date.now(),
-      minNoticeMinutes: config.settings.min_notice_minutes,
-    }),
+      time: utcToZoned(slot.startsAt, config.timeZone).time,
+      isToday: offset === 0,
+      isTomorrow: offset === 1,
+      serviceId: service.product_id,
+      serviceName: service.name,
+      professionalName: professional?.name ?? null,
+    }
   }
+  return null
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -65,6 +63,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const { searchParams } = new URL(request.url)
   const date = searchParams.get('date')
   const serviceId = searchParams.get('service')
+
+  if (searchParams.get('next') === '1') return NextResponse.json({ next: await nextFreeSlot(agenda) })
 
   if (date && serviceId) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !z.string().uuid().safeParse(serviceId).success) {
@@ -89,8 +89,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     openDays: Object.keys(config.settings.opening_hours).map(Number),
     services: config.services
       .filter((service) => service.online)
-      .map((service) => ({ id: service.product_id, name: service.name, duration: service.duration_minutes, price: service.hide_price ? null : service.price })),
-    professionals: config.professionals.map((professional) => ({ id: professional.id, name: professional.name, color: professional.color })),
+      .map((service) => ({
+        id: service.product_id,
+        name: service.name,
+        duration: service.duration_minutes,
+        price: service.hide_price ? null : service.price,
+        // Quién lo hace: la reserva solo ofrece a esos profesionales.
+        professionalIds: professionalsForService(config.professionals, service.product_id).map((professional) => professional.id),
+      })),
+    professionals: config.professionals.map((professional) => ({
+      id: professional.id,
+      name: professional.name,
+      color: professional.color,
+      photoUrl: professional.photo_url || null,
+      specialty: professional.specialty || null,
+    })),
   })
 }
 
@@ -147,11 +160,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       source: 'online',
       notes: parsed.data.notes || null,
     })
-    .select('public_token, status, starts_at')
+    .select('id, public_token, status, starts_at')
     .single()
   if (error || !data) {
     if (!error?.message?.includes('APPOINTMENT_OVERLAP')) logger.error('No se pudo reservar el turno online', { error: error?.message })
     return NextResponse.json({ error: appointmentErrorMessage(error, 'No se pudo reservar. Probá de nuevo.') }, { status: 409 })
   }
+  // La tienda se entera: campanita de la Agenda y, si lo pidió, email.
+  await notifyAppointmentEvent(admin, {
+    organizationId: organization.id,
+    appointmentId: (data as { id: string }).id,
+    kind: 'booked',
+    customerName: parsed.data.name,
+    serviceName: result.service.name,
+    startsAt,
+  }, { timeZone: config.timeZone, notifyEmail: config.settings.notify_email !== false })
   return NextResponse.json({ token: (data as { public_token: string }).public_token, status }, { status: 201 })
 }

@@ -53,6 +53,18 @@ export const WEBSITE_SECTION_HELP = {
     examples: ['Taller: cambio de pantalla con plazo estimado y condiciones.', 'Belleza: asesoramiento o un tratamiento, indicando qué incluye.'],
     note: 'Si solo vendés productos, podés mantener esta sección oculta. Publicar un servicio no genera una orden de reparación ni una venta.',
   },
+  gallery: {
+    title: 'Galería de trabajos', description: 'Mostrá lo que hacés: es lo que más convence a un cliente nuevo.',
+    steps: ['Subí fotos de tus mejores trabajos (hasta 12).', 'Ordenalas y, si querés, poneles un texto corto.', 'Activá la galería y guardá.'],
+    examples: ['Barbería: fades, diseños y barbas.', 'Peluquería: color, mechas y peinados de fiesta.'],
+    note: 'Usá fotos propias y con permiso de tus clientes. Cuentan para el límite de 20 imágenes del sitio.',
+  },
+  booking: {
+    title: 'Reservas online en tu inicio', description: 'Tus clientes reservan su turno sin salir de la tienda.',
+    steps: ['En la agenda cargá servicios con duración, quién atiende y el horario.', 'Activá «Aceptar reservas desde la tienda» en la agenda.', 'Acá activá la sección, escribí el título y guardá.'],
+    examples: ['Barbería: «Reservá tu corte» con el equipo a la vista.', 'Estética: «Elegí tu tratamiento y horario».'],
+    note: 'Los turnos reservados aparecen en la agenda. Si pedís confirmación, quedan pendientes hasta que los confirmes.',
+  },
   process: {
     title: 'Cómo atendés a tus clientes', description: 'Describí el recorrido desde la consulta hasta la entrega.',
     steps: ['Elegí el flujo que querés explicar.', 'Ordená los pasos con instrucciones breves.', 'Ocultá la sección si no aporta información a tu negocio.'],

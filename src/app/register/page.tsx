@@ -74,6 +74,7 @@ const BUSINESS_VERTICAL_OPTIONS = [
   { value: 'cosmetics', label: 'Cosmética y belleza' },
   { value: 'food', label: 'Alimentos y gastronomía' },
   { value: 'hardware', label: 'Ferretería y construcción' },
+  { value: 'barbershop', label: 'Barbería, peluquería y estética' },
   { value: 'general', label: 'Comercio general / multirubro' },
   { value: 'other', label: 'Otro rubro' },
 ] as const

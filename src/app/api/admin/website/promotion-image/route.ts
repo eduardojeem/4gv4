@@ -74,9 +74,9 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     {
       url: finalUrl,
       path: storagePath,
-      name: slideId === 'aviso' ? 'Imagen de aviso' : `Banner ${slideId}`,
+      name: slideId === 'aviso' ? 'Imagen de aviso' : slideId.startsWith('galeria') ? 'Foto de la galería' : slideId.startsWith('equipo') ? 'Foto del equipo' : `Banner ${slideId}`,
       size: optimized.buffer.byteLength,
-      section: slideId === 'aviso' ? 'announcements' : 'promotions',
+      section: slideId === 'aviso' ? 'announcements' : slideId.startsWith('galeria') ? 'gallery' : slideId.startsWith('equipo') ? 'team' : 'promotions',
     },
     admin
   )

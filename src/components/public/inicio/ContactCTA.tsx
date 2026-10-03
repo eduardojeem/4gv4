@@ -88,7 +88,7 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
   const hasSocials = getSocialLinks(companyInfo).length > 0
 
   return (
-    <section id="contacto" aria-labelledby="contact-title" className="py-14 sm:py-20 bg-background border-t border-border/80">
+    <section id="contacto" aria-labelledby="contact-title" className="scroll-mt-20 py-14 sm:py-20 bg-background border-t border-border/80">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
         {/* Tarjeta Principal de Atención al Cliente */}

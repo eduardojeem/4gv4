@@ -11,6 +11,7 @@ import { getSocialLinks } from '@/lib/public/social-links'
 import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import type { WebsiteSettings } from '@/types/website-settings'
+import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 
 export function PublicFooter({
   initialSettings = null,
@@ -32,6 +33,9 @@ export function PublicFooter({
   const company = effectiveSettings?.company_info
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
+  // En la plantilla «Servicios» el pie lleva a las secciones del negocio, no a la tienda.
+  const isServices = useStorefrontStyle() === 'services'
+  const galleryVisible = Boolean(effectiveSettings?.gallery_section?.enabled && effectiveSettings.gallery_section.images?.length)
 
   const phoneDisplay = company?.phone || ''
   const emailDisplay = company?.email || ''
@@ -65,7 +69,9 @@ export function PublicFooter({
               {companyName}
             </p>
             <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              {company?.slogan || `${companyName} - Tienda oficial. Catálogo con stock actualizado, garantía y atención personalizada.`}
+              {company?.slogan || (isServices
+                ? `${companyName}. Reservá tu turno online y conocé nuestros servicios.`
+                : `${companyName} - Tienda oficial. Catálogo con stock actualizado, garantía y atención personalizada.`)}
             </p>
           </div>
 
@@ -83,16 +89,25 @@ export function PublicFooter({
                   Inicio
                 </Link>
               </li>
-              <li>
-                <Link
-                  href={`${tenantPrefix}/productos`}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Productos
-                </Link>
-              </li>
+              {isServices ? (
+                <>
+                  <li><Link href={`${tenantPrefix}/inicio#servicios`} className="text-muted-foreground hover:text-foreground transition-colors">Servicios y precios</Link></li>
+                  <li><Link href={`${tenantPrefix}/inicio#reservar`} className="text-muted-foreground hover:text-foreground transition-colors">Reservar turno</Link></li>
+                  {galleryVisible && <li><Link href={`${tenantPrefix}/inicio#galeria`} className="text-muted-foreground hover:text-foreground transition-colors">Galería de trabajos</Link></li>}
+                  <li><Link href={`${tenantPrefix}/inicio#resenas`} className="text-muted-foreground hover:text-foreground transition-colors">Opiniones</Link></li>
+                </>
+              ) : (
+                <li>
+                  <Link
+                    href={`${tenantPrefix}/productos`}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Productos
+                  </Link>
+                </li>
+              )}
 
-              {servicesEnabled && (
+              {servicesEnabled && !isServices && (
                 <li>
                   <Link
                     href={`${tenantPrefix}/servicios`}
@@ -114,14 +129,16 @@ export function PublicFooter({
                 </li>
               )}
 
-              <li>
-                <Link
-                  href={`${tenantPrefix}/track`}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Rastrear Pedidos
-                </Link>
-              </li>
+              {!isServices && (
+                <li>
+                  <Link
+                    href={`${tenantPrefix}/track`}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Rastrear Pedidos
+                  </Link>
+                </li>
+              )}
 
               <li>
                 <Link

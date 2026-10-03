@@ -14,6 +14,7 @@ import {
   isExistingConfirmedAuthUser,
 } from './provisioning'
 import { provisionStarterKit } from '@/lib/organization/starter-kit'
+import { defaultOperatingModelFor } from '@/lib/organization/business-profile'
 
 type RegisterAdminClient = ReturnType<typeof createAdminSupabase>
 type RegisteredAuthUser = {
@@ -225,7 +226,9 @@ export async function POST(request: Request) {
         slug: companySlug,
         plan: resolvedPlanTier,
         owner_id: userId,
-        ...(input.businessVertical ? { business_vertical: input.businessVertical } : {}),
+        ...(input.businessVertical
+          ? { business_vertical: input.businessVertical, operating_model: defaultOperatingModelFor(input.businessVertical) }
+          : {}),
       })
       .select('id, name, slug, plan')
       .single()

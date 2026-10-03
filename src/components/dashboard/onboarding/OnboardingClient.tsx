@@ -26,6 +26,7 @@ import {
   MessageCircle,
   Package, Phone,
   RotateCcw,
+  Scissors,
   ShieldAlert,
   Shirt,
   ShoppingBag,
@@ -163,6 +164,11 @@ const VERTICAL_METADATA: Record<
     label: 'Alimentos y gastronomía',
     description: 'Almacenes, minimarkets, productos gourmet y alimentos',
     icon: Utensils,
+  },
+  barbershop: {
+    label: 'Barbería y peluquería',
+    description: 'Cortes, barba, color y tratamientos con turnos online',
+    icon: Scissors,
   },
   hardware: {
     label: 'Ferretería y construcción',
@@ -417,7 +423,12 @@ export function OnboardingClient({
   }
 
   const updateField = (field: keyof CompanyInfoForm, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }))
+    // Una barbería trabaja con turnos: se propone «Prestación de servicios», que se puede cambiar.
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === 'businessVertical' && value === 'barbershop' ? { operatingModel: 'service' } : {}),
+    }))
     if (field === 'currency') setConfirmCurrencyChange(false)
     setError('')
   }

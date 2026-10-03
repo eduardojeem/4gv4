@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  CalendarCheck2,
   Building2,
   CreditCard,
   Sparkles,
@@ -103,6 +104,20 @@ const GROUPS: NavigationGroup[] = [
     title: 'Servicios y atención',
     items: [
       {
+        id: 'booking',
+        label: 'Reservas online',
+        short: 'Reservas',
+        description: 'Turnos desde el inicio de tu tienda',
+        icon: CalendarCheck2,
+      },
+      {
+        id: 'gallery',
+        label: 'Galería de trabajos',
+        short: 'Galería',
+        description: 'Fotos de cortes, color y peinados',
+        icon: Images,
+      },
+      {
         id: 'services',
         label: 'Catálogo de servicios',
         short: 'Servicios',
@@ -179,6 +194,16 @@ function getSectionBadge(
       const activeCount = (settings.services || []).filter((s) => s.active !== false).length
       if (!enabled) return { label: 'Oculto', tone: 'muted' }
       return activeCount > 0 ? { label: `${activeCount}`, tone: 'emerald' } : { label: '0', tone: 'muted' }
+    }
+    case 'gallery': {
+      const count = settings.gallery_section?.images?.length || 0
+      if (!settings.gallery_section?.enabled) return { label: 'Oculta', tone: 'muted' }
+      return count > 0 ? { label: `${count}`, tone: 'emerald' } : { label: '0', tone: 'muted' }
+    }
+    case 'booking': {
+      return settings.booking_section?.enabled
+        ? { label: 'Activa', tone: 'emerald' }
+        : { label: 'Oculta', tone: 'muted' }
     }
     case 'process': {
       const enabled = settings.company_info?.processSectionEnabled !== false

@@ -12,10 +12,23 @@ import { cn } from '@/lib/utils'
 import { useStorefrontStyle } from '@/components/public/storefront-style-context'
 import { STOREFRONT_EYEBROW_CLASS, STOREFRONT_HEADING_CLASS } from '@/lib/website/storefront-style'
 import { NEWEST_PRODUCTS_SWR_OPTIONS, fetchPublicProducts, newestProductsKey } from './newest-products'
+import type { StorefrontStyle } from '@/lib/website/storefront-style'
 
-export function getFeaturedProductLimit(style: 'classic' | 'fashion' | 'sport') {
-  return style === 'classic' ? 16 : 8
+export function getFeaturedProductLimit(style: StorefrontStyle) {
+  // Un súper vende por volumen: más productos a la vista. En Servicios son un complemento.
+  if (style === 'classic' || style === 'market') return 16
+  if (style === 'services') return 4
+  return 8
 }
+
+/** Encabezado de la sección según la plantilla: «prendas» solo donde hay ropa. */
+const FEATURED_COPY: Partial<Record<StorefrontStyle, { eyebrow: string; title: string; text: string }>> = {
+  fashion: { eyebrow: 'Nuevos ingresos', title: 'Lo último en la tienda', text: 'Descubrí las últimas novedades y prendas destacadas de nuestra tienda.' },
+  sport: { eyebrow: 'Recién llegados', title: 'Lo nuevo para entrenar', text: 'Calzado, ropa y equipamiento que acaba de entrar.' },
+  market: { eyebrow: 'Para tu compra', title: 'Productos de la tienda', text: 'Sumá al carrito lo que necesitás y recibilo o retiralo.' },
+  services: { eyebrow: 'Tienda', title: 'Productos que usamos y recomendamos', text: 'Llevate a casa lo mismo que usamos en cada servicio.' },
+}
+const DEFAULT_FEATURED_COPY = { eyebrow: 'Nuevos ingresos', title: 'Lo último en la tienda', text: 'Descubrí las últimas novedades de nuestra tienda.' }
 
 const subscribeToMount = () => () => undefined
 
@@ -27,6 +40,7 @@ export function FeaturedProducts() {
   const [activeSpecialTab, setActiveSpecialTab] = useState<'all' | 'offers' | 'featured'>('all')
 
   const storefrontStyle = useStorefrontStyle()
+  const featuredCopy = FEATURED_COPY[storefrontStyle] ?? DEFAULT_FEATURED_COPY
 
   const { data, error, isLoading } = useSWR(
     newestProductsKey(tenantSlug),
@@ -103,15 +117,15 @@ export function FeaturedProducts() {
                 Catálogo Destacado
               </span>
             ) : (
-              <span className={STOREFRONT_EYEBROW_CLASS[storefrontStyle]}>Nuevos ingresos</span>
+              <span className={STOREFRONT_EYEBROW_CLASS[storefrontStyle]}>{featuredCopy.eyebrow}</span>
             )}
             <h2 className={cn('mt-1.5 text-2xl sm:text-3xl text-foreground', STOREFRONT_HEADING_CLASS[storefrontStyle])}>
-              {storefrontStyle === 'classic' ? 'Productos Disponibles' : 'Lo último en la tienda'}
+              {storefrontStyle === 'classic' ? 'Productos Disponibles' : featuredCopy.title}
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
               {storefrontStyle === 'classic'
                 ? 'Descubrí los artículos en stock con garantía, opciones de financiación y entrega inmediata.'
-                : 'Descubrí las últimas novedades y prendas destacadas de nuestra tienda.'}
+                : featuredCopy.text}
             </p>
           </div>
 
@@ -211,7 +225,7 @@ export function FeaturedProducts() {
             ))}
           </div>
         ) : displayedProducts.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 sm:gap-5">
+          <div className={cn('grid grid-cols-2 sm:grid-cols-3', storefrontStyle === 'market' ? 'gap-2 sm:gap-3 lg:grid-cols-5' : 'gap-3 sm:gap-5 lg:grid-cols-4')}>
             {displayedProducts.slice(0, getFeaturedProductLimit(storefrontStyle)).map((product, index) => (
               <ProductCard key={product.id} product={product} priority={index < 4} />
             ))}

@@ -87,6 +87,7 @@ export const VERTICAL_OPTIONS = [
   { value: 'food', label: 'Alimentos & Gastronomía', icon: '🍔' },
   { value: 'cosmetics', label: 'Cosmética & Belleza', icon: '💄' },
   { value: 'hardware', label: 'Ferretería & Construcción', icon: '🔨' },
+  { value: 'barbershop', label: 'Barbería & Peluquería', icon: '💈' },
   { value: 'other', label: 'Otros Rubros', icon: '🏷️' },
 ]
 

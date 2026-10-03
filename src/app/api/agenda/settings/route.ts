@@ -25,6 +25,7 @@ const settingsSchema = z.object({
   min_notice_minutes: z.number().int().min(0).max(10080),
   max_days_ahead: z.number().int().min(1).max(180),
   booking_message: z.string().trim().max(500).nullable().optional(),
+  notify_email: z.boolean().optional(),
   services: z.array(z.object({
     product_id: z.string().uuid(),
     duration_minutes: z.number().int().min(5).max(600),
@@ -38,13 +39,19 @@ export const PUT = withTenantAuth({ permission: 'settings.manage', module: 'serv
   const supabase = (await createClient()) as unknown as SupabaseClient
   const { services, ...settings } = parsed.data
 
-  const { error } = await supabase.from('agenda_settings').upsert({
+  const row = {
     ...settings,
     opening_hours: normalizeOpeningHours(settings.opening_hours),
     booking_message: settings.booking_message || null,
     organization_id: organization.id,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'organization_id' })
+  }
+  let { error } = await supabase.from('agenda_settings').upsert(row, { onConflict: 'organization_id' })
+  // Sin la migración de avisos, se guarda el resto en vez de fallar.
+  if (error && /notify_email/.test(error.message)) {
+    const { notify_email: _skipped, ...withoutNotify } = row
+    ;({ error } = await supabase.from('agenda_settings').upsert(withoutNotify, { onConflict: 'organization_id' }))
+  }
   if (error) {
     logger.error('No se pudo guardar la configuración de la agenda', { error: error.message })
     return NextResponse.json({ error: 'No se pudo guardar la configuración' }, { status: 500 })

@@ -16,7 +16,9 @@ export interface CompanyInfo {
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
-  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport'
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services'
+  /** Variante específica dentro de la plantilla elegida */
+  storefrontVariant?: string
   headerColor?: string
   showTopBar?: boolean
   whatsapp?: string
@@ -146,6 +148,35 @@ export interface ServicesSectionSettings {
   badge: string
   title: string
   subtitle: string
+}
+
+/**
+ * Sección «Reserva tu turno» del inicio: el cliente reserva sin salir de la
+ * portada. Solo se muestra si la agenda acepta reservas online.
+ */
+export interface BookingSectionSettings {
+  enabled: boolean
+  title: string
+  subtitle: string
+  /** Muestra al equipo (profesionales de la agenda) junto a la reserva. */
+  showTeam: boolean
+}
+
+/** Una foto de la galería de trabajos (cortes, color, peinados). */
+export interface GalleryImage {
+  id: string
+  url: string
+  /** Ruta en el almacenamiento, para borrarla. */
+  path?: string
+  caption?: string
+}
+
+/** Galería de trabajos del inicio (plantilla «Servicios»). */
+export interface GallerySectionSettings {
+  enabled: boolean
+  title: string
+  subtitle: string
+  images: GalleryImage[]
 }
 
 export interface Service {
@@ -315,7 +346,7 @@ export interface StoreAnnouncement {
 }
 
 /** Sección donde se originó o utilizó la imagen */
-export type WebsiteMediaSection = 'logo' | 'promotions' | 'announcements' | 'brands' | 'general'
+export type WebsiteMediaSection = 'logo' | 'promotions' | 'announcements' | 'brands' | 'gallery' | 'team' | 'general'
 
 /** Imagen registrada en el historial de medios del sitio web */
 export interface WebsiteMediaItem {
@@ -340,6 +371,8 @@ export interface WebsiteSettings {
   brands_section?: BrandsSectionSettings
   product_credit_defaults?: ProductCreditDefaults
   services_section?: ServicesSectionSettings
+  booking_section?: BookingSectionSettings
+  gallery_section?: GallerySectionSettings
   services: Service[]
   testimonials: Testimonial[]
   process_steps: ProcessStep[]

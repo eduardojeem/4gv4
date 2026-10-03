@@ -29,7 +29,7 @@ export function StorefrontCatalogHero({
     ? `${total} ${total === 1 ? 'resultado' : 'resultados'} para “${query}”`
     : `${total} ${total === 1 ? 'producto disponible' : 'productos disponibles'}`
 
-  if (style === 'classic') {
+  if (style !== 'fashion' && style !== 'sport') {
     return (
       <div className="border-b border-border/60 bg-gradient-to-b from-primary/[0.04] via-card to-background py-6">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -112,7 +112,7 @@ export function StorefrontCollections({
   productsHref: string
 }) {
   const style = useStorefrontStyle()
-  if (style === 'classic') return null
+  if (style !== 'fashion' && style !== 'sport') return null
 
   const visible = categories.filter((category) => !category.parent_id).slice(0, 8)
   if (visible.length === 0) return null

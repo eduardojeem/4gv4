@@ -51,6 +51,12 @@ const PRESETS: Record<BusinessVertical, Preset[]> = {
     { key: 'gauge', label: 'Calibre', control: 'text', examples: ['18', '20', '22'] },
     { key: 'sales_unit', label: 'Unidad de venta', control: 'select', examples: ['Unidad', 'Metro', 'Caja'] },
   ],
+  // Lo que vende una barbería además de los cortes: ceras, shampoo, aceites.
+  barbershop: [
+    { key: 'hair_type', label: 'Tipo de cabello', control: 'select', examples: ['Normal', 'Graso', 'Seco', 'Rizado'] },
+    { key: 'hold', label: 'Fijación', control: 'select', examples: ['Suave', 'Media', 'Fuerte'] },
+    { key: 'volume', label: 'Contenido', control: 'select', examples: ['100 ml', '150 g', '250 ml'] },
+  ],
   other: [],
 }
 

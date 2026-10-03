@@ -7,6 +7,8 @@ export const BUSINESS_VERTICALS = [
   'electronics',
   'food',
   'hardware',
+  // Barberías y peluquerías: venden turnos más que productos.
+  'barbershop',
   'other',
 ] as const
 
@@ -70,7 +72,14 @@ const VERTICAL_RECOMMENDATIONS: Record<BusinessVertical, OrganizationModule[]> =
   electronics: ['inventory', 'pos', 'crm', 'repairs', 'services', 'orders', 'delivery', 'credits'],
   food: ['inventory', 'pos', 'crm', 'orders', 'ecommerce', 'delivery', 'promotions', 'web_analytics'],
   hardware: ['inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'delivery', 'credits', 'analytics'],
+  // La agenda (módulo services) es el corazón; el inventario es para los productos que venden (ceras, shampoo).
+  barbershop: ['services', 'pos', 'crm', 'inventory', 'promotions', 'web_analytics'],
   other: [],
+}
+
+/** Cómo trabaja el rubro por defecto. Las barberías venden turnos: prestación de servicios. */
+export function defaultOperatingModelFor(vertical: BusinessVertical | null | undefined): OperatingModel {
+  return vertical === 'barbershop' ? 'service' : 'retail'
 }
 
 export function getSuggestedModules(
