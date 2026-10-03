@@ -8,8 +8,8 @@ const leer = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 
 describe('nombres de módulos iguales al plan', () => {
   it('cada módulo del sistema tiene su nombre en el catálogo de planes', () => {
-    for (const module of ORGANIZATION_MODULES) {
-      expect(PLAN_FEATURES.some((feature) => feature.module === module), module).toBe(true)
+    for (const organizationModule of ORGANIZATION_MODULES) {
+      expect(PLAN_FEATURES.some((feature) => feature.module === organizationModule), organizationModule).toBe(true)
     }
     expect(moduleDisplayName('repairs')).toBe('Módulo de Reparaciones')
   })
