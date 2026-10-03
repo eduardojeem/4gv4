@@ -102,6 +102,29 @@ export interface HealthMetricGroup {
   rows?: Array<{ label: string; value: string | number; hint?: string }>
 }
 
+export type ServiceConfigurationState = 'configured' | 'partial' | 'missing'
+
+export interface ServiceHealthEntry {
+  id: string
+  name: string
+  status: HealthStatus
+  configured: ServiceConfigurationState
+  summary: string
+  source: string
+  checkedAt: string | null
+}
+
+export interface ScheduledTaskHealth {
+  id: string
+  name: string
+  status: HealthStatus
+  summary: string
+  source: string
+  lastRunAt: string | null
+  nextRunAt: string | null
+  durationMs: number | null
+}
+
 export interface TenantTableFinding {
   table: string
   status: HealthStatus
