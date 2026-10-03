@@ -120,6 +120,8 @@ export interface ServiceHealthEntry {
   summary: string
   source: string
   checkedAt: string | null
+  latencyMs: number | null
+  unavailableReason?: string
 }
 
 export interface ScheduledTaskHealth {

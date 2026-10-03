@@ -14,12 +14,12 @@ import type {
 type ServiceConfiguration = Partial<Record<string, ServiceConfigurationState>>
 
 const SERVICE_DEFINITIONS = [
-  { id: 'supabase', name: 'Supabase', checkId: 'supabase.database', source: 'NEXT_PUBLIC_SUPABASE_URL + consulta de base de datos' },
-  { id: 'upstash', name: 'Upstash', checkId: 'security.rate_limiting', source: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN' },
-  { id: 'telegram', name: 'Telegram', checkId: 'integrations.telegram', source: 'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID' },
-  { id: 'turnstile', name: 'Cloudflare Turnstile', checkId: 'security.turnstile', source: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY' },
-  { id: 'cloudflare', name: 'Cloudflare', checkId: 'cloudflare.edge', source: 'Headers públicos y API opcional Zone:Read' },
-  { id: 'pagopar', name: 'Pagopar', checkId: 'payments.pagopar', source: 'Código, variables requeridas y actividad registrada' },
+  { id: 'supabase', name: 'Supabase', checkId: 'supabase.database', source: 'NEXT_PUBLIC_SUPABASE_URL + consulta de base de datos', runtimeVerified: true },
+  { id: 'upstash', name: 'Upstash', checkId: 'security.rate_limiting', source: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN', runtimeVerified: false },
+  { id: 'telegram', name: 'Telegram', checkId: 'integrations.telegram', source: 'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID', runtimeVerified: false },
+  { id: 'turnstile', name: 'Cloudflare Turnstile', checkId: 'security.turnstile', source: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY', runtimeVerified: false },
+  { id: 'cloudflare', name: 'Cloudflare', checkId: 'cloudflare.edge', source: 'Headers públicos y API opcional Zone:Read', runtimeVerified: true },
+  { id: 'pagopar', name: 'Pagopar', checkId: 'payments.pagopar', source: 'Código, variables requeridas y actividad registrada', runtimeVerified: false },
 ] as const
 
 function pairConfiguration(first: string, second: string): ServiceConfigurationState {
@@ -51,11 +51,17 @@ export function buildServiceHealthEntries(
     const configured = definition.id === 'cloudflare' && check?.status === 'healthy'
       ? 'configured'
       : configuredFromEnvironment
-    const status = definition.id === 'cloudflare'
-      ? check?.status ?? 'unknown'
-      : configured === 'missing'
+    const status = configured === 'missing'
         ? 'not_configured'
-        : check?.status ?? 'unknown'
+        : check && check.status !== 'healthy'
+          ? check.status
+          : definition.runtimeVerified
+            ? check?.status ?? 'unknown'
+            : 'unknown'
+    const unavailableReason = configured !== 'missing' && !definition.runtimeVerified && (!check || check.status === 'healthy')
+      ? 'Configurado, pero no verificado contra el proveedor en esta ejecución.'
+      : undefined
+    const latency = check?.metadata?.latencyMs
     return {
       id: definition.id,
       name: definition.name,
@@ -63,9 +69,11 @@ export function buildServiceHealthEntries(
       status,
       summary: configured === 'missing'
         ? 'No configurado'
-        : check?.summary ?? 'Configurado, pero sin comprobación automática disponible',
+        : unavailableReason ?? check?.summary ?? 'Configurado, pero sin comprobación automática disponible',
       source: definition.source,
       checkedAt: check?.checkedAt ?? null,
+      latencyMs: typeof latency === 'number' ? latency : null,
+      unavailableReason,
     }
   })
 }
@@ -118,19 +126,26 @@ const WEBHOOK_STALE_DAYS = 30
 
 type WebhookEvent = { provider: string; endpoint: string; outcome: string; http_status: number; error_code: string | null; received_at: string }
 
-async function loadWebhookEvents(admin: SupabaseClient) {
-  const { data, error } = await admin
-    .from('payment_webhook_events')
-    .select('provider, endpoint, outcome, http_status, error_code, received_at')
-    .order('received_at', { ascending: false })
-    .limit(200)
-  if (error) {
+export async function loadWebhookEvents(admin: SupabaseClient) {
+  try {
+    const { data, error } = await admin
+      .from('payment_webhook_events')
+      .select('provider, endpoint, outcome, http_status, error_code, received_at')
+      .order('received_at', { ascending: false })
+      .limit(200)
+    if (error) {
+      return {
+        available: false as const,
+        reason: isMissingObjectError(error) ? `Tabla payment_webhook_events inexistente: aplicar ${HEALTH_MIGRATION}.` : errorMessage(error),
+      }
+    }
+    return { available: true as const, events: (data ?? []) as WebhookEvent[] }
+  } catch (error) {
     return {
       available: false as const,
-      reason: isMissingObjectError(error) ? `Tabla payment_webhook_events inexistente: aplicar ${HEALTH_MIGRATION}.` : errorMessage(error),
+      reason: `No se pudo consultar payment_webhook_events: ${errorMessage(error)}`,
     }
   }
-  return { available: true as const, events: (data ?? []) as WebhookEvent[] }
 }
 
 function formatDate(value: string | null | undefined): string {

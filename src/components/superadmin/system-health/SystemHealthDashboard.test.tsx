@@ -57,8 +57,8 @@ function report(overrides: Partial<HealthReport> = {}): HealthReport {
     executiveSummary: { critical: 0, warnings: 1, newOrWorsened: 1, resolved: 0 },
     deployment: null,
     serviceHealth: [
-      { id: 'supabase', name: 'Supabase', status: 'healthy', configured: 'configured', summary: 'Base accesible', source: 'Consulta', checkedAt: now },
-      { id: 'telegram', name: 'Telegram', status: 'unknown', configured: 'configured', summary: 'Sin prueba', source: 'Variables', checkedAt: null },
+      { id: 'supabase', name: 'Supabase', status: 'healthy', configured: 'configured', summary: 'Base accesible', source: 'Consulta', checkedAt: now, latencyMs: 100 },
+      { id: 'telegram', name: 'Telegram', status: 'unknown', configured: 'configured', summary: 'Sin prueba', source: 'Variables', checkedAt: null, latencyMs: null, unavailableReason: 'No verificado' },
     ],
     scheduledTasks: [
       { id: 'subscription-lifecycle', name: 'Ciclo de suscripciones', status: 'unknown', summary: 'Sin bitácora', source: 'Efecto observado', lastRunAt: null, nextRunAt: null, durationMs: null },
@@ -122,6 +122,29 @@ describe('SystemHealthDashboard', () => {
     expect(screen.getByText('Servicios externos')).toBeInTheDocument()
     expect(screen.getByText('Tareas programadas')).toBeInTheDocument()
     expect(screen.getAllByText('No verificable').length).toBeGreaterThan(0)
+  })
+
+  it('identifica cambios nuevos, resueltos y sin comparación en todas las comprobaciones', async () => {
+    const current = report()
+    current.checks.push({
+      id: 'security.unverified', category: 'security', name: 'Control nuevo', status: 'unknown', severity: 'info',
+      summary: 'No disponible', description: 'd', method: 'm', findings: [], checkedAt: current.finishedAt,
+    })
+    current.comparison.changes = [
+      { ...current.comparison.changes[0], kind: 'new_issue', previousStatus: null, previousSeverity: null },
+      { ...current.comparison.changes[1], kind: 'resolved', previousStatus: 'error', previousSeverity: 'high' },
+      { ...current.comparison.changes[2], checkId: 'security.unverified' },
+    ]
+    runSystemHealthAction.mockResolvedValue({ ok: true, data: current })
+    render(<SystemHealthDashboard initialHistory={emptyHistory} severityRules={{}} />)
+
+    const allChecksTab = await screen.findByRole('tab', { name: /Todas/ })
+    fireEvent.mouseDown(allChecksTab)
+    fireEvent.click(allChecksTab)
+    await waitFor(() => expect(allChecksTab).toHaveAttribute('data-state', 'active'))
+    expect(await screen.findByText('Nuevo')).toBeInTheDocument()
+    expect(screen.getByText('Resuelto')).toBeInTheDocument()
+    expect(screen.getByText('Sin comparación anterior')).toBeInTheDocument()
   })
 
   it('muestra el error saneado y permite reintentar', async () => {

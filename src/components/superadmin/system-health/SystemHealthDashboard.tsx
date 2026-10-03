@@ -298,7 +298,7 @@ export function SystemHealthDashboard({
                   <CardContent className="space-y-1">
                     {supabaseRows.map((row) => {
                       const check = checkById.get(row.id)
-                      return check ? <CheckRow key={row.id} check={{ ...check, name: row.label }} onOpen={() => setSelected(check)} /> : null
+                      return check ? <CheckRow key={row.id} check={{ ...check, name: row.label }} change={changeById.get(check.id)} onOpen={() => setSelected(check)} /> : null
                     })}
                   </CardContent>
                 </Card>
@@ -436,7 +436,7 @@ export function SystemHealthDashboard({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-1">
-                  {(byCategory.get('tenancy') ?? []).map((check) => <CheckRow key={check.id} check={check} onOpen={setSelected} />)}
+                  {(byCategory.get('tenancy') ?? []).map((check) => <CheckRow key={check.id} check={check} change={changeById.get(check.id)} onOpen={setSelected} />)}
                 </CardContent>
               </Card>
 
@@ -497,7 +497,7 @@ export function SystemHealthDashboard({
                       <StatusBadge status={aggregate(checks)} />
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      {checks.map((check) => <CheckRow key={check.id} check={check} onOpen={setSelected} />)}
+                      {checks.map((check) => <CheckRow key={check.id} check={check} change={changeById.get(check.id)} onOpen={setSelected} />)}
                     </CardContent>
                   </Card>
                 )

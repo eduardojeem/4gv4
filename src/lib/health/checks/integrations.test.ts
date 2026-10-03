@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildScheduledTaskHealth, buildServiceHealthEntries } from '@/lib/health/checks/integrations'
+import { buildScheduledTaskHealth, buildServiceHealthEntries, loadWebhookEvents } from '@/lib/health/checks/integrations'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { HealthCheckResult, HealthStatus } from '@/lib/health/types'
 
 function check(id: string, status: HealthStatus, summary = status): HealthCheckResult {
@@ -66,6 +67,41 @@ describe('buildServiceHealthEntries', () => {
     expect(services.find((service) => service.id === 'cloudflare')).toMatchObject({
       configured: 'configured',
       status: 'healthy',
+    })
+  })
+
+  it('does not call configuration-only checks healthy and exposes verification context', () => {
+    const configuredOnly = buildServiceHealthEntries(
+      [
+        { ...check('security.rate_limiting', 'healthy'), metadata: { latencyMs: 7 } },
+        check('security.turnstile', 'healthy'),
+        check('payments.pagopar', 'healthy'),
+      ],
+      { upstash: 'configured', turnstile: 'configured', pagopar: 'configured' },
+    )
+
+    for (const id of ['upstash', 'turnstile', 'pagopar']) {
+      expect(configuredOnly.find((service) => service.id === id)).toMatchObject({
+        status: 'unknown',
+        unavailableReason: expect.stringContaining('no verificado'),
+      })
+    }
+    expect(configuredOnly.find((service) => service.id === 'upstash')).toMatchObject({ latencyMs: 7 })
+  })
+})
+
+describe('loadWebhookEvents', () => {
+  it('degrades a rejected provider query instead of aborting the whole diagnostic', async () => {
+    const query = {
+      select: () => query,
+      order: () => query,
+      limit: () => Promise.reject(new Error('network unavailable')),
+    }
+    const admin = { from: () => query } as unknown as SupabaseClient
+
+    await expect(loadWebhookEvents(admin)).resolves.toMatchObject({
+      available: false,
+      reason: expect.stringContaining('network unavailable'),
     })
   })
 })

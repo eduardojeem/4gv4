@@ -36,7 +36,10 @@ export function OperationalHealthPanels({ report }: { report: HealthReport }) {
           <ul className="space-y-3">
             {report.serviceHealth.map((service) => (
               <li key={service.id} className="flex items-start justify-between gap-3">
-                <span><span className="block text-sm font-semibold">{service.name}</span><span className="block text-xs text-slate-500">{service.summary}</span></span>
+                <span><span className="block text-sm font-semibold">{service.name}</span><span className="block text-xs text-slate-500">{service.summary}</span>
+                  <span className="block text-[11px] text-slate-400">Fuente: {service.source} · Comprobado: {service.checkedAt ?? 'No verificable'} · Latencia: {service.latencyMs === null ? 'No verificable' : `${service.latencyMs} ms`}</span>
+                  {service.unavailableReason && <span className="block text-[11px] text-amber-700">{service.unavailableReason}</span>}
+                </span>
                 <StatusBadge status={service.status} />
               </li>
             ))}
