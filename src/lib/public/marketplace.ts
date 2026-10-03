@@ -1,4 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { PRODUCT_ORGANIZATION } from '@/lib/supabase/embeds'
+import { logger } from '@/lib/logger'
 import type { PublicProduct } from '@/types/public'
 import { applyAutomaticPromotionToProduct, buildPublicOfferCandidateFilter, mapPublicPromotion } from '@/lib/public-promotions'
 import { getCompanyMapsHref } from '@/lib/website/company-maps-url'
@@ -13,6 +15,10 @@ import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
 // Precio, stock y promociones cambian con frecuencia. El directorio y sus
 // facetas cambian mucho menos, por eso pueden vivir mas tiempo sin volver a
 // materializar miles de filas en cada funcion de Vercel.
+function logMarketplaceError(query: string, error: { message?: string; code?: string }) {
+  logger.error(`[marketplace] falló la consulta de ${query}`, { code: error.code, message: error.message })
+}
+
 export const MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 30
 export const MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS = 300
 /** Cuántos productos lleva la fila de cada tienda en el inicio del marketplace. */
@@ -635,7 +641,7 @@ async function getMarketplaceProductsPageUncached(
 
   let query = supabase
     .from('products')
-    .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), organizations!inner(id, name, slug, logo_url)${camposExtras}`, { count: 'exact' })
+    .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), ${PRODUCT_ORGANIZATION}!inner(id, name, slug, logo_url)${camposExtras}`, { count: 'exact' })
     .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
@@ -673,7 +679,15 @@ async function getMarketplaceProductsPageUncached(
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error || !data) return { products: [], total: 0 }
+  if (error || !data) {
+
+    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
+
+    if (error) logMarketplaceError('productos', error)
+
+    return { products: [], total: 0 }
+
+  }
 
   const rows = (data ?? []) as unknown as ProductRow[]
   const productIds = rows.map((product) => product.id)
@@ -802,7 +816,7 @@ async function getMarketplaceCategoriesUncached(): Promise<MarketplaceCategory[]
     .select(`
       organization_id,
       categories(id, name, parent_id, global_category_id, global_categories:global_category_id(id, name, slug, parent_id)),
-      organizations!inner(id)
+      ${PRODUCT_ORGANIZATION}!inner(id)
     `)
     .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
@@ -812,7 +826,15 @@ async function getMarketplaceCategoriesUncached(): Promise<MarketplaceCategory[]
     .gt('stock_quantity', 0)
     .limit(20000)
 
-  if (error || !data) return []
+  if (error || !data) {
+
+    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
+
+    if (error) logMarketplaceError('categorías', error)
+
+    return []
+
+  }
 
   const categories = new Map<string, MarketplaceCategory & { organizationIds: Set<string> }>()
 
@@ -864,7 +886,7 @@ async function getMarketplaceBrandsUncached(
 
   let query = supabase
     .from('products')
-    .select('organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url, global_brands:global_brand_id(name, logo_url)), organizations!inner(id)')
+    .select(`organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url, global_brands:global_brand_id(name, logo_url)), ${PRODUCT_ORGANIZATION}!inner(id)`)
     .in('organization_id', showcaseOrganizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
@@ -880,7 +902,15 @@ async function getMarketplaceBrandsUncached(
 
   const { data, error } = await query.limit(20000)
 
-  if (error || !data) return []
+  if (error || !data) {
+
+    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
+
+    if (error) logMarketplaceError('marcas', error)
+
+    return []
+
+  }
 
   type BrandRow = {
     organization_id: string
@@ -1042,7 +1072,15 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
     .order('created_at', { ascending: false })
     .limit(50)
 
-  if (error || !data) return []
+  if (error || !data) {
+
+    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
+
+    if (error) logMarketplaceError('productos de promociones', error)
+
+    return []
+
+  }
 
   const rows = data as unknown as (ProductRow & { has_variants?: boolean })[]
 
@@ -1203,7 +1241,15 @@ async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplacePro
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error || !data) return []
+  if (error || !data) {
+
+    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
+
+    if (error) logMarketplaceError('ofertas', error)
+
+    return []
+
+  }
 
   const rows = data as unknown as ProductRow[]
 

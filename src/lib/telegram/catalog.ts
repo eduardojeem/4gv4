@@ -7,6 +7,7 @@
 
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { PRODUCT_ORGANIZATION } from '@/lib/supabase/embeds'
 import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
 import { PAGE_SIZE, type BotCategory, type BotProduct, type BotStore, type StoreContact } from '@/lib/telegram/messages'
 
@@ -117,7 +118,7 @@ export async function rememberChatStore(admin: Admin, chatId: number, store: Bot
 /** Los campos del producto; `hide_price` sólo si la migración ya está. */
 async function productFields(admin: Admin): Promise<string> {
   const hidePrice = await productsHaveHidePriceColumn(admin)
-  return `${PRODUCT_FIELDS}${hidePrice ? ', hide_price' : ''}, organizations!inner(${STORE_FIELDS})`
+  return `${PRODUCT_FIELDS}${hidePrice ? ', hide_price' : ''}, ${PRODUCT_ORGANIZATION}!inner(${STORE_FIELDS})`
 }
 
 // Sin `async`: el query builder es «thenable» y devolverlo desde una función
