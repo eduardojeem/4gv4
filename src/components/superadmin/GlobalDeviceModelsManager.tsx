@@ -24,6 +24,7 @@ type Row = GlobalDeviceModel & { stores: number }
 
 type Draft = {
   id?: string
+  global_brand_id: string
   brand: string
   model: string
   device_type: DeviceType
@@ -32,7 +33,7 @@ type Draft = {
   is_active: boolean
 }
 
-const EMPTY_DRAFT: Draft = { brand: '', model: '', device_type: 'smartphone', aliases: '', release_year: '', is_active: true }
+const EMPTY_DRAFT: Draft = { global_brand_id: '', brand: '', model: '', device_type: 'smartphone', aliases: '', release_year: '', is_active: true }
 
 type Filter = 'all' | 'used' | 'unused' | 'inactive'
 
@@ -208,6 +209,7 @@ export function GlobalDeviceModelsManager() {
     const year = draft.release_year.trim() ? Number(draft.release_year) : null
     const body = {
       ...(draft.id ? { id: draft.id } : {}),
+      global_brand_id: draft.global_brand_id,
       brand: draft.brand.trim(),
       model: draft.model.trim(),
       device_type: draft.device_type,
@@ -296,7 +298,10 @@ export function GlobalDeviceModelsManager() {
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={() => setDraft({ ...EMPTY_DRAFT, brand: brandFilter ?? '' })} className="gap-1.5" disabled={missingTable}>
+          <Button onClick={() => {
+            const selectedBrand = catalogBrands.find((brand) => brand.name === brandFilter)
+            setDraft({ ...EMPTY_DRAFT, global_brand_id: selectedBrand?.id ?? '', brand: selectedBrand?.name ?? '' })
+          }} className="gap-1.5" disabled={missingTable}>
             <Plus className="h-4 w-4" />
             Nuevo modelo
           </Button>
@@ -422,6 +427,7 @@ export function GlobalDeviceModelsManager() {
                             size="sm"
                             onClick={() => setDraft({
                               id: model.id,
+                              global_brand_id: model.global_brand_id ?? '',
                               brand: model.brand,
                               model: model.model,
                               device_type: model.device_type,
@@ -475,13 +481,18 @@ export function GlobalDeviceModelsManager() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="dm-brand">Marca *</Label>
-                  <Input id="dm-brand" list="dm-brands" value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} placeholder="Samsung" />
-                  <datalist id="dm-brands">
-                    {[...new Set([...catalogBrands.map((brand) => brand.name), ...brands.map(([brand]) => brand)])].map((brand) => <option key={brand} value={brand} />)}
-                  </datalist>
-                  {draft.brand.trim() && !catalogBrandByName.has(draft.brand.trim().toLocaleLowerCase('es')) && (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">No está en Marcas: conviene crearla ahí primero, con su logo.</p>
-                  )}
+                  <select
+                    id="dm-brand"
+                    value={draft.global_brand_id}
+                    onChange={(event) => {
+                      const brand = catalogBrands.find((item) => item.id === event.target.value)
+                      setDraft({ ...draft, global_brand_id: event.target.value, brand: brand?.name ?? '' })
+                    }}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Elegí una marca</option>
+                    {catalogBrands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="dm-model">Modelo *</Label>
@@ -518,7 +529,7 @@ export function GlobalDeviceModelsManager() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>Cancelar</Button>
-            <Button onClick={() => void save()} disabled={saving || !draft?.brand.trim() || !draft?.model.trim()} className="gap-1.5">
+            <Button onClick={() => void save()} disabled={saving || !draft?.global_brand_id || !draft?.model.trim()} className="gap-1.5">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
             </Button>

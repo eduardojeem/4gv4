@@ -4,7 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { buildDeviceOptions } from '@/lib/products/device-options'
-import { mergeCatalogIntoOptions, type GlobalDeviceModel } from '@/lib/devices/global-models'
+import { mergeCatalogIntoOptions, resolveGlobalDeviceModelBrand, type GlobalDeviceModel } from '@/lib/devices/global-models'
 
 /**
  * Marcas y modelos de celular para elegir de una lista.
@@ -52,10 +52,16 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     if (!soloProductos) {
       const { data: catalogo, error: catalogoError } = await admin
         .from('global_device_models')
-        .select('id, brand, model, device_type, aliases, release_year, is_active')
+        .select('id, global_brand_id, brand, model, device_type, aliases, release_year, is_active, global_brands(name)')
         .eq('is_active', true)
         .limit(5000)
-      if (!catalogoError && catalogo) opciones = mergeCatalogIntoOptions(propias, catalogo as GlobalDeviceModel[])
+      if (!catalogoError && catalogo) {
+        const models = (catalogo as unknown as GlobalDeviceModel[]).map((item) => ({
+          ...item,
+          brand: resolveGlobalDeviceModelBrand(item),
+        }))
+        opciones = mergeCatalogIntoOptions(propias, models)
+      }
     }
 
     return NextResponse.json({ success: true, data: { ...opciones, columnsReady: conColumnas } })
