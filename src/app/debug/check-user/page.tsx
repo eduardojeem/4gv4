@@ -7,9 +7,13 @@ export default function CheckUserPage() {
   const [data, setData] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [loading, setLoading] = useState(true)
-  const [email, setEmail] = useState('jeem101595@gmail.com')
+  const [email, setEmail] = useState('')
 
   const checkUser = useCallback(async () => {
+    if (!email.trim()) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const supabase = createClient()
     try {
