@@ -245,6 +245,17 @@ describe('el superadmin sigue el tema elegido', () => {
 })
 
 describe('categorías globales del superadmin', () => {
+  it('mueve la rama mediante la RPC transaccional y no actualiza la jerarquía directamente', () => {
+    const route = readFileSync(resolve(process.cwd(), 'src/app/api/superadmin/global-categories/route.ts'), 'utf8')
+
+    expect(route).toContain("rpc('move_global_category_safely'")
+    expect(route).toContain('p_actor_user_id: user.id')
+    expect(route).not.toMatch(/updates\.parent_id\s*=/)
+    expect(route).not.toMatch(/updates\.level\s*=/)
+    expect(route).toContain("error.code === 'CAT01'")
+    expect(route).toContain("error.code === 'CAT02'")
+  })
+
   it('muestra qué categoría de qué empresa se une a cuál', async () => {
     servidor(categorias)
     render(<GlobalCategoriesManager />)

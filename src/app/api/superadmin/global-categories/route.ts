@@ -364,13 +364,23 @@ export async function PUT(request: NextRequest) {
     const admin = createAdminSupabase()
     if (input.parent_id !== undefined) {
       const parentId = input.parent_id || null
-      updates.parent_id = parentId
-      let level = 0
-      if (parentId) {
-        const { data: parent } = await admin.from('global_categories').select('level').eq('id', parentId).maybeSingle()
-        level = Math.min(2, Number(parent?.level ?? 0) + 1)
+      const { error } = await admin.rpc('move_global_category_safely', {
+        p_category_id: id,
+        p_parent_id: parentId,
+        p_actor_user_id: user.id,
+      })
+      if (error) {
+        if (error.code === 'CAT01') {
+          return NextResponse.json({ success: false, error: 'Ese movimiento formaría un ciclo en la taxonomía.' }, { status: 409 })
+        }
+        if (error.code === 'CAT02') {
+          return NextResponse.json({ success: false, error: 'La taxonomía admite como máximo tres niveles.' }, { status: 409 })
+        }
+        if (error.code === 'CAT03') {
+          return NextResponse.json({ success: false, error: 'La categoría o su nueva madre ya no existe.' }, { status: 404 })
+        }
+        throw error
       }
-      updates.level = level
     }
 
     const { data, error } = await admin.from('global_categories').update(updates).eq('id', id).select(input.verticals !== undefined ? `${COLUMNS}, verticals` : COLUMNS).single()
