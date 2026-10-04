@@ -287,17 +287,6 @@ export function ProductModal({
   const [activeTab, setActiveTab] = useState<string>(initialTab)
   const initialTabRef = useRef(initialTab)
   initialTabRef.current = initialTab
-  const currentStepIndex = Math.max(0, PRODUCT_TABS.findIndex(t => t.id === activeTab))
-  const prevTab = currentStepIndex > 0 ? PRODUCT_TABS[currentStepIndex - 1] : null
-  const nextTab = currentStepIndex < PRODUCT_TABS.length - 1 ? PRODUCT_TABS[currentStepIndex + 1] : null
-
-  const goToPrevTab = () => {
-    if (prevTab) setActiveTab(prevTab.id)
-  }
-
-  const goToNextTab = () => {
-    if (nextTab) setActiveTab(nextTab.id)
-  }
 
   const [saveFeedback, setSaveFeedback] = useState<ProductSaveFeedback | null>(null)
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
@@ -408,6 +397,22 @@ export function ProductModal({
     [businessVertical, operatingModel, currentUnit],
   )
   const isServiceUnit = currentUnit === SERVICE_UNIT
+  // Un servicio no lleva stock ni variantes: esas pestañas no aparecen.
+  const visibleTabs = useMemo(
+    () => (isServiceUnit ? PRODUCT_TABS.filter((tab) => tab.id !== 'inventory' && tab.id !== 'variants') : [...PRODUCT_TABS]),
+    [isServiceUnit],
+  )
+  const currentStepIndex = Math.max(0, visibleTabs.findIndex(t => t.id === activeTab))
+  const prevTab = currentStepIndex > 0 ? visibleTabs[currentStepIndex - 1] : null
+  const nextTab = currentStepIndex < visibleTabs.length - 1 ? visibleTabs[currentStepIndex + 1] : null
+
+  const goToPrevTab = () => {
+    if (prevTab) setActiveTab(prevTab.id)
+  }
+
+  const goToNextTab = () => {
+    if (nextTab) setActiveTab(nextTab.id)
+  }
   const currencyShort = getLocaleConfig().currency === 'PYG' ? 'Gs' : getLocaleConfig().currency
   // Lo que trae Postventa un producto nuevo; se lee al abrir el formulario.
   const postSaleDefaultsRef = useRef(postSaleDefaultsFor(formProfile.vertical))
@@ -1083,9 +1088,9 @@ export function ProductModal({
   }
 
   const renderStepNavigation = (currentTabId: ProductModalTabId) => {
-    const idx = PRODUCT_TABS.findIndex(t => t.id === currentTabId)
-    const prev = idx > 0 ? PRODUCT_TABS[idx - 1] : null
-    const next = idx < PRODUCT_TABS.length - 1 ? PRODUCT_TABS[idx + 1] : null
+    const idx = visibleTabs.findIndex(t => t.id === currentTabId)
+    const prev = idx > 0 ? visibleTabs[idx - 1] : null
+    const next = idx >= 0 && idx < visibleTabs.length - 1 ? visibleTabs[idx + 1] : null
 
     return (
       <div className="mt-8 pt-4 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
@@ -1194,22 +1199,22 @@ export function ProductModal({
                         <div className="hidden sm:flex items-center gap-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-2xs">
                           <span className="flex h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse" />
                           <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                            Paso {currentStepIndex + 1} de {PRODUCT_TABS.length}:
+                            Paso {currentStepIndex + 1} de {visibleTabs.length}:
                           </span>
                           <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                            {PRODUCT_TABS[currentStepIndex]?.shortLabel}
+                            {visibleTabs[currentStepIndex]?.shortLabel}
                           </span>
                           <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden ml-0.5">
                             <div
                               className="h-full bg-blue-600 dark:bg-blue-400 rounded-full transition-all duration-300"
-                              style={{ width: `${((currentStepIndex + 1) / PRODUCT_TABS.length) * 100}%` }}
+                              style={{ width: `${((currentStepIndex + 1) / visibleTabs.length) * 100}%` }}
                             />
                           </div>
                         </div>
                         {/* Indicador ultra compacto para móvil */}
                         <div className="sm:hidden flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-blue-800/80 px-2 py-0.5 rounded-full shadow-2xs">
                           <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
-                          <span>{currentStepIndex + 1}/{PRODUCT_TABS.length}</span>
+                          <span>{currentStepIndex + 1}/{visibleTabs.length}</span>
                         </div>
                         <Badge className="hidden sm:inline-flex bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800 px-2.5 py-1 text-xs font-semibold">
                           ✦ Nuevo
@@ -1346,6 +1351,8 @@ export function ProductModal({
                     )}
                   </button>
 
+                  {!isServiceUnit && (
+                  <>
                   <button
                     type="button"
                     onClick={() => setActiveTab('inventory')}
@@ -1382,6 +1389,8 @@ export function ProductModal({
                       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'variants' ? 'bg-amber-300' : 'bg-red-500'}`} />
                     )}
                   </button>
+                  </>
+                  )}
 
                   <button
                     type="button"
@@ -1465,6 +1474,8 @@ export function ProductModal({
                       </div>
                     </TabsTrigger>
 
+                    {!isServiceUnit && (
+                    <>
                     {/* 3. Inventario */}
                     <TabsTrigger
                       value="inventory"
@@ -1495,6 +1506,8 @@ export function ProductModal({
                         )}
                       </div>
                     </TabsTrigger>
+                    </>
+                    )}
 
                     {/* 5. Postventa */}
                     <TabsTrigger
@@ -1578,7 +1591,7 @@ export function ProductModal({
                 </div>
                 {!product && (
                   <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                    Modo guiado · Paso {currentStepIndex + 1} de {PRODUCT_TABS.length}
+                    Modo guiado · Paso {currentStepIndex + 1} de {visibleTabs.length}
                   </span>
                 )}
               </div>
