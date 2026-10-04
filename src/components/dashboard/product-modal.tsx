@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
 import { Upload, Package, Tag, Warehouse, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, TrendingUp, Percent, RotateCcw } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
@@ -56,13 +57,20 @@ import {
 import type { Product, Category, Supplier, Brand, ProductFormData } from '@/types/products'
 import type { Database } from '@/lib/supabase/types'
 import type { ProductAttributeDefinition, ProductVariantInput } from '@/lib/products/variant-contract'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { generateEAN13 } from '@/lib/validations/product-validation'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { ForeignPriceSection } from '@/components/dashboard/currency/ForeignPriceSection'
+import {
+  SERVICE_UNIT,
+  exchangeTemplateFor,
+  generateProductSku,
+  postSaleDefaultsFor,
+  productFormProfile,
+} from '@/lib/products/vertical-product-form'
 import { CategoryModal } from '@/components/categories/CategoryModal'
 import { buildCategoryOptions, getCategoryIndent } from '@/lib/categories/category-tree'
 import { NewProductChecklist } from '@/components/dashboard/products/NewProductChecklist'
@@ -102,6 +110,8 @@ interface ProductModalProps {
   suppliers: Supplier[]
   /** Called when a category, brand, or supplier is created from within the modal */
   onCatalogChange?: () => void
+  /** Paso en el que se abre; por ejemplo «variants» desde la pestaña de variantes. */
+  initialTab?: ProductModalTabId
 }
 
 const DEFAULT_POST_SALE_VALUES = {
@@ -271,9 +281,12 @@ export function ProductModal({
   categories,
   brands,
   suppliers,
-  onCatalogChange
+  onCatalogChange,
+  initialTab = 'basic',
 }: ProductModalProps) {
-  const [activeTab, setActiveTab] = useState<string>('basic')
+  const [activeTab, setActiveTab] = useState<string>(initialTab)
+  const initialTabRef = useRef(initialTab)
+  initialTabRef.current = initialTab
   const currentStepIndex = Math.max(0, PRODUCT_TABS.findIndex(t => t.id === activeTab))
   const prevTab = currentStepIndex > 0 ? PRODUCT_TABS[currentStepIndex - 1] : null
   const nextTab = currentStepIndex < PRODUCT_TABS.length - 1 ? PRODUCT_TABS[currentStepIndex + 1] : null
@@ -387,6 +400,20 @@ export function ProductModal({
   const { formState: { isSubmitting, errors, isValid, isDirty }, setValue, watch } = form
   // Con precio en otra moneda, los precios locales los calcula el tipo de cambio.
   const isForeignPriced = Boolean(watch('price_currency'))
+  // El formulario habla el idioma del rubro: ejemplos, unidades, garantía y
+  // políticas de una ferretería no son las de una barbería o un almacén.
+  const currentUnit = watch('unit_measure')
+  const formProfile = useMemo(
+    () => productFormProfile(businessVertical, operatingModel, currentUnit),
+    [businessVertical, operatingModel, currentUnit],
+  )
+  const isServiceUnit = currentUnit === SERVICE_UNIT
+  const currencyShort = getLocaleConfig().currency === 'PYG' ? 'Gs' : getLocaleConfig().currency
+  // Lo que trae Postventa un producto nuevo; se lee al abrir el formulario.
+  const postSaleDefaultsRef = useRef(postSaleDefaultsFor(formProfile.vertical))
+  useEffect(() => {
+    postSaleDefaultsRef.current = postSaleDefaultsFor(formProfile.vertical)
+  }, [formProfile.vertical])
   const isExistingVariantDataReady = !productNeedsVariantHydration || hydratedVariantProductId === productId
   const submitState = getProductSubmitState({
     isEditing: Boolean(product),
@@ -545,7 +572,7 @@ export function ProductModal({
     const product = productRef.current
     newlyUploadedImages.current.clear()
     setSaveFeedback(null)
-    setActiveTab('basic')
+    setActiveTab(initialTabRef.current)
     // Cada producto vuelve a preguntar: sin esto, elegir "cargar nuevos" en un
     // producto se arrastraba al siguiente y la eleccion no volvia a aparecer.
     setCreditChoice('pending')
@@ -630,7 +657,7 @@ export function ProductModal({
         installments_enabled: false,
         installments_public: true,
         installments_plans: [],
-        ...DEFAULT_POST_SALE_VALUES,
+        ...postSaleDefaultsRef.current,
         stock_quantity: 0,
         min_stock: 0,
         max_stock: 0,
@@ -790,11 +817,7 @@ export function ProductModal({
     }
   }
 
-  const generateSKU = () => {
-    const timestamp = Date.now().toString(36).toUpperCase()
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
-    return `PROD-${timestamp}-${random}`
-  }
+  const generateSKU = () => generateProductSku(formProfile.skuPrefix)
 
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
@@ -1177,6 +1200,13 @@ export function ProductModal({
                   </div>
                 </div>
 
+                {!product && (
+                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    Formulario adaptado a <strong className="text-slate-700 dark:text-slate-200">{formProfile.label}</strong>: ejemplos, unidades y postventa de tu rubro.{' '}
+                    <Link href="/admin/settings" className="underline hover:text-slate-700 dark:hover:text-slate-200">Cambiar rubro</Link>
+                  </p>
+                )}
+
                 {/* Asistente guiado rápido para producto nuevo - oculto en móvil para no consumir espacio vertical */}
                 {!product && (
                   <div className="hidden sm:grid mt-3.5 sm:grid-cols-3 gap-2">
@@ -1207,7 +1237,7 @@ export function ProductModal({
                     >
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-[10px] shrink-0">2</span>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold leading-tight">Precios (Gs)</p>
+                        <p className="text-xs font-semibold leading-tight">Precios ({currencyShort})</p>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Venta al público y costo</p>
                       </div>
                     </button>
@@ -1290,7 +1320,7 @@ export function ProductModal({
                         : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
-                    <span className="font-black text-[10px] shrink-0">Gs</span>
+                    <span className="font-black text-[10px] shrink-0">{currencyShort}</span>
                     <span className="truncate">Precios</span>
                     {tabErrorMap.pricing && (
                       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${activeTab === 'pricing' ? 'bg-amber-300' : 'bg-red-500'}`} />
@@ -1564,7 +1594,7 @@ export function ProductModal({
                           <FormItem>
                             <FormLabel>Nombre del Producto <FieldRequirement required /></FormLabel>
                             <FormControl>
-                              <Input placeholder="Ej: iPhone 14 Pro" {...field} />
+                              <Input placeholder={formProfile.namePlaceholder} {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -1580,7 +1610,7 @@ export function ProductModal({
                               <FormLabel>SKU / Código <FieldRequirement required /></FormLabel>
                               <div className="flex gap-2">
                                 <FormControl>
-                                  <Input placeholder="Ej: PROD-001" {...field} />
+                                  <Input placeholder={`Ej: ${formProfile.skuPrefix}-001`} {...field} />
                                 </FormControl>
                                 <Button
                                   type="button"
@@ -1741,17 +1771,16 @@ export function ProductModal({
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="unidad">Unidad</SelectItem>
-                                  <SelectItem value="kg">Kilogramo</SelectItem>
-                                  <SelectItem value="g">Gramo</SelectItem>
-                                  <SelectItem value="l">Litro</SelectItem>
-                                  <SelectItem value="ml">Mililitro</SelectItem>
-                                  <SelectItem value="m">Metro</SelectItem>
-                                  <SelectItem value="cm">Centímetro</SelectItem>
-                                  <SelectItem value="caja">Caja</SelectItem>
-                                  <SelectItem value="paquete">Paquete</SelectItem>
+                                  {formProfile.units.map((unit) => (
+                                    <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
+                              {isServiceUnit && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  Es un servicio: no lleva stock y en el POS se cobra sin descontar inventario.
+                                </p>
+                              )}
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1937,7 +1966,7 @@ export function ProductModal({
                             </div>
                             <FormControl>
                               <Textarea
-                                placeholder="Descripción detallada del producto..."
+                                placeholder={formProfile.descriptionPlaceholder}
                                 className="resize-none"
                                 rows={3}
                                 {...field}
@@ -2981,6 +3010,15 @@ export function ProductModal({
 
                 {/* Inventory */}
                 <TabsContent value="inventory" className="space-y-4 sm:space-y-6 py-1 sm:py-2">
+                  {isServiceUnit && (
+                    <Alert className="border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Los servicios no llevan stock</AlertTitle>
+                      <AlertDescription>
+                        Podés dejar el stock en 0: el POS cobra un servicio sin descontar inventario.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {/* Tip contextual - Inventario (oculto en móvil) */}
                   <div className="hidden sm:flex items-start gap-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/60 dark:border-amber-800/40 p-3.5 shadow-2xs">
                     <div className="h-7 w-7 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -3082,7 +3120,7 @@ export function ProductModal({
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-indigo-950 dark:text-indigo-200 mb-0.5">Variantes del Producto</p>
                       <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
-                        Usá variantes para manejar <strong>colores, talles o especificaciones</strong>. Cada variante tiene su propio stock, precio y SKU derivado.
+                        {formProfile.variantsTip}
                       </p>
                     </div>
                   </div>
@@ -3152,10 +3190,11 @@ export function ProductModal({
                     <CardHeader className="pb-3 px-4 sm:px-6 border-b border-slate-100 dark:border-slate-800/60">
                       <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold">
                         <RefreshCw className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-                        Garantía y Cobertura
+                        {formProfile.warranty.title}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 sm:p-6 space-y-4">
+                      {formProfile.warranty.enabled ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -3168,14 +3207,10 @@ export function ProductModal({
                               </FormControl>
                               {/* ── Chips rápidos de meses ── */}
                               <div className="flex flex-wrap gap-1.5 pt-1">
-                                {[
-                                  { label: 'Sin garantía', val: 0 },
-                                  { label: '1 mes', val: 1 },
-                                  { label: '3 meses', val: 3 },
-                                  { label: '6 meses', val: 6 },
-                                  { label: '12 meses (1 año)', val: 12 },
-                                  { label: '24 meses (2 años)', val: 24 },
-                                ].map((item) => (
+                                {formProfile.warranty.monthOptions.map((months) => ({
+                                  label: months === 0 ? 'Sin garantía' : months === 1 ? '1 mes' : months === 12 ? '12 meses (1 año)' : months === 24 ? '24 meses (2 años)' : `${months} meses`,
+                                  val: months,
+                                })).map((item) => (
                                   <button
                                     key={item.val}
                                     type="button"
@@ -3204,6 +3239,11 @@ export function ProductModal({
                           </p>
                         </div>
                       </div>
+                      ) : (
+                        <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                          {formProfile.warranty.disabledNote}
+                        </p>
+                      )}
 
                       <FormField
                         control={form.control}
@@ -3214,33 +3254,22 @@ export function ProductModal({
                               <FormLabel>Condiciones de garantía <FieldRequirement /></FormLabel>
                               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                                 <span className="font-semibold text-primary">Plantillas:</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setValue('warranty_info', 'Garantía oficial por fallas o defectos de fabricación durante el período establecido. No cubre roturas por golpes, caídas, humedad, sobretensión eléctrica o manipulación indebida.', { shouldDirty: true })}
-                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                                >
-                                  ⚡ Electrónica
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setValue('warranty_info', 'Garantía por defectos de confección o costura. El producto debe presentarse con etiqueta original y no presentar signos de uso ni lavado.', { shouldDirty: true })}
-                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                                >
-                                  👕 Ropa/Calzado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setValue('warranty_info', 'Cubre defectos o vicios de fabricación presentando el comprobante o factura de compra correspondiente y empaque original.', { shouldDirty: true })}
-                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                                >
-                                  📦 Estándar
-                                </button>
+                                {formProfile.warranty.templates.map((template) => (
+                                  <button
+                                    key={template.label}
+                                    type="button"
+                                    onClick={() => setValue('warranty_info', template.text, { shouldDirty: true })}
+                                    className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                  >
+                                    {template.label}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                             <FormControl>
                               <Textarea
                                 rows={3}
-                                placeholder="Ej: Cubre fallas de fabrica. No cubre golpes, humedad o manipulacion."
+                                placeholder={formProfile.warranty.placeholder}
                                 {...field}
                                 value={field.value || ""}
                               />
@@ -3353,7 +3382,7 @@ export function ProductModal({
                               <FormLabel>Política de devolución <FieldRequirement /></FormLabel>
                               <button
                                 type="button"
-                                onClick={() => setValue('return_policy', 'Devolución aceptada dentro del plazo establecido. El producto debe encontrarse sin uso, en su empaque y caja original con todos los accesorios y factura de compra.', { shouldDirty: true })}
+                                onClick={() => setValue('return_policy', formProfile.returnTemplates[0]?.text ?? 'Devolución aceptada dentro del plazo establecido. El producto debe encontrarse sin uso, en su empaque y caja original con todos los accesorios y factura de compra.', { shouldDirty: true })}
                                 className="text-[11px] text-primary hover:underline font-semibold"
                               >
                                 💡 Insertar política estándar
@@ -3362,7 +3391,7 @@ export function ProductModal({
                             <FormControl>
                               <Textarea
                                 rows={3}
-                                placeholder="Ej: Producto sin uso, con caja y factura, dentro del plazo."
+                                placeholder={formProfile.returnPlaceholder}
                                 {...field}
                                 value={field.value || ""}
                               />
@@ -3381,7 +3410,7 @@ export function ProductModal({
                               <FormLabel>Política de cambio <FieldRequirement /></FormLabel>
                               <button
                                 type="button"
-                                onClick={() => setValue('exchange_policy', 'Cambio directo por talle, modelo o equivalente dentro del plazo indicado, sujeto a stock disponible. El producto debe conservar su embalaje original.', { shouldDirty: true })}
+                                onClick={() => setValue('exchange_policy', exchangeTemplateFor(formProfile.vertical), { shouldDirty: true })}
                                 className="text-[11px] text-primary hover:underline font-semibold"
                               >
                                 💡 Insertar política de cambio
@@ -3390,7 +3419,7 @@ export function ProductModal({
                             <FormControl>
                               <Textarea
                                 rows={3}
-                                placeholder="Ej: Cambio por mismo producto o equivalente sujeto a stock."
+                                placeholder={formProfile.exchangePlaceholder}
                                 {...field}
                                 value={field.value || ""}
                               />
