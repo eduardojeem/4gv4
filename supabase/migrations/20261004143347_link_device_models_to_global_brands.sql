@@ -10,7 +10,7 @@ with brand_names as (
   where brand.is_active
 ), matches as (
   select model.id as model_id,
-         min(brand_names.id) as brand_id,
+         (array_agg(brand_names.id order by brand_names.id))[1] as brand_id,
          count(distinct brand_names.id) as match_count
   from public.global_device_models model
   join brand_names

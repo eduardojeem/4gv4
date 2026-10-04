@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
 
     const payload = result as Record<string, unknown> | null
     if (!payload || !Array.isArray(payload.items)) throw new Error('Invalid device catalog query result')
+    // `brand` queda como fallback compatible para filas históricas todavía no vinculadas.
     const items = (payload.items as Array<Record<string, unknown>>).map((item) => ({
       ...item,
       brand: String(item.resolved_brand ?? item.brand ?? ''),

@@ -13,6 +13,8 @@ describe('relación de modelos con marcas globales', () => {
 
   it('solo rellena coincidencias inequívocas por nombre o alias', () => {
     expect(sql).toMatch(/count\(distinct[\s\S]+having count\(distinct/i)
+    expect(sql).not.toMatch(/min\(brand_names\.id\)/i)
+    expect(sql).toMatch(/array_agg\(brand_names\.id order by brand_names\.id\)/i)
     expect(sql).toMatch(/global_brand_id is null/i)
     expect(sql).toMatch(/unique[\s\S]+global_brand_id[\s\S]+lower\(model\)/i)
   })

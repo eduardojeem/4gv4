@@ -1,3 +1,6 @@
+create schema if not exists extensions;
+create extension if not exists unaccent with schema extensions;
+
 create or replace function public.apply_global_category_links(p_links jsonb, p_actor_user_id uuid)
 returns jsonb
 language plpgsql

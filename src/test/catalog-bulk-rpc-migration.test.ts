@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest'
 const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261004142816_atomic_catalog_links.sql'), 'utf8')
 
 describe('RPC atómicas de vínculos de catálogo', () => {
+  it('instala unaccent en el esquema que usan las funciones', () => {
+    expect(sql).toMatch(/create extension if not exists unaccent with schema extensions/i)
+  })
+
   it.each(['category', 'brand'])('implementa vínculos de %s de forma set-based', (kind) => {
     expect(sql).toMatch(new RegExp(`apply_global_${kind}_links`, 'i'))
     expect(sql).toMatch(/jsonb_to_recordset/i)
