@@ -134,6 +134,9 @@ export function GlobalDeviceModelsManager() {
   const [candidates, setCandidates] = useState<DeviceModelCandidate[]>([])
   const [candidatesTotal, setCandidatesTotal] = useState(0)
   const [storesUsing, setStoresUsing] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [metrics, setMetrics] = useState({ active: 0, used: 0, storesUsing: 0 })
   // Marcas del catálogo de Marcas: la marca del equipo se elige de ahí.
   const [catalogBrands, setCatalogBrands] = useState<Array<{ id: string; name: string; logo_url: string | null }>>([])
   const [loading, setLoading] = useState(true)
@@ -152,7 +155,8 @@ export function GlobalDeviceModelsManager() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/superadmin/global-device-models', { cache: 'no-store' })
+      const params = new URLSearchParams({ q: search, status: filter, sort: 'name', page: String(page), pageSize: '50' })
+      const response = await fetch(`/api/superadmin/global-device-models?${params}`, { cache: 'no-store' })
       const payload = await response.json().catch(() => null)
       if (payload?.missingTable) {
         setMissingTable(true)
@@ -164,15 +168,21 @@ export function GlobalDeviceModelsManager() {
       setCandidates(payload.candidates ?? [])
       setCandidatesTotal(payload.candidatesTotal ?? 0)
       setStoresUsing(payload.storesUsing ?? 0)
+      setTotal(payload.total ?? 0)
+      setMetrics((current) => ({ ...current, ...(payload.metrics ?? {}) }))
       setCatalogBrands(payload.brands ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filter, page, search])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load() }, 250)
+    return () => window.clearTimeout(timer)
+  }, [load])
+  useEffect(() => { setPage(1) }, [brandFilter, filter, search])
 
   const brands = useMemo(() => {
     const counts = new Map<string, number>()
@@ -280,8 +290,8 @@ export function GlobalDeviceModelsManager() {
     }
   }
 
-  const activeCount = models.filter((model) => model.is_active).length
-  const usedCount = models.filter((model) => model.is_active && model.stores > 0).length
+  const activeCount = metrics.active
+  const usedCount = metrics.used
 
   return (
     <div className="space-y-6">
@@ -321,7 +331,7 @@ export function GlobalDeviceModelsManager() {
             cells={[
               { label: 'En el catálogo', value: activeCount, hint: `${brands.length} marca${brands.length === 1 ? '' : 's'}` },
               { label: 'Usados', value: usedCount, hint: 'por al menos una tienda' },
-              { label: 'Tiendas', value: storesUsing, hint: 'cargan marca y modelo' },
+              { label: 'Tiendas', value: metrics.storesUsing || storesUsing, hint: 'cargan marca y modelo' },
               { label: 'Por sumar', value: candidatesTotal, hint: 'ya los usan las tiendas', warn: candidatesTotal > 0 },
             ]}
           />
@@ -351,7 +361,10 @@ export function GlobalDeviceModelsManager() {
                   </button>
                 ))}
               </div>
-              <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} de {models.length}</span>
+              <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} en esta página · {total} total</span>
+              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</Button>
+              <span className="text-xs text-muted-foreground">Página {page}</span>
+              <Button variant="outline" size="sm" disabled={page * 50 >= total || loading} onClick={() => setPage((value) => value + 1)}>Siguiente</Button>
             </div>
             {brands.length > 1 && (
               <div className="flex flex-wrap gap-1.5" aria-label="Filtrar por marca">

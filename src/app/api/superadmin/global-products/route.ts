@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
-import { groupGlobalProductCandidates, gtinKey, type CatalogCandidateRow } from '@/lib/products/barcode-catalog'
+import { gtinKey } from '@/lib/products/barcode-catalog'
 import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
+import { parseCatalogAdminQuery } from '@/lib/catalog/admin-query'
 
 /**
  * Catálogo global de productos por código de barras: lo administra solo la
@@ -62,53 +62,18 @@ function isMissingTable(error: { code?: string; message?: string } | null) {
   return Boolean(error && (error.code === 'PGRST205' || error.code === '42P01' || /does not exist|could not find/i.test(error.message ?? '')))
 }
 
-/** Hasta dónde se leen productos de las tiendas para proponer candidatos. */
-const PRODUCT_ROW_CAP = 20_000
-const EMPTY_PAGE = Promise.resolve({ data: [] as never[], error: null })
-
-type ProductRow = {
-  organization_id: string | null
-  barcode: string | null
-  name: string | null
-  brand: string | null
-  description: string | null
-  image_url: string | null
-  images: string[] | null
-  brands: { global_brand_id: string | null } | null
-  categories: { global_category_id: string | null } | null
-}
-
-async function readProductsWithBarcode(admin: ReturnType<typeof createAdminSupabase>): Promise<CatalogCandidateRow[]> {
-  const rows = await fetchAllRows<ProductRow>((from, to) => from >= PRODUCT_ROW_CAP
-    ? EMPTY_PAGE
-    : admin
-      .from('products')
-      .select('organization_id, barcode, name, brand, description, image_url, images, brands(global_brand_id), categories(global_category_id)')
-      .not('barcode', 'is', null)
-      .neq('barcode', '')
-      .order('id')
-      .range(from, to) as never)
-  return rows.map((row) => ({
-    organization_id: row.organization_id,
-    barcode: row.barcode,
-    name: row.name,
-    brand: row.brand,
-    description: row.description,
-    image_url: row.images?.[0] ?? row.image_url,
-    global_brand_id: row.brands?.global_brand_id ?? null,
-    global_category_id: row.categories?.global_category_id ?? null,
-  }))
-}
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSuperAdminUser()
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
     const admin = createAdminSupabase()
-    const [{ data, error }, products, { data: brands }, { data: categories }] = await Promise.all([
-      admin.from('global_products').select(COLUMNS).order('name').limit(5000),
-      readProductsWithBarcode(admin).catch(() => [] as CatalogCandidateRow[]),
+    const query = parseCatalogAdminQuery(new URL(request.url).searchParams)
+    const [{ data: result, error }, { data: brands }, { data: categories }] = await Promise.all([
+      admin.rpc('get_global_products_admin', {
+        p_q: query.q, p_status: query.status, p_brand: query.brand, p_category: query.category,
+        p_sort: query.sort, p_page: query.page, p_page_size: query.pageSize,
+      }),
       admin.from('global_brands').select('id, name').eq('is_active', true).order('name'),
       admin.from('global_categories').select('id, name, parent_id, sort_order').eq('is_active', true).order('name'),
     ])
@@ -117,23 +82,20 @@ export async function GET() {
     }
     if (error) throw error
 
-    const catalog = (data ?? []) as Array<{ id: string; gtin: string }>
-    const storesByGtin = new Map<string, Set<string>>()
-    for (const row of products) {
-      const gtin = gtinKey(row.barcode)
-      if (!gtin || !row.organization_id) continue
-      const stores = storesByGtin.get(gtin) ?? new Set<string>()
-      stores.add(row.organization_id)
-      storesByGtin.set(gtin, stores)
-    }
-    const candidates = groupGlobalProductCandidates(products, new Set(catalog.map((item) => item.gtin)))
+    const payload = result as Record<string, unknown> | null
+    if (!payload || !Array.isArray(payload.items)) throw new Error('Invalid catalog query result')
 
     return NextResponse.json({
       success: true,
-      data: catalog.map((item) => ({ ...item, stores: storesByGtin.get(item.gtin)?.size ?? 0 })),
-      candidates: candidates.slice(0, 300),
-      candidatesTotal: candidates.length,
-      productsWithBarcode: products.filter((row) => gtinKey(row.barcode)).length,
+      data: payload.items,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      total: payload.total,
+      metrics: payload.metrics,
+      candidates: payload.candidates,
+      candidatesTotal: payload.candidatesTotal,
+      truncated: payload.truncated,
+      productsWithBarcode: (payload.metrics as { productsWithBarcode?: number } | undefined)?.productsWithBarcode ?? 0,
       brands: brands ?? [],
       categories: categories ?? [],
     })

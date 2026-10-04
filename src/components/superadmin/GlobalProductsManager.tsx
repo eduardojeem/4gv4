@@ -127,6 +127,9 @@ export function GlobalProductsManager() {
   const [candidates, setCandidates] = useState<GlobalProductCandidate[]>([])
   const [candidatesTotal, setCandidatesTotal] = useState(0)
   const [productsWithBarcode, setProductsWithBarcode] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [metrics, setMetrics] = useState({ active: 0, used: 0, uncategorized: 0, unbranded: 0, withoutImage: 0, inactive: 0 })
   const [brands, setBrands] = useState<Option[]>([])
   const [categories, setCategories] = useState<Option[]>([])
   const [loading, setLoading] = useState(true)
@@ -176,7 +179,16 @@ export function GlobalProductsManager() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/superadmin/global-products', { cache: 'no-store' })
+      const params = new URLSearchParams({
+        q: search,
+        status: selectedBrandFilter === 'none' ? 'no-brand' : selectedCategoryFilter === 'none' ? 'no-category' : filter,
+        sort: sortBy === 'stores-desc' ? 'usage_desc' : sortBy === 'name-desc' ? 'name_desc' : 'name',
+        page: String(page),
+        pageSize: '50',
+      })
+      if (selectedBrandFilter !== 'all' && selectedBrandFilter !== 'none') params.set('brand', selectedBrandFilter)
+      if (selectedCategoryFilter !== 'all' && selectedCategoryFilter !== 'none') params.set('category', selectedCategoryFilter)
+      const response = await fetch(`/api/superadmin/global-products?${params}`, { cache: 'no-store' })
       const payload = await response.json().catch(() => null)
       if (payload?.missingTable) {
         setMissingTable(true)
@@ -188,6 +200,8 @@ export function GlobalProductsManager() {
       setCandidates(payload.candidates ?? [])
       setCandidatesTotal(payload.candidatesTotal ?? 0)
       setProductsWithBarcode(payload.productsWithBarcode ?? 0)
+      setTotal(payload.total ?? 0)
+      setMetrics((current) => ({ ...current, ...(payload.metrics ?? {}) }))
       setBrands(payload.brands ?? [])
       setCategories(payload.categories ?? [])
     } catch (err) {
@@ -195,11 +209,14 @@ export function GlobalProductsManager() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filter, page, search, selectedBrandFilter, selectedCategoryFilter, sortBy])
 
   useEffect(() => {
-    void load()
+    const timer = window.setTimeout(() => { void load() }, 250)
+    return () => window.clearTimeout(timer)
   }, [load])
+
+  useEffect(() => { setPage(1) }, [filter, search, selectedBrandFilter, selectedCategoryFilter, sortBy])
 
   const brandName = useMemo(() => new Map(brands.map((brand) => [brand.id, brand.name])), [brands])
   const categoryName = useMemo(() => categoryLabels(categories), [categories])
@@ -545,10 +562,10 @@ export function GlobalProductsManager() {
         <>
           {/* ── Tarjetas de Métricas Interactivas (KPIs) ── */}
           <GlobalProductStats
-            activeCount={active.length}
-            usedCount={used.length}
-            uncategorizedCount={noCat.length}
-            unbrandedCount={noBrand.length}
+            activeCount={metrics.active}
+            usedCount={metrics.used}
+            uncategorizedCount={metrics.uncategorized}
+            unbrandedCount={metrics.unbranded}
             candidatesCount={candidatesTotal}
             currentFilter={filter}
             onSelectFilter={(filterId) => setFilter(filterId as Filter)}
@@ -621,12 +638,12 @@ export function GlobalProductsManager() {
               <div role="tablist" aria-label="Filtrar productos" className="flex flex-wrap gap-1.5">
                 {FILTERS.map((item) => {
                   const isSelected = filter === item.id
-                  let count = active.length
-                  if (item.id === 'used') count = used.length
-                  else if (item.id === 'no-category') count = noCat.length
-                  else if (item.id === 'no-brand') count = noBrand.length
-                  else if (item.id === 'no-image') count = active.filter((p) => !p.image_url).length
-                  else if (item.id === 'inactive') count = products.filter((p) => !p.is_active).length
+                  let count = metrics.active
+                  if (item.id === 'used') count = metrics.used
+                  else if (item.id === 'no-category') count = metrics.uncategorized
+                  else if (item.id === 'no-brand') count = metrics.unbranded
+                  else if (item.id === 'no-image') count = metrics.withoutImage
+                  else if (item.id === 'inactive') count = metrics.inactive
 
                   return (
                     <button
@@ -703,8 +720,11 @@ export function GlobalProductsManager() {
                 </select>
 
                 <span className="text-xs font-bold tabular-nums text-muted-foreground pl-1">
-                  {visible.length} de {products.length}
+                  {visible.length} en esta página · {total} total
                 </span>
+                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</Button>
+                <span className="text-xs text-muted-foreground">Página {page}</span>
+                <Button variant="outline" size="sm" disabled={page * 50 >= total || loading} onClick={() => setPage((value) => value + 1)}>Siguiente</Button>
               </div>
             </div>
           </div>

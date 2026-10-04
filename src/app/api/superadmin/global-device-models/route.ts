@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { logger } from '@/lib/logger'
 import { normalizeDeviceBrand, normalizeDeviceModel } from '@/lib/products/device-compatibility'
-import { DEVICE_TYPES, resolveGlobalDeviceModelBrand, sortDeviceModels, summarizeDeviceUsage, type GlobalDeviceModel, type UsageRows } from '@/lib/devices/global-models'
+import { DEVICE_TYPES } from '@/lib/devices/global-models'
 import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
+import { parseCatalogAdminQuery } from '@/lib/catalog/admin-query'
 
 /**
  * Catálogo global de modelos de equipos: lo administra solo la plataforma y se
@@ -43,25 +43,6 @@ function normalized(input: { brand: string; model: string; aliases?: string[] })
   return { brand, model, aliases }
 }
 
-/** Hasta dónde se leen productos y reparaciones para contar el uso. */
-const USAGE_ROW_CAP = 20_000
-
-/** Una página vacía corta la lectura de `fetchAllRows` al llegar al tope. */
-const EMPTY_PAGE = Promise.resolve({ data: [] as never[], error: null })
-
-/** Lo que las tiendas cargaron en productos y reparaciones. */
-async function readUsage(admin: ReturnType<typeof createAdminSupabase>): Promise<UsageRows> {
-  const [products, repairs] = await Promise.all([
-    fetchAllRows<UsageRows['products'][number]>((from, to) => from >= USAGE_ROW_CAP
-      ? EMPTY_PAGE
-      : admin.from('products').select('organization_id, device_brand, device_models').not('device_brand', 'is', null).order('id').range(from, to)).catch(() => []),
-    fetchAllRows<UsageRows['repairs'][number]>((from, to) => from >= USAGE_ROW_CAP
-      ? EMPTY_PAGE
-      : admin.from('repairs').select('organization_id, device_brand, device_model').not('device_brand', 'is', null).order('id').range(from, to)).catch(() => []),
-  ])
-  return { products, repairs }
-}
-
 /**
  * La marca del equipo sale del catálogo de Marcas: si lo escrito coincide con
  * una marca global (por nombre o alias), se guarda con su nombre oficial. Así
@@ -86,15 +67,18 @@ function isMissingTable(error: { code?: string; message?: string } | null) {
   return Boolean(error && (error.code === 'PGRST205' || error.code === '42P01' || /does not exist|could not find/i.test(error.message ?? '')))
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSuperAdminUser()
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
     const admin = createAdminSupabase()
-    const [{ data, error }, usage, { data: brands }] = await Promise.all([
-      admin.from('global_device_models').select(COLUMNS).limit(5000),
-      readUsage(admin),
+    const query = parseCatalogAdminQuery(new URL(request.url).searchParams)
+    const [{ data: result, error }, { data: brands }] = await Promise.all([
+      admin.rpc('get_global_device_models_admin', {
+        p_q: query.q, p_status: query.status, p_brand: query.brand,
+        p_sort: query.sort, p_page: query.page, p_page_size: query.pageSize,
+      }),
       admin.from('global_brands').select('id, name, logo_url').eq('is_active', true).order('name'),
     ])
     if (isMissingTable(error)) {
@@ -102,17 +86,24 @@ export async function GET() {
     }
     if (error) throw error
 
-    // La relación manda; `brand` queda como fallback compatible para filas históricas.
-    const catalog = ((data ?? []) as unknown as GlobalDeviceModel[]).map((item) => ({ ...item, brand: resolveGlobalDeviceModelBrand(item) }))
-    const { storesByModel, candidates } = summarizeDeviceUsage(usage, catalog)
-    const storesUsing = new Set([...usage.products, ...usage.repairs].map((row) => row.organization_id).filter(Boolean)).size
+    const payload = result as Record<string, unknown> | null
+    if (!payload || !Array.isArray(payload.items)) throw new Error('Invalid device catalog query result')
+    const items = (payload.items as Array<Record<string, unknown>>).map((item) => ({
+      ...item,
+      brand: String(item.resolved_brand ?? item.brand ?? ''),
+    }))
 
     return NextResponse.json({
       success: true,
-      data: sortDeviceModels(catalog).map((item) => ({ ...item, stores: storesByModel.get(item.id) ?? 0 })),
-      candidates: candidates.slice(0, 300),
-      candidatesTotal: candidates.length,
-      storesUsing,
+      data: items,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      total: payload.total,
+      metrics: payload.metrics,
+      candidates: payload.candidates,
+      candidatesTotal: payload.candidatesTotal,
+      truncated: payload.truncated,
+      storesUsing: (payload.metrics as { storesUsing?: number } | undefined)?.storesUsing ?? 0,
       // Las marcas del catálogo de Marcas: de ahí se elige la del equipo.
       brands: brands ?? [],
     })
