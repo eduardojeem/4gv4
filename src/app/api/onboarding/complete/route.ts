@@ -129,7 +129,17 @@ export async function POST(request: Request) {
   const currentModules = normalizeOrganizationModules(settings?.modules) as OnboardingMetadata
   const currentAdminSettings = getTenantAdminSettings(currentModules)
   const currentCurrency = settings?.currency || currentAdminSettings.currency || 'PYG'
+  // Sin productos ni ventas no hay importes que el cambio de moneda afecte:
+  // una empresa nueva elige su moneda sin confirmar nada.
+  let currencyChangeMatters = false
   if (input.currency !== currentCurrency && !input.confirmCurrencyChange) {
+    const [{ count: productCount }, { count: saleCount }] = await Promise.all([
+      admin.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
+      admin.from('sales').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
+    ])
+    currencyChangeMatters = (productCount ?? 0) > 0 || (saleCount ?? 0) > 0
+  }
+  if (currencyChangeMatters) {
     return NextResponse.json(
       {
         error: 'Confirma que el cambio de moneda no convierte precios, saldos ni operaciones existentes.',

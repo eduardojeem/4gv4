@@ -89,7 +89,8 @@ describe('la pantalla del onboarding', () => {
     expect(cliente).toContain('const publishingNow = form.storefrontPublic && !initialCompanyInfo.storefrontPublic')
     expect(cliente).toContain('&& (!publishingNow || confirmPublication)')
     expect(cliente).toContain('mi tienda queda visible para cualquiera con el enlace')
-    expect(cliente).toContain('confirmCurrencyChange, confirmPublication')
+    // Se mandan las dos confirmaciones (la de moneda sobra sin productos ni ventas).
+    expect(cliente).toContain('confirmCurrencyChange: confirmCurrencyChange || !currencyNeedsConfirmation, confirmPublication')
   })
 })
 

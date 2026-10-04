@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { OnboardingClient } from '@/components/dashboard/onboarding/OnboardingClient'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 type SettingsModules = {
   onboarding?: {
@@ -49,7 +50,7 @@ export default async function DashboardOnboardingPage() {
   const [{ data: subscription }, { data: settings }, { data: businessProfile }] = await Promise.all([
     admin
       .from('subscriptions')
-      .select('plan, status, trial_ends_at')
+      .select('plan, status, trial_ends_at, current_period_ends_at')
       .eq('organization_id', organization.id)
       .maybeSingle(),
     admin
@@ -69,6 +70,10 @@ export default async function DashboardOnboardingPage() {
     { data: companyInfoSetting },
     { count: productsCount },
     { count: membersCount },
+    { count: salesCount },
+    { count: agendaProfessionals },
+    { data: agendaSettingsRow },
+    planInfo,
   ] = await Promise.all([
     admin
       .from('branches')
@@ -92,6 +97,22 @@ export default async function DashboardOnboardingPage() {
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organization.id)
       .eq('status', 'active'),
+    // Con ventas o productos, cambiar la moneda afecta importes que ya existen.
+    admin
+      .from('sales')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organization.id),
+    // La agenda cuenta como configurada si cargó profesionales o su horario.
+    admin
+      .from('agenda_professionals')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organization.id),
+    admin
+      .from('agenda_settings')
+      .select('organization_id')
+      .eq('organization_id', organization.id)
+      .maybeSingle(),
+    getOrganizationPlanInfo(organization.id).catch(() => null),
   ])
 
   const modules = (settings?.modules ?? {}) as SettingsModules
@@ -137,15 +158,21 @@ export default async function DashboardOnboardingPage() {
               plan: subscription.plan,
               status: subscription.status,
               trialEndsAt: subscription.trial_ends_at,
+              currentPeriodEndsAt: subscription.current_period_ends_at ?? null,
             }
           : null
       }
+      planName={planInfo?.name ?? null}
+      entitledModules={planInfo ? [...planInfo.entitledModules, ...planInfo.moduleTrials.map((trial) => trial.module)] : null}
+      servicesEnabled={Boolean(planInfo?.effectiveModules.includes('services'))}
+      hasBusinessData={(productsCount ?? 0) > 0 || (salesCount ?? 0) > 0}
       completedAt={modules.onboarding?.completed_at ?? null}
       stepProgress={{
         hasCompanyInfo,
         hasProducts: (productsCount ?? 0) > 0,
         hasPublicStore: storefrontPublic,
         hasTeam: (membersCount ?? 0) > 1,
+        hasAgenda: (agendaProfessionals ?? 0) > 0 || Boolean(agendaSettingsRow),
       }}
       initialCompanyInfo={{
         displayName: settings?.display_name || organization.name,
