@@ -8,13 +8,14 @@ import { normalizeDeviceBrand, normalizeDeviceModel } from '@/lib/products/devic
 import { DEVICE_TYPES } from '@/lib/devices/global-models'
 import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
 import { parseCatalogAdminQuery } from '@/lib/catalog/admin-query'
+import { canTransitionCatalogStatus, catalogStatusSchema, type CatalogStatus } from '@/lib/catalog/editorial-status'
 
 /**
  * Catálogo global de modelos de equipos: lo administra solo la plataforma y se
  * suma a las sugerencias de marca/modelo de todas las tiendas.
  */
 
-const COLUMNS = 'id, global_brand_id, brand, model, device_type, aliases, release_year, is_active, global_brands(name)'
+const COLUMNS = 'id, global_brand_id, brand, model, device_type, aliases, release_year, is_active, catalog_status, source_type, source_summary, confidence, reviewed_by, reviewed_at, deactivation_reason, global_brands(name)'
 
 const modelSchema = z.object({
   brand: z.string({ message: 'Poné la marca.' }).trim().min(1, 'Poné la marca.').max(80),
@@ -24,6 +25,8 @@ const modelSchema = z.object({
   aliases: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   release_year: z.number().int().min(1990).max(2100).nullable().optional(),
   is_active: z.boolean().optional(),
+  catalog_status: catalogStatusSchema.optional(),
+  deactivation_reason: z.string().trim().max(500).optional().nullable(),
 })
 
 const updateSchema = modelSchema.partial().extend({ id: z.string().uuid() })
@@ -173,7 +176,10 @@ export async function POST(request: NextRequest) {
         aliases,
         device_type: validation.data.device_type ?? 'smartphone',
         release_year: validation.data.release_year ?? null,
-        is_active: validation.data.is_active ?? true,
+        catalog_status: 'published',
+        source_type: 'manual',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
       })
       .select(COLUMNS)
       .single()
@@ -210,9 +216,27 @@ export async function PUT(request: NextRequest) {
     }
     const { id, ...input } = validation.data
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    const admin = createAdminSupabase()
+
+    if (input.catalog_status !== undefined) {
+      const { data: editorial, error: editorialError } = await admin
+        .from('global_device_models')
+        .select('catalog_status')
+        .eq('id', id)
+        .maybeSingle()
+      if (editorialError) throw editorialError
+      if (!editorial) return NextResponse.json({ success: false, error: 'El modelo no existe.' }, { status: 404 })
+      const currentStatus = (editorial.catalog_status ?? ((editorial as { is_active?: boolean }).is_active ? 'published' : 'inactive')) as CatalogStatus
+      if (!canTransitionCatalogStatus(currentStatus, input.catalog_status)) {
+        return NextResponse.json({ success: false, error: `No se puede pasar de ${currentStatus} a ${input.catalog_status}.` }, { status: 409 })
+      }
+      updates.catalog_status = input.catalog_status
+      updates.reviewed_by = user.id
+      updates.reviewed_at = new Date().toISOString()
+      updates.deactivation_reason = input.catalog_status === 'inactive' ? input.deactivation_reason || null : null
+    }
 
     if (input.global_brand_id !== undefined || input.brand !== undefined || input.model !== undefined || input.aliases !== undefined) {
-      const admin = createAdminSupabase()
       const { data: current } = await admin.from('global_device_models').select('global_brand_id, brand, model, aliases').eq('id', id).maybeSingle()
       const next = normalized({
         brand: input.brand ?? (current as { brand?: string } | null)?.brand ?? '',
@@ -227,9 +251,9 @@ export async function PUT(request: NextRequest) {
     }
     if (input.device_type !== undefined) updates.device_type = input.device_type
     if (input.release_year !== undefined) updates.release_year = input.release_year
-    if (input.is_active !== undefined) updates.is_active = input.is_active
+    // El formulario todavía transporta is_active; no se persiste porque el
+    // trigger lo deriva del estado editorial.
 
-    const admin = createAdminSupabase()
     const { data, error } = await admin.from('global_device_models').update(updates).eq('id', id).select(COLUMNS).single()
     if (error) {
       if (error.code === '23505') return NextResponse.json({ success: false, error: 'Ese modelo ya está en el catálogo.' }, { status: 409 })
@@ -264,7 +288,13 @@ export async function DELETE(request: NextRequest) {
     const admin = createAdminSupabase()
     const { data, error } = await admin
       .from('global_device_models')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .update({
+        catalog_status: 'inactive',
+        deactivation_reason: 'Baja manual desde SuperAdmin',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select(COLUMNS)
       .single()

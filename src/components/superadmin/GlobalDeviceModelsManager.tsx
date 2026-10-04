@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from '@/lib/utils'
 import { DEVICE_TYPES, DEVICE_TYPE_LABEL, type DeviceModelCandidate, type DeviceType, type GlobalDeviceModel } from '@/lib/devices/global-models'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
+import { CATALOG_STATUS_LABEL, type CatalogStatus } from '@/lib/catalog/editorial-status'
 
 /**
  * Catálogo global de modelos de equipos.
@@ -35,10 +36,13 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { global_brand_id: '', brand: '', model: '', device_type: 'smartphone', aliases: '', release_year: '', is_active: true }
 
-type Filter = 'all' | 'used' | 'unused' | 'inactive'
+type Filter = 'all' | 'used' | 'unused' | 'inactive' | 'candidate' | 'review' | 'published'
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'all', label: 'Todos' },
+  { id: 'candidate', label: 'Candidatos' },
+  { id: 'review', label: 'En revisión' },
+  { id: 'published', label: 'Publicados' },
   { id: 'used', label: 'Usados' },
   { id: 'unused', label: 'Sin uso' },
   { id: 'inactive', label: 'De baja' },
@@ -199,6 +203,9 @@ export function GlobalDeviceModelsManager() {
       if (filter === 'used') return model.is_active && model.stores > 0
       if (filter === 'unused') return model.is_active && model.stores === 0
       if (filter === 'inactive') return !model.is_active
+      if (filter === 'candidate') return model.catalog_status === 'candidate'
+      if (filter === 'review') return model.catalog_status === 'review'
+      if (filter === 'published') return (model.catalog_status ?? (model.is_active ? 'published' : 'inactive')) === 'published'
       return true
     })
   }, [models, search, brandFilter, filter])
@@ -268,19 +275,19 @@ export function GlobalDeviceModelsManager() {
     }
   }
 
-  const setActive = async (model: Row, active: boolean) => {
-    if (!active) setDeactivating(true)
+  const setStatus = async (model: Row, status: CatalogStatus) => {
+    if (status === 'inactive') setDeactivating(true)
     try {
-      const response = active
+      const response = status !== 'inactive'
         ? await fetch('/api/superadmin/global-device-models', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: model.id, is_active: true }),
+          body: JSON.stringify({ id: model.id, catalog_status: status }),
         })
         : await fetch(`/api/superadmin/global-device-models?id=${model.id}`, { method: 'DELETE' })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo guardar.')
-      toast.success(active ? `${model.brand} ${model.model} vuelve al catálogo` : `${model.brand} ${model.model} deja de sugerirse`)
+      toast.success(status === 'published' ? `${model.brand} ${model.model} fue publicado` : status === 'review' ? `${model.brand} ${model.model} quedó listo para revisión` : `${model.brand} ${model.model} deja de sugerirse`)
       setToDeactivate(null)
       await load()
     } catch (err) {
@@ -430,7 +437,7 @@ export function GlobalDeviceModelsManager() {
                             {model.model}
                             <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{DEVICE_TYPE_LABEL[model.device_type] ?? model.device_type}</span>
                             {model.release_year && <span className="text-xs font-normal text-muted-foreground">{model.release_year}</span>}
-                            {!model.is_active && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">De baja</span>}
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{CATALOG_STATUS_LABEL[model.catalog_status ?? (model.is_active ? 'published' : 'inactive')]}</span>
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {model.stores > 0 ? `${model.stores} tienda${model.stores === 1 ? '' : 's'}` : 'Sin uso todavía'}
@@ -454,13 +461,13 @@ export function GlobalDeviceModelsManager() {
                           >
                             Editar
                           </Button>
-                          {model.is_active ? (
+                          {(model.catalog_status ?? (model.is_active ? 'published' : 'inactive')) === 'published' ? (
                             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setToDeactivate(model)} aria-label={`Dar de baja ${model.brand} ${model.model}`}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           ) : (
-                            <Button variant="ghost" size="sm" onClick={() => void setActive(model, true)} aria-label={`Reactivar ${model.brand} ${model.model}`}>
-                              <RotateCcw className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" onClick={() => void setStatus(model, (model.catalog_status ?? 'inactive') === 'review' ? 'published' : 'review')} aria-label={(model.catalog_status ?? 'inactive') === 'review' ? `Publicar ${model.brand} ${model.model}` : `Enviar ${model.brand} ${model.model} a revisión`}>
+                              {(model.catalog_status ?? 'inactive') === 'review' ? <Sparkles className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                             </Button>
                           )}
                         </div>
@@ -483,7 +490,7 @@ export function GlobalDeviceModelsManager() {
         } : null}
         busy={deactivating}
         onCancel={() => setToDeactivate(null)}
-        onConfirm={() => toDeactivate && void setActive(toDeactivate, false)}
+        onConfirm={() => toDeactivate && void setStatus(toDeactivate, 'inactive')}
       />
 
       <Dialog open={draft !== null} onOpenChange={(open) => !open && !saving && setDraft(null)}>

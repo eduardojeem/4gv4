@@ -54,6 +54,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         .from('global_device_models')
         .select('id, global_brand_id, brand, model, device_type, aliases, release_year, is_active, global_brands(name)')
         .eq('is_active', true)
+        .eq('catalog_status', 'published')
         .limit(5000)
       if (!catalogoError && catalogo) {
         const models = (catalogo as unknown as GlobalDeviceModel[]).map((item) => ({

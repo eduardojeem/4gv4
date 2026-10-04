@@ -35,6 +35,7 @@ export type GlobalDeviceModel = {
   aliases: string[] | null
   release_year: number | null
   is_active: boolean
+  catalog_status?: 'candidate' | 'review' | 'published' | 'inactive'
 }
 
 /** Usa la relación nueva y conserva `brand` como fallback para filas históricas. */

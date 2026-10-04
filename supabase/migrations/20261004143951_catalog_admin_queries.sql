@@ -25,6 +25,7 @@ with usage_rows as (
   left join usage on usage.gtin = catalog.gtin
   where (coalesce(trim(p_q), '') = '' or catalog.name ilike '%' || trim(p_q) || '%' or catalog.gtin like '%' || trim(p_q) || '%')
     and (p_status in ('all', 'no-category', 'no-brand', 'no-image') or (p_status = 'active' and catalog.is_active) or (p_status = 'inactive' and not catalog.is_active)
+      or (p_status in ('candidate', 'review', 'published') and to_jsonb(catalog) ->> 'catalog_status' = p_status)
       or (p_status = 'used' and coalesce(usage.stores, 0) > 0) or (p_status = 'unused' and coalesce(usage.stores, 0) = 0))
     and (p_status <> 'no-category' or (catalog.is_active and catalog.global_category_id is null))
     and (p_status <> 'no-brand' or (catalog.is_active and catalog.global_brand_id is null))
@@ -115,6 +116,7 @@ with usage_rows as (
   where (coalesce(trim(p_q), '') = '' or model.model ilike '%' || trim(p_q) || '%'
       or coalesce(brand.name, model.brand) ilike '%' || trim(p_q) || '%')
     and (p_status = 'all' or (p_status = 'active' and model.is_active) or (p_status = 'inactive' and not model.is_active)
+      or (p_status in ('candidate', 'review', 'published') and to_jsonb(model) ->> 'catalog_status' = p_status)
       or (p_status = 'used' and coalesce(usage.stores, 0) > 0) or (p_status = 'unused' and coalesce(usage.stores, 0) = 0))
     and (p_brand is null or model.global_brand_id = p_brand)
 ), page_rows as (
