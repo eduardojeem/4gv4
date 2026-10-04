@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { linkToExisting, listUsage, unlink, type CatalogKind } from '@/lib/catalog/manual-link'
+import { bulkResultSucceeded } from '@/lib/catalog/bulk-result'
 
 /**
  * Acciones de vínculo manual que comparten las rutas de categorías y marcas
@@ -30,8 +31,11 @@ export async function handleManualLinkAction(
     if (!validation.success) {
       return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
     }
-    const result = await linkToExisting(createAdminSupabase(), kind, validation.data)
+    const result = await linkToExisting(createAdminSupabase(), kind, validation.data, user.id)
     if ('error' in result) return NextResponse.json({ success: false, error: result.error }, { status: 400 })
+    if (!bulkResultSucceeded(result)) {
+      return NextResponse.json({ success: false, error: 'Las fichas cambiaron desde la revisión.', ...result }, { status: 409 })
+    }
     await logSuperAdminAction({
       actorId: user.id,
       actorEmail: user.email,
