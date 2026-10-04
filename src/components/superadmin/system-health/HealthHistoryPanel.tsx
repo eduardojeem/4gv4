@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import { History, Loader2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { readHealthHistoryAction } from '@/app/superadmin/system-health/actions'
+import { summarizeHistoryRuns } from '@/lib/health/history'
 import { HEALTH_STATUSES, type HealthHistoryResult } from '@/lib/health/types'
 import { SeverityBadge, StatusBadge } from './CheckDetailSheet'
 import { CATEGORY_LABEL, CATEGORY_ORDER, STATUS_META, formatDateTime } from './health-meta'
@@ -22,6 +23,7 @@ export function HealthHistoryPanel({ initial }: { initial: HealthHistoryResult }
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [pending, startTransition] = useTransition()
+  const runs = useMemo(() => summarizeHistoryRuns(history.entries), [history.entries])
 
   const search = useCallback(() => {
     startTransition(async () => {
@@ -96,23 +98,47 @@ export function HealthHistoryPanel({ initial }: { initial: HealthHistoryResult }
             No hay registros para estos filtros. Ejecutá un diagnóstico para generar historial.
           </p>
         ) : (
-          <ul className="divide-y rounded-lg border dark:divide-slate-800 dark:border-slate-800">
-            {history.entries.map((entry) => (
-              <li key={entry.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-xs font-mono text-slate-500">{formatDateTime(entry.checkedAt)}</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {CATEGORY_LABEL[entry.category] ?? entry.category} · <span className="font-normal">{entry.checkId}</span>
-                  </p>
-                  <p className="break-words text-sm text-slate-600 dark:text-slate-300">{entry.message}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {entry.status !== 'healthy' && <SeverityBadge severity={entry.severity} />}
-                  <StatusBadge status={entry.status} />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-3">
+            {runs.map((run) => {
+              const entries = history.entries.filter((entry) => entry.runId === run.runId)
+              return (
+                <details key={run.runId} className="group rounded-lg border dark:border-slate-800">
+                  <summary className="cursor-pointer list-none p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Ejecución {run.runId}</p>
+                        <p className="text-xs text-slate-500">
+                          {formatDateTime(run.finishedAt)} · {run.checkCount} comprobaciones · {run.durationMs} ms acumulados
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {run.counts.error > 0 && <span>{run.counts.error} error(es)</span>}
+                        {run.counts.warning > 0 && <span>{run.counts.warning} advertencia(s)</span>}
+                        {run.counts.unknown > 0 && <span>{run.counts.unknown} no verificable(s)</span>}
+                        <span>{run.counts.healthy} correcto(s)</span>
+                      </div>
+                    </div>
+                  </summary>
+                  <ul className="divide-y border-t dark:divide-slate-800 dark:border-slate-800">
+                    {entries.map((entry) => (
+                      <li key={entry.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {CATEGORY_LABEL[entry.category] ?? entry.category} · <span className="font-normal">{entry.checkId}</span>
+                          </p>
+                          <p className="break-words text-sm text-slate-600 dark:text-slate-300">{entry.message}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {entry.status !== 'healthy' && <SeverityBadge severity={entry.severity} />}
+                          <StatusBadge status={entry.status} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )
+            })}
+          </div>
         )}
       </CardContent>
     </Card>

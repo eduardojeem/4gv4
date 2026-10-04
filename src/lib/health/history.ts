@@ -24,6 +24,47 @@ type Row = {
   duration_ms: number | null
 }
 
+export interface HealthPreviousRunResult extends HealthHistoryResult {
+  runId: string | null
+  checkedAt: string | null
+}
+
+export interface HealthRunSummary {
+  runId: string
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  checkCount: number
+  counts: Record<HealthStatus, number>
+}
+
+function mapHistoryRow(row: Row): HealthHistoryEntry {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    checkedAt: row.checked_at,
+    checkId: row.check_id,
+    category: row.category,
+    status: (HEALTH_STATUSES as string[]).includes(row.status) ? row.status : 'unknown',
+    severity: (HEALTH_SEVERITIES as string[]).includes(row.severity) ? row.severity : 'info',
+    message: row.message,
+    durationMs: row.duration_ms,
+  }
+}
+
+function unavailablePreviousRun(error: { code?: string; message?: string } | unknown): HealthPreviousRunResult {
+  const databaseError = error && typeof error === 'object' ? (error as { code?: string; message?: string }) : null
+  return {
+    available: false,
+    reason: isMissingObjectError(databaseError)
+      ? `Historial no disponible: aplicar ${HEALTH_MIGRATION}.`
+      : errorMessage(error),
+    entries: [],
+    runId: null,
+    checkedAt: null,
+  }
+}
+
 export async function persistReport(
   admin: SupabaseClient,
   report: HealthReport,
@@ -93,18 +134,75 @@ export async function readHistory(admin: SupabaseClient, filters: HistoryFilters
 
   return {
     available: true,
-    entries: ((data ?? []) as Row[]).map(
-      (row): HealthHistoryEntry => ({
-        id: row.id,
-        runId: row.run_id,
-        checkedAt: row.checked_at,
-        checkId: row.check_id,
-        category: row.category,
-        status: row.status,
-        severity: (HEALTH_SEVERITIES as string[]).includes(row.severity) ? row.severity : 'info',
-        message: row.message,
-        durationMs: row.duration_ms,
-      }),
-    ),
+    entries: ((data ?? []) as Row[]).map(mapHistoryRow),
   }
+}
+
+export async function readPreviousRun(
+  admin: SupabaseClient,
+  currentRunId?: string,
+): Promise<HealthPreviousRunResult> {
+  try {
+    let lookup = admin
+      .from('system_health_checks')
+      .select('id, run_id, checked_at, check_id, category, status, severity, message, duration_ms')
+    if (currentRunId) lookup = lookup.neq('run_id', currentRunId)
+
+    const { data: selected, error: lookupError } = await lookup
+      .order('checked_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (lookupError) return unavailablePreviousRun(lookupError)
+    if (!selected) {
+      return { available: true, entries: [], runId: null, checkedAt: null }
+    }
+
+    const selectedRow = selected as Row
+    const { data, error } = await admin
+      .from('system_health_checks')
+      .select('id, run_id, checked_at, check_id, category, status, severity, message, duration_ms')
+      .eq('run_id', selectedRow.run_id)
+      .order('checked_at', { ascending: false })
+    if (error) return unavailablePreviousRun(error)
+
+    return {
+      available: true,
+      entries: ((data ?? []) as Row[]).map(mapHistoryRow),
+      runId: selectedRow.run_id,
+      checkedAt: selectedRow.checked_at,
+    }
+  } catch (error) {
+    return unavailablePreviousRun(error)
+  }
+}
+
+export function summarizeHistoryRuns(entries: HealthHistoryEntry[]): HealthRunSummary[] {
+  const runs = new Map<string, HealthRunSummary>()
+
+  for (const entry of entries) {
+    const existing = runs.get(entry.runId)
+    if (!existing) {
+      const counts = Object.fromEntries(HEALTH_STATUSES.map((status) => [status, 0])) as Record<HealthStatus, number>
+      counts[entry.status] = 1
+      runs.set(entry.runId, {
+        runId: entry.runId,
+        startedAt: entry.checkedAt,
+        finishedAt: entry.checkedAt,
+        durationMs: Math.max(entry.durationMs ?? 0, 0),
+        checkCount: 1,
+        counts,
+      })
+      continue
+    }
+
+    if (entry.checkedAt < existing.startedAt) existing.startedAt = entry.checkedAt
+    if (entry.checkedAt > existing.finishedAt) existing.finishedAt = entry.checkedAt
+    existing.durationMs += Math.max(entry.durationMs ?? 0, 0)
+    existing.checkCount += 1
+    existing.counts[entry.status] += 1
+  }
+
+  return [...runs.values()].sort(
+    (left, right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt) || right.runId.localeCompare(left.runId),
+  )
 }

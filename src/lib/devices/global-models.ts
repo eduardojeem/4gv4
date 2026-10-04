@@ -27,12 +27,21 @@ export const DEVICE_TYPE_LABEL: Record<DeviceType, string> = {
 
 export type GlobalDeviceModel = {
   id: string
+  global_brand_id?: string | null
   brand: string
+  global_brands?: { name: string } | Array<{ name: string }> | null
   model: string
   device_type: DeviceType
   aliases: string[] | null
   release_year: number | null
   is_active: boolean
+  catalog_status?: 'candidate' | 'review' | 'published' | 'inactive'
+}
+
+/** Usa la relación nueva y conserva `brand` como fallback para filas históricas. */
+export function resolveGlobalDeviceModelBrand(model: Pick<GlobalDeviceModel, 'brand' | 'global_brands'>): string {
+  const related = Array.isArray(model.global_brands) ? model.global_brands[0] : model.global_brands
+  return related?.name?.trim() || model.brand
 }
 
 export type UsageRows = {
@@ -55,7 +64,7 @@ const key = (brand: string, model: string) => `${brand.toLowerCase()}|${model.to
 export function catalogKeys(catalog: GlobalDeviceModel[]): Map<string, GlobalDeviceModel> {
   const keys = new Map<string, GlobalDeviceModel>()
   for (const item of catalog) {
-    const brand = normalizeDeviceBrand(item.brand)
+    const brand = normalizeDeviceBrand(resolveGlobalDeviceModelBrand(item))
     if (!brand) continue
     for (const name of [item.model, ...(item.aliases ?? [])]) {
       const model = normalizeDeviceModel(name)
@@ -111,9 +120,9 @@ export function summarizeDeviceUsage(rows: UsageRows, catalog: GlobalDeviceModel
 }
 
 /** Ordena el catálogo por marca y, dentro de cada marca, en orden de modelo. */
-export function sortDeviceModels<T extends Pick<GlobalDeviceModel, 'brand' | 'model'>>(catalog: T[]): T[] {
+export function sortDeviceModels<T extends Pick<GlobalDeviceModel, 'brand' | 'model'> & Partial<Pick<GlobalDeviceModel, 'global_brands'>>>(catalog: T[]): T[] {
   return [...catalog].sort((a, b) =>
-    a.brand.localeCompare(b.brand, 'es') ||
+    resolveGlobalDeviceModelBrand(a).localeCompare(resolveGlobalDeviceModelBrand(b), 'es') ||
     deviceModelSortKey(a.model).localeCompare(deviceModelSortKey(b.model), 'es') ||
     a.model.localeCompare(b.model, 'es'))
 }
@@ -130,7 +139,7 @@ export function mergeCatalogIntoOptions(options: DeviceOptions, catalog: GlobalD
   )
 
   for (const item of sortDeviceModels(catalog.filter((entry) => entry.is_active))) {
-    const brand = normalizeDeviceBrand(item.brand)
+    const brand = normalizeDeviceBrand(resolveGlobalDeviceModelBrand(item))
     const model = normalizeDeviceModel(item.model)
     if (!brand || !model) continue
     if (!brands.includes(brand)) brands.push(brand)

@@ -58,6 +58,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         .select('id, gtin, name, brand_name, global_brand_id, global_category_id, description, image_url, global_brands(name), global_categories(name)')
         .eq('gtin', gtin)
         .eq('is_active', true)
+        .eq('catalog_status', 'published')
         .maybeSingle()
 
       // Sin la tabla del catálogo (SQL sin correr) solo se avisa de duplicados.

@@ -195,7 +195,10 @@ export function GlobalCategoriesManager() {
         body: JSON.stringify({ action: 'link-existing', ...(ids ? { ids } : {}) }),
       })
       const payload = await response.json().catch(() => null)
-      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo vincular.')
+      if (!response.ok || !payload?.success) {
+        const failed = Array.isArray(payload?.failed) ? payload.failed.length : 0
+        throw new Error(failed > 0 ? `${failed} vínculo${failed === 1 ? '' : 's'} cambió desde la revisión; no se aplicó ninguno.` : payload?.error || 'No se pudo vincular.')
+      }
       toast.success(payload.linked > 0
         ? `${payload.linked} categoría${payload.linked === 1 ? '' : 's'} de empresas vinculada${payload.linked === 1 ? '' : 's'}`
         : 'No había categorías para vincular por nombre')

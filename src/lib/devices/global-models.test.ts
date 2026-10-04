@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeCatalogIntoOptions, sortDeviceModels, summarizeDeviceUsage, type GlobalDeviceModel } from './global-models'
+import { mergeCatalogIntoOptions, resolveGlobalDeviceModelBrand, sortDeviceModels, summarizeDeviceUsage, type GlobalDeviceModel } from './global-models'
 
 const catalog: GlobalDeviceModel[] = [
   { id: 'a15', brand: 'Samsung', model: 'Galaxy A15', device_type: 'smartphone', aliases: ['A15'], release_year: 2023, is_active: true },
@@ -8,6 +8,13 @@ const catalog: GlobalDeviceModel[] = [
 ]
 
 describe('catálogo global de modelos', () => {
+  it('usa el nombre relacionado y conserva la marca histórica como fallback', () => {
+    const related = { ...catalog[0], brand: 'Vieja', global_brands: { name: 'Samsung' } }
+    const legacy = { ...catalog[0], id: 'legacy', brand: 'Motorola', global_brand_id: null }
+
+    expect(resolveGlobalDeviceModelBrand(related)).toBe('Samsung')
+    expect(resolveGlobalDeviceModelBrand(legacy)).toBe('Motorola')
+  })
   it('reconoce lo que escriben las tiendas por modelo o alias, y propone lo que falta', () => {
     const { storesByModel, candidates } = summarizeDeviceUsage({
       products: [

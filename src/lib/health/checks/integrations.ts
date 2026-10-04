@@ -3,7 +3,113 @@ import { codeAudit, codeAuditMethod } from '@/lib/health/code-audit'
 import { HEALTH_MIGRATION, isMissingObjectError } from '@/lib/health/catalog'
 import { errorMessage, isConfigured, runCheck } from '@/lib/health/core'
 import type { SiteProbe } from '@/lib/health/site-probe'
-import type { HealthCheckResult, HealthMetricGroup } from '@/lib/health/types'
+import type {
+  HealthCheckResult,
+  HealthMetricGroup,
+  ScheduledTaskHealth,
+  ServiceConfigurationState,
+  ServiceHealthEntry,
+} from '@/lib/health/types'
+
+type ServiceConfiguration = Partial<Record<string, ServiceConfigurationState>>
+
+const SERVICE_DEFINITIONS = [
+  { id: 'supabase', name: 'Supabase', checkId: 'supabase.database', source: 'NEXT_PUBLIC_SUPABASE_URL + consulta de base de datos', runtimeVerified: true },
+  { id: 'upstash', name: 'Upstash', checkId: 'security.rate_limiting', source: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN', runtimeVerified: false },
+  { id: 'telegram', name: 'Telegram', checkId: 'integrations.telegram', source: 'TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID', runtimeVerified: false },
+  { id: 'turnstile', name: 'Cloudflare Turnstile', checkId: 'security.turnstile', source: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY', runtimeVerified: false },
+  { id: 'cloudflare', name: 'Cloudflare', checkId: 'cloudflare.edge', source: 'Headers públicos y API opcional Zone:Read', runtimeVerified: true },
+  { id: 'pagopar', name: 'Pagopar', checkId: 'payments.pagopar', source: 'Código, variables requeridas y actividad registrada', runtimeVerified: false },
+] as const
+
+function pairConfiguration(first: string, second: string): ServiceConfigurationState {
+  const configured = [isConfigured(first), isConfigured(second)].filter(Boolean).length
+  return configured === 2 ? 'configured' : configured === 1 ? 'partial' : 'missing'
+}
+
+function runtimeServiceConfiguration(): ServiceConfiguration {
+  return {
+    supabase: pairConfiguration('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'),
+    upstash: pairConfiguration('UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'),
+    telegram: pairConfiguration('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'),
+    turnstile: pairConfiguration('NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY'),
+    cloudflare: pairConfiguration('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ZONE_ID'),
+    pagopar: pairConfiguration('PAGOPAR_PUBLIC_KEY', 'PAGOPAR_PRIVATE_KEY'),
+  }
+}
+
+export function buildServiceHealthEntries(
+  checks: HealthCheckResult[],
+  configuration: ServiceConfiguration = runtimeServiceConfiguration(),
+): ServiceHealthEntry[] {
+  const checksById = new Map(checks.map((check) => [check.id, check]))
+  const runtime = runtimeServiceConfiguration()
+
+  return SERVICE_DEFINITIONS.map((definition) => {
+    const check = checksById.get(definition.checkId)
+    const configuredFromEnvironment = configuration[definition.id] ?? runtime[definition.id] ?? 'missing'
+    const configured = definition.id === 'cloudflare' && check?.status === 'healthy'
+      ? 'configured'
+      : configuredFromEnvironment
+    const status = configured === 'missing'
+        ? 'not_configured'
+        : check && check.status !== 'healthy'
+          ? check.status
+          : definition.runtimeVerified
+            ? check?.status ?? 'unknown'
+            : 'unknown'
+    const unavailableReason = configured !== 'missing' && !definition.runtimeVerified && (!check || check.status === 'healthy')
+      ? 'Configurado, pero no verificado contra el proveedor en esta ejecución.'
+      : undefined
+    const latency = check?.metadata?.latencyMs
+    return {
+      id: definition.id,
+      name: definition.name,
+      configured,
+      status,
+      summary: configured === 'missing'
+        ? 'No configurado'
+        : unavailableReason ?? check?.summary ?? 'Configurado, pero sin comprobación automática disponible',
+      source: definition.source,
+      checkedAt: check?.checkedAt ?? null,
+      latencyMs: typeof latency === 'number' ? latency : null,
+      unavailableReason,
+    }
+  })
+}
+
+export function buildScheduledTaskHealth(
+  checks: HealthCheckResult[],
+  options: { graceNotificationsConfigured?: boolean } = {},
+): ScheduledTaskHealth[] {
+  const lifecycle = checks.find((check) => check.id === 'integrity.subscription_lifecycle')
+  const graceConfigured = options.graceNotificationsConfigured ?? isConfigured('CRON_SECRET')
+
+  return [
+    {
+      id: 'subscription-lifecycle',
+      name: 'Ciclo de suscripciones',
+      status: lifecycle?.status ?? 'unknown',
+      summary: lifecycle?.summary ?? 'Sin evidencia del efecto del proceso',
+      source: 'Efecto observado en subscriptions; no existe bitácora de ejecución consultable',
+      lastRunAt: null,
+      nextRunAt: null,
+      durationMs: lifecycle?.durationMs ?? null,
+    },
+    {
+      id: 'plan-grace-notifications',
+      name: 'Avisos de gracia de planes',
+      status: graceConfigured ? 'unknown' : 'not_configured',
+      summary: graceConfigured
+        ? 'Configurado, pero sin bitácora de ejecución consultable'
+        : 'CRON_SECRET no configurado',
+      source: 'Ruta /api/cron/plan-grace-notifications y presencia de CRON_SECRET',
+      lastRunAt: null,
+      nextRunAt: null,
+      durationMs: null,
+    },
+  ]
+}
 
 /**
  * Proveedores de pago conocidos. Solo se reportan como "implementados" los
@@ -20,19 +126,26 @@ const WEBHOOK_STALE_DAYS = 30
 
 type WebhookEvent = { provider: string; endpoint: string; outcome: string; http_status: number; error_code: string | null; received_at: string }
 
-async function loadWebhookEvents(admin: SupabaseClient) {
-  const { data, error } = await admin
-    .from('payment_webhook_events')
-    .select('provider, endpoint, outcome, http_status, error_code, received_at')
-    .order('received_at', { ascending: false })
-    .limit(200)
-  if (error) {
+export async function loadWebhookEvents(admin: SupabaseClient) {
+  try {
+    const { data, error } = await admin
+      .from('payment_webhook_events')
+      .select('provider, endpoint, outcome, http_status, error_code, received_at')
+      .order('received_at', { ascending: false })
+      .limit(200)
+    if (error) {
+      return {
+        available: false as const,
+        reason: isMissingObjectError(error) ? `Tabla payment_webhook_events inexistente: aplicar ${HEALTH_MIGRATION}.` : errorMessage(error),
+      }
+    }
+    return { available: true as const, events: (data ?? []) as WebhookEvent[] }
+  } catch (error) {
     return {
       available: false as const,
-      reason: isMissingObjectError(error) ? `Tabla payment_webhook_events inexistente: aplicar ${HEALTH_MIGRATION}.` : errorMessage(error),
+      reason: `No se pudo consultar payment_webhook_events: ${errorMessage(error)}`,
     }
   }
-  return { available: true as const, events: (data ?? []) as WebhookEvent[] }
 }
 
 function formatDate(value: string | null | undefined): string {

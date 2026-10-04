@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { AlertTriangle, ArrowRight, Barcode, CheckCircle2, FolderTree, Smartphone, Tag } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowRight, Barcode, CheckCircle2, CircleHelp, FolderTree, Smartphone, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { catalogHealth, type CatalogHealth } from '@/lib/catalog/health'
 
 /**
  * Resumen de los catálogos globales: para qué sirve cada uno, quién lo usa,
@@ -15,8 +16,8 @@ type Count = number | null
 export type CatalogsHubData = {
   categories: { active: Count; roots: Count; tenantTotal: Count; tenantLinked: Count }
   brands: { active: Count; withoutLogo: Count; tenantTotal: Count; tenantLinked: Count }
-  products: { active: Count; withoutCategory: Count; withoutImage: Count }
-  deviceModels: { active: Count }
+  products: { active: Count; withoutCategory: Count; withoutImage: Count; candidates: Count; review: Count }
+  deviceModels: { active: Count; candidates: Count; review: Count }
 }
 
 const n = (value: Count) => (value === null ? '—' : value.toLocaleString('es-PY'))
@@ -32,7 +33,8 @@ type Card = {
   dependsOn?: string
   verticals: string
   figures: Array<{ label: string; value: string }>
-  pending: string[]
+  pending: Array<{ text: string; href?: string }>
+  health: CatalogHealth
 }
 
 function buildCards(data: CatalogsHubData): Card[] {
@@ -53,7 +55,8 @@ function buildCards(data: CatalogsHubData): Card[] {
         { label: 'principales', value: n(data.categories.roots) },
         { label: 'de tiendas vinculadas', value: `${n(data.categories.tenantLinked)} de ${n(data.categories.tenantTotal)}` },
       ],
-      pending: unlinkedCategories ? [`${unlinkedCategories} categorías de tiendas sin vincular: no se agrupan en el marketplace`] : [],
+      pending: unlinkedCategories ? [{ text: `${unlinkedCategories} categorías de tiendas sin vincular: no se agrupan en el marketplace` }] : [],
+      health: catalogHealth([data.categories.active, data.categories.tenantTotal, data.categories.tenantLinked], { pending: unlinkedCategories }),
     },
     {
       href: '/superadmin/brands',
@@ -69,9 +72,10 @@ function buildCards(data: CatalogsHubData): Card[] {
         { label: 'de tiendas vinculadas', value: `${n(data.brands.tenantLinked)} de ${n(data.brands.tenantTotal)}` },
       ],
       pending: [
-        ...(data.brands.withoutLogo ? [`${data.brands.withoutLogo} marcas sin logo oficial: se muestran con la inicial`] : []),
-        ...(unlinkedBrands ? [`${unlinkedBrands} marcas de tiendas sin vincular`] : []),
+        ...(data.brands.withoutLogo ? [{ text: `${data.brands.withoutLogo} marcas sin logo oficial: se muestran con la inicial` }] : []),
+        ...(unlinkedBrands ? [{ text: `${unlinkedBrands} marcas de tiendas sin vincular` }] : []),
       ],
+      health: catalogHealth([data.brands.active, data.brands.withoutLogo, data.brands.tenantTotal, data.brands.tenantLinked], { pending: (data.brands.withoutLogo ?? 0) + (unlinkedBrands ?? 0) }),
     },
     {
       href: '/superadmin/global-products',
@@ -88,8 +92,13 @@ function buildCards(data: CatalogsHubData): Card[] {
         { label: 'sin foto', value: n(data.products.withoutImage) },
       ],
       pending: data.products.active === null
-        ? ['Falta correr su SQL']
-        : data.products.withoutCategory ? [`${data.products.withoutCategory} productos sin categoría: la tienda la elige a mano`] : [],
+        ? [{ text: 'Falta correr su SQL' }]
+        : [
+            ...(data.products.candidates ? [{ text: `${data.products.candidates} candidatos pendientes de revisión`, href: '/superadmin/global-products?status=candidate' }] : []),
+            ...(data.products.review ? [{ text: `${data.products.review} ficha${data.products.review === 1 ? '' : 's'} lista${data.products.review === 1 ? '' : 's'} para publicar`, href: '/superadmin/global-products?status=review' }] : []),
+            ...(data.products.withoutCategory ? [{ text: `${data.products.withoutCategory} productos sin categoría: la tienda la elige a mano` }] : []),
+          ],
+      health: catalogHealth([data.products.active, data.products.withoutCategory, data.products.withoutImage, data.products.candidates, data.products.review], { pending: (data.products.withoutCategory ?? 0) + (data.products.candidates ?? 0) + (data.products.review ?? 0) }),
     },
     {
       href: '/superadmin/device-models',
@@ -102,15 +111,20 @@ function buildCards(data: CatalogsHubData): Card[] {
       verticals: 'Electrónica y talleres de reparación',
       figures: [{ label: 'modelos', value: n(data.deviceModels.active) }],
       pending: data.deviceModels.active === null
-        ? ['Falta correr su SQL']
-        : data.deviceModels.active === 0 ? ['Vacío: sumá los modelos que ya usan las tiendas'] : [],
+        ? [{ text: 'Falta correr su SQL' }]
+        : [
+            ...(data.deviceModels.candidates ? [{ text: `${data.deviceModels.candidates} candidatos pendientes de revisión`, href: '/superadmin/device-models?status=candidate' }] : []),
+            ...(data.deviceModels.review ? [{ text: `${data.deviceModels.review} modelo${data.deviceModels.review === 1 ? '' : 's'} listo${data.deviceModels.review === 1 ? '' : 's'} para publicar`, href: '/superadmin/device-models?status=review' }] : []),
+            ...(data.deviceModels.active === 0 ? [{ text: 'Vacío: sumá los modelos que ya usan las tiendas' }] : []),
+          ],
+      health: catalogHealth([data.deviceModels.active, data.deviceModels.candidates, data.deviceModels.review], { pending: (data.deviceModels.active === 0 ? 1 : 0) + (data.deviceModels.candidates ?? 0) + (data.deviceModels.review ?? 0) }),
     },
   ]
 }
 
 export function CatalogsHub({ data }: { data: CatalogsHubData }) {
   const cards = buildCards(data)
-  const pending = cards.flatMap((card) => card.pending.map((text) => ({ text, href: card.href, title: card.title })))
+  const pending = cards.flatMap((card) => card.pending.map((item) => ({ text: item.text, href: item.href ?? card.href, title: card.title })))
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-6">
@@ -155,7 +169,13 @@ export function CatalogsHub({ data }: { data: CatalogsHubData }) {
       <div className="grid gap-4 md:grid-cols-2">
         {cards.map((card) => {
           const Icon = card.icon
-          const ok = card.pending.length === 0
+          const status = {
+            healthy: { label: 'Al día', icon: CheckCircle2, className: 'text-emerald-700 dark:text-emerald-400' },
+            warning: { label: 'Con pendientes', icon: AlertTriangle, className: 'text-amber-700 dark:text-amber-400' },
+            error: { label: 'Con errores', icon: AlertCircle, className: 'text-destructive' },
+            unknown: { label: 'Sin verificar', icon: CircleHelp, className: 'text-muted-foreground' },
+          }[card.health]
+          const StatusIcon = status.icon
           return (
             <Link
               key={card.href}
@@ -185,9 +205,9 @@ export function CatalogsHub({ data }: { data: CatalogsHubData }) {
                   </span>
                 ))}
               </div>
-              <p className={cn('mt-auto flex items-center gap-1.5 text-xs font-medium', ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400')}>
-                {ok ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
-                {ok ? 'Al día' : `${card.pending.length} para revisar`}
+              <p className={cn('mt-auto flex items-center gap-1.5 text-xs font-medium', status.className)}>
+                <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                {status.label}{card.pending.length > 0 ? ` · ${card.pending.length} para revisar` : ''}
               </p>
             </Link>
           )

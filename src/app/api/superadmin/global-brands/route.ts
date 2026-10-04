@@ -8,6 +8,7 @@ import { groupUnmatched } from '@/lib/catalog/unmatched'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
 import { handleManualLinkAction, handleUsageRequest } from '@/lib/catalog/manual-link-actions'
+import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
 
 /**
  * Catálogo global de marcas: lo administra solo la plataforma.
@@ -152,36 +153,30 @@ export async function POST(request: NextRequest) {
       const onlyIds = Array.isArray(body.ids) ? new Set(body.ids.map(String)) : null
 
       const catalogRows = (catalog ?? []) as unknown as GlobalBrand[]
-      const byId = new Map(catalogRows.map((brand) => [brand.id, brand]))
-
-      let linked = 0
-      for (const link of suggestBrandLinks((unlinked ?? []) as Array<{ id: string; name: string }>, catalogRows)) {
-        if (onlyIds && !onlyIds.has(link.id)) continue
-        const match = byId.get(link.global_brand_id)
-        if (!match) continue
-        const { error } = await admin
-          .from('brands')
-          .update({
-            global_brand_id: match.id,
-            name: match.name,
-            logo_url: match.logo_url ?? null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', link.id)
-          .is('global_brand_id', null)
-        if (!error) linked += 1
-      }
+      const tenantRows = (unlinked ?? []) as Array<{ id: string; name: string }>
+      const names = new Map(tenantRows.map((row) => [row.id, row.name]))
+      const selected = suggestBrandLinks(tenantRows, catalogRows).filter((link) => !onlyIds || onlyIds.has(link.id))
+      const { data: result, error } = await admin.rpc('apply_global_brand_links', {
+        p_links: selected.map((link) => ({
+          tenant_id: link.id,
+          target_id: link.global_brand_id,
+          expected_name: names.get(link.id) ?? '',
+          alias: null,
+        })),
+        p_actor_user_id: user.id,
+      })
+      if (error || !isBulkCatalogResult(result)) throw error ?? new Error('Invalid bulk brand result')
 
       await logSuperAdminAction({
         actorId: user.id,
         actorEmail: user.email,
         action: 'update',
         resource: 'brands',
-        newValues: { linked, action: 'link-existing' },
+        newValues: { ...result, action: 'link-existing' },
         request,
       })
 
-      return NextResponse.json({ success: true, linked })
+      return NextResponse.json({ success: bulkResultSucceeded(result), ...result }, { status: bulkResultSucceeded(result) ? 200 : 409 })
     }
 
     // Crear en el catálogo una marca que hoy solo existe en las empresas, y

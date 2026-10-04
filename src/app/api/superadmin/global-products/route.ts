@@ -3,17 +3,19 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
-import { groupGlobalProductCandidates, gtinKey, type CatalogCandidateRow } from '@/lib/products/barcode-catalog'
+import { gtinKey } from '@/lib/products/barcode-catalog'
+import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
+import { parseCatalogAdminQuery } from '@/lib/catalog/admin-query'
+import { canTransitionCatalogStatus, catalogStatusSchema, type CatalogStatus } from '@/lib/catalog/editorial-status'
 
 /**
  * Catálogo global de productos por código de barras: lo administra solo la
  * plataforma. Las tiendas lo usan al escanear (/api/products/barcode-lookup).
  */
 
-const COLUMNS = 'id, gtin, name, brand_name, global_brand_id, global_category_id, description, image_url, is_active, created_at'
+const COLUMNS = 'id, gtin, name, brand_name, global_brand_id, global_category_id, description, image_url, is_active, catalog_status, source_type, source_summary, confidence, reviewed_by, reviewed_at, deactivation_reason, created_at'
 
 const productSchema = z.object({
   gtin: z.string({ message: 'Poné el código de barras.' }).trim().min(8, 'El código de barras es muy corto.').max(14),
@@ -24,6 +26,8 @@ const productSchema = z.object({
   description: z.string().trim().max(2000).optional().nullable(),
   image_url: z.string().trim().max(600).optional().nullable(),
   is_active: z.boolean().optional(),
+  catalog_status: catalogStatusSchema.optional(),
+  deactivation_reason: z.string().trim().max(500).optional().nullable(),
 })
 
 const updateSchema = productSchema.partial().extend({ id: z.string().uuid() })
@@ -61,53 +65,18 @@ function isMissingTable(error: { code?: string; message?: string } | null) {
   return Boolean(error && (error.code === 'PGRST205' || error.code === '42P01' || /does not exist|could not find/i.test(error.message ?? '')))
 }
 
-/** Hasta dónde se leen productos de las tiendas para proponer candidatos. */
-const PRODUCT_ROW_CAP = 20_000
-const EMPTY_PAGE = Promise.resolve({ data: [] as never[], error: null })
-
-type ProductRow = {
-  organization_id: string | null
-  barcode: string | null
-  name: string | null
-  brand: string | null
-  description: string | null
-  image_url: string | null
-  images: string[] | null
-  brands: { global_brand_id: string | null } | null
-  categories: { global_category_id: string | null } | null
-}
-
-async function readProductsWithBarcode(admin: ReturnType<typeof createAdminSupabase>): Promise<CatalogCandidateRow[]> {
-  const rows = await fetchAllRows<ProductRow>((from, to) => from >= PRODUCT_ROW_CAP
-    ? EMPTY_PAGE
-    : admin
-      .from('products')
-      .select('organization_id, barcode, name, brand, description, image_url, images, brands(global_brand_id), categories(global_category_id)')
-      .not('barcode', 'is', null)
-      .neq('barcode', '')
-      .order('id')
-      .range(from, to) as never)
-  return rows.map((row) => ({
-    organization_id: row.organization_id,
-    barcode: row.barcode,
-    name: row.name,
-    brand: row.brand,
-    description: row.description,
-    image_url: row.images?.[0] ?? row.image_url,
-    global_brand_id: row.brands?.global_brand_id ?? null,
-    global_category_id: row.categories?.global_category_id ?? null,
-  }))
-}
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSuperAdminUser()
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
     const admin = createAdminSupabase()
-    const [{ data, error }, products, { data: brands }, { data: categories }] = await Promise.all([
-      admin.from('global_products').select(COLUMNS).order('name').limit(5000),
-      readProductsWithBarcode(admin).catch(() => [] as CatalogCandidateRow[]),
+    const query = parseCatalogAdminQuery(new URL(request.url).searchParams)
+    const [{ data: result, error }, { data: brands }, { data: categories }] = await Promise.all([
+      admin.rpc('get_global_products_admin', {
+        p_q: query.q, p_status: query.status, p_brand: query.brand, p_category: query.category,
+        p_sort: query.sort, p_page: query.page, p_page_size: query.pageSize,
+      }),
       admin.from('global_brands').select('id, name').eq('is_active', true).order('name'),
       admin.from('global_categories').select('id, name, parent_id, sort_order').eq('is_active', true).order('name'),
     ])
@@ -116,23 +85,20 @@ export async function GET() {
     }
     if (error) throw error
 
-    const catalog = (data ?? []) as Array<{ id: string; gtin: string }>
-    const storesByGtin = new Map<string, Set<string>>()
-    for (const row of products) {
-      const gtin = gtinKey(row.barcode)
-      if (!gtin || !row.organization_id) continue
-      const stores = storesByGtin.get(gtin) ?? new Set<string>()
-      stores.add(row.organization_id)
-      storesByGtin.set(gtin, stores)
-    }
-    const candidates = groupGlobalProductCandidates(products, new Set(catalog.map((item) => item.gtin)))
+    const payload = result as Record<string, unknown> | null
+    if (!payload || !Array.isArray(payload.items)) throw new Error('Invalid catalog query result')
 
     return NextResponse.json({
       success: true,
-      data: catalog.map((item) => ({ ...item, stores: storesByGtin.get(item.gtin)?.size ?? 0 })),
-      candidates: candidates.slice(0, 300),
-      candidatesTotal: candidates.length,
-      productsWithBarcode: products.filter((row) => gtinKey(row.barcode)).length,
+      data: payload.items,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      total: payload.total,
+      metrics: payload.metrics,
+      candidates: payload.candidates,
+      candidatesTotal: payload.candidatesTotal,
+      truncated: payload.truncated,
+      productsWithBarcode: (payload.metrics as { productsWithBarcode?: number } | undefined)?.productsWithBarcode ?? 0,
       brands: brands ?? [],
       categories: categories ?? [],
     })
@@ -182,33 +148,34 @@ export async function POST(request: NextRequest) {
       if (!validation.success) {
         return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
       }
-      let created = 0
-      for (const entry of validation.data.entries) {
+      const entries = validation.data.entries.flatMap((entry) => {
         const gtin = gtinKey(entry.gtin)
-        if (!gtin) continue
+        if (!gtin) return []
         const image = imageOrNull(entry.imageUrl)
-        const { error } = await admin.from('global_products').insert({
+        return [{
           gtin,
           name: entry.name,
           brand_name: entry.brandName || null,
           global_brand_id: entry.globalBrandId || null,
           global_category_id: entry.globalCategoryId || null,
           description: entry.description || null,
-          // Una foto de origen no permitido no bloquea la ficha: entra sin foto.
           image_url: 'error' in image ? null : image.value,
-        })
-        if (!error) created += 1
-        else if (error.code !== '23505') logger.error('[superadmin/global-products] import', { error: error.message, gtin })
-      }
+        }]
+      })
+      const { data: result, error } = await admin.rpc('import_global_product_candidates', {
+        p_entries: entries,
+        p_actor_user_id: user.id,
+      })
+      if (error || !isBulkCatalogResult(result)) throw error ?? new Error('Invalid product import result')
       await logSuperAdminAction({
         actorId: user.id,
         actorEmail: user.email,
         action: 'create',
         resource: 'global_products',
-        newValues: { created, action: 'import' },
+        newValues: { ...result, action: 'import' },
         request,
       })
-      return NextResponse.json({ success: true, created })
+      return NextResponse.json({ success: bulkResultSucceeded(result), ...result }, { status: bulkResultSucceeded(result) ? 200 : 409 })
     }
 
     const validation = productSchema.safeParse(body)
@@ -232,7 +199,10 @@ export async function POST(request: NextRequest) {
         global_category_id: validation.data.global_category_id || null,
         description: validation.data.description || null,
         image_url: 'error' in image ? null : image.value,
-        is_active: validation.data.is_active ?? true,
+        catalog_status: 'published',
+        source_type: 'manual',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
       })
       .select(COLUMNS)
       .single()
@@ -268,6 +238,25 @@ export async function PUT(request: NextRequest) {
     }
     const { id, ...input } = validation.data
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    const admin = createAdminSupabase()
+
+    if (input.catalog_status !== undefined) {
+      const { data: current, error: currentError } = await admin
+        .from('global_products')
+        .select('catalog_status')
+        .eq('id', id)
+        .maybeSingle()
+      if (currentError) throw currentError
+      if (!current) return NextResponse.json({ success: false, error: 'El producto no existe.' }, { status: 404 })
+      const currentStatus = (current.catalog_status ?? ((current as { is_active?: boolean }).is_active ? 'published' : 'inactive')) as CatalogStatus
+      if (!canTransitionCatalogStatus(currentStatus, input.catalog_status)) {
+        return NextResponse.json({ success: false, error: `No se puede pasar de ${currentStatus} a ${input.catalog_status}.` }, { status: 409 })
+      }
+      updates.catalog_status = input.catalog_status
+      updates.reviewed_by = user.id
+      updates.reviewed_at = new Date().toISOString()
+      updates.deactivation_reason = input.catalog_status === 'inactive' ? input.deactivation_reason || null : null
+    }
 
     if (input.gtin !== undefined) {
       const gtin = gtinKey(input.gtin)
@@ -284,9 +273,9 @@ export async function PUT(request: NextRequest) {
       if ('error' in image) return NextResponse.json({ success: false, error: image.error }, { status: 400 })
       updates.image_url = 'error' in image ? null : image.value
     }
-    if (input.is_active !== undefined) updates.is_active = input.is_active
+    // is_active queda como compatibilidad de lectura en formularios antiguos;
+    // el trigger lo deriva exclusivamente de catalog_status.
 
-    const admin = createAdminSupabase()
     const { data, error } = await admin.from('global_products').update(updates).eq('id', id).select(COLUMNS).single()
     if (error) {
       if (error.code === '23505') return NextResponse.json({ success: false, error: 'Ese código ya está en el catálogo.' }, { status: 409 })
@@ -321,7 +310,13 @@ export async function DELETE(request: NextRequest) {
     const admin = createAdminSupabase()
     const { data, error } = await admin
       .from('global_products')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .update({
+        catalog_status: 'inactive',
+        deactivation_reason: 'Baja manual desde SuperAdmin',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select(COLUMNS)
       .single()

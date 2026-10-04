@@ -1,6 +1,7 @@
 import type {
   HealthCategory,
   HealthCheckResult,
+  HealthGuidedAction,
   HealthSeverity,
   HealthStatus,
 } from '@/lib/health/types'
@@ -146,6 +147,34 @@ export function sanitizeMessage(message: string): string {
     if (value.length >= 8 && clean.includes(value)) clean = clean.split(value).join('[oculto]')
   }
   return clean.length > 400 ? `${clean.slice(0, 397)}...` : clean
+}
+
+export function sanitizeGuidedActions(actions: HealthGuidedAction[]): HealthGuidedAction[] {
+  return actions.flatMap((action) => {
+    const target = action.target.trim()
+    let allowed = false
+    if (action.type === 'env') allowed = /^[A-Z][A-Z0-9_]*$/.test(target)
+    if (action.type === 'file') allowed = /^(src|supabase|docs|scripts)\/[A-Za-z0-9._/-]+$/.test(target) && !target.includes('..')
+    if (action.type === 'dashboard') allowed = /^\/[A-Za-z0-9/_-]+$/.test(target)
+    if (action.type === 'command') {
+      allowed = /^(npx supabase migration list --linked|npm run (typecheck|lint|test|build|build:turbo))$/.test(target)
+    }
+    if (action.type === 'documentation') {
+      try {
+        const url = new URL(target)
+        allowed = url.protocol === 'https:' && !url.search && !url.hash && !url.username && !url.password
+      } catch {
+        allowed = false
+      }
+    }
+    if (!allowed) return []
+    return [{
+      ...action,
+      label: sanitizeMessage(action.label),
+      target,
+      description: action.description ? sanitizeMessage(action.description) : undefined,
+    }]
+  })
 }
 
 const PRIVATE_ENV_KEYS = [

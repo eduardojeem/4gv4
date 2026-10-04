@@ -1,4 +1,5 @@
 import type { createAdminSupabase } from '@/lib/supabase/admin'
+import { isBulkCatalogResult, type BulkCatalogResult } from '@/lib/catalog/bulk-result'
 
 /**
  * Vincular a mano las categorías y marcas de las empresas con el catálogo
@@ -34,7 +35,8 @@ export async function linkToExisting(
   admin: Admin,
   kind: CatalogKind,
   input: { targetId: string; ids: string[]; alias?: string | null },
-): Promise<{ linked: number; aliasAdded: boolean } | { error: string }> {
+  actorId: string,
+): Promise<(BulkCatalogResult & { aliasAdded: boolean }) | { error: string }> {
   const config = CONFIG[kind]
   const columns = kind === 'brand' ? 'id, name, aliases, logo_url, is_active' : 'id, name, aliases, is_active'
   const { data: target } = await admin.from(config.globalTable).select(columns).eq('id', input.targetId).maybeSingle()
@@ -42,23 +44,26 @@ export async function linkToExisting(
   if (!row) return { error: kind === 'brand' ? 'La marca de destino no existe.' : 'La categoría de destino no existe.' }
   if (!row.is_active) return { error: 'Está dada de baja: reactivala antes de vincular.' }
 
-  // Las marcas vinculadas toman el nombre y el logo oficial, igual que al
-  // vincular por nombre. Las categorías conservan el nombre de la empresa.
-  const updates: Record<string, unknown> = { [config.foreignKey]: row.id }
-  if (kind === 'brand') Object.assign(updates, { name: row.name, logo_url: row.logo_url ?? null, updated_at: new Date().toISOString() })
-
-  const { data: updated, error } = await admin
+  const { data: tenantRows, error: tenantError } = await admin
     .from(config.tenantTable)
-    .update(updates)
+    .select('id, name')
     .in('id', input.ids)
-    .is(config.foreignKey, null)
-    .select('id')
-  if (error) return { error: 'No se pudo vincular.' }
+  if (tenantError || tenantRows?.length !== input.ids.length) return { error: 'Una o más fichas ya no existen.' }
 
-  const aliases = withAlias(row.name, row.aliases, input.alias)
-  if (aliases) await admin.from(config.globalTable).update({ aliases, updated_at: new Date().toISOString() }).eq('id', row.id)
+  const rpc = kind === 'brand' ? 'apply_global_brand_links' : 'apply_global_category_links'
+  const { data, error } = await admin.rpc(rpc, {
+    p_links: (tenantRows ?? []).map((tenant) => ({
+      tenant_id: tenant.id,
+      target_id: row.id,
+      expected_name: tenant.name,
+      alias: input.alias ?? null,
+    })),
+    p_actor_user_id: actorId,
+  })
+  if (error || !isBulkCatalogResult(data)) return { error: 'No se pudo vincular.' }
 
-  return { linked: updated?.length ?? 0, aliasAdded: Boolean(aliases) }
+  const aliasAdded = Boolean(withAlias(row.name, row.aliases, input.alias)) && data.linked > 0
+  return { ...data, aliasAdded }
 }
 
 export type CatalogUsageRow = { id: string; name: string; organizationName: string | null }

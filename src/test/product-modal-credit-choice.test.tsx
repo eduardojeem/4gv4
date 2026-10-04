@@ -40,6 +40,9 @@ vi.mock('@/hooks/useBrands', () => ({
 vi.mock('@/hooks/use-shared-settings', () => ({
   useSharedSettings: () => ({ settings: { currency: 'PYG', taxRate: 10 }, loading: false }),
 }))
+vi.mock('@/components/dashboard/currency/ExchangeRatesManager', () => ({
+  useExchangeRates: () => ({ state: null, loading: false, error: null, reload: vi.fn() }),
+}))
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }))

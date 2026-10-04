@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from '@/lib/utils'
 import { DEVICE_TYPES, DEVICE_TYPE_LABEL, type DeviceModelCandidate, type DeviceType, type GlobalDeviceModel } from '@/lib/devices/global-models'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
+import { CATALOG_STATUS_LABEL, type CatalogStatus } from '@/lib/catalog/editorial-status'
 
 /**
  * Catálogo global de modelos de equipos.
@@ -24,6 +25,7 @@ type Row = GlobalDeviceModel & { stores: number }
 
 type Draft = {
   id?: string
+  global_brand_id: string
   brand: string
   model: string
   device_type: DeviceType
@@ -32,12 +34,15 @@ type Draft = {
   is_active: boolean
 }
 
-const EMPTY_DRAFT: Draft = { brand: '', model: '', device_type: 'smartphone', aliases: '', release_year: '', is_active: true }
+const EMPTY_DRAFT: Draft = { global_brand_id: '', brand: '', model: '', device_type: 'smartphone', aliases: '', release_year: '', is_active: true }
 
-type Filter = 'all' | 'used' | 'unused' | 'inactive'
+type Filter = 'all' | 'used' | 'unused' | 'inactive' | 'candidate' | 'review' | 'published'
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'all', label: 'Todos' },
+  { id: 'candidate', label: 'Candidatos' },
+  { id: 'review', label: 'En revisión' },
+  { id: 'published', label: 'Publicados' },
   { id: 'used', label: 'Usados' },
   { id: 'unused', label: 'Sin uso' },
   { id: 'inactive', label: 'De baja' },
@@ -133,6 +138,9 @@ export function GlobalDeviceModelsManager() {
   const [candidates, setCandidates] = useState<DeviceModelCandidate[]>([])
   const [candidatesTotal, setCandidatesTotal] = useState(0)
   const [storesUsing, setStoresUsing] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [metrics, setMetrics] = useState({ active: 0, used: 0, storesUsing: 0 })
   // Marcas del catálogo de Marcas: la marca del equipo se elige de ahí.
   const [catalogBrands, setCatalogBrands] = useState<Array<{ id: string; name: string; logo_url: string | null }>>([])
   const [loading, setLoading] = useState(true)
@@ -147,11 +155,17 @@ export function GlobalDeviceModelsManager() {
   const [toDeactivate, setToDeactivate] = useState<Row | null>(null)
   const [deactivating, setDeactivating] = useState(false)
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('status')
+    if (FILTERS.some((item) => item.id === requested)) setFilter(requested as Filter)
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/superadmin/global-device-models', { cache: 'no-store' })
+      const params = new URLSearchParams({ q: search, status: filter, sort: 'name', page: String(page), pageSize: '50' })
+      const response = await fetch(`/api/superadmin/global-device-models?${params}`, { cache: 'no-store' })
       const payload = await response.json().catch(() => null)
       if (payload?.missingTable) {
         setMissingTable(true)
@@ -163,15 +177,21 @@ export function GlobalDeviceModelsManager() {
       setCandidates(payload.candidates ?? [])
       setCandidatesTotal(payload.candidatesTotal ?? 0)
       setStoresUsing(payload.storesUsing ?? 0)
+      setTotal(payload.total ?? 0)
+      setMetrics((current) => ({ ...current, ...(payload.metrics ?? {}) }))
       setCatalogBrands(payload.brands ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filter, page, search])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load() }, 250)
+    return () => window.clearTimeout(timer)
+  }, [load])
+  useEffect(() => { setPage(1) }, [brandFilter, filter, search])
 
   const brands = useMemo(() => {
     const counts = new Map<string, number>()
@@ -188,6 +208,9 @@ export function GlobalDeviceModelsManager() {
       if (filter === 'used') return model.is_active && model.stores > 0
       if (filter === 'unused') return model.is_active && model.stores === 0
       if (filter === 'inactive') return !model.is_active
+      if (filter === 'candidate') return model.catalog_status === 'candidate'
+      if (filter === 'review') return model.catalog_status === 'review'
+      if (filter === 'published') return (model.catalog_status ?? (model.is_active ? 'published' : 'inactive')) === 'published'
       return true
     })
   }, [models, search, brandFilter, filter])
@@ -208,6 +231,7 @@ export function GlobalDeviceModelsManager() {
     const year = draft.release_year.trim() ? Number(draft.release_year) : null
     const body = {
       ...(draft.id ? { id: draft.id } : {}),
+      global_brand_id: draft.global_brand_id,
       brand: draft.brand.trim(),
       model: draft.model.trim(),
       device_type: draft.device_type,
@@ -243,7 +267,10 @@ export function GlobalDeviceModelsManager() {
         body: JSON.stringify({ action: 'import', entries: entries.map(({ brand, model }) => ({ brand, model })) }),
       })
       const payload = await response.json().catch(() => null)
-      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo sumar.')
+      if (!response.ok || !payload?.success) {
+        const failed = Array.isArray(payload?.failed) ? payload.failed.length : 0
+        throw new Error(failed > 0 ? `${failed} candidato${failed === 1 ? '' : 's'} no tiene una marca global activa; no se importó ninguno.` : payload?.error || 'No se pudo sumar.')
+      }
       toast.success(`${payload.created} modelo${payload.created === 1 ? '' : 's'} sumado${payload.created === 1 ? '' : 's'} al catálogo`)
       await load()
     } catch (err) {
@@ -253,19 +280,19 @@ export function GlobalDeviceModelsManager() {
     }
   }
 
-  const setActive = async (model: Row, active: boolean) => {
-    if (!active) setDeactivating(true)
+  const setStatus = async (model: Row, status: CatalogStatus) => {
+    if (status === 'inactive') setDeactivating(true)
     try {
-      const response = active
+      const response = status !== 'inactive'
         ? await fetch('/api/superadmin/global-device-models', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: model.id, is_active: true }),
+          body: JSON.stringify({ id: model.id, catalog_status: status }),
         })
         : await fetch(`/api/superadmin/global-device-models?id=${model.id}`, { method: 'DELETE' })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo guardar.')
-      toast.success(active ? `${model.brand} ${model.model} vuelve al catálogo` : `${model.brand} ${model.model} deja de sugerirse`)
+      toast.success(status === 'published' ? `${model.brand} ${model.model} fue publicado` : status === 'review' ? `${model.brand} ${model.model} quedó listo para revisión` : `${model.brand} ${model.model} deja de sugerirse`)
       setToDeactivate(null)
       await load()
     } catch (err) {
@@ -275,8 +302,8 @@ export function GlobalDeviceModelsManager() {
     }
   }
 
-  const activeCount = models.filter((model) => model.is_active).length
-  const usedCount = models.filter((model) => model.is_active && model.stores > 0).length
+  const activeCount = metrics.active
+  const usedCount = metrics.used
 
   return (
     <div className="space-y-6">
@@ -296,7 +323,10 @@ export function GlobalDeviceModelsManager() {
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={() => setDraft({ ...EMPTY_DRAFT, brand: brandFilter ?? '' })} className="gap-1.5" disabled={missingTable}>
+          <Button onClick={() => {
+            const selectedBrand = catalogBrands.find((brand) => brand.name === brandFilter)
+            setDraft({ ...EMPTY_DRAFT, global_brand_id: selectedBrand?.id ?? '', brand: selectedBrand?.name ?? '' })
+          }} className="gap-1.5" disabled={missingTable}>
             <Plus className="h-4 w-4" />
             Nuevo modelo
           </Button>
@@ -313,7 +343,7 @@ export function GlobalDeviceModelsManager() {
             cells={[
               { label: 'En el catálogo', value: activeCount, hint: `${brands.length} marca${brands.length === 1 ? '' : 's'}` },
               { label: 'Usados', value: usedCount, hint: 'por al menos una tienda' },
-              { label: 'Tiendas', value: storesUsing, hint: 'cargan marca y modelo' },
+              { label: 'Tiendas', value: metrics.storesUsing || storesUsing, hint: 'cargan marca y modelo' },
               { label: 'Por sumar', value: candidatesTotal, hint: 'ya los usan las tiendas', warn: candidatesTotal > 0 },
             ]}
           />
@@ -343,7 +373,10 @@ export function GlobalDeviceModelsManager() {
                   </button>
                 ))}
               </div>
-              <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} de {models.length}</span>
+              <span className="ml-auto text-xs tabular-nums text-muted-foreground">{visible.length} en esta página · {total} total</span>
+              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</Button>
+              <span className="text-xs text-muted-foreground">Página {page}</span>
+              <Button variant="outline" size="sm" disabled={page * 50 >= total || loading} onClick={() => setPage((value) => value + 1)}>Siguiente</Button>
             </div>
             {brands.length > 1 && (
               <div className="flex flex-wrap gap-1.5" aria-label="Filtrar por marca">
@@ -409,7 +442,7 @@ export function GlobalDeviceModelsManager() {
                             {model.model}
                             <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{DEVICE_TYPE_LABEL[model.device_type] ?? model.device_type}</span>
                             {model.release_year && <span className="text-xs font-normal text-muted-foreground">{model.release_year}</span>}
-                            {!model.is_active && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">De baja</span>}
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{CATALOG_STATUS_LABEL[model.catalog_status ?? (model.is_active ? 'published' : 'inactive')]}</span>
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {model.stores > 0 ? `${model.stores} tienda${model.stores === 1 ? '' : 's'}` : 'Sin uso todavía'}
@@ -422,6 +455,7 @@ export function GlobalDeviceModelsManager() {
                             size="sm"
                             onClick={() => setDraft({
                               id: model.id,
+                              global_brand_id: model.global_brand_id ?? '',
                               brand: model.brand,
                               model: model.model,
                               device_type: model.device_type,
@@ -432,13 +466,13 @@ export function GlobalDeviceModelsManager() {
                           >
                             Editar
                           </Button>
-                          {model.is_active ? (
+                          {(model.catalog_status ?? (model.is_active ? 'published' : 'inactive')) === 'published' ? (
                             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setToDeactivate(model)} aria-label={`Dar de baja ${model.brand} ${model.model}`}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           ) : (
-                            <Button variant="ghost" size="sm" onClick={() => void setActive(model, true)} aria-label={`Reactivar ${model.brand} ${model.model}`}>
-                              <RotateCcw className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" onClick={() => void setStatus(model, (model.catalog_status ?? 'inactive') === 'review' ? 'published' : 'review')} aria-label={(model.catalog_status ?? 'inactive') === 'review' ? `Publicar ${model.brand} ${model.model}` : `Enviar ${model.brand} ${model.model} a revisión`}>
+                              {(model.catalog_status ?? 'inactive') === 'review' ? <Sparkles className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                             </Button>
                           )}
                         </div>
@@ -461,7 +495,7 @@ export function GlobalDeviceModelsManager() {
         } : null}
         busy={deactivating}
         onCancel={() => setToDeactivate(null)}
-        onConfirm={() => toDeactivate && void setActive(toDeactivate, false)}
+        onConfirm={() => toDeactivate && void setStatus(toDeactivate, 'inactive')}
       />
 
       <Dialog open={draft !== null} onOpenChange={(open) => !open && !saving && setDraft(null)}>
@@ -475,13 +509,18 @@ export function GlobalDeviceModelsManager() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="dm-brand">Marca *</Label>
-                  <Input id="dm-brand" list="dm-brands" value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} placeholder="Samsung" />
-                  <datalist id="dm-brands">
-                    {[...new Set([...catalogBrands.map((brand) => brand.name), ...brands.map(([brand]) => brand)])].map((brand) => <option key={brand} value={brand} />)}
-                  </datalist>
-                  {draft.brand.trim() && !catalogBrandByName.has(draft.brand.trim().toLocaleLowerCase('es')) && (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">No está en Marcas: conviene crearla ahí primero, con su logo.</p>
-                  )}
+                  <select
+                    id="dm-brand"
+                    value={draft.global_brand_id}
+                    onChange={(event) => {
+                      const brand = catalogBrands.find((item) => item.id === event.target.value)
+                      setDraft({ ...draft, global_brand_id: event.target.value, brand: brand?.name ?? '' })
+                    }}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Elegí una marca</option>
+                    {catalogBrands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="dm-model">Modelo *</Label>
@@ -518,7 +557,7 @@ export function GlobalDeviceModelsManager() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>Cancelar</Button>
-            <Button onClick={() => void save()} disabled={saving || !draft?.brand.trim() || !draft?.model.trim()} className="gap-1.5">
+            <Button onClick={() => void save()} disabled={saving || !draft?.global_brand_id || !draft?.model.trim()} className="gap-1.5">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
             </Button>

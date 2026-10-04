@@ -28,7 +28,11 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function checkUser() {
-    const email = 'jeem101595@gmail.com';
+    const email = process.argv.find(a => a.startsWith('--email='))?.split('=')[1];
+    if (!email) {
+        console.error('Usa: node scripts/check-admin.js --email=usuario@example.com');
+        process.exit(1);
+    }
     console.log(`Checking user: ${email}`);
 
     // 1. Get Profile

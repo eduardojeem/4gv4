@@ -8,6 +8,7 @@
 import * as React from "react"
 import { memo } from "react"
 import { cn } from "@/lib/utils"
+import { getLocaleConfig } from "@/lib/currency"
 
 // ============================================================================
 // GRID COMPONENTS
@@ -342,9 +343,18 @@ export function GSIcon({ className }: { className?: string }) {
         className
       )}
     >
-      Gs
+      {currencyBadge()}
     </span>
   )
+}
+
+/** «Gs» para guaraníes; con otra moneda, su símbolo o código (la empresa puede trabajar en USD). */
+function currencyBadge() {
+  const currency = getLocaleConfig().currency
+  if (currency === 'PYG') return 'Gs'
+  if (currency === 'USD') return '$'
+  if (currency === 'EUR') return '€'
+  return currency.slice(0, 2)
 }
 
 // ============================================================================

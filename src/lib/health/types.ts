@@ -19,6 +19,14 @@ export type HealthStatus = 'healthy' | 'warning' | 'error' | 'not_configured' | 
 
 export type HealthSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
+export type HealthChangeKind =
+  | 'new_issue'
+  | 'worsened'
+  | 'improved'
+  | 'resolved'
+  | 'unchanged'
+  | 'not_comparable'
+
 export type HealthCategory =
   | 'legal'
   | 'security'
@@ -54,6 +62,38 @@ export interface HealthCheckResult {
   checkedAt: string
   /** Datos adicionales seguros (nunca secretos). */
   metadata?: Record<string, string | number | boolean | null>
+  guidedActions?: HealthGuidedAction[]
+}
+
+export interface HealthGuidedAction {
+  type: 'file' | 'env' | 'command' | 'dashboard' | 'documentation'
+  label: string
+  target: string
+  description?: string
+}
+
+export interface HealthCheckChange {
+  checkId: string
+  kind: HealthChangeKind
+  currentStatus: HealthStatus
+  previousStatus: HealthStatus | null
+  currentSeverity: HealthSeverity
+  previousSeverity: HealthSeverity | null
+}
+
+export interface ExecutiveHealthSummary {
+  critical: number
+  warnings: number
+  newOrWorsened: number
+  resolved: number
+}
+
+export interface HealthComparison {
+  previousRunId: string | null
+  previousCheckedAt: string | null
+  changes: HealthCheckChange[]
+  counts: Record<HealthChangeKind, number>
+  executiveSummary: ExecutiveHealthSummary
 }
 
 export interface HealthMetric {
@@ -68,6 +108,31 @@ export interface HealthMetricGroup {
   title: string
   metrics: HealthMetric[]
   rows?: Array<{ label: string; value: string | number; hint?: string }>
+}
+
+export type ServiceConfigurationState = 'configured' | 'partial' | 'missing'
+
+export interface ServiceHealthEntry {
+  id: string
+  name: string
+  status: HealthStatus
+  configured: ServiceConfigurationState
+  summary: string
+  source: string
+  checkedAt: string | null
+  latencyMs: number | null
+  unavailableReason?: string
+}
+
+export interface ScheduledTaskHealth {
+  id: string
+  name: string
+  status: HealthStatus
+  summary: string
+  source: string
+  lastRunAt: string | null
+  nextRunAt: string | null
+  durationMs: number | null
 }
 
 export interface TenantTableFinding {
@@ -89,6 +154,15 @@ export interface HealthReport {
   tenantTables: TenantTableFinding[]
   counts: Record<HealthStatus, number>
   overall: HealthStatus
+  comparison: HealthComparison
+  executiveSummary: ExecutiveHealthSummary
+  deployment: HealthMetricGroup | null
+  serviceHealth: ServiceHealthEntry[]
+  scheduledTasks: ScheduledTaskHealth[]
+  scope: {
+    complete: boolean
+    unavailableSources: string[]
+  }
   historyPersisted: boolean
   historyError?: string
 }

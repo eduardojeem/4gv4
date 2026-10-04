@@ -24,6 +24,7 @@ const BLOCKED_SECTIONS: string[] = [
 const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
   vendedor: [
     '/dashboard/pos',
+    '/dashboard/vencimientos',
     '/dashboard/agenda',
     '/dashboard/quotes',
     '/dashboard/inventory-count',

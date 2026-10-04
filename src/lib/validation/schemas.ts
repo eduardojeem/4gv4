@@ -204,6 +204,12 @@ const productBaseSchema = z.object({
   foreign_wholesale_price: z.number().nonnegative('El precio mayorista en moneda extranjera no puede ser negativo').nullable().optional(),
   foreign_purchase_price: z.number().nonnegative('El costo en moneda extranjera no puede ser negativo').nullable().optional(),
 
+  // Lote del stock inicial (alimentos, cosmética): se registra al crear el producto.
+  initial_batch: z.object({
+    lot_code: z.string().trim().max(60).nullable().optional(),
+    expires_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha de vencimiento no es válida'),
+  }).nullable().optional(),
+
   ...productVariantsFields,
 })
 

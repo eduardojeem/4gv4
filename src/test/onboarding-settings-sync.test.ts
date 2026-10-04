@@ -76,9 +76,12 @@ describe('onboarding and admin settings synchronization', () => {
   it('presents onboarding as a focused configuration workspace', () => {
     const client = read('src/components/dashboard/onboarding/OnboardingClient.tsx')
 
-    expect(client).toContain("<TabsTrigger value=\"essential\"")
-    expect(client).toContain("<TabsTrigger value=\"public\"")
-    expect(client).toContain("<TabsTrigger value=\"social\"")
+    // Un asistente paso a paso la primera vez; después, las mismas secciones como pestañas.
+    for (const step of ['business', 'contact', 'payments', 'public', 'social']) {
+      expect(client).toContain(`{ id: '${step}'`)
+      expect(client).toContain(`<TabsContent value="${step}"`)
+    }
+    expect(client).toContain('<TabsTrigger key={step.id} value={step.id}')
     expect(client).toContain('clearOnboardingStatusCache()')
     expect(client).toContain("if (isRevisit) router.refresh()")
     expect(client).toContain("window.addEventListener('beforeunload'")

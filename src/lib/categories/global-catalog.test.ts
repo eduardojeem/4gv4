@@ -29,6 +29,22 @@ describe('catálogo global de categorías', () => {
     expect(sortGlobalCategories(catalogo).map((c) => c.id)).toEqual(['c-elec', 'c-cel', 'c-acc', 'c-vieja'])
   })
 
+  it('termina ante ciclos, conserva huérfanas y no repite IDs', () => {
+    const corruptCatalog = [
+      { id: 'root', name: 'Raíz', slug: 'raiz', sort_order: 1 },
+      { id: 'child', name: 'Hija', slug: 'hija', parent_id: 'root', sort_order: 1 },
+      { id: 'cycle-a', name: 'Ciclo A', slug: 'ciclo-a', parent_id: 'cycle-b', sort_order: 1 },
+      { id: 'cycle-b', name: 'Ciclo B', slug: 'ciclo-b', parent_id: 'cycle-a', sort_order: 1 },
+      { id: 'orphan', name: 'Huérfana', slug: 'huerfana', parent_id: 'missing', sort_order: 1 },
+      { id: 'child', name: 'Hija duplicada', slug: 'hija-duplicada', parent_id: 'root', sort_order: 2 },
+    ]
+
+    const ids = sortGlobalCategories(corruptCatalog).map((category) => category.id)
+
+    expect(ids).toEqual(['root', 'child', 'cycle-a', 'cycle-b', 'orphan'])
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
   /** Hoy hay 116 categorías de empresas y ninguna vinculada. */
   it('vincula por nombre solo las que están sueltas', () => {
     const plan = planCategoryLinks(

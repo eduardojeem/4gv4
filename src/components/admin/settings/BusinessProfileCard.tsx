@@ -3,6 +3,7 @@
 import { useMemo, useState, type ElementType } from 'react'
 import { moduleDisplayHint, moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 import { dashboardNavGroups } from '@/config/dashboard-navigation'
+import { isNavigationModuleAvailable } from '@/lib/navigation/dashboard-navigation'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -136,7 +137,7 @@ export function BusinessProfileCard() {
     () => dashboardNavGroups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => !item.module || (enabled.includes(item.module) && entitled.has(item.module))),
+        items: group.items.filter((item) => isNavigationModuleAvailable(item.module, enabled.filter((module) => entitled.has(module)))),
       }))
       .filter((group) => group.items.length > 0),
     [enabled, entitled],

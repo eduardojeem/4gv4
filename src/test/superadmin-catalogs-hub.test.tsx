@@ -5,8 +5,8 @@ import { CatalogsHub, type CatalogsHubData } from '@/components/superadmin/Catal
 const data: CatalogsHubData = {
   categories: { active: 28, roots: 13, tenantTotal: 123, tenantLinked: 53 },
   brands: { active: 43, withoutLogo: 39, tenantTotal: 115, tenantLinked: 79 },
-  products: { active: 15, withoutCategory: 4, withoutImage: 0 },
-  deviceModels: { active: 0 },
+  products: { active: 15, withoutCategory: 4, withoutImage: 0, candidates: 2, review: 1 },
+  deviceModels: { active: 0, candidates: 3, review: 0 },
 }
 
 describe('resumen de catálogos globales', () => {
@@ -32,7 +32,15 @@ describe('resumen de catálogos globales', () => {
   })
 
   it('una tabla sin crear se ve como pendiente, no como cero', () => {
-    render(<CatalogsHub data={{ ...data, products: { active: null, withoutCategory: null, withoutImage: null } }} />)
+    render(<CatalogsHub data={{ ...data, products: { active: null, withoutCategory: null, withoutImage: null, candidates: null, review: null } }} />)
     expect(screen.getByRole('link', { name: /Productos por código: Falta correr su SQL/ })).toBeInTheDocument()
+    expect(screen.getByText(/Sin verificar/)).toBeInTheDocument()
+  })
+
+  it('expone la cola editorial con acceso a resolverla', () => {
+    render(<CatalogsHub data={data} />)
+    expect(screen.getByRole('link', { name: /Productos por código: 2 candidatos pendientes de revisión/ })).toHaveAttribute('href', '/superadmin/global-products?status=candidate')
+    expect(screen.getByRole('link', { name: /Productos por código: 1 ficha lista para publicar/ })).toHaveAttribute('href', '/superadmin/global-products?status=review')
+    expect(screen.getAllByText(/Con pendientes/).length).toBeGreaterThan(0)
   })
 })

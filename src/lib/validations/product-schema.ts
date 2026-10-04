@@ -42,6 +42,10 @@ export const productSchema = z
     foreign_wholesale_price: z.coerce.number().min(0, "El precio no puede ser negativo").optional().nullable(),
     foreign_purchase_price: z.coerce.number().min(0, "El costo no puede ser negativo").optional().nullable(),
 
+    // Lote y vencimiento del stock inicial (rubros con vencimiento).
+    initial_lot_code: z.string().max(60).optional().nullable(),
+    initial_expires_on: z.string().optional().nullable(),
+
     // Pricing
     purchase_price: z
       .coerce

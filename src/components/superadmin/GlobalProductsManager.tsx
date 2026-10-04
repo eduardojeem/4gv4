@@ -35,6 +35,7 @@ import { GlobalProductStats } from './global-products/GlobalProductStats'
 import { BarcodeSimulatorDialog } from './global-products/BarcodeSimulatorDialog'
 import { GlobalProductCandidates } from './global-products/GlobalProductCandidates'
 import { GlobalProductFormDialog, type GlobalProductDraft } from './global-products/GlobalProductFormDialog'
+import { CATALOG_STATUS_LABEL, type CatalogStatus } from '@/lib/catalog/editorial-status'
 
 /**
  * Catálogo global de productos por código de barras. Sirve a todos los rubros:
@@ -52,6 +53,7 @@ type GlobalProduct = {
   description: string | null
   image_url: string | null
   is_active: boolean
+  catalog_status?: CatalogStatus
   stores: number
 }
 
@@ -88,10 +90,13 @@ const EMPTY_DRAFT: GlobalProductDraft = {
   is_active: true,
 }
 
-type Filter = 'all' | 'no-category' | 'no-brand' | 'no-image' | 'used' | 'inactive'
+type Filter = 'all' | 'no-category' | 'no-brand' | 'no-image' | 'used' | 'inactive' | 'candidate' | 'review' | 'published'
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'all', label: 'Todos' },
+  { id: 'candidate', label: 'Candidatos' },
+  { id: 'review', label: 'En revisión' },
+  { id: 'published', label: 'Publicados' },
   { id: 'used', label: 'Usados en tiendas' },
   { id: 'no-category', label: 'Sin categoría' },
   { id: 'no-brand', label: 'Sin marca' },
@@ -127,6 +132,9 @@ export function GlobalProductsManager() {
   const [candidates, setCandidates] = useState<GlobalProductCandidate[]>([])
   const [candidatesTotal, setCandidatesTotal] = useState(0)
   const [productsWithBarcode, setProductsWithBarcode] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [metrics, setMetrics] = useState({ active: 0, used: 0, uncategorized: 0, unbranded: 0, withoutImage: 0, inactive: 0 })
   const [brands, setBrands] = useState<Option[]>([])
   const [categories, setCategories] = useState<Option[]>([])
   const [loading, setLoading] = useState(true)
@@ -149,6 +157,11 @@ export function GlobalProductsManager() {
   const [bulkBrand, setBulkBrand] = useState('')
   const [bulkSaving, setBulkSaving] = useState(false)
   const [simulatorOpen, setSimulatorOpen] = useState(false)
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('status')
+    if (FILTERS.some((item) => item.id === requested)) setFilter(requested as Filter)
+  }, [])
 
   // La vista elegida se recuerda en este navegador.
   useEffect(() => {
@@ -176,7 +189,16 @@ export function GlobalProductsManager() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/superadmin/global-products', { cache: 'no-store' })
+      const params = new URLSearchParams({
+        q: search,
+        status: selectedBrandFilter === 'none' ? 'no-brand' : selectedCategoryFilter === 'none' ? 'no-category' : filter,
+        sort: sortBy === 'stores-desc' ? 'usage_desc' : sortBy === 'name-desc' ? 'name_desc' : 'name',
+        page: String(page),
+        pageSize: '50',
+      })
+      if (selectedBrandFilter !== 'all' && selectedBrandFilter !== 'none') params.set('brand', selectedBrandFilter)
+      if (selectedCategoryFilter !== 'all' && selectedCategoryFilter !== 'none') params.set('category', selectedCategoryFilter)
+      const response = await fetch(`/api/superadmin/global-products?${params}`, { cache: 'no-store' })
       const payload = await response.json().catch(() => null)
       if (payload?.missingTable) {
         setMissingTable(true)
@@ -188,6 +210,8 @@ export function GlobalProductsManager() {
       setCandidates(payload.candidates ?? [])
       setCandidatesTotal(payload.candidatesTotal ?? 0)
       setProductsWithBarcode(payload.productsWithBarcode ?? 0)
+      setTotal(payload.total ?? 0)
+      setMetrics((current) => ({ ...current, ...(payload.metrics ?? {}) }))
       setBrands(payload.brands ?? [])
       setCategories(payload.categories ?? [])
     } catch (err) {
@@ -195,11 +219,14 @@ export function GlobalProductsManager() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filter, page, search, selectedBrandFilter, selectedCategoryFilter, sortBy])
 
   useEffect(() => {
-    void load()
+    const timer = window.setTimeout(() => { void load() }, 250)
+    return () => window.clearTimeout(timer)
   }, [load])
+
+  useEffect(() => { setPage(1) }, [filter, search, selectedBrandFilter, selectedCategoryFilter, sortBy])
 
   const brandName = useMemo(() => new Map(brands.map((brand) => [brand.id, brand.name])), [brands])
   const categoryName = useMemo(() => categoryLabels(categories), [categories])
@@ -243,6 +270,9 @@ export function GlobalProductsManager() {
       if (filter === 'no-image' && (!product.is_active || product.image_url)) return false
       if (filter === 'used' && (!product.is_active || product.stores <= 0)) return false
       if (filter === 'inactive' && product.is_active) return false
+      if (filter === 'candidate' && product.catalog_status !== 'candidate') return false
+      if (filter === 'review' && product.catalog_status !== 'review') return false
+      if (filter === 'published' && (product.catalog_status ?? (product.is_active ? 'published' : 'inactive')) !== 'published') return false
 
       // Filtro por marca específica
       if (selectedBrandFilter !== 'all') {
@@ -426,7 +456,10 @@ export function GlobalProductsManager() {
         body: JSON.stringify({ action: 'import', entries }),
       })
       const payload = await response.json().catch(() => null)
-      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo sumar.')
+      if (!response.ok || !payload?.success) {
+        const failed = Array.isArray(payload?.failed) ? payload.failed.length : 0
+        throw new Error(failed > 0 ? `${failed} candidato${failed === 1 ? '' : 's'} no pasó la validación; no se importó ninguno.` : payload?.error || 'No se pudo sumar.')
+      }
       toast.success(
         `${payload.created} producto${payload.created === 1 ? '' : 's'} sumado${payload.created === 1 ? '' : 's'} al catálogo`,
       )
@@ -438,19 +471,19 @@ export function GlobalProductsManager() {
     }
   }
 
-  const setActive = async (product: GlobalProduct, activeStatus: boolean) => {
-    if (!activeStatus) setDeactivating(true)
+  const setStatus = async (product: GlobalProduct, status: CatalogStatus) => {
+    if (status === 'inactive') setDeactivating(true)
     try {
-      const response = activeStatus
+      const response = status !== 'inactive'
         ? await fetch('/api/superadmin/global-products', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: product.id, is_active: true }),
+            body: JSON.stringify({ id: product.id, catalog_status: status }),
           })
         : await fetch(`/api/superadmin/global-products?id=${product.id}`, { method: 'DELETE' })
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo guardar.')
-      toast.success(activeStatus ? `${product.name} vuelve al catálogo` : `${product.name} deja de ofrecerse`)
+      toast.success(status === 'published' ? `${product.name} fue publicado` : status === 'review' ? `${product.name} quedó listo para revisión` : `${product.name} deja de ofrecerse`)
       setToDeactivate(null)
       await load()
     } catch (err) {
@@ -542,10 +575,10 @@ export function GlobalProductsManager() {
         <>
           {/* ── Tarjetas de Métricas Interactivas (KPIs) ── */}
           <GlobalProductStats
-            activeCount={active.length}
-            usedCount={used.length}
-            uncategorizedCount={noCat.length}
-            unbrandedCount={noBrand.length}
+            activeCount={metrics.active}
+            usedCount={metrics.used}
+            uncategorizedCount={metrics.uncategorized}
+            unbrandedCount={metrics.unbranded}
             candidatesCount={candidatesTotal}
             currentFilter={filter}
             onSelectFilter={(filterId) => setFilter(filterId as Filter)}
@@ -618,12 +651,12 @@ export function GlobalProductsManager() {
               <div role="tablist" aria-label="Filtrar productos" className="flex flex-wrap gap-1.5">
                 {FILTERS.map((item) => {
                   const isSelected = filter === item.id
-                  let count = active.length
-                  if (item.id === 'used') count = used.length
-                  else if (item.id === 'no-category') count = noCat.length
-                  else if (item.id === 'no-brand') count = noBrand.length
-                  else if (item.id === 'no-image') count = active.filter((p) => !p.image_url).length
-                  else if (item.id === 'inactive') count = products.filter((p) => !p.is_active).length
+                  let count = metrics.active
+                  if (item.id === 'used') count = metrics.used
+                  else if (item.id === 'no-category') count = metrics.uncategorized
+                  else if (item.id === 'no-brand') count = metrics.unbranded
+                  else if (item.id === 'no-image') count = metrics.withoutImage
+                  else if (item.id === 'inactive') count = metrics.inactive
 
                   return (
                     <button
@@ -700,8 +733,11 @@ export function GlobalProductsManager() {
                 </select>
 
                 <span className="text-xs font-bold tabular-nums text-muted-foreground pl-1">
-                  {visible.length} de {products.length}
+                  {visible.length} en esta página · {total} total
                 </span>
+                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</Button>
+                <span className="text-xs text-muted-foreground">Página {page}</span>
+                <Button variant="outline" size="sm" disabled={page * 50 >= total || loading} onClick={() => setPage((value) => value + 1)}>Siguiente</Button>
               </div>
             </div>
           </div>
@@ -872,11 +908,9 @@ export function GlobalProductsManager() {
                                 {product.gtin}
                                 <Copy className="h-2.5 w-2.5 opacity-50 group-hover/btn:opacity-100" />
                               </button>
-                              {!product.is_active && (
-                                <Badge variant="destructive" className="text-[10px] py-0 px-1.5 h-4">
-                                  De baja
-                                </Badge>
-                              )}
+                              <Badge variant={product.catalog_status === 'inactive' || (!product.catalog_status && !product.is_active) ? 'destructive' : 'outline'} className="text-[10px] py-0 px-1.5 h-4">
+                                {CATALOG_STATUS_LABEL[product.catalog_status ?? (product.is_active ? 'published' : 'inactive')]}
+                              </Badge>
                             </div>
 
                             <h3 className="font-bold text-sm text-foreground line-clamp-2 leading-snug">
@@ -928,7 +962,7 @@ export function GlobalProductsManager() {
                           >
                             Editar
                           </Button>
-                          {product.is_active ? (
+                          {(product.catalog_status ?? (product.is_active ? 'published' : 'inactive')) === 'published' ? (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -943,10 +977,10 @@ export function GlobalProductsManager() {
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                              onClick={() => void setActive(product, true)}
-                              aria-label={`Reactivar ${product.name}`}
+                              onClick={() => void setStatus(product, (product.catalog_status ?? 'inactive') === 'review' ? 'published' : 'review')}
+                              aria-label={(product.catalog_status ?? 'inactive') === 'review' ? `Publicar ${product.name}` : `Enviar ${product.name} a revisión`}
                             >
-                              <RotateCcw className="h-4 w-4" />
+                              {(product.catalog_status ?? 'inactive') === 'review' ? <Check className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                             </Button>
                           )}
                         </div>
@@ -1054,11 +1088,9 @@ export function GlobalProductsManager() {
                                     <p className="font-bold text-sm text-foreground truncate max-w-xl">
                                       {product.name}
                                     </p>
-                                    {!product.is_active && (
-                                      <Badge variant="destructive" className="text-[10px] py-0 px-1.5 h-4">
-                                        De baja
-                                      </Badge>
-                                    )}
+                                    <Badge variant={product.catalog_status === 'inactive' || (!product.catalog_status && !product.is_active) ? 'destructive' : 'outline'} className="text-[10px] py-0 px-1.5 h-4">
+                                      {CATALOG_STATUS_LABEL[product.catalog_status ?? (product.is_active ? 'published' : 'inactive')]}
+                                    </Badge>
                                   </div>
 
                                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
@@ -1126,7 +1158,7 @@ export function GlobalProductsManager() {
                                   >
                                     Editar
                                   </Button>
-                                  {product.is_active ? (
+                                  {(product.catalog_status ?? (product.is_active ? 'published' : 'inactive')) === 'published' ? (
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -1141,10 +1173,10 @@ export function GlobalProductsManager() {
                                       variant="ghost"
                                       size="sm"
                                       className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-lg"
-                                      onClick={() => void setActive(product, true)}
-                                      aria-label={`Reactivar ${product.name}`}
+                                      onClick={() => void setStatus(product, (product.catalog_status ?? 'inactive') === 'review' ? 'published' : 'review')}
+                                      aria-label={(product.catalog_status ?? 'inactive') === 'review' ? `Publicar ${product.name}` : `Enviar ${product.name} a revisión`}
                                     >
-                                      <RotateCcw className="h-4 w-4" />
+                                      {(product.catalog_status ?? 'inactive') === 'review' ? <Check className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                                     </Button>
                                   )}
                                 </div>
@@ -1175,7 +1207,7 @@ export function GlobalProductsManager() {
         }
         busy={deactivating}
         onCancel={() => setToDeactivate(null)}
-        onConfirm={() => toDeactivate && void setActive(toDeactivate, false)}
+        onConfirm={() => toDeactivate && void setStatus(toDeactivate, 'inactive')}
       />
 
       {/* ── Modal Moderno de Alta / Edición de Producto ── */}

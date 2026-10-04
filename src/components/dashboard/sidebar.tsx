@@ -67,7 +67,7 @@ export const Sidebar = memo(function Sidebar() {
   const router = useRouter()
   const { sidebarCollapsed: collapsed, toggleSidebar } = useDashboardLayout()
   const { user, signOut } = useAuth()
-  const { organizationName, organizationLogoUrl, effectiveModules } = useSubscriptionStatus()
+  const { organizationName, organizationLogoUrl, effectiveModules, businessVertical } = useSubscriptionStatus()
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
@@ -124,8 +124,8 @@ export const Sidebar = memo(function Sidebar() {
   const isDev = process.env.NODE_ENV === 'development'
 
   const filteredGroups = useMemo(
-    () => filterDashboardNavGroups({ role: userRole, effectiveModules, hasPermission }),
-    [userRole, hasPermission, effectiveModules],
+    () => filterDashboardNavGroups({ role: userRole, effectiveModules, hasPermission, businessVertical }),
+    [userRole, hasPermission, effectiveModules, businessVertical],
   )
   const activeItem = useMemo(() => getDashboardNavItemByPath(pathname), [pathname])
   const activeGroup = useMemo(

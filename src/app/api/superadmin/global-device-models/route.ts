@@ -3,25 +3,30 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { logger } from '@/lib/logger'
 import { normalizeDeviceBrand, normalizeDeviceModel } from '@/lib/products/device-compatibility'
-import { DEVICE_TYPES, sortDeviceModels, summarizeDeviceUsage, type GlobalDeviceModel, type UsageRows } from '@/lib/devices/global-models'
+import { DEVICE_TYPES } from '@/lib/devices/global-models'
+import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
+import { parseCatalogAdminQuery } from '@/lib/catalog/admin-query'
+import { canTransitionCatalogStatus, catalogStatusSchema, type CatalogStatus } from '@/lib/catalog/editorial-status'
 
 /**
  * Catálogo global de modelos de equipos: lo administra solo la plataforma y se
  * suma a las sugerencias de marca/modelo de todas las tiendas.
  */
 
-const COLUMNS = 'id, brand, model, device_type, aliases, release_year, is_active'
+const COLUMNS = 'id, global_brand_id, brand, model, device_type, aliases, release_year, is_active, catalog_status, source_type, source_summary, confidence, reviewed_by, reviewed_at, deactivation_reason, global_brands(name)'
 
 const modelSchema = z.object({
   brand: z.string({ message: 'Poné la marca.' }).trim().min(1, 'Poné la marca.').max(80),
+  global_brand_id: z.string().uuid().optional().nullable(),
   model: z.string({ message: 'Poné el modelo.' }).trim().min(1, 'Poné el modelo.').max(80),
   device_type: z.enum(DEVICE_TYPES).optional(),
   aliases: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   release_year: z.number().int().min(1990).max(2100).nullable().optional(),
   is_active: z.boolean().optional(),
+  catalog_status: catalogStatusSchema.optional(),
+  deactivation_reason: z.string().trim().max(500).optional().nullable(),
 })
 
 const updateSchema = modelSchema.partial().extend({ id: z.string().uuid() })
@@ -41,53 +46,42 @@ function normalized(input: { brand: string; model: string; aliases?: string[] })
   return { brand, model, aliases }
 }
 
-/** Hasta dónde se leen productos y reparaciones para contar el uso. */
-const USAGE_ROW_CAP = 20_000
-
-/** Una página vacía corta la lectura de `fetchAllRows` al llegar al tope. */
-const EMPTY_PAGE = Promise.resolve({ data: [] as never[], error: null })
-
-/** Lo que las tiendas cargaron en productos y reparaciones. */
-async function readUsage(admin: ReturnType<typeof createAdminSupabase>): Promise<UsageRows> {
-  const [products, repairs] = await Promise.all([
-    fetchAllRows<UsageRows['products'][number]>((from, to) => from >= USAGE_ROW_CAP
-      ? EMPTY_PAGE
-      : admin.from('products').select('organization_id, device_brand, device_models').not('device_brand', 'is', null).order('id').range(from, to)).catch(() => []),
-    fetchAllRows<UsageRows['repairs'][number]>((from, to) => from >= USAGE_ROW_CAP
-      ? EMPTY_PAGE
-      : admin.from('repairs').select('organization_id, device_brand, device_model').not('device_brand', 'is', null).order('id').range(from, to)).catch(() => []),
-  ])
-  return { products, repairs }
-}
-
 /**
  * La marca del equipo sale del catálogo de Marcas: si lo escrito coincide con
  * una marca global (por nombre o alias), se guarda con su nombre oficial. Así
  * «samsung» no queda como otra marca distinta de la de Marcas.
  */
-async function canonicalBrand(admin: ReturnType<typeof createAdminSupabase>, raw: string): Promise<string | null> {
+async function canonicalBrand(admin: ReturnType<typeof createAdminSupabase>, raw: string): Promise<{ id: string; name: string } | null> {
   const brand = normalizeDeviceBrand(raw)
   if (!brand) return null
-  const { data } = await admin.from('global_brands').select('name, aliases').eq('is_active', true)
+  const { data } = await admin.from('global_brands').select('id, name, aliases').eq('is_active', true)
   const key = brand.toLocaleLowerCase('es')
-  const match = ((data ?? []) as Array<{ name: string; aliases: string[] | null }>).find((row) =>
+  const matches = ((data ?? []) as Array<{ id: string; name: string; aliases: string[] | null }>).filter((row) =>
     row.name.toLocaleLowerCase('es') === key || (row.aliases ?? []).some((alias) => alias.toLocaleLowerCase('es') === key))
-  return match?.name ?? brand
+  return matches.length === 1 ? { id: matches[0].id, name: matches[0].name } : null
+}
+
+async function activeBrand(admin: ReturnType<typeof createAdminSupabase>, id: string) {
+  const { data } = await admin.from('global_brands').select('id, name').eq('id', id).eq('is_active', true).maybeSingle()
+  return data as { id: string; name: string } | null
 }
 
 function isMissingTable(error: { code?: string; message?: string } | null) {
   return Boolean(error && (error.code === 'PGRST205' || error.code === '42P01' || /does not exist|could not find/i.test(error.message ?? '')))
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSuperAdminUser()
   if (!user) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 })
 
   try {
     const admin = createAdminSupabase()
-    const [{ data, error }, usage, { data: brands }] = await Promise.all([
-      admin.from('global_device_models').select(COLUMNS).limit(5000),
-      readUsage(admin),
+    const query = parseCatalogAdminQuery(new URL(request.url).searchParams)
+    const [{ data: result, error }, { data: brands }] = await Promise.all([
+      admin.rpc('get_global_device_models_admin', {
+        p_q: query.q, p_status: query.status, p_brand: query.brand,
+        p_sort: query.sort, p_page: query.page, p_page_size: query.pageSize,
+      }),
       admin.from('global_brands').select('id, name, logo_url').eq('is_active', true).order('name'),
     ])
     if (isMissingTable(error)) {
@@ -95,16 +89,25 @@ export async function GET() {
     }
     if (error) throw error
 
-    const catalog = (data ?? []) as GlobalDeviceModel[]
-    const { storesByModel, candidates } = summarizeDeviceUsage(usage, catalog)
-    const storesUsing = new Set([...usage.products, ...usage.repairs].map((row) => row.organization_id).filter(Boolean)).size
+    const payload = result as Record<string, unknown> | null
+    if (!payload || !Array.isArray(payload.items)) throw new Error('Invalid device catalog query result')
+    // `brand` queda como fallback compatible para filas históricas todavía no vinculadas.
+    const items = (payload.items as Array<Record<string, unknown>>).map((item) => ({
+      ...item,
+      brand: String(item.resolved_brand ?? item.brand ?? ''),
+    }))
 
     return NextResponse.json({
       success: true,
-      data: sortDeviceModels(catalog).map((item) => ({ ...item, stores: storesByModel.get(item.id) ?? 0 })),
-      candidates: candidates.slice(0, 300),
-      candidatesTotal: candidates.length,
-      storesUsing,
+      data: items,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      total: payload.total,
+      metrics: payload.metrics,
+      candidates: payload.candidates,
+      candidatesTotal: payload.candidatesTotal,
+      truncated: payload.truncated,
+      storesUsing: (payload.metrics as { storesUsing?: number } | undefined)?.storesUsing ?? 0,
       // Las marcas del catálogo de Marcas: de ahí se elige la del equipo.
       brands: brands ?? [],
     })
@@ -131,25 +134,26 @@ export async function POST(request: NextRequest) {
       const rows = validation.data.entries
         .map((entry) => normalized(entry))
         .filter((entry): entry is { brand: string; model: string; aliases: string[] } => Boolean(entry.brand && entry.model))
-        .map((entry) => ({ brand: entry.brand, model: entry.model, device_type: 'smartphone', aliases: [] as string[] }))
-
-      let created = 0
-      for (const row of rows) {
-        row.brand = (await canonicalBrand(admin, row.brand)) ?? row.brand
-        const { error } = await admin.from('global_device_models').insert(row)
-        if (!error) created += 1
-        else if (error.code !== '23505') logger.error('[superadmin/global-device-models] import', { error: error.message, row })
-      }
+      const entries = await Promise.all(rows.map(async (row) => ({
+        global_brand_id: (await canonicalBrand(admin, row.brand))?.id ?? null,
+        model: row.model,
+        device_type: 'smartphone',
+      })))
+      const { data: result, error } = await admin.rpc('import_global_device_model_candidates', {
+        p_entries: entries,
+        p_actor_user_id: user.id,
+      })
+      if (error || !isBulkCatalogResult(result)) throw error ?? new Error('Invalid device model import result')
 
       await logSuperAdminAction({
         actorId: user.id,
         actorEmail: user.email,
         action: 'create',
         resource: 'global_device_models',
-        newValues: { created, action: 'import' },
+        newValues: { ...result, action: 'import' },
         request,
       })
-      return NextResponse.json({ success: true, created })
+      return NextResponse.json({ success: bulkResultSucceeded(result), ...result }, { status: bulkResultSucceeded(result) ? 200 : 409 })
     }
 
     const validation = modelSchema.safeParse(body)
@@ -158,24 +162,31 @@ export async function POST(request: NextRequest) {
     }
     const normalizedInput = normalized(validation.data)
     const { model, aliases } = normalizedInput
-    const brand = normalizedInput.brand ? await canonicalBrand(admin, normalizedInput.brand) : null
-    if (!brand || !model) return NextResponse.json({ success: false, error: 'Poné la marca y el modelo.' }, { status: 400 })
+    const brand = validation.data.global_brand_id
+      ? await activeBrand(admin, validation.data.global_brand_id)
+      : normalizedInput.brand ? await canonicalBrand(admin, normalizedInput.brand) : null
+    if (!brand) return NextResponse.json({ success: false, error: 'La marca elegida no está activa o es ambigua.' }, { status: 400 })
+    if (!model) return NextResponse.json({ success: false, error: 'Poné la marca y el modelo.' }, { status: 400 })
 
     const { data, error } = await admin
       .from('global_device_models')
       .insert({
-        brand,
+        global_brand_id: brand.id,
+        brand: brand.name,
         model,
         aliases,
         device_type: validation.data.device_type ?? 'smartphone',
         release_year: validation.data.release_year ?? null,
-        is_active: validation.data.is_active ?? true,
+        catalog_status: 'published',
+        source_type: 'manual',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
       })
       .select(COLUMNS)
       .single()
 
     if (error) {
-      if (error.code === '23505') return NextResponse.json({ success: false, error: `${brand} ${model} ya está en el catálogo.` }, { status: 409 })
+      if (error.code === '23505') return NextResponse.json({ success: false, error: `${brand.name} ${model} ya está en el catálogo.` }, { status: 409 })
       throw error
     }
 
@@ -185,7 +196,7 @@ export async function POST(request: NextRequest) {
       action: 'create',
       resource: 'global_device_models',
       resourceId: data.id,
-      newValues: { brand, model },
+      newValues: { global_brand_id: brand.id, brand: brand.name, model },
       request,
     })
     return NextResponse.json({ success: true, data }, { status: 201 })
@@ -206,23 +217,44 @@ export async function PUT(request: NextRequest) {
     }
     const { id, ...input } = validation.data
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    const admin = createAdminSupabase()
 
-    if (input.brand !== undefined || input.model !== undefined || input.aliases !== undefined) {
-      const admin = createAdminSupabase()
-      const { data: current } = await admin.from('global_device_models').select('brand, model, aliases').eq('id', id).maybeSingle()
+    if (input.catalog_status !== undefined) {
+      const { data: editorial, error: editorialError } = await admin
+        .from('global_device_models')
+        .select('catalog_status')
+        .eq('id', id)
+        .maybeSingle()
+      if (editorialError) throw editorialError
+      if (!editorial) return NextResponse.json({ success: false, error: 'El modelo no existe.' }, { status: 404 })
+      const currentStatus = (editorial.catalog_status ?? ((editorial as { is_active?: boolean }).is_active ? 'published' : 'inactive')) as CatalogStatus
+      if (!canTransitionCatalogStatus(currentStatus, input.catalog_status)) {
+        return NextResponse.json({ success: false, error: `No se puede pasar de ${currentStatus} a ${input.catalog_status}.` }, { status: 409 })
+      }
+      updates.catalog_status = input.catalog_status
+      updates.reviewed_by = user.id
+      updates.reviewed_at = new Date().toISOString()
+      updates.deactivation_reason = input.catalog_status === 'inactive' ? input.deactivation_reason || null : null
+    }
+
+    if (input.global_brand_id !== undefined || input.brand !== undefined || input.model !== undefined || input.aliases !== undefined) {
+      const { data: current } = await admin.from('global_device_models').select('global_brand_id, brand, model, aliases').eq('id', id).maybeSingle()
       const next = normalized({
         brand: input.brand ?? (current as { brand?: string } | null)?.brand ?? '',
         model: input.model ?? (current as { model?: string } | null)?.model ?? '',
         aliases: input.aliases ?? (current as { aliases?: string[] } | null)?.aliases ?? [],
       })
       if (!next.brand || !next.model) return NextResponse.json({ success: false, error: 'Poné la marca y el modelo.' }, { status: 400 })
-      Object.assign(updates, next, { brand: await canonicalBrand(admin, next.brand) })
+      const brandId = input.global_brand_id ?? (current as { global_brand_id?: string | null } | null)?.global_brand_id
+      const brand = brandId ? await activeBrand(admin, brandId) : await canonicalBrand(admin, next.brand)
+      if (!brand) return NextResponse.json({ success: false, error: 'La marca elegida no está activa o es ambigua.' }, { status: 400 })
+      Object.assign(updates, next, { global_brand_id: brand.id, brand: brand.name })
     }
     if (input.device_type !== undefined) updates.device_type = input.device_type
     if (input.release_year !== undefined) updates.release_year = input.release_year
-    if (input.is_active !== undefined) updates.is_active = input.is_active
+    // El formulario todavía transporta is_active; no se persiste porque el
+    // trigger lo deriva del estado editorial.
 
-    const admin = createAdminSupabase()
     const { data, error } = await admin.from('global_device_models').update(updates).eq('id', id).select(COLUMNS).single()
     if (error) {
       if (error.code === '23505') return NextResponse.json({ success: false, error: 'Ese modelo ya está en el catálogo.' }, { status: 409 })
@@ -257,7 +289,13 @@ export async function DELETE(request: NextRequest) {
     const admin = createAdminSupabase()
     const { data, error } = await admin
       .from('global_device_models')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .update({
+        catalog_status: 'inactive',
+        deactivation_reason: 'Baja manual desde SuperAdmin',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select(COLUMNS)
       .single()

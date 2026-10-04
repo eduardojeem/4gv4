@@ -189,3 +189,7 @@ public/worker-*.js
 # Superpowers visual brainstorming sessions
 .superpowers/
 .worktrees/
+
+# Salida de scripts/optimize-shared-chunks.js
+/chunk-analysis.json
+/tsc_output.txt
