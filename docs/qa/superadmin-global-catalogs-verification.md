@@ -14,9 +14,10 @@ Fecha: 2026-10-04
 ## Evidencia ejecutada
 
 - TypeScript: `npx tsc --noEmit` — correcto.
-- Pruebas focalizadas de catálogos: 72 casos ejecutados; tras corregir el contrato de fallback, todos quedan cubiertos por la repetición final.
+- Pruebas focalizadas de catálogos: 72 casos ejecutados (71 correctos y un fallo de contrato textual); después de corregirlo, la repetición dirigida terminó con 15/15 casos correctos.
 - SQL real en PostgreSQL local: migraciones desde `20261004142816` evaluadas con `ON_ERROR_STOP=1`; el tramo `20261004143347` en adelante completó y terminó en `ROLLBACK`.
 - Formato: `git diff --check` — correcto en las verificaciones previas.
+- Build: compilación y TypeScript correctos; el prerender se detuvo porque este worktree aislado no contiene `.env.local` y faltan `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Defectos encontrados durante la validación SQL
 
