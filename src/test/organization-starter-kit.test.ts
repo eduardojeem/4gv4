@@ -137,8 +137,10 @@ describe('el alta usa el kit', () => {
 
   it('el onboarding siembra cobro, barra de confianza y WhatsApp', () => {
     const onboarding = leer('src/app/api/onboarding/complete/route.ts')
-    expect(onboarding).toContain("{ key: 'checkout', value: starterCheckout }")
-    expect(onboarding).toContain("{ key: 'trust_bar', value: buildStarterTrustBar(starterCheckout) }")
+    expect(onboarding).toContain("{ key: 'checkout', value: checkoutValue }")
+    // Lo elegido en «Cobro y entrega» se aplica sobre el kit inicial.
+    expect(onboarding).toContain('applyCheckoutChoices(starterCheckout, input.checkout)')
+    expect(onboarding).toContain("{ key: 'trust_bar', value: buildStarterTrustBar(checkoutValue) }")
     expect(onboarding).toContain('whatsapp: input.whatsapp || input.phone')
     expect(onboarding).toContain('provisionStarterKit(')
   })
