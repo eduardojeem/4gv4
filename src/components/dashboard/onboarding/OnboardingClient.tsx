@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Boxes,
   CalendarClock,
@@ -18,6 +19,7 @@ import {
   Circle,
   Clock,
   Coins,
+  CreditCard,
   Cpu, ExternalLink,
   Globe,
   Hammer,
@@ -33,7 +35,7 @@ import {
   Shirt,
   ShoppingBag,
   Sparkles,
-  Store, Upload, Users,
+  Store, Truck, Upload, Users,
   Utensils,
   Wrench
 } from 'lucide-react'
@@ -67,6 +69,9 @@ import {
   splitSuggestedModules,
   subscriptionSummary,
 } from '@/lib/onboarding/onboarding-view'
+import { checkoutChoicesError, type CheckoutChoices } from '@/lib/onboarding/checkout-choices'
+import { siteUrl } from '@/lib/site-url'
+import { ShareStoreCard } from './ShareStoreCard'
 
 type StepProgress = {
   hasCompanyInfo: boolean
@@ -109,7 +114,22 @@ type CompanyInfoForm = {
   instagram: string
   facebook: string
   tiktok: string
+  /** Cómo cobra y entrega la tienda. */
+  checkout: CheckoutChoices
 }
+
+/**
+ * Los pasos del asistente. La primera vez se recorren en orden con
+ * «Siguiente»; después quedan como pestañas para editar cualquiera.
+ */
+const FORM_STEPS = [
+  { id: 'business', label: 'Rubro', icon: Store },
+  { id: 'contact', label: 'Datos y contacto', icon: Building2 },
+  { id: 'payments', label: 'Cobro y entrega', icon: CreditCard },
+  { id: 'public', label: 'Tu tienda', icon: Globe },
+  { id: 'social', label: 'Redes', icon: MessageCircle },
+] as const
+type FormStepId = (typeof FORM_STEPS)[number]['id']
 
 type OnboardingClientProps = {
   organization: {
@@ -337,7 +357,10 @@ export function OnboardingClient({
   const isRevisit = Boolean(completedAt)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<CompanyInfoForm>(initialCompanyInfo)
-  const [activeTab, setActiveTab] = useState('essential')
+  const [activeTab, setActiveTab] = useState<string>('business')
+  const wizard = !isRevisit
+  const stepIndex = Math.max(0, FORM_STEPS.findIndex((step) => step.id === activeTab))
+  const [furthestStep, setFurthestStep] = useState(0)
   const [error, setError] = useState('')
   const [confirmCurrencyChange, setConfirmCurrencyChange] = useState(false)
   const [confirmPublication, setConfirmPublication] = useState(false)
@@ -376,8 +399,11 @@ export function OnboardingClient({
   // «Sitio Web», en vez de alcanzar con mover el interruptor.
   const publishingNow = form.storefrontPublic && !initialCompanyInfo.storefrontPublic
 
+  const checkoutError = checkoutChoicesError(form.checkout)
+
   const canSubmit = isAdmin
     && Object.keys(fieldErrors).length === 0
+    && !checkoutError
     && (!currencyNeedsConfirmation || confirmCurrencyChange)
     && (!publishingNow || confirmPublication)
     && (!isRevisit || hasChanges)
@@ -429,7 +455,8 @@ export function OnboardingClient({
     draftChecked.current = true
     const draft = readOnboardingDraft(organization.id)
     if (!isDraftWorthRestoring(draft, initialCompanyInfo, new Date())) return
-    setForm(draft!.form as CompanyInfoForm)
+    // Un borrador viejo puede no tener los campos nuevos (cobro): se completan.
+    setForm({ ...initialCompanyInfo, ...(draft!.form as Partial<CompanyInfoForm>) })
     setCountryCode(draft!.countryCode || countryCode)
     setLocalPhone(draft!.localPhone || localPhone)
     setDraftRestored(true)
@@ -489,6 +516,44 @@ export function OnboardingClient({
     setError('')
   }
 
+  const updateCheckout = (patch: Partial<CheckoutChoices>) => {
+    setForm((current) => ({ ...current, checkout: { ...current.checkout, ...patch } }))
+    setError('')
+  }
+
+  /** Lo que falta en un paso para poder seguir. null = se puede avanzar. */
+  const stepProblem = (stepId: FormStepId): string | null => {
+    if (stepId === 'contact') {
+      const contactErrors = (['displayName', 'phone', 'email', 'address', 'city'] as const).filter((field) => fieldErrors[field])
+      if (contactErrors.length) return 'Completá los datos marcados para seguir.'
+      if (currencyNeedsConfirmation && !confirmCurrencyChange) return 'Confirmá el impacto del cambio de moneda para seguir.'
+    }
+    if (stepId === 'payments') return checkoutError
+    if (stepId === 'public') {
+      if (fieldErrors.logoUrl) return fieldErrors.logoUrl
+      if (publishingNow && !confirmPublication) return 'Confirmá que querés publicar la tienda, o desmarcá la casilla.'
+    }
+    return null
+  }
+
+  const goToStep = (index: number) => {
+    const target = FORM_STEPS[Math.min(FORM_STEPS.length - 1, Math.max(0, index))]
+    setActiveTab(target.id)
+    setFurthestStep((current) => Math.max(current, index))
+    setError('')
+    document.getElementById('company-info')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }
+
+  const nextStep = () => {
+    const problem = stepProblem(FORM_STEPS[stepIndex].id)
+    if (problem) {
+      setError(problem)
+      if (FORM_STEPS[stepIndex].id === 'contact') focusFirstError()
+      return
+    }
+    goToStep(stepIndex + 1)
+  }
+
   const updatePhone = (code: string, local: string) => {
     const combined = local.trim() ? `${code} ${local.trim()}` : ''
     setForm((current) => ({ ...current, phone: combined }))
@@ -498,7 +563,7 @@ export function OnboardingClient({
   const focusFirstError = () => {
     const firstField = Object.keys(fieldErrors)[0]
     if (!firstField) return
-    setActiveTab(firstField === 'logoUrl' ? 'public' : 'essential')
+    setActiveTab(firstField === 'logoUrl' ? 'public' : 'contact')
     window.setTimeout(() => document.getElementById(firstField)?.focus(), 0)
   }
 
@@ -513,8 +578,13 @@ export function OnboardingClient({
       return
     }
     if (currencyNeedsConfirmation && !confirmCurrencyChange) {
-      setActiveTab('essential')
+      setActiveTab('contact')
       setError('Confirmá el impacto del cambio de moneda antes de guardar.')
+      return
+    }
+    if (checkoutError) {
+      setActiveTab('payments')
+      setError(checkoutError)
       return
     }
     if (publishingNow && !confirmPublication) {
@@ -623,20 +693,47 @@ export function OnboardingClient({
         <main id="company-info" className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <div className="border-b border-border/80 bg-muted/20 p-3 sm:p-4">
-              <TabsList className="grid h-11 w-full grid-cols-3 bg-muted/70 p-1 rounded-xl">
-                <TabsTrigger value="essential" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                  <Building2 className="h-4 w-4" />
-                  <span>Esenciales</span>
-                </TabsTrigger>
-                <TabsTrigger value="public" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                  <Globe className="h-4 w-4" />
-                  <span>Público</span>
-                </TabsTrigger>
-                <TabsTrigger value="social" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                  <MessageCircle className="h-4 w-4" />
-                  <span>Redes</span>
-                </TabsTrigger>
-              </TabsList>
+              {wizard ? (
+                // Primera vez: un paso a la vez. Se puede volver a cualquiera ya visitado.
+                <ol className="flex items-center gap-1.5 overflow-x-auto" aria-label="Pasos de la configuración">
+                  {FORM_STEPS.map((step, index) => {
+                    const current = index === stepIndex
+                    const reachable = index <= furthestStep
+                    return (
+                      <li key={step.id} className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={!reachable}
+                          onClick={() => goToStep(index)}
+                          aria-current={current ? 'step' : undefined}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                            current ? 'bg-primary text-primary-foreground' : reachable ? 'bg-background text-foreground hover:bg-muted' : 'text-muted-foreground',
+                          )}
+                        >
+                          <span className={cn('flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold', current ? 'bg-primary-foreground/20' : 'bg-muted')}>
+                            {index < stepIndex ? <Check className="h-3 w-3" /> : index + 1}
+                          </span>
+                          <span className={current ? '' : 'hidden sm:inline'}>{step.label}</span>
+                        </button>
+                        {index < FORM_STEPS.length - 1 ? <span className="h-px w-3 bg-border" /> : null}
+                      </li>
+                    )
+                  })}
+                </ol>
+              ) : (
+                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-muted/70 p-1 rounded-xl sm:grid-cols-5">
+                  {FORM_STEPS.map((step) => {
+                    const Icon = step.icon
+                    return (
+                      <TabsTrigger key={step.id} value={step.id} className="gap-1.5 text-xs font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                        <Icon className="h-4 w-4" />
+                        <span className="truncate">{step.label}</span>
+                      </TabsTrigger>
+                    )
+                  })}
+                </TabsList>
+              )}
             </div>
 
             {draftRestored ? (
@@ -663,7 +760,7 @@ export function OnboardingClient({
             ) : null}
 
             {/* TAB 1: ESENCIALES (RUBRO, IDENTIDAD, MONEDA) */}
-            <TabsContent value="essential" className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
+            <TabsContent value="business" className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
               {/* SECCIÓN 1: SELECCIÓN DE RUBRO Y FORMA DE TRABAJO */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -840,8 +937,11 @@ export function OnboardingClient({
                 </div>
               </div>
 
+            </TabsContent>
+
+            <TabsContent value="contact" className="m-0 space-y-8 p-5 sm:p-6 focus-visible:outline-none">
               {/* SECCIÓN 2: IDENTIDAD Y CONTACTO */}
-              <div className="space-y-4 border-t border-border/80 pt-6">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Building2 className="h-4 w-4" />
@@ -1052,6 +1152,97 @@ export function OnboardingClient({
                   </Alert>
                 ) : null}
               </div>
+            </TabsContent>
+
+            {/* COBRO Y ENTREGA: lo mínimo para que el cliente pueda comprar. */}
+            <TabsContent value="payments" className="m-0 space-y-6 p-5 sm:p-6 focus-visible:outline-none">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <CreditCard className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold tracking-tight text-foreground">Cómo cobrás y entregás</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Es lo que ve el cliente al comprar en tu tienda. Las instrucciones y las zonas con precio se ajustan después en Sitio Web.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-foreground">Formas de pago que aceptás</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {([
+                    ['cash', 'Efectivo', 'Al retirar o al recibir'],
+                    ['card', 'Tarjeta', 'Débito o crédito con posnet'],
+                    ['transfer', 'Transferencia', 'Le mostrás tus datos bancarios'],
+                    ['wallet', 'Billetera o QR', 'Tigo Money, QR del banco…'],
+                  ] as const).map(([key, label, hint]) => (
+                    <label key={key} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors', form.checkout[key] ? 'border-primary bg-primary/[0.04]' : 'border-border/80 hover:bg-muted/30')}>
+                      <Checkbox checked={form.checkout[key]} onCheckedChange={(checked) => updateCheckout({ [key]: checked === true })} className="mt-0.5" />
+                      <span>
+                        <span className="block text-xs font-semibold text-foreground">{label}</span>
+                        <span className="block text-[11px] text-muted-foreground">{hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {form.checkout.transfer ? (
+                <div className="grid gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 sm:grid-cols-2">
+                  <p className="text-xs font-semibold text-foreground sm:col-span-2">Datos para transferencias</p>
+                  <div className="space-y-1">
+                    <Label htmlFor="transferBank" className="text-xs">Banco</Label>
+                    <Input id="transferBank" value={form.checkout.transferBank} onChange={(event) => updateCheckout({ transferBank: event.target.value })} placeholder="Ej: Banco Itaú" className="h-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="transferAccount" className="text-xs">Número de cuenta</Label>
+                    <Input id="transferAccount" value={form.checkout.transferAccount} onChange={(event) => updateCheckout({ transferAccount: event.target.value })} className="h-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="transferHolder" className="text-xs">Titular</Label>
+                    <Input id="transferHolder" value={form.checkout.transferHolder} onChange={(event) => updateCheckout({ transferHolder: event.target.value })} placeholder="Nombre o razón social" className="h-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="transferAlias" className="text-xs">Alias (opcional)</Label>
+                    <Input id="transferAlias" value={form.checkout.transferAlias} onChange={(event) => updateCheckout({ transferAlias: event.target.value })} placeholder="Ej: tu RUC o celular" className="h-9" />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-foreground">Cómo recibe el pedido el cliente</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors', form.checkout.pickup ? 'border-primary bg-primary/[0.04]' : 'border-border/80 hover:bg-muted/30')}>
+                    <Checkbox checked={form.checkout.pickup} onCheckedChange={(checked) => updateCheckout({ pickup: checked === true })} className="mt-0.5" />
+                    <span>
+                      <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Store className="h-3.5 w-3.5" /> Retiro en el local</span>
+                      <span className="block text-[11px] text-muted-foreground">En {form.address || 'tu dirección'}</span>
+                    </span>
+                  </label>
+                  <label className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors', form.checkout.delivery ? 'border-primary bg-primary/[0.04]' : 'border-border/80 hover:bg-muted/30')}>
+                    <Checkbox checked={form.checkout.delivery} onCheckedChange={(checked) => updateCheckout({ delivery: checked === true })} className="mt-0.5" />
+                    <span>
+                      <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Truck className="h-3.5 w-3.5" /> Envío a domicilio</span>
+                      <span className="block text-[11px] text-muted-foreground">Delivery propio o por encomienda</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {form.checkout.delivery ? (
+                <div className="grid gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="deliveryCost" className="text-xs">Costo del envío</Label>
+                    <Input id="deliveryCost" type="number" min={0} value={form.checkout.deliveryCost} onChange={(event) => updateCheckout({ deliveryCost: Math.max(0, Number(event.target.value) || 0) })} className="h-9" />
+                    <p className="text-[11px] text-muted-foreground">0 = «a coordinar» o gratis.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="deliveryZones" className="text-xs">Zonas a las que llegás</Label>
+                    <Input id="deliveryZones" value={form.checkout.deliveryZones} onChange={(event) => updateCheckout({ deliveryZones: event.target.value })} placeholder="Ej: Asunción y Gran Asunción" className="h-9" />
+                  </div>
+                </div>
+              ) : null}
+
+              {checkoutError ? <FieldError id="checkout-error" message={checkoutError} /> : null}
             </TabsContent>
 
             {/* TAB 2: PÚBLICO (HORARIOS, LOGO, WHATSAPP) */}
@@ -1438,6 +1629,17 @@ export function OnboardingClient({
             </ol>
           </section>
 
+          <ShareStoreCard
+            url={siteUrl(publicUrl)}
+            storeName={initialCompanyInfo.displayName || organization.name}
+            published={initialCompanyInfo.storefrontPublic}
+            onPublish={() => {
+              setActiveTab('public')
+              setFurthestStep(FORM_STEPS.length - 1)
+              document.getElementById('company-info')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+            }}
+          />
+
           {/* Tarjeta de Vista Previa de Tienda Pública */}
           <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -1499,7 +1701,9 @@ export function OnboardingClient({
                   ? 'Tenés cambios sin guardar'
                   : isRevisit
                     ? 'Todo está actualizado'
-                    : 'Listo para completar tu configuración'}
+                    : wizard
+                      ? `Paso ${stepIndex + 1} de ${FORM_STEPS.length}: ${FORM_STEPS[stepIndex].label}`
+                      : 'Listo para completar tu configuración'}
             </p>
             <p className="text-xs text-muted-foreground">
               {isRevisit
@@ -1521,6 +1725,18 @@ export function OnboardingClient({
               </Button>
             ) : null}
 
+            {wizard && stepIndex > 0 ? (
+              <Button type="button" variant="outline" onClick={() => goToStep(stepIndex - 1)} className="gap-1.5 text-xs">
+                <ArrowLeft className="h-3.5 w-3.5" /> Atrás
+              </Button>
+            ) : null}
+
+            {wizard && stepIndex < FORM_STEPS.length - 1 ? (
+              <Button type="button" onClick={nextStep} className="min-w-0 flex-1 sm:min-w-[170px] sm:flex-none gap-2 shadow-sm text-xs font-semibold">
+                Siguiente: {FORM_STEPS[stepIndex + 1].label}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
             <Button
               onClick={completeOnboarding}
               disabled={saving || !canSubmit}
@@ -1533,6 +1749,7 @@ export function OnboardingClient({
               )}
               {saving ? 'Guardando…' : isRevisit ? 'Guardar cambios' : 'Finalizar configuración'}
             </Button>
+            )}
           </div>
         </div>
       </footer>

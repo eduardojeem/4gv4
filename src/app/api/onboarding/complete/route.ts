@@ -16,7 +16,9 @@ import {
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
 import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
-import { getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { applyCheckoutChoices, checkoutChoicesError } from '@/lib/onboarding/checkout-choices'
+import type { CheckoutSettings } from '@/types/website-settings'
 import { buildStarterCheckout, buildStarterTrustBar, provisionStarterKit } from '@/lib/organization/starter-kit'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { DEFAULT_BRAND_COLOR, isKnownBrandColor } from '@/lib/website/brand-colors'
@@ -64,6 +66,21 @@ const onboardingSchema = z.object({
   storefrontPublic: z.boolean().default(false),
   // Publicar la deja visible para cualquiera: se confirma, como en «Sitio Web».
   confirmPublication: z.boolean().default(false),
+  // Cómo cobra y entrega: lo mínimo para que una tienda nueva pueda vender.
+  checkout: z.object({
+    cash: z.boolean(),
+    card: z.boolean(),
+    transfer: z.boolean(),
+    wallet: z.boolean(),
+    transferBank: z.string().trim().max(80).default(''),
+    transferAccount: z.string().trim().max(60).default(''),
+    transferHolder: z.string().trim().max(120).default(''),
+    transferAlias: z.string().trim().max(60).default(''),
+    delivery: z.boolean(),
+    deliveryCost: z.number().min(0).max(100_000_000).default(0),
+    deliveryZones: z.string().trim().max(300).default(''),
+    pickup: z.boolean(),
+  }).optional(),
 })
 
 export async function POST(request: Request) {
@@ -115,6 +132,8 @@ export async function POST(request: Request) {
 
   const input = validation.data
   const organizationId = organizationContext!.id
+  const checkoutError = input.checkout ? checkoutChoicesError(input.checkout) : null
+  if (checkoutError) return NextResponse.json({ error: checkoutError, code: 'CHECKOUT_INVALID' }, { status: 400 })
   const { data: settings, error: settingsError } = await admin
     .from('organization_settings')
     .select('currency, modules')
@@ -310,14 +329,33 @@ export async function POST(request: Request) {
   const starterCheckout = buildStarterCheckout(getWebsiteSettingsDefaults().checkout, {
     hasWhatsapp: Boolean(input.whatsapp || input.phone),
   })
+  // Lo que eligió en «Cobro y entrega»: sobre el cobro que ya tenga, o sobre
+  // el inicial si todavía no existe. El resto de su configuración se conserva.
+  let checkoutValue: CheckoutSettings = starterCheckout
+  let checkoutUpdate: CheckoutSettings | null = null
+  if (input.checkout) {
+    const { data: savedCheckout } = await admin
+      .from('website_settings')
+      .select('value')
+      .eq('organization_id', organizationId)
+      .eq('key', 'checkout')
+      .maybeSingle()
+    const savedValue = (savedCheckout as { value?: unknown } | null)?.value
+    if (savedValue && typeof savedValue === 'object') {
+      const full = applyWebsiteSettingsDefaults({ checkout: savedValue as CheckoutSettings }).checkout
+      checkoutUpdate = applyCheckoutChoices(full, input.checkout)
+    } else {
+      checkoutValue = applyCheckoutChoices(starterCheckout, input.checkout)
+    }
+  }
   const seedableKeys = [
     { key: 'hero_content', value: verticalDefaults.hero_content },
     { key: 'hero_stats', value: verticalDefaults.hero_stats },
     { key: 'process_steps', value: verticalDefaults.process_steps },
     // Barberías y otros rubros de turnos arrancan con la reserva en el inicio.
     { key: 'booking_section', value: verticalDefaults.booking_section },
-    { key: 'checkout', value: starterCheckout },
-    { key: 'trust_bar', value: buildStarterTrustBar(starterCheckout) },
+    { key: 'checkout', value: checkoutValue },
+    { key: 'trust_bar', value: buildStarterTrustBar(checkoutValue) },
   ].filter((row) => row.value !== undefined)
 
   const { data: existingRows, error: existingRowsError } = await admin
@@ -357,6 +395,18 @@ export async function POST(request: Request) {
         organizationId,
         key: row.key,
       })
+    }
+  }
+
+  if (checkoutUpdate) {
+    const { error: checkoutUpdateError } = await admin
+      .from('website_settings')
+      .update({ value: checkoutUpdate, updated_by: user.id, updated_at: now })
+      .eq('organization_id', organizationId)
+      .eq('key', 'checkout')
+    if (checkoutUpdateError) {
+      seedFailures.push('checkout')
+      logger.error('Failed to update checkout from onboarding', { error: checkoutUpdateError.message, organizationId })
     }
   }
 

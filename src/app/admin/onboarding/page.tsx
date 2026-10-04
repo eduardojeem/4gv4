@@ -5,6 +5,7 @@ import { OnboardingClient } from '@/components/dashboard/onboarding/OnboardingCl
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { choicesFromCheckout } from '@/lib/onboarding/checkout-choices'
 
 type SettingsModules = {
   onboarding?: {
@@ -74,6 +75,7 @@ export default async function DashboardOnboardingPage() {
     { count: agendaProfessionals },
     { data: agendaSettingsRow },
     planInfo,
+    { data: checkoutSetting },
   ] = await Promise.all([
     admin
       .from('branches')
@@ -113,6 +115,12 @@ export default async function DashboardOnboardingPage() {
       .eq('organization_id', organization.id)
       .maybeSingle(),
     getOrganizationPlanInfo(organization.id).catch(() => null),
+    admin
+      .from('website_settings')
+      .select('value')
+      .eq('organization_id', organization.id)
+      .eq('key', 'checkout')
+      .maybeSingle(),
   ])
 
   const modules = (settings?.modules ?? {}) as SettingsModules
@@ -201,6 +209,8 @@ export default async function DashboardOnboardingPage() {
         instagram: companyInfo.instagram || '',
         facebook: companyInfo.facebook || '',
         tiktok: companyInfo.tiktok || '',
+        // Cómo cobra y entrega hoy (o lo inicial: efectivo y retiro en el local).
+        checkout: choicesFromCheckout(checkoutSetting?.value as Parameters<typeof choicesFromCheckout>[0]),
       }}
       serverIsAdmin={canAccessOnboarding}
     />
