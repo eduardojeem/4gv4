@@ -753,6 +753,25 @@ export function ProductModal({
     }
   }
 
+  // Sin categorías: un clic crea las del rubro (Mujer/Hombre, Herramientas…).
+  const [seedingCategories, setSeedingCategories] = useState(false)
+  const handleSeedCategories = async () => {
+    setSeedingCategories(true)
+    try {
+      const response = await fetch('/api/categories/starter', { method: 'POST' })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        toast.error(body.error || 'No se pudieron crear las categorías')
+        return
+      }
+      setLocalCategories(body.categories as Category[])
+      onCatalogChange?.()
+      toast.success(`Se crearon ${body.created} categorías de tu rubro`)
+    } finally {
+      setSeedingCategories(false)
+    }
+  }
+
   const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
     const result = await createSupplier(supplierData as SupplierInsert)
     if (result.success && result.data) {
@@ -1667,6 +1686,11 @@ export function ProductModal({
                                   <Plus className="h-4 w-4" />
                                 </Button>
                               </div>
+                              {categoryOptions.length === 0 && (
+                                <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" disabled={seedingCategories} onClick={() => void handleSeedCategories()}>
+                                  {seedingCategories ? 'Creando…' : `Crear las categorías de ${formProfile.label}`}
+                                </Button>
+                              )}
                               <FormMessage />
                             </FormItem>
                           )}
