@@ -96,6 +96,7 @@ import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products
 import { getFirstProductErrorTab, shouldConfirmProductModalClose, getProductRequirementsProgress, calculateWholesalePriceFromCost, calculateWholesalePriceFromSale } from './product-modal-behavior'
 import { FASHION_AUDIENCES, getFashionAudienceFromTags, mergeFashionAudienceTag } from '@/lib/products/fashion-filters'
 import { ProductVariantsEditor } from '@/components/dashboard/products/ProductVariantsEditor'
+import { ProductBatchesPanel } from '@/components/dashboard/products/ProductBatchesPanel'
 import { ProductVariantReview } from '@/components/dashboard/products/ProductVariantReview'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
@@ -846,6 +847,11 @@ export function ProductModal({
   const cleanProductData = (data: ProductFormValues) => {
     const rest = { ...data };
     delete rest.fashion_audience
+    // El lote del stock inicial viaja como un objeto aparte (solo al crear).
+    const initialExpiresOn = data.initial_expires_on?.trim() || null
+    const initialLotCode = data.initial_lot_code?.trim() || null
+    delete (rest as Record<string, unknown>).initial_expires_on
+    delete (rest as Record<string, unknown>).initial_lot_code
     // Un negocio que no ve los campos del celular no los manda: así no se
     // escriben vacíos en cada guardado ni se pisa lo que haya quedado cargado.
     if (!muestraCelular) {
@@ -879,6 +885,7 @@ export function ProductModal({
       offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
       // Sin moneda extranjera, los precios en otra moneda se limpian.
       price_currency: data.price_currency || null,
+      ...(!product && initialExpiresOn ? { initial_batch: { lot_code: initialLotCode, expires_on: initialExpiresOn } } : {}),
       foreign_sale_price: data.price_currency ? Number(data.foreign_sale_price ?? 0) : null,
       foreign_wholesale_price: data.price_currency && Number(data.foreign_wholesale_price) > 0 ? Number(data.foreign_wholesale_price) : null,
       foreign_purchase_price: data.price_currency && Number(data.foreign_purchase_price) > 0 ? Number(data.foreign_purchase_price) : null,
@@ -3144,6 +3151,41 @@ export function ProductModal({
                       </div>
                     </CardContent>
                   </Card>
+
+                  {product ? (
+                    <ProductBatchesPanel productId={product.id} alwaysShow={formProfile.tracksExpiry} />
+                  ) : formProfile.tracksExpiry && (
+                    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+                      <div>
+                        <p className="text-sm font-semibold sm:text-base">Lote y vencimiento del stock inicial</p>
+                        <p className="text-xs text-muted-foreground">Opcional. Así la pantalla de Vencimientos te avisa antes de que venza. Los próximos ingresos se registran desde el producto.</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="initial_expires_on"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Vence</FormLabel>
+                              <FormControl><Input type="date" {...field} value={field.value ?? ''} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="initial_lot_code"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Lote (opcional)</FormLabel>
+                              <FormControl><Input placeholder="L2410" {...field} value={field.value ?? ''} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {renderStepNavigation('inventory')}
                 </TabsContent>

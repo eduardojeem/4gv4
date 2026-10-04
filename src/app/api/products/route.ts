@@ -703,6 +703,19 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       throw error
     }
 
+    // Lote del stock inicial: queda registrado con sus unidades y su vencimiento.
+    if (validated.initial_batch?.expires_on && requestedStock > 0) {
+      const { error: batchError } = await supabase.from('product_batches').insert({
+        organization_id: organization.id,
+        product_id: product.id,
+        lot_code: validated.initial_batch.lot_code || null,
+        expires_on: validated.initial_batch.expires_on,
+        quantity: requestedStock,
+        created_by: user.id,
+      })
+      if (batchError) logger.warn('Se creó el producto pero no su lote inicial', { error: batchError.message })
+    }
+
     if (branchScopedCreate && branchScope.branchId) {
       try {
         // Tenant, permission, and branch scope were already validated above.

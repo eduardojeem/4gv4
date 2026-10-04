@@ -6,6 +6,7 @@ import {
   ChartNoAxesCombined,
   ClipboardCheck,
   CalendarClock,
+  CalendarX2,
   ClipboardList,
   FileText,
   ScanBarcode,
@@ -35,8 +36,11 @@ export type DashboardNavItem = {
   description: string
   mobileLabel?: string
   permission?: string
-  module?: OrganizationModule
+  /** Con una lista alcanza con cualquiera de los módulos. */
+  module?: OrganizationModule | readonly OrganizationModule[]
   mobilePriority?: number
+  /** Solo para estos rubros (vacío = todos). */
+  verticals?: readonly string[]
 }
 
 export type DashboardNavGroup = {
@@ -72,10 +76,12 @@ export const dashboardNavGroups: DashboardNavGroup[] = [
     id: 'inventory',
     label: 'Inventario',
     items: [
-      { key: 'products', label: 'Productos', href: '/dashboard/products', icon: Boxes, description: 'Catálogo y existencias', permission: 'products.read', module: 'inventory', mobilePriority: 40 },
+      // Los servicios de la agenda se cargan como productos: una cuenta solo de servicios también lo necesita.
+      { key: 'products', label: 'Productos', href: '/dashboard/products', icon: Boxes, description: 'Catálogo, servicios y existencias', permission: 'products.read', module: ['inventory', 'services'], mobilePriority: 40 },
       { key: 'categories', label: 'Categorías', href: '/dashboard/categories', icon: Tags, description: 'Organización del catálogo', permission: 'products.read', module: 'inventory' },
       { key: 'brands', label: 'Marcas', href: '/dashboard/brands', icon: BadgeCheck, description: 'Marcas del catálogo', permission: 'products.manage', module: 'inventory' },
       { key: 'inventory-count', label: 'Toma de inventario', href: '/dashboard/inventory-count', icon: ScanBarcode, description: 'Contar, ver diferencias y ajustar', permission: 'products.read', module: 'inventory' },
+      { key: 'expirations', label: 'Vencimientos', href: '/dashboard/vencimientos', icon: CalendarX2, description: 'Lotes vencidos o por vencer', permission: 'products.read', module: 'inventory', verticals: ['food', 'cosmetics', 'general', 'other'] },
       { key: 'suppliers', label: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, description: 'Compras y abastecimiento', module: 'inventory' },
     ],
   },
@@ -115,16 +121,20 @@ export function filterDashboardNavGroups({
   role,
   effectiveModules,
   hasPermission,
+  businessVertical,
 }: {
   role: UserRole | undefined
   effectiveModules: readonly string[]
   hasPermission: (permission: string) => boolean
+  /** Sin rubro conocido todavía, se muestra todo. */
+  businessVertical?: string | null
 }): DashboardNavGroup[] {
   return dashboardNavGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (!isNavigationModuleAvailable(item.module, effectiveModules)) return false
+        if (item.verticals?.length && businessVertical && !item.verticals.includes(businessVertical)) return false
         if (!canRoleAccessSection(role, item.href)) return false
         return item.permission ? hasPermission(item.permission) : true
       }),

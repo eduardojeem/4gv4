@@ -77,6 +77,8 @@ export interface ProductFormProfile {
   exchangePlaceholder: string
   returnTemplates: PolicyTemplate[]
   variantsTip: string
+  /** Trabaja con fechas de vencimiento: el formulario pide lote y vencimiento. */
+  tracksExpiry: boolean
 }
 
 const ELECTRONICS_WARRANTY: PolicyTemplate = {
@@ -109,6 +111,7 @@ const BASE: ProfileOverrides = {
   exchangePlaceholder: 'Ej: Cambio por el mismo producto o uno equivalente, sujeto a stock.',
   returnTemplates: [],
   variantsTip: 'Usá variantes cuando el mismo producto viene en distintas versiones (tamaño, color, modelo). Cada una tiene su propio stock, precio y SKU.',
+  tracksExpiry: false,
 }
 
 const PROFILES: Record<BusinessVertical, Partial<ProfileOverrides>> = {
@@ -153,6 +156,7 @@ const PROFILES: Record<BusinessVertical, Partial<ProfileOverrides>> = {
     exchangePlaceholder: 'Ej: Por higiene, no se cambian productos abiertos o probados.',
     returnTemplates: [{ label: 'Higiene', text: 'Por razones de higiene no aceptamos devoluciones ni cambios de productos abiertos, probados o sin precinto.' }],
     variantsTip: 'Usá variantes para tonos y presentaciones (30 ml, 50 ml…). Cada una tiene su propio stock, precio y SKU.',
+    tracksExpiry: true,
   },
   food: {
     namePlaceholder: 'Ej: Yerba mate 500 g',
@@ -168,6 +172,7 @@ const PROFILES: Record<BusinessVertical, Partial<ProfileOverrides>> = {
     exchangePlaceholder: 'Ej: Reponemos el producto si llega dañado o vencido.',
     returnTemplates: [{ label: 'Alimentos', text: 'No aceptamos devoluciones de alimentos, salvo que el producto esté vencido o en mal estado al momento de la entrega.' }],
     variantsTip: 'Usá variantes para presentaciones y contenidos (250 g, 500 g, 1 kg). Cada una tiene su propio stock, precio y SKU.',
+    tracksExpiry: true,
   },
   hardware: {
     namePlaceholder: 'Ej: Tornillo autoperforante 8 x 1"',

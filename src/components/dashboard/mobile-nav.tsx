@@ -20,7 +20,7 @@ export const MobileNav = memo(function MobileNav() {
   const pathname = usePathname()
   const { user } = useAuth()
   const { toggleSidebar } = useDashboardLayout()
-  const { effectiveModules } = useSubscriptionStatus()
+  const { effectiveModules, businessVertical } = useSubscriptionStatus()
   const { hasPermission } = usePermissions()
   const userRole = user?.role
 
@@ -29,9 +29,10 @@ export const MobileNav = memo(function MobileNav() {
       role: userRole,
       effectiveModules,
       hasPermission,
+      businessVertical,
     })
     return getMobileDashboardItems(groups, 4)
-  }, [userRole, effectiveModules, hasPermission])
+  }, [userRole, effectiveModules, hasPermission, businessVertical])
   const activeItem = useMemo(() => getDashboardNavItemByPath(pathname), [pathname])
 
   return (
