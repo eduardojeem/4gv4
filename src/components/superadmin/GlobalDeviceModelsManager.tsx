@@ -155,6 +155,11 @@ export function GlobalDeviceModelsManager() {
   const [toDeactivate, setToDeactivate] = useState<Row | null>(null)
   const [deactivating, setDeactivating] = useState(false)
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('status')
+    if (FILTERS.some((item) => item.id === requested)) setFilter(requested as Filter)
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)

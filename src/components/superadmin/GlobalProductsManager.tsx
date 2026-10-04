@@ -158,6 +158,11 @@ export function GlobalProductsManager() {
   const [bulkSaving, setBulkSaving] = useState(false)
   const [simulatorOpen, setSimulatorOpen] = useState(false)
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('status')
+    if (FILTERS.some((item) => item.id === requested)) setFilter(requested as Filter)
+  }, [])
+
   // La vista elegida se recuerda en este navegador.
   useEffect(() => {
     try {

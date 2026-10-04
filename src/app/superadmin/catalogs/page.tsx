@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export const revalidate = 60
 
 type Admin = ReturnType<typeof createAdminSupabase>
-type Conditions = { active?: boolean; isNull?: string[]; notNull?: string[] }
+type Conditions = { active?: boolean; isNull?: string[]; notNull?: string[]; equals?: Record<string, string> }
 
 /** Cuenta filas sin traerlas. `null` si la tabla no existe todavía. */
 async function count(admin: Admin, table: string, conditions: Conditions = {}): Promise<number | null> {
@@ -17,6 +17,7 @@ async function count(admin: Admin, table: string, conditions: Conditions = {}): 
   if (conditions.active) query = query.eq('is_active', true)
   for (const column of conditions.isNull ?? []) query = query.is(column, null)
   for (const column of conditions.notNull ?? []) query = query.not(column, 'is', null)
+  for (const [column, value] of Object.entries(conditions.equals ?? {})) query = query.eq(column, value)
   const { count: total, error } = await query
   return error ? null : total ?? 0
 }
@@ -26,8 +27,8 @@ async function getData(): Promise<CatalogsHubData> {
   const [
     categories, categoryRoots, tenantCategories, tenantCategoriesLinked,
     brands, brandsWithoutLogo, tenantBrands, tenantBrandsLinked,
-    products, productsWithoutCategory, productsWithoutImage,
-    deviceModels,
+    products, productsWithoutCategory, productsWithoutImage, productCandidates, productsInReview,
+    deviceModels, deviceModelCandidates, deviceModelsInReview,
   ] = await Promise.all([
     count(admin, 'global_categories', { active: true }),
     count(admin, 'global_categories', { active: true, isNull: ['parent_id'] }),
@@ -40,14 +41,18 @@ async function getData(): Promise<CatalogsHubData> {
     count(admin, 'global_products', { active: true }),
     count(admin, 'global_products', { active: true, isNull: ['global_category_id'] }),
     count(admin, 'global_products', { active: true, isNull: ['image_url'] }),
+    count(admin, 'global_products', { equals: { catalog_status: 'candidate' } }),
+    count(admin, 'global_products', { equals: { catalog_status: 'review' } }),
     count(admin, 'global_device_models', { active: true }),
+    count(admin, 'global_device_models', { equals: { catalog_status: 'candidate' } }),
+    count(admin, 'global_device_models', { equals: { catalog_status: 'review' } }),
   ])
 
   return {
     categories: { active: categories, roots: categoryRoots, tenantTotal: tenantCategories, tenantLinked: tenantCategoriesLinked },
     brands: { active: brands, withoutLogo: brandsWithoutLogo, tenantTotal: tenantBrands, tenantLinked: tenantBrandsLinked },
-    products: { active: products, withoutCategory: productsWithoutCategory, withoutImage: productsWithoutImage },
-    deviceModels: { active: deviceModels },
+    products: { active: products, withoutCategory: productsWithoutCategory, withoutImage: productsWithoutImage, candidates: productCandidates, review: productsInReview },
+    deviceModels: { active: deviceModels, candidates: deviceModelCandidates, review: deviceModelsInReview },
   }
 }
 
