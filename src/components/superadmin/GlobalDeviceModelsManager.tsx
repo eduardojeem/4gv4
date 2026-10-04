@@ -245,7 +245,10 @@ export function GlobalDeviceModelsManager() {
         body: JSON.stringify({ action: 'import', entries: entries.map(({ brand, model }) => ({ brand, model })) }),
       })
       const payload = await response.json().catch(() => null)
-      if (!response.ok || !payload?.success) throw new Error(payload?.error || 'No se pudo sumar.')
+      if (!response.ok || !payload?.success) {
+        const failed = Array.isArray(payload?.failed) ? payload.failed.length : 0
+        throw new Error(failed > 0 ? `${failed} candidato${failed === 1 ? '' : 's'} no tiene una marca global activa; no se importó ninguno.` : payload?.error || 'No se pudo sumar.')
+      }
       toast.success(`${payload.created} modelo${payload.created === 1 ? '' : 's'} sumado${payload.created === 1 ? '' : 's'} al catálogo`)
       await load()
     } catch (err) {

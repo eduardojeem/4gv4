@@ -7,6 +7,7 @@ import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { logger } from '@/lib/logger'
 import { normalizeDeviceBrand, normalizeDeviceModel } from '@/lib/products/device-compatibility'
 import { DEVICE_TYPES, resolveGlobalDeviceModelBrand, sortDeviceModels, summarizeDeviceUsage, type GlobalDeviceModel, type UsageRows } from '@/lib/devices/global-models'
+import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
 
 /**
  * Catálogo global de modelos de equipos: lo administra solo la plataforma y se
@@ -138,28 +139,26 @@ export async function POST(request: NextRequest) {
       const rows = validation.data.entries
         .map((entry) => normalized(entry))
         .filter((entry): entry is { brand: string; model: string; aliases: string[] } => Boolean(entry.brand && entry.model))
-        .map((entry) => ({ brand: entry.brand, model: entry.model, device_type: 'smartphone', aliases: [] as string[] }))
-
-      let created = 0
-      for (const row of rows) {
-        const brand = await canonicalBrand(admin, row.brand)
-        const { error } = await admin.from('global_device_models').insert({
-          ...row,
-          ...(brand ? { global_brand_id: brand.id, brand: brand.name } : {}),
-        })
-        if (!error) created += 1
-        else if (error.code !== '23505') logger.error('[superadmin/global-device-models] import', { error: error.message, row })
-      }
+      const entries = await Promise.all(rows.map(async (row) => ({
+        global_brand_id: (await canonicalBrand(admin, row.brand))?.id ?? null,
+        model: row.model,
+        device_type: 'smartphone',
+      })))
+      const { data: result, error } = await admin.rpc('import_global_device_model_candidates', {
+        p_entries: entries,
+        p_actor_user_id: user.id,
+      })
+      if (error || !isBulkCatalogResult(result)) throw error ?? new Error('Invalid device model import result')
 
       await logSuperAdminAction({
         actorId: user.id,
         actorEmail: user.email,
         action: 'create',
         resource: 'global_device_models',
-        newValues: { created, action: 'import' },
+        newValues: { ...result, action: 'import' },
         request,
       })
-      return NextResponse.json({ success: true, created })
+      return NextResponse.json({ success: bulkResultSucceeded(result), ...result }, { status: bulkResultSucceeded(result) ? 200 : 409 })
     }
 
     const validation = modelSchema.safeParse(body)

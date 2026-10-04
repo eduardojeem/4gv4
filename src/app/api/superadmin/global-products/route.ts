@@ -7,6 +7,7 @@ import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import { isSupportedImageSource } from '@/lib/image-url-policy'
 import { logger } from '@/lib/logger'
 import { groupGlobalProductCandidates, gtinKey, type CatalogCandidateRow } from '@/lib/products/barcode-catalog'
+import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
 
 /**
  * Catálogo global de productos por código de barras: lo administra solo la
@@ -182,33 +183,34 @@ export async function POST(request: NextRequest) {
       if (!validation.success) {
         return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
       }
-      let created = 0
-      for (const entry of validation.data.entries) {
+      const entries = validation.data.entries.flatMap((entry) => {
         const gtin = gtinKey(entry.gtin)
-        if (!gtin) continue
+        if (!gtin) return []
         const image = imageOrNull(entry.imageUrl)
-        const { error } = await admin.from('global_products').insert({
+        return [{
           gtin,
           name: entry.name,
           brand_name: entry.brandName || null,
           global_brand_id: entry.globalBrandId || null,
           global_category_id: entry.globalCategoryId || null,
           description: entry.description || null,
-          // Una foto de origen no permitido no bloquea la ficha: entra sin foto.
           image_url: 'error' in image ? null : image.value,
-        })
-        if (!error) created += 1
-        else if (error.code !== '23505') logger.error('[superadmin/global-products] import', { error: error.message, gtin })
-      }
+        }]
+      })
+      const { data: result, error } = await admin.rpc('import_global_product_candidates', {
+        p_entries: entries,
+        p_actor_user_id: user.id,
+      })
+      if (error || !isBulkCatalogResult(result)) throw error ?? new Error('Invalid product import result')
       await logSuperAdminAction({
         actorId: user.id,
         actorEmail: user.email,
         action: 'create',
         resource: 'global_products',
-        newValues: { created, action: 'import' },
+        newValues: { ...result, action: 'import' },
         request,
       })
-      return NextResponse.json({ success: true, created })
+      return NextResponse.json({ success: bulkResultSucceeded(result), ...result }, { status: bulkResultSucceeded(result) ? 200 : 409 })
     }
 
     const validation = productSchema.safeParse(body)
