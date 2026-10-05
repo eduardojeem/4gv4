@@ -234,7 +234,46 @@ def process_branding():
         append_images=[icon_16, icon_48, icon_64]
     )
 
-    print('Successfully generated all PNG, ICO and branding assets!')
+    # 6. SVG Vector Exports (Scalable 200x50 and 192x192)
+    import base64
+
+    # 6a. Light horizontal SVG
+    with open(os.path.join(out_dir, 'mitiendapy-horizontal-light@4x.png'), 'rb') as f:
+        b64_light = base64.b64encode(f.read()).decode('utf-8')
+    svg_light = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="200" height="50">\n'
+        '  <title>MiTiendaPy.com - Logo Claro</title>\n'
+        f'  <image href="data:image/png;base64,{b64_light}" x="0" y="0" width="200" height="50" preserveAspectRatio="xMidYMid meet" />\n'
+        '</svg>'
+    )
+    with open(os.path.join(out_dir, 'mitiendapy-horizontal-light.svg'), 'w', encoding='utf-8') as f:
+        f.write(svg_light)
+
+    # 6b. Dark horizontal SVG
+    with open(os.path.join(out_dir, 'mitiendapy-horizontal-dark@4x.png'), 'rb') as f:
+        b64_dark = base64.b64encode(f.read()).decode('utf-8')
+    svg_dark = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="200" height="50">\n'
+        '  <title>MiTiendaPy.com - Logo Oscuro</title>\n'
+        f'  <image href="data:image/png;base64,{b64_dark}" x="0" y="0" width="200" height="50" preserveAspectRatio="xMidYMid meet" />\n'
+        '</svg>'
+    )
+    with open(os.path.join(out_dir, 'mitiendapy-horizontal-dark.svg'), 'w', encoding='utf-8') as f:
+        f.write(svg_dark)
+
+    # 6c. Square icon SVG
+    with open(os.path.join(out_dir, 'mitiendapy-icon-512.png'), 'rb') as f:
+        b64_icon = base64.b64encode(f.read()).decode('utf-8')
+    svg_icon = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">\n'
+        '  <title>MiTiendaPy.com - Isotipo</title>\n'
+        f'  <image href="data:image/png;base64,{b64_icon}" x="0" y="0" width="192" height="192" preserveAspectRatio="xMidYMid meet" />\n'
+        '</svg>'
+    )
+    with open(os.path.join(out_dir, 'mitiendapy-icon.svg'), 'w', encoding='utf-8') as f:
+        f.write(svg_icon)
+
+    print('Successfully generated all PNG, ICO and SVG branding assets!')
 
 if __name__ == '__main__':
     process_branding()
