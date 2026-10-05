@@ -20,6 +20,8 @@ import {
 import {
   countDifference,
   countToCsv,
+  getInventoryCountDetailGuidance,
+  getInventoryCountListGuidance,
   findByCode,
   parseScan,
   summarizeCount,
@@ -126,6 +128,29 @@ const item = (over: Partial<CountItem>): CountItem => ({
 })
 
 describe('toma de inventario', () => {
+  it('el asistente recomienda abrir, continuar o revisar según el estado real', () => {
+    expect(getInventoryCountListGuidance({ available: true, canAdjust: true, counts: [], progress: {} }).kind).toBe('start')
+    expect(getInventoryCountListGuidance({
+      available: true,
+      canAdjust: true,
+      counts: [{ id: 'c1', number: 4, status: 'counting' }],
+      progress: { c1: { total: 10, counted: 3 } },
+    })).toMatchObject({ kind: 'continue', countId: 'c1', pending: 7 })
+    expect(getInventoryCountListGuidance({
+      available: true,
+      canAdjust: true,
+      counts: [{ id: 'c1', number: 4, status: 'counting' }],
+      progress: { c1: { total: 10, counted: 10 } },
+    }).kind).toBe('review')
+  })
+
+  it('el asistente del detalle nunca invita a aplicar una toma incompleta', () => {
+    expect(getInventoryCountDetailGuidance({ status: 'counting', canAdjust: true, counted: 0, notCounted: 8, withDifference: 0 }).kind).toBe('count')
+    expect(getInventoryCountDetailGuidance({ status: 'counting', canAdjust: true, counted: 5, notCounted: 3, withDifference: 2 }).kind).toBe('continue')
+    expect(getInventoryCountDetailGuidance({ status: 'counting', canAdjust: true, counted: 8, notCounted: 0, withDifference: 2 }).kind).toBe('review')
+    expect(getInventoryCountDetailGuidance({ status: 'applied', canAdjust: true, counted: 8, notCounted: 0, withDifference: 2 }).kind).toBe('closed')
+  })
+
   it('la diferencia se mide contra el stock al momento de contar', () => {
     // Se abrió con 10, se vendieron 2 antes de contar: contar 8 no es faltante.
     expect(countDifference(item({ counted_qty: 8, system_qty_at_count: 8 }))).toBe(0)

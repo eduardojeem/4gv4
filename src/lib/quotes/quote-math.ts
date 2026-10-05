@@ -97,6 +97,7 @@ export function buildQuoteWhatsAppMessage(params: {
   currency: string
   validUntil: string | null
   url: string
+  customIntro?: string
 }) {
   const money = (amount: number) => formatCurrency(amount, { currency: params.currency })
   const shown = params.lines.slice(0, 8)
@@ -105,8 +106,14 @@ export function buildQuoteWhatsAppMessage(params: {
   const valid = params.validUntil
     ? `Válido hasta el ${params.validUntil.split('-').reverse().join('/')}.`
     : null
+  const greeting = params.customIntro
+    ? params.customIntro
+        .replace('{cliente}', params.customerName)
+        .replace('{numero}', quoteCode(params.number))
+        .replace('{empresa}', params.storeName)
+    : `Hola ${params.customerName}! Te paso el presupuesto ${quoteCode(params.number)} de ${params.storeName}:`
   return [
-    `Hola ${params.customerName}! Te paso el presupuesto ${quoteCode(params.number)} de ${params.storeName}:`,
+    greeting,
     '',
     ...rows,
     '',
