@@ -334,7 +334,7 @@ export function CompanyInfoForm() {
       <WebsiteMediaQuotaBanner onOpenHistory={() => setLogoMediaOpen(true)} />
 
       {/* Identidad */}
-      <SectionCard icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
+      <SectionCard id="website-identity" icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
         <div className="grid gap-8 md:grid-cols-3 md:gap-10">
           <div className="space-y-2 md:col-span-1">
             <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
@@ -494,7 +494,7 @@ export function CompanyInfoForm() {
         }}
       />
 
-      <SectionCard icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
+      <SectionCard id="website-visibility" icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="slug" className="text-sm font-medium">Ruta pública / Enlace web</Label>
@@ -541,7 +541,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Personalización visual */}
-      <SectionCard collapsible icon={Sparkles} title="Personalización visual" description="Plantilla, color y encabezado de tu tienda.">
+      <SectionCard id="website-appearance" collapsible icon={Sparkles} title="Personalización visual" description="Plantilla, color y encabezado de tu tienda.">
         <StorefrontAppearanceEditor
           value={formData}
           onChange={handleAppearanceChange}
@@ -552,7 +552,7 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Contacto */}
-      <SectionCard icon={Phone} title="Información de contacto" description="Datos mostrados en el portal público">
+      <SectionCard id="website-contact" icon={Phone} title="Información de contacto" description="Datos mostrados en el portal público">
         <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="phone" className="flex items-center gap-2 text-sm font-medium">

@@ -287,6 +287,9 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
         <BookingSection settings={inlineBooking} agenda={agenda} slug={agendaSlug} serviceId={bookingServiceId} nextSlot={nextSlot} onBookNext={bookService} />
       )}
 
+      {/* La galería se edita en el panel para cualquier plantilla: también se publica fuera de Servicios. */}
+      {!isServices && <ServiceGallery settings={settings.gallery_section} />}
+
       {hasProcessSteps && (
         <ProcessSteps
           brand={brand}

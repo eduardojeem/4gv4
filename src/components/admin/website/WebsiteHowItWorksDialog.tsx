@@ -19,7 +19,6 @@ import {
   ShoppingCart,
   HelpCircle,
   Lightbulb,
-  CheckCircle2,
   ArrowRight,
   Store,
   Layers,
@@ -59,14 +58,6 @@ export interface FaqItem {
   answer: string
   category: string
   relatedTab: string
-}
-
-export interface ChecklistItem {
-  id: string
-  tabKey: string
-  title: string
-  description: string
-  recommendation: string
 }
 
 const WEBSITE_GUIDES: WebsiteSectionGuide[] = [
@@ -409,85 +400,52 @@ const FAQS: FaqItem[] = [
   },
 ]
 
-const CHECKLIST: ChecklistItem[] = [
-  {
-    id: 'chk-1',
-    tabKey: 'company',
-    title: '1. Nombre, Logo y WhatsApp',
-    description: 'Verifica que tu logo esté cargado y tu número de WhatsApp configurado para recibir consultas.',
-    recommendation: 'Esencial para que los clientes te reconozcan y te escriban.',
-  },
-  {
-    id: 'chk-2',
-    tabKey: 'hero',
-    title: '2. Título de Portada e Insignias',
-    description: 'Personaliza el mensaje principal de bienvenida y tus garantías (ej. Garantía escrita, Repuestos de calidad).',
-    recommendation: 'Genera confianza inmediata al primer contacto.',
-  },
-  {
-    id: 'chk-3',
-    tabKey: 'carousel',
-    title: '3. Al menos 1 Banner o Promoción',
-    description: 'Sube un banner atractivo para destacar novedades, accesorios o tus mejores servicios.',
-    recommendation: 'Aumenta el interés visual y clics a tu catálogo.',
-  },
-  {
-    id: 'chk-4',
-    tabKey: 'services',
-    title: '4. Servicios Principales Publicados',
-    description: 'Crea 2 o 3 servicios habituales con sus tiempos estimados de trabajo.',
-    recommendation: 'Permite que te pidan presupuestos directamente.',
-  },
-  {
-    id: 'chk-5',
-    tabKey: 'checkout',
-    title: '5. Métodos de Pago y Entregas',
-    description: 'Habilita si aceptas transferencias, efectivo o delivery a domicilio.',
-    recommendation: 'Facilita el cierre de ventas sin fricciones.',
-  },
-]
-
 interface WebsiteHowItWorksDialogProps {
   onNavigateToTab?: (tabKey: string) => void
+  /** Oculta las guías de secciones que la cuenta no tiene. */
+  isSectionAvailable?: (tabKey: string) => boolean
   currentTab?: string
   orgSlug?: string | null
 }
 
 export function WebsiteHowItWorksDialog({
   onNavigateToTab,
+  isSectionAvailable,
   currentTab,
   orgSlug,
 }: WebsiteHowItWorksDialogProps) {
+  const guides = isSectionAvailable ? WEBSITE_GUIDES.filter((guide) => isSectionAvailable(guide.tabKey)) : WEBSITE_GUIDES
+  const faqs = isSectionAvailable ? FAQS.filter((faq) => isSectionAvailable(faq.relatedTab)) : FAQS
   const [open, setOpen] = useState(false)
-  const [activeView, setActiveView] = useState<'sections' | 'faq' | 'checklist'>('sections')
+  const [activeView, setActiveView] = useState<'sections' | 'faq'>('sections')
   const [searchQuery, setSearchQuery] = useState('')
-  const initialGuide = WEBSITE_GUIDES.find(g => g.tabKey === currentTab) || WEBSITE_GUIDES[0]
+  const initialGuide = guides.find(g => g.tabKey === currentTab) || guides[0]
   const [selectedGuide, setSelectedGuide] = useState<WebsiteSectionGuide>(initialGuide)
 
   // Filtrado de secciones según búsqueda
   const filteredGuides = useMemo(() => {
-    if (!searchQuery.trim()) return WEBSITE_GUIDES
+    if (!searchQuery.trim()) return guides
     const q = searchQuery.toLowerCase()
-    return WEBSITE_GUIDES.filter(
+    return guides.filter(
       (g) =>
         g.label.toLowerCase().includes(q) ||
         g.title.toLowerCase().includes(q) ||
         g.subtitle.toLowerCase().includes(q) ||
         g.steps.some(s => s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q))
     )
-  }, [searchQuery])
+  }, [searchQuery, guides])
 
   // Filtrado de FAQs según búsqueda
   const filteredFaqs = useMemo(() => {
-    if (!searchQuery.trim()) return FAQS
+    if (!searchQuery.trim()) return faqs
     const q = searchQuery.toLowerCase()
-    return FAQS.filter(
+    return faqs.filter(
       (f) =>
         f.question.toLowerCase().includes(q) ||
         f.answer.toLowerCase().includes(q) ||
         f.category.toLowerCase().includes(q)
     )
-  }, [searchQuery])
+  }, [searchQuery, faqs])
 
   const handleSelectTab = (guide: WebsiteSectionGuide) => {
     setSelectedGuide(guide)
@@ -522,10 +480,11 @@ export function WebsiteHowItWorksDialog({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-2 font-bold text-xs border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 shadow-xs transition-all h-9 px-3.5"
+          className="gap-2"
+          aria-label="¿Cómo funciona el Sitio Web?"
         >
-          <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          <span>¿Cómo funciona el Sitio Web?</span>
+          <HelpCircle className="h-4 w-4" />
+          <span>Ayuda</span>
         </Button>
       </DialogTrigger>
 
@@ -598,7 +557,7 @@ export function WebsiteHowItWorksDialog({
               )}
             >
               <Layers className="h-3.5 w-3.5" />
-              <span>Secciones ({WEBSITE_GUIDES.length})</span>
+              <span>Secciones ({guides.length})</span>
             </button>
             <button
               type="button"
@@ -611,20 +570,7 @@ export function WebsiteHowItWorksDialog({
               )}
             >
               <MessageSquare className="h-3.5 w-3.5" />
-              <span>Preguntas Frecuentes ({FAQS.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveView('checklist')}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5',
-                activeView === 'checklist'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-white/80 hover:bg-white/15 hover:text-white'
-              )}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Checklist de Lanzamiento</span>
+              <span>Preguntas Frecuentes ({faqs.length})</span>
             </button>
           </div>
         </div>
@@ -824,55 +770,6 @@ export function WebsiteHowItWorksDialog({
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Vista de Checklist de Lanzamiento */}
-        {activeView === 'checklist' && (
-          <div className="p-6 sm:p-8 overflow-y-auto space-y-5 flex-1 bg-background">
-            <div className="p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-start gap-3.5">
-              <CheckCircle2 className="h-6 w-6 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-              <div>
-                <h5 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
-                  Pasos Esenciales para Publicar tu Tienda
-                </h5>
-                <p className="text-xs sm:text-sm text-indigo-700 dark:text-indigo-300/90 leading-relaxed mt-1">
-                  Completa estos 5 pasos recomendados para que tu sitio web esté 100% listo para recibir clientes y cerrar ventas.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {CHECKLIST.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/30 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-2xs"
-                >
-                  <div className="space-y-1.5">
-                    <h5 className="text-xs sm:text-sm font-bold text-foreground flex items-center gap-2">
-                      <span>{item.title}</span>
-                    </h5>
-                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                      {item.description}
-                    </p>
-                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      💡 {item.recommendation}
-                    </p>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleGoToSection(item.tabKey)}
-                    className="gap-2 text-xs font-bold shrink-0 self-start sm:self-auto h-9 px-3.5"
-                  >
-                    <span>Configurar</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               ))}
             </div>

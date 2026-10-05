@@ -4,6 +4,7 @@ import { WebsiteSettings } from '@/types/website-settings'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
+import { restrictPublicSettingsToModules } from '@/lib/website/public-section-availability'
 import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
 
 /**
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      data: normalized,
+      data: await restrictPublicSettingsToModules(normalized, organization.id),
       organization: toPublicOrganizationPayload(organization),
     })
     // 30 s fresh, luego sirve el cache mientras revalida en background.

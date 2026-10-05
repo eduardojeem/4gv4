@@ -310,7 +310,7 @@ describe('el aviso de cada tienda', () => {
 
   it('el dueño lo encuentra en «Sitio Web»', () => {
     expect(leer('src/components/admin/website/WebsiteNavigation.tsx')).toContain("id: 'announcement'")
-    expect(leer('src/app/admin/website/page.tsx')).toContain("tab === 'announcement'")
+    expect(leer('src/app/admin/website/page.tsx')).toContain("show('announcement')")
     expect(leer('src/components/admin/website/WebsiteSectionIntro.tsx')).toContain('Aviso al entrar a tu tienda')
   })
 })

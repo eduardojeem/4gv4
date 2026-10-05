@@ -5,6 +5,7 @@ import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
+import { restrictPublicSettingsToModules } from '@/lib/website/public-section-availability'
 import type { WebsiteSettings } from '@/types/website-settings'
 import { headers } from 'next/headers'
 
@@ -62,6 +63,7 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
         ordersEnabled: await isOrganizationModuleEnabled(organization.id, 'orders'),
         hasWhatsapp: Boolean(normalized.company_info.whatsapp?.trim()),
       })
+      return restrictPublicSettingsToModules(normalized, organization.id)
     }
 
     return normalized

@@ -12,16 +12,19 @@ export function SectionCard({
   description,
   children,
   collapsible = false,
+  id,
 }: {
   icon: ComponentType<{ className?: string }>
   title: string
   description: string
   children: ReactNode
   collapsible?: boolean
+  /** Ancla para que la guía del sitio pueda llevar directo a esta tarjeta. */
+  id?: string
 }) {
   if (collapsible) {
     return (
-      <Card className="gap-0 py-0 rounded-2xl overflow-hidden border-border/80 shadow-2xs">
+      <Card id={id} className="scroll-mt-4 gap-0 py-0 rounded-2xl overflow-hidden border-border/80 shadow-2xs">
         <details className="group">
           <summary className="cursor-pointer rounded-2xl p-3.5 sm:p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring hover:bg-muted/30 transition-colors">
             <span className="ml-1 sm:ml-2 inline-flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -38,7 +41,7 @@ export function SectionCard({
     )
   }
   return (
-    <Card className="rounded-2xl border-border/80 shadow-2xs overflow-hidden">
+    <Card id={id} className="scroll-mt-4 rounded-2xl border-border/80 shadow-2xs overflow-hidden">
       <CardHeader className="border-b bg-muted/30 p-4 sm:p-6">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl border bg-background text-primary shadow-xs">
