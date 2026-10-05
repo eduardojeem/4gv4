@@ -9,7 +9,7 @@ import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/components/public/MarketplaceOffersSection'
 import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
-import { getPlatformBranding } from '@/lib/platform/branding'
+import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/branding'
 import { getPlatformAnnouncements } from '@/lib/platform/announcement'
 import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
@@ -18,7 +18,7 @@ import { MarketplaceOrgMarquee } from '@/components/public/MarketplaceOrgMarquee
 import { MarketplaceBusinessPromoShowcase } from '@/components/public/MarketplaceBusinessPromoShowcase'
 
 export async function generateMetadata(): Promise<Metadata> {
-  const branding = await getPlatformBranding()
+  const branding = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)
   return publicPageMetadata({
     title: `${branding.marketplaceName} | ${branding.platformName}`,
     description: branding.marketplaceTagline?.trim()
@@ -41,7 +41,7 @@ export default async function MarketplacePage() {
     getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT),
     getMarketplaceBrands(30),
     getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT),
-    getPlatformAnnouncements(),
+    getPlatformAnnouncements().catch(() => []),
   ])
   const marketplaceProducts = marketplacePage.products
 
