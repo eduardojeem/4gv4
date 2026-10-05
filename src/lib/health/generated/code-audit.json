@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T15:00:29.460Z",
+  "generatedAt": "2026-10-05T01:11:58.203Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
@@ -1973,6 +1973,36 @@
       "serviceRole": false
     },
     {
+      "route": "/api/categories/starter",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/categories/suggest",
       "methods": [
         "GET"
@@ -2930,7 +2960,49 @@
       "serviceRole": false
     },
     {
+      "route": "/api/inventory/expirations",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/inventory/stats",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/inventory/variants",
       "methods": [
         "GET"
       ],
@@ -3699,6 +3771,45 @@
       "superAdminGuard": false,
       "authGuard": true,
       "serviceRole": true
+    },
+    {
+      "route": "/api/products/[id]/batches",
+      "methods": [
+        "GET",
+        "POST",
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
     },
     {
       "route": "/api/products/barcode-lookup",
@@ -6539,7 +6650,8 @@
     "20261010120000",
     "20261011120000",
     "20261012120000",
-    "20261013120000"
+    "20261013120000",
+    "20261014120000"
   ],
   "paymentProviders": [
     {
