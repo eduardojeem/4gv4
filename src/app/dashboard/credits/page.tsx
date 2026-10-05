@@ -19,20 +19,20 @@ import { CreditPaymentDialog, PaymentMethod, PaymentConfirmResult } from '@/comp
 import { CreditDetailDialog } from '@/components/dashboard/credits/CreditDetailDialog'
 import { PaymentsTimeline } from '@/components/dashboard/credits/PaymentsTimeline'
 import { RouteGuard } from '@/components/auth/permission-guard'
-import { PlanGate } from '@/components/admin/PlanGate'
+import { OrganizationModuleGate } from '@/components/admin/OrganizationModuleGate'
 import { formatDateInputLocal, formatDateOnlyDisplay, isSameLocalDate, startOfLocalDay } from '@/lib/date-only'
 import { getCreditDisplayInfo, getInstallmentDisplayInfo } from '@/lib/credits/display'
 import { CreditExportModal } from '@/components/dashboard/credits/CreditExportModal'
 
 export default function CreditsDashboardPage() {
   return (
-    <PlanGate
+    <OrganizationModuleGate
       module="credits"
       title="Módulo de créditos no incluido"
       description="Financiación y cobranza en cuotas para tus clientes."
     >
       <CreditsDashboardContent />
-    </PlanGate>
+    </OrganizationModuleGate>
   )
 }
 

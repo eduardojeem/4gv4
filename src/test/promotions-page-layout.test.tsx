@@ -53,8 +53,8 @@ vi.mock('@/components/auth/permission-guard', () => ({
   RouteGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
-vi.mock('@/components/admin/PlanGate', () => ({
-  PlanGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock('@/components/admin/OrganizationModuleGate', () => ({
+  OrganizationModuleGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
 // Los bloques se reemplazan por marcadores: lo que se prueba es donde queda

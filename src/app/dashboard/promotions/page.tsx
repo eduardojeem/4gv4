@@ -73,7 +73,7 @@ const OffersPromoCarouselEditor = dynamic(
   () => import('@/components/admin/website/PromotionalCarouselEditor').then((m) => ({ default: m.PromotionalCarouselEditor })),
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl border bg-muted/30" /> }
 )
-import { PlanGate } from '@/components/admin/PlanGate'
+import { OrganizationModuleGate } from '@/components/admin/OrganizationModuleGate'
 import { usePermissions } from '@/hooks/use-permissions'
 
 // Dynamic import to avoid SSR issues with Calendar component
@@ -296,7 +296,7 @@ export default function PromotionsPage() {
 
   return (
     <RouteGuard route="/dashboard/promotions">
-      <PlanGate
+      <OrganizationModuleGate
         module="promotions"
         title="Promociones no está incluido en tu plan"
         description="Descuentos, campañas y códigos promocionales para tus clientes."
@@ -713,7 +713,7 @@ export default function PromotionsPage() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      </PlanGate>
+      </OrganizationModuleGate>
     </RouteGuard>
   )
 }

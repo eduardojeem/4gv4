@@ -8,20 +8,31 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import type { OrganizationModule } from '@/lib/organization/business-profile'
 import { PlanGate } from './PlanGate'
 
+/**
+ * Bloquea una pantalla si la organización no usa el módulo. Distingue un módulo
+ * que el plan no incluye (ofrece prueba o upgrade) de uno incluido pero ocultado
+ * desde el perfil del negocio. Con una lista alcanza con cualquiera.
+ */
 export function OrganizationModuleGate({
   module,
+  title,
+  description,
   children,
 }: {
-  module: OrganizationModule
+  module: OrganizationModule | readonly OrganizationModule[]
+  /** Textos del aviso cuando el plan no incluye el módulo. */
+  title?: string
+  description?: string
   children: React.ReactNode
 }) {
   const { effectiveModules, entitledModules, moduleTrials } = useSubscriptionStatus()
-  if (effectiveModules.includes(module)) return <>{children}</>
+  const anyOf: readonly OrganizationModule[] = typeof module === 'string' ? [module] : module
+  if (anyOf.some((candidate) => effectiveModules.includes(candidate))) return <>{children}</>
 
-  const commerciallyAvailable = entitledModules.includes(module)
-    || moduleTrials.some(trial => trial.module === module)
+  const commerciallyAvailable = anyOf.some((candidate) => entitledModules.includes(candidate)
+    || moduleTrials.some(trial => trial.module === candidate))
   if (!commerciallyAvailable) {
-    return <PlanGate module={module}>{children}</PlanGate>
+    return <PlanGate module={anyOf[0]} title={title} description={description}>{children}</PlanGate>
   }
 
   return (

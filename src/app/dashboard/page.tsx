@@ -30,6 +30,7 @@ import {
   RotateCcw,
   PackageCheck,
   CheckCircle2,
+  CalendarClock,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -201,6 +202,13 @@ export default function DashboardPage() {
   const hasRepairs = effectiveModules.includes('repairs')
   const hasOrders = effectiveModules.includes('orders')
   const hasServices = effectiveModules.includes('services')
+  const hasPos = effectiveModules.includes('pos')
+  const hasInventory = effectiveModules.includes('inventory')
+  // Los servicios de la agenda viven en el catálogo: una barbería sin inventario igual tiene catálogo.
+  const hasCatalog = hasInventory || hasServices
+  const catalogLabel = hasInventory ? 'Producto' : 'Servicio'
+  // Devoluciones y garantías salen de una venta o de un pedido.
+  const hasSales = hasPos || effectiveModules.includes('orders')
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
@@ -212,8 +220,8 @@ export default function DashboardPage() {
     { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/admin/reports' },
     ...(hasOrders ? [{ title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo' as const, href: '/dashboard/orders' }] : []),
     { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
-    { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
-    { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
+    ...(hasCatalog ? [{ title: hasInventory ? 'Productos' : 'Servicios', value: '—', icon: Package, tone: 'cyan' as const, href: '/dashboard/products' }] : []),
+    ...(hasInventory ? [{ title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber' as const, href: '/dashboard/products?filter=low_stock' }] : []),
     ...(hasRepairs ? [{ title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red' as const, href: '/dashboard/repairs' }] : []),
   ])
 
@@ -485,8 +493,8 @@ export default function DashboardPage() {
           icon: Users, tone: 'violet' as const, href: '/dashboard/customers',
           trend: customerTrend,
         },
-        {
-          title: 'Catálogo / Inventario',
+        ...(hasCatalog ? [{
+          title: hasInventory ? 'Catálogo / Inventario' : 'Servicios',
           value: String(totalCatalogCount),
           subtitle: hasServices
             ? `${physicalProductsCount} productos · ${servicesCount} servicios`
@@ -496,14 +504,14 @@ export default function DashboardPage() {
             { label: 'Productos', count: physicalProductsCount, icon: Package },
             ...(hasServices ? [{ label: 'Servicios', count: servicesCount, icon: Wrench }] : []),
           ],
-        },
-        {
+        }] : []),
+        ...(hasInventory ? [{
           title: 'Stock bajo',
           value: String(lowStockCount),
           subtitle: lowStockCount > 0 ? 'requiere reposición' : 'inventario OK',
           icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' as const : 'emerald' as const, href: '/dashboard/products?filter=low_stock',
           badge: lowStockCount > 0 ? '⚠' : undefined,
-        },
+        }] : []),
         ...(hasRepairs ? [{
           title: 'Reparaciones',
           value: String(repairsActive),
@@ -521,7 +529,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [hasOrders, hasRepairs, hasServices, organization?.id, selectedBranchId, supabase])
+  }, [hasOrders, hasRepairs, hasServices, hasCatalog, hasInventory, organization?.id, selectedBranchId, supabase])
 
   useEffect(() => {
     if (config.supabase.isConfigured && organization?.id) {
@@ -532,11 +540,12 @@ export default function DashboardPage() {
   }, [fetchDashboardStats, organization?.id])
 
   const quickActions = [
-    { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
+    ...(hasPos ? [{ title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const }] : []),
+    ...(hasServices ? [{ title: 'Nuevo turno', icon: CalendarClock, href: '/dashboard/agenda', tone: 'emerald' as const }] : []),
     ...(hasRepairs ? [{ title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const }] : []),
-    { title: 'Nueva devolución', icon: RotateCcw, href: '/dashboard/after-sales?new=true', tone: 'violet' as const },
+    ...(hasSales ? [{ title: 'Nueva devolución', icon: RotateCcw, href: '/dashboard/after-sales?new=true', tone: 'violet' as const }] : []),
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
-    { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
+    ...(hasCatalog ? [{ title: `Nuevo ${catalogLabel.toLowerCase()}`, icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const }] : []),
     { title: 'Ver reportes', icon: BarChart3, href: '/admin/reports', tone: 'cyan' as const },
     { title: 'Mi tienda pública', icon: Store, href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
     { title: 'Marketplace', icon: Globe, href: '/marketplace', tone: 'cyan' as const },
@@ -581,12 +590,18 @@ export default function DashboardPage() {
         <div className="flex flex-wrap gap-2 items-center">
           {/* La caja ya no es un botón más acá arriba: es el primer bloque de
               la pantalla, con su estado y lo que pasa si está cerrada. */}
-          <Button asChild size="sm" className="gap-2">
+          {hasPos ? <Button asChild size="sm" className="gap-2">
             <Link href="/dashboard/pos">
               <Plus className="h-3.5 w-3.5" />
               Nueva venta
             </Link>
-          </Button>
+          </Button> : null}
+          {hasServices ? <Button asChild size="sm" variant={hasPos ? 'outline' : 'default'} className="gap-2">
+            <Link href="/dashboard/agenda">
+              <CalendarClock className="h-3.5 w-3.5" />
+              Nuevo turno
+            </Link>
+          </Button> : null}
           {hasRepairs ? <Button
             asChild
             size="sm"
@@ -597,7 +612,7 @@ export default function DashboardPage() {
               Nueva reparación
             </Link>
           </Button> : null}
-          <Button
+          {hasSales ? <Button
             asChild
             size="sm"
             className="gap-2 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
@@ -606,7 +621,7 @@ export default function DashboardPage() {
               <RotateCcw className="h-3.5 w-3.5" />
               Nueva devolución
             </Link>
-          </Button>
+          </Button> : null}
           <Button
             variant="outline"
             size="sm"
@@ -632,7 +647,7 @@ export default function DashboardPage() {
 
       {/* Estado de la caja: es el primer paso del día y va antes que todo lo
           demás. Sin caja abierta el POS no confirma ventas. */}
-      <CashStatusBanner
+      {hasPos && <CashStatusBanner
         status={!cajaVerificada ? 'verificando' : currentSession ? 'abierta' : 'cerrada'}
         // La sesión vive en `cash_closures`, que no tiene `opened_at`: la
         // apertura es su `created_at`.
@@ -649,7 +664,7 @@ export default function DashboardPage() {
           setClosingCountedAmount('')
           setIsCloseDialogOpen(true)
         }}
-      />
+      />}
 
       {/* Alerta de tienda pública no configurada o sin publicar */}
       <StoreSetupAlert />
@@ -828,11 +843,12 @@ export default function DashboardPage() {
       {/* Quick links footer */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[
-          { href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' },
-          { href: '/dashboard/products', icon: Boxes, label: 'Inventario', sub: 'Catálogo y stock' },
+          ...(hasPos ? [{ href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' }] : []),
+          ...(hasServices ? [{ href: '/dashboard/agenda', icon: CalendarClock, label: 'Agenda', sub: 'Turnos y reservas online' }] : []),
+          ...(hasCatalog ? [{ href: '/dashboard/products', icon: Boxes, label: hasInventory ? 'Inventario' : 'Servicios', sub: hasInventory ? 'Catálogo y stock' : 'Precios y duración' }] : []),
           ...(hasOrders ? [{ href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' }] : []),
           { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
-          { href: '/dashboard/after-sales', icon: RotateCcw, label: 'Posventa y Devoluciones', sub: 'Garantías y reclamos' },
+          ...(hasSales ? [{ href: '/dashboard/after-sales', icon: RotateCcw, label: 'Posventa y Devoluciones', sub: 'Garantías y reclamos' }] : []),
           { href: '/marketplace', icon: Globe, label: 'Marketplace', sub: 'Explorar empresas y productos' },
           { href: organization?.slug ? `/${organization.slug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
         ].map(({ href, icon: Icon, label, sub }) => (
