@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { BarcodeScanner } from '@/components/ui/barcode-scanner'
 import { Progress } from '@/components/ui/progress'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
@@ -130,17 +131,25 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
     void save([{ item_id: item.id, counted_qty: value }])
   }
 
-  const onScan = async () => {
-    const { code, quantity } = parseScan(scan)
-    if (!code) return
+  /** Suma lo leído (lector, teclado o cámara). Devuelve el texto para la cámara, o null si no está en la toma. */
+  const countCode = async (input: string, notify: boolean) => {
+    const { code, quantity } = parseScan(input)
+    if (!code) return undefined
     const item = findByCode(items, code)
-    setScan('')
     if (!item) {
-      toast.error(`No encontré el código «${code}» en esta toma`)
-      return
+      if (notify) toast.error(`No encontré el código «${code}» en esta toma`)
+      return null
     }
     const next = (item.counted_qty ?? 0) + quantity
-    if (await save([{ item_id: item.id, counted_qty: next }])) setLastScan({ name: item.name, qty: next, added: quantity })
+    if (!(await save([{ item_id: item.id, counted_qty: next }]))) return { text: `No se guardó ${item.name}`, ok: false }
+    setLastScan({ name: item.name, qty: next, added: quantity })
+    return `+${quantity} ${item.name} → llevás ${next}`
+  }
+
+  const onScan = async () => {
+    const input = scan
+    setScan('')
+    await countCode(input, true)
     scanRef.current?.focus()
   }
 
@@ -285,6 +294,14 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
                 aria-label="Código para contar"
               />
             </div>
+            {/* Con el celular: se cuenta recorriendo el depósito, un producto tras otro. */}
+            <BarcodeScanner
+              continuous
+              label="Contar con la cámara"
+              className="h-11 shrink-0"
+              hint="Pasá cada unidad frente a la cámara: suma 1 por lectura"
+              onScan={(code) => countCode(code, false)}
+            />
             {lastScan && (
               <p className="text-sm sm:max-w-sm">
                 <span className="font-semibold">+{lastScan.added}</span> {lastScan.name} <span className="text-muted-foreground">→ llevás {lastScan.qty}</span>

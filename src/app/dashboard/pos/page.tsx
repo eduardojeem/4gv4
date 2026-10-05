@@ -48,6 +48,7 @@ import { formatCurrency as formatCurrencyBase } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { POSBarcodeScanner } from '@/components/barcode/BarcodeScanner'
+import { BarcodeScanner, type BarcodeScanFeedback } from '@/components/ui/barcode-scanner'
 import { VariantSelector } from '@/components/pos/VariantSelector'
 import { useProductVariants } from '@/hooks/useProductVariants'
 import { usePromotionEngine } from '@/hooks/use-promotion-engine'
@@ -608,6 +609,24 @@ function POSPageContent() {
       showAddToCartToast({ name: product.name })
     })
   }, [getProductWithVariants, measureCartOperation, addToCartHook])
+
+  /**
+   * Agrega el producto de un código leído (lector o cámara). Devuelve el texto
+   * para la cámara, null si no existe, o pide cerrarla si hay que elegir variante.
+   */
+  const addScannedBarcode = useCallback(async (barcode: string): Promise<BarcodeScanFeedback> => {
+    const normalized = normalizeBarcode(barcode)
+    const product = inventoryProducts.find(
+      (p) => p.barcode === barcode || p.barcode === normalized
+    ) ?? await findProductByBarcode(normalized)
+    if (!product) return null
+    if (product.is_active === false) return { text: `${product.name} está inactivo`, ok: false }
+    addToCart(product)
+    if (getProductWithVariants(product.id)?.variants?.length) {
+      return { text: `Elegí la variante de ${product.name}`, close: true }
+    }
+    return `+1 ${product.name}`
+  }, [addToCart, findProductByBarcode, getProductWithVariants, inventoryProducts])
 
   // Función para agregar variante al carrito
   const addVariantToCart = useCallback((variant: ProductVariant, quantity: number) => {
@@ -2130,24 +2149,22 @@ function POSPageContent() {
                 {getFeatureFlag('enableBarcodeScanner') && (
                   <POSBarcodeScanner
                     onProductFound={async (barcode) => {
-                      const normalized = normalizeBarcode(barcode)
-                      const localProduct = inventoryProducts.find(
-                        (p) => p.barcode === barcode || p.barcode === normalized
-                      )
-                      if (localProduct) {
-                        addToCart(localProduct)
-                        return
-                      }
-                      const remoteProduct = await findProductByBarcode(normalized)
-                      if (remoteProduct) {
-                        addToCart(remoteProduct)
-                      } else {
-                        toast.error('Producto no encontrado')
-                      }
+                      const result = await addScannedBarcode(barcode)
+                      if (result === null) toast.error('Producto no encontrado')
+                      else if (typeof result === 'object' && result?.ok === false) toast.error(result.text)
                     }}
                     className="w-full shadow-sm"
                   />
                 )}
+
+                {/* Desde el celular o la tablet: la cámara lee un producto tras otro. */}
+                <BarcodeScanner
+                  continuous
+                  label="Escanear con la cámara"
+                  className="w-full"
+                  hint="Pasá los productos de a uno: cada lectura suma 1 al carrito"
+                  onScan={addScannedBarcode}
+                />
               </div>
 
               {/* Estados de carga y error */}
