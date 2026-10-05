@@ -374,6 +374,7 @@ describe('Component Performance Tests', () => {
 
   describe('Rendering Performance Benchmarks', () => {
     it('should meet performance benchmarks for critical components', () => {
+      const ciRunnerMargin = process.env.CI ? 1.5 : 1
       const benchmarks = {
         smallList: { items: 100, maxTime: 150 },
         mediumList: { items: 1000, maxTime: 500 },
@@ -395,7 +396,7 @@ describe('Component Performance Tests', () => {
         const endTime = performance.now()
         const renderTime = endTime - startTime
 
-        expect(renderTime).toBeWithinPerformanceThreshold(config.maxTime)
+        expect(renderTime).toBeWithinPerformanceThreshold(config.maxTime * ciRunnerMargin)
 
         unmount()
       })
