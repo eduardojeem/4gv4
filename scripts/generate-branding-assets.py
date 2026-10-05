@@ -223,6 +223,25 @@ def process_branding():
     app_icon_180 = make_square_icon(180, bg_color=(3, 11, 23, 255))
     app_icon_180.save(os.path.join(icons_dir, 'apple-touch-icon.png'), 'PNG')
 
+    # Maskable PWA icons (with 18% safe zone padding and clean background)
+    def make_maskable_icon(size):
+        sq = Image.new('RGBA', (size, size), (255, 255, 255, 255))
+        pad = int(size * 0.18)
+        usable = size - 2 * pad
+        aspect = iw / float(ih)
+        target_w = usable
+        target_h = int(usable / aspect)
+        icon_sq = icon_clean.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        pos_x = (size - target_w) // 2
+        pos_y = (size - target_h) // 2
+        sq.paste(icon_sq, (pos_x, pos_y), icon_sq)
+        return sq
+
+    mask_192 = make_maskable_icon(192)
+    mask_192.save(os.path.join(icons_dir, 'maskable-192x192.png'), 'PNG')
+    mask_512 = make_maskable_icon(512)
+    mask_512.save(os.path.join(icons_dir, 'maskable-512x512.png'), 'PNG')
+
     # Favicon .ico (multi-size: 16x16, 32x32, 48x48, 64x64)
     icon_16 = make_square_icon(16)
     icon_32 = make_square_icon(32)
