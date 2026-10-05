@@ -11,7 +11,7 @@ import { AlertTriangle, CheckCircle, Loader2, RefreshCw, XCircle } from 'lucide-
 
 interface InventoryAlertsPanelProps {
   branchName?: string | null
-  onRestock: (productId: string) => void
+  onRestock: (productId: string, productName?: string) => void
 }
 
 /**
@@ -99,7 +99,7 @@ interface AlertColumnProps {
   description: string
   emptyLabel: string
   alerts: ReturnType<typeof useProductAlerts>['alerts']
-  onRestock: (productId: string) => void
+  onRestock: (productId: string, productName?: string) => void
   onResolve: (alertId: string) => void
 }
 
@@ -148,7 +148,7 @@ function AlertColumn({
                   variant="outline"
                   size="sm"
                   className="h-8 rounded-lg text-xs"
-                  onClick={() => onRestock(alert.product_id)}
+                  onClick={() => onRestock(alert.product_id, alert.product?.name)}
                 >
                   Reponer
                 </Button>

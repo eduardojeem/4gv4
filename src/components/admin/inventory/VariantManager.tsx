@@ -14,13 +14,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useProductVariants } from '@/hooks/useProductVariants'
 import { VariantAttribute, VariantOption, ProductVariant, VariantAttributeValue } from '@/types/product-variants'
 import { toast } from 'sonner'
+import { formatCurrency } from '@/lib/currency'
 
 interface VariantManagerProps {
   productId?: string
   onVariantSelect?: (variant: ProductVariant) => void
+  /**
+   * Solo la biblioteca de atributos. Las variantes de cada producto se editan
+   * desde la ficha del producto, que las guarda con su stock por sucursal.
+   */
+  attributesOnly?: boolean
 }
 
-export function VariantManager({ productId, onVariantSelect }: VariantManagerProps) {
+export function VariantManager({ productId, onVariantSelect, attributesOnly = false }: VariantManagerProps) {
   const {
     attributes,
     products,
@@ -32,7 +38,7 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
     createProductVariant,
     updateProductVariant: _updateProductVariant,
     deleteProductVariant
-  } = useProductVariants()
+  } = useProductVariants({ loadCatalog: !attributesOnly })
 
   const [activeTab, setActiveTab] = useState('attributes')
   const [editingAttribute, setEditingAttribute] = useState<VariantAttribute | null>(null)
@@ -310,7 +316,9 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => deleteProductVariant(variant.id)}
+                onClick={() => {
+                  if (window.confirm(`¿Eliminar la variante «${variant.name}»?`)) void deleteProductVariant(variant.id)
+                }}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -333,7 +341,7 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">Precio</Label>
-              <p className="font-semibold">${variant.price.toFixed(2)}</p>
+              <p className="font-semibold">{formatCurrency(variant.price)}</p>
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">Stock</Label>
@@ -368,17 +376,13 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
     )
   }
 
-  return (
-    <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="attributes">Atributos</TabsTrigger>
-          <TabsTrigger value="variants">Variantes</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="attributes" className="space-y-4">
+  const attributesSection = (
+    <>
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Gestión de Atributos</h3>
+            <div>
+              <h3 className="text-base font-semibold">Atributos guardados</h3>
+              <p className="text-xs text-muted-foreground">Aparecen como sugerencia al crear las variantes de cualquier producto.</p>
+            </div>
             <Dialog open={showCreateAttribute} onOpenChange={(open) => {
               setShowCreateAttribute(open)
               if (!open) setCreateAttrError(null)
@@ -499,6 +503,11 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
             </Dialog>
           </div>
 
+          {attributes.length === 0 && (
+            <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Todavía no guardaste atributos. Creá «Talle» o «Color» con sus opciones y los vas a tener a un clic en cada producto.
+            </p>
+          )}
           <div className="space-y-4">
             {attributes.map((attribute) => (
               <div key={attribute.id}>
@@ -527,7 +536,12 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => deleteAttribute(attribute.id)}
+                            onClick={() => {
+                              if (window.confirm(`¿Eliminar el atributo «${attribute.name}»? Las variantes ya creadas conservan sus valores.`)) {
+                                void deleteAttribute(attribute.id)
+                              }
+                            }}
+                            aria-label={`Eliminar atributo ${attribute.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -554,6 +568,21 @@ export function VariantManager({ productId, onVariantSelect }: VariantManagerPro
               </div>
             ))}
           </div>
+    </>
+  )
+
+  if (attributesOnly) return <div className="space-y-4">{attributesSection}</div>
+
+  return (
+    <div className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="attributes">Atributos</TabsTrigger>
+          <TabsTrigger value="variants">Variantes</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="attributes" className="space-y-4">
+          {attributesSection}
         </TabsContent>
 
         <TabsContent value="variants" className="space-y-4">

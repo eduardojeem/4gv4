@@ -168,7 +168,11 @@ async function fetchAllProducts(): Promise<ProductRow[]> {
   return allProducts
 }
 
-export function useProductVariants() {
+/**
+ * `loadCatalog: false` trae solo la biblioteca de atributos: la pestaña de
+ * atributos no necesita recorrer todos los productos y variantes.
+ */
+export function useProductVariants({ loadCatalog = true }: { loadCatalog?: boolean } = {}) {
   const [attributes, setAttributes] = useState<VariantAttribute[]>([])
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [loading, setLoading] = useState(false)
@@ -181,8 +185,8 @@ export function useProductVariants() {
     try {
       const [attributesResponse, variants, productRows] = await Promise.all([
         fetchJson<AttributesApiResponse>('/api/attributes'),
-        fetchAllVariants(),
-        fetchAllProducts(),
+        loadCatalog ? fetchAllVariants() : Promise.resolve([] as ProductVariant[]),
+        loadCatalog ? fetchAllProducts() : Promise.resolve([] as ProductRow[]),
       ])
 
       const nextAttributes = Array.isArray(attributesResponse.data) ? attributesResponse.data : []
@@ -197,7 +201,7 @@ export function useProductVariants() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadCatalog])
 
   useEffect(() => {
     void refreshData()

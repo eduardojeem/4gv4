@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -20,12 +19,27 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import AdvancedSearch from '@/components/admin/advanced-search'
-import StockControl from '@/components/admin/inventory/stock-control'
+import StockControl, { type StockRestockRequest } from '@/components/admin/inventory/stock-control'
+import { InventoryAssistant } from '@/components/admin/inventory/InventoryAssistant'
+import { CatalogProductGrid } from '@/components/admin/inventory/CatalogProductGrid'
+import { CatalogFirstSteps, CatalogGuide } from '@/components/admin/inventory/CatalogGuide'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { buildInventoryRecommendations, type InventoryIssueSample, type InventoryRecommendation } from '@/lib/inventory/inventory-health'
+import { cn } from '@/lib/utils'
 import StockMovements from '@/components/admin/inventory/stock-movements'
 import InventoryReports from '@/components/admin/reports/inventory-reports'
 import SupplierManagement from '@/components/admin/inventory/supplier-management'
 import { PromotionManager } from '@/components/admin/inventory/PromotionManager'
-import { VariantManager } from '@/components/admin/inventory/VariantManager'
+import { VariantsOverview } from '@/components/admin/inventory/VariantsOverview'
+import { InventoryCategoriesPanel } from '@/components/admin/inventory/InventoryCategoriesPanel'
+import type { ProductModalTabId } from '@/components/dashboard/product-modal'
 import { InventoryAlertsPanel } from '@/components/admin/inventory/InventoryAlertsPanel'
 import { InventoryGuide } from '@/components/admin/inventory/InventoryGuide'
 import { ProductModal } from '@/components/dashboard/product-modal'
@@ -37,7 +51,6 @@ import {
   Download,
   CheckCircle,
   TrendingUp,
-  Tag,
   Search,
   XCircle,
   AlertTriangle, Trash2,
@@ -59,7 +72,15 @@ import {
   RotateCcw,
   ArrowUpDown,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  BookOpen,
+  ChevronDown,
+  LayoutDashboard,
+  MoreHorizontal,
+  PackagePlus,
+  ScanBarcode,
+  LayoutGrid,
+  Rows3,
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -73,7 +94,20 @@ import { exportInventoryCsvRows } from '@/lib/inventory/export'
 const BOM_UTF8 = String.fromCharCode(0xfeff)
 const LINE_BREAK_CRLF = String.fromCharCode(13, 10)
 
+const CATALOG_VIEW_KEY = 'mipos:inventory:catalog-view'
+type CatalogView = 'table' | 'grid'
+
+/** Chips de stock del catálogo: más rápidos que un selector y muestran cuántos hay. */
+const STOCK_FILTER_CHIPS = [
+  { value: 'all', label: 'Todos' },
+  { value: 'out', label: 'Agotados' },
+  { value: 'low', label: 'Stock bajo' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'Sobre el máximo' },
+] as const
+
 const operationTabs = [
+  { value: 'overview', label: 'Resumen', icon: LayoutDashboard },
   { value: 'products', label: 'Catálogo', icon: Package },
   { value: 'stock-control', label: 'Stock por sucursal', icon: Warehouse },
   { value: 'movements', label: 'Movimientos', icon: History },
@@ -81,7 +115,7 @@ const operationTabs = [
 ] as const
 
 const INVENTORY_TAB_VALUES = new Set([
-  'products', 'stock-control', 'movements', 'alerts',
+  'overview', 'products', 'stock-control', 'movements', 'alerts',
   'suppliers', 'categories', 'variants', 'promotions', 'reports', 'search',
 ])
 
@@ -153,6 +187,7 @@ export default function InventoryManagement() {
     updateProduct,
     deleteProduct,
     refreshSuppliers,
+    refreshCategories,
     sort,
     setSort,
     setPageSize
@@ -162,24 +197,53 @@ export default function InventoryManagement() {
   // La pestaña viaja en la URL: con diez secciones y `useState`, recargar,
   // volver desde el detalle de un producto o compartir un enlace te devolvia
   // siempre a «Catalogo».
+  // Sin pestaña en la URL se arranca en «Resumen»: indicadores y el asistente
+  // con lo que conviene hacer primero.
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === 'undefined') return 'products'
+    if (typeof window === 'undefined') return 'overview'
     const desdeUrl = new URLSearchParams(window.location.search).get('tab')
-    return INVENTORY_TAB_VALUES.has(desdeUrl || '') ? (desdeUrl as string) : 'products'
+    return INVENTORY_TAB_VALUES.has(desdeUrl || '') ? (desdeUrl as string) : 'overview'
   })
 
   const changeTab = (value: string) => {
     setActiveTab(value)
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
-    if (value === 'products') url.searchParams.delete('tab')
+    if (value === 'overview') url.searchParams.delete('tab')
     else url.searchParams.set('tab', value)
     window.history.replaceState(null, '', url)
+  }
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [catalogView, setCatalogView] = useState<CatalogView>(() => {
+    try {
+      return window.localStorage.getItem(CATALOG_VIEW_KEY) === 'grid' ? 'grid' : 'table'
+    } catch {
+      return 'table'
+    }
+  })
+  const changeCatalogView = (view: CatalogView) => {
+    setCatalogView(view)
+    try {
+      window.localStorage.setItem(CATALOG_VIEW_KEY, view)
+    } catch {
+      // Sin almacenamiento la vista elegida dura hasta recargar.
+    }
+  }
+  // Pedido para «Stock por sucursal»: abre el registro de movimiento, con el
+  // producto ya elegido cuando viene de una alerta o del catálogo.
+  const [restock, setRestock] = useState<(StockRestockRequest & { nonce: number }) | null>(null)
+
+  const openStockMovement = (product?: { id: string; name: string }) => {
+    setRestock({ productId: product?.id, productName: product?.name, nonce: Date.now() })
+    changeTab('stock-control')
   }
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false)
+  // Paso en que se abre la ficha: «variants» desde las acciones de variantes.
+  const [modalTab, setModalTab] = useState<ProductModalTabId>('basic')
+  // Sube cada vez que se guarda un producto, para que Variantes vuelva a revisar.
+  const [productSaves, setProductSaves] = useState(0)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
@@ -233,6 +297,7 @@ export default function InventoryManagement() {
         icon: Package,
         tone: 'text-blue-600 dark:text-blue-400',
         bg: 'bg-blue-100 dark:bg-blue-500/20',
+        stockStatus: 'all' as const,
       },
       {
         label: 'Sin stock',
@@ -241,6 +306,7 @@ export default function InventoryManagement() {
         icon: XCircle,
         tone: 'text-rose-600 dark:text-rose-400',
         bg: 'bg-rose-100 dark:bg-rose-500/20',
+        stockStatus: 'out' as const,
       },
       {
         label: 'Stock bajo',
@@ -249,6 +315,7 @@ export default function InventoryManagement() {
         icon: AlertTriangle,
         tone: 'text-amber-600 dark:text-amber-400',
         bg: 'bg-amber-100 dark:bg-amber-500/20',
+        stockStatus: 'low' as const,
       },
       {
         label: 'Valor a costo',
@@ -257,9 +324,35 @@ export default function InventoryManagement() {
         icon: GSIcon,
         tone: 'text-emerald-600 dark:text-emerald-400',
         bg: 'bg-emerald-100 dark:bg-emerald-500/20',
+        stockStatus: 'all' as const,
       },
     ]
   }, [snapshot, selectedBranch?.name])
+
+  const recommendations = useMemo(
+    () => buildInventoryRecommendations(snapshot?.health ?? null, {
+      categories: categories.length,
+      suppliers: suppliers.length,
+      branchName: snapshot?.branchScoped ? selectedBranch?.name : null,
+    }),
+    [snapshot, categories.length, suppliers.length, selectedBranch?.name],
+  )
+
+  /** Lleva al catálogo con un filtro de stock ya aplicado. */
+  const showCatalog = (stockStatus: 'all' | 'out' | 'low' | 'high' = 'all', search = '') => {
+    setPage(1)
+    setFilters((current) => ({ ...current, search, category: 'all', stockStatus }))
+    changeTab('products')
+  }
+
+  const handleRecommendation = (recommendation: InventoryRecommendation) => {
+    if ('href' in recommendation.action) return
+    if (recommendation.action.tab === 'products') showCatalog(recommendation.action.stockStatus ?? 'all')
+    else changeTab(recommendation.action.tab)
+  }
+
+  // Un ejemplo del asistente se abre buscándolo en el catálogo por su código o nombre.
+  const openSample = (sample: InventoryIssueSample) => showCatalog('all', sample.sku || sample.name)
 
   // Handlers CRUD
   const handleDeleteProduct = async () => {
@@ -278,10 +371,33 @@ export default function InventoryManagement() {
     setIsSubmitting(false)
   }
 
-  const openEditDialog = (product: Product) => {
+  const openEditDialog = (product: Product, tab: ProductModalTabId = 'basic') => {
     setSelectedProduct(product)
+    setModalTab(tab)
     setActionError('')
     setIsEditDialogOpen(true)
+  }
+
+  /**
+   * Las variantes se editan en la ficha del producto: guarda con la misma
+   * función que el resto del sistema, que crea el stock de cada variante en la
+   * sucursal. El editor viejo de esta pantalla no lo hacía y esas variantes no
+   * se podían cobrar en el punto de venta.
+   */
+  const openVariantEditor = async (productId: string) => {
+    const loaded = products.find((item) => item.id === productId)
+    if (loaded) {
+      openEditDialog(loaded, 'variants')
+      return
+    }
+    try {
+      const response = await fetch(`/api/products/${productId}`, { cache: 'no-store' })
+      const body = await response.json().catch(() => null)
+      if (!response.ok || !body?.data) throw new Error(body?.error || 'No se encontró el producto')
+      openEditDialog(body.data as Product, 'variants')
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'No se pudo abrir el producto')
+    }
   }
 
   const handleAdvancedSearch = (activeFilters: AdvancedSearchFilter[]) => {
@@ -430,102 +546,78 @@ export default function InventoryManagement() {
         </Alert>
       )}
 
-      {/* Header */}
-      <div className="border-b border-slate-200 dark:border-white/10 pb-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
-              <Package className="h-6 w-6" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                Gestión de Inventario
-              </h2>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span>Catálogo, existencias y trazabilidad</span>
-                <Badge variant="outline" className="max-w-full gap-1.5 rounded-md font-semibold border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
-                  <Building2 className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-                  <span className="truncate">
-                    {branchLoading ? 'Cargando sucursal...' : `Stock: ${selectedBranch?.name || 'sin sucursal activa'}`}
-                  </span>
-                </Badge>
-              </div>
-            </div>
+      {/* Encabezado: título, sucursal, guía y lo demás en un menú */}
+      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Inventario</h2>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>Catálogo, existencias y movimientos</span>
+            <Badge variant="outline" className="max-w-full gap-1.5 rounded-md">
+              <Building2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="truncate">
+                {branchLoading ? 'Cargando sucursal...' : `Stock: ${selectedBranch?.name || 'sin sucursal activa'}`}
+              </span>
+            </Badge>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" size="sm" asChild className="h-9 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10">
-              <Link href="/dashboard/products">
-                Productos <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild className="h-9 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10">
-              <Link href="/admin/branches">
-                Sucursales <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportProducts}
-              disabled={isExporting}
-              className="h-9 rounded-xl border-slate-200 bg-white text-xs dark:border-white/10 dark:bg-[#0d1117]"
-            >
-              {isExporting ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              {isExporting ? 'Exportando...' : 'Exportar CSV'}
-            </Button>
-            <Button
-              onClick={() => {
-                setActionError('')
-                setIsAddDialogOpen(true)
-              }}
-              className="h-9 rounded-xl bg-blue-600 text-white hover:bg-blue-500 shadow-sm text-xs"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Nuevo Producto
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setGuideOpen(true)}>
+            <BookOpen className="h-4 w-4" /> Guía
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              setActionError('')
+              setIsAddDialogOpen(true)
+            }}
+          >
+            <Plus className="h-4 w-4" /> Nuevo producto
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Más opciones de inventario">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={() => openStockMovement()} className="gap-2">
+                <PackagePlus className="h-4 w-4" /> Registrar movimiento
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="gap-2">
+                <Link href="/dashboard/inventory-count"><ScanBarcode className="h-4 w-4" /> Toma de inventario</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void handleExportProducts()} disabled={isExporting} className="gap-2">
+                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {isExporting ? 'Exportando...' : 'Exportar CSV'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="gap-2">
+                <Link href="/dashboard/products"><ArrowUpRight className="h-4 w-4" /> Productos en el panel</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="gap-2">
+                <Link href="/admin/branches"><Building2 className="h-4 w-4" /> Sucursales</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <InventoryGuide />
-
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {kpiCards.map(({ label, value, hint, icon: Icon, tone, bg }) => (
-          <Card key={label} className="border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]">
-            <CardContent className="p-4 flex items-center justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
-                {value === null ? (
-                  <p className="text-sm font-medium text-slate-400 dark:text-slate-500">Sin datos</p>
-                ) : (
-                  <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">{value}</p>
-                )}
-                {/* Cada cifra dice de que universo habla: eran cuatro tarjetas
-                    identicas, una global y tres de la pagina que estabas viendo. */}
-                <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{hint}</p>
-              </div>
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg}`}>
-                <Icon className={`h-5 w-5 ${tone}`} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {snapshot?.truncated && (
-        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertDescription className="text-amber-800 dark:text-amber-300">
-            El catálogo supera el máximo que se puede recorrer de una vez: los indicadores de arriba
-            son parciales.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* La guía completa vive en un panel lateral: no empuja la pantalla hacia abajo. */}
+      <Sheet open={guideOpen} onOpenChange={setGuideOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-primary" /> Cómo funciona el inventario
+            </SheetTitle>
+            <SheetDescription>El modelo de stock por sucursal, los movimientos y las situaciones más comunes.</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-6">
+            <InventoryGuide embedded />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={changeTab} className="min-w-0 space-y-5">
@@ -558,48 +650,139 @@ export default function InventoryManagement() {
           </Select>
         </div>
 
-        <aside className="hidden min-w-0 lg:block">
-          <nav className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#0d1117]" aria-label="Secciones de inventario">
-            <div className="mb-3 border-b border-slate-100 dark:border-white/5 px-2 pb-3">
-              <p className="text-xs font-bold text-slate-900 dark:text-white">Secciones</p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Navegación de inventario</p>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Operación</p>
-                <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 bg-transparent p-0 xl:grid-cols-4">
-                  {operationTabs.map(({ value, label, icon: Icon }) => (
-                    <TabsTrigger
-                      key={value}
-                      value={value}
-                      className="h-10 min-w-0 justify-center gap-2 rounded-md border border-transparent px-2.5 text-xs font-semibold text-slate-600 shadow-none transition-colors hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-white/5 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-blue-600 dark:data-[state=active]:text-white"
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">{label}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-              <div className="border-t border-slate-100 dark:border-white/5 pt-3">
-                <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Gestión</p>
-                <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 bg-transparent p-0 xl:grid-cols-3 2xl:grid-cols-6">
-                  {managementTabs.map(({ value, label, icon: Icon }) => (
-                    <TabsTrigger
-                      key={value}
-                      value={value}
-                      className="h-10 min-w-0 justify-center gap-2 rounded-md border border-transparent px-2.5 text-xs font-semibold text-slate-600 shadow-none transition-colors hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-white/5 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-blue-600 dark:data-[state=active]:text-white"
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">{label}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-            </div>
-          </nav>
-        </aside>
+        {/* Escritorio: lo del día a día a la vista y la gestión en «Más». */}
+        <nav className="hidden items-center gap-1 border-b border-border lg:flex" aria-label="Secciones de inventario">
+          <TabsList className="h-auto gap-1 bg-transparent p-0">
+            {operationTabs.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="relative h-10 gap-2 rounded-none border-b-2 border-transparent px-3 text-sm text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+                {value === 'alerts' && snapshot && snapshot.outOfStock + snapshot.lowStock > 0 && (
+                  <span className="rounded-full bg-rose-500/15 px-1.5 text-[11px] tabular-nums text-rose-700 dark:text-rose-300">
+                    {(snapshot.outOfStock + snapshot.lowStock).toLocaleString()}
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'flex h-10 items-center gap-1.5 border-b-2 px-3 text-sm transition-colors',
+                  managementTabs.some((tab) => tab.value === activeTab)
+                    ? 'border-primary text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {managementTabs.find((tab) => tab.value === activeTab)?.label ?? 'Más'}
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-52">
+              {managementTabs.map(({ value, label, icon: Icon }) => (
+                <DropdownMenuItem key={value} onSelect={() => changeTab(value)} className="gap-2">
+                  <Icon className="h-4 w-4" /> {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </nav>
 
         <div className="min-w-0">
+
+        <TabsContent value="overview" className="space-y-5">
+          {/* KPIs: cada tarjeta lleva al catálogo con ese filtro. */}
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            {kpiCards.map(({ label, value, hint, icon: Icon, tone, bg, stockStatus }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => showCatalog(stockStatus)}
+                className="rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 space-y-1">
+                    <span className="block text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+                    {value === null ? (
+                      <span className="block text-sm text-muted-foreground">Sin datos</span>
+                    ) : (
+                      <span className="block text-xl font-semibold tracking-tight tabular-nums text-foreground">{value}</span>
+                    )}
+                    {/* Cada cifra dice de que universo habla: eran cuatro tarjetas
+                        identicas, una global y tres de la pagina que estabas viendo. */}
+                    <span className="block truncate text-[11px] text-muted-foreground">{hint}</span>
+                  </span>
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg}`}>
+                    <Icon className={`h-5 w-5 ${tone}`} />
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {snapshot?.truncated && (
+            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="text-amber-800 dark:text-amber-300">
+                El catálogo supera el máximo que se puede recorrer de una vez: los indicadores de arriba
+                son parciales.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <InventoryAssistant
+              health={snapshot?.health ?? null}
+              recommendations={recommendations}
+              loading={loading && !snapshot}
+              onAction={handleRecommendation}
+              onOpenSample={openSample}
+            />
+
+            <section aria-labelledby="inventory-shortcuts-title" className="space-y-2 rounded-2xl border bg-card p-4 shadow-xs">
+              <h3 id="inventory-shortcuts-title" className="text-sm font-semibold text-foreground">Accesos rápidos</h3>
+              {[
+                { label: 'Registrar entrada o ajuste', hint: 'Llegó mercadería o contaste distinto', icon: PackagePlus, onClick: () => openStockMovement() },
+                { label: 'Nuevo producto', hint: 'Alta en el catálogo', icon: Plus, onClick: () => { setActionError(''); setIsAddDialogOpen(true) } },
+                { label: 'Ver alertas', hint: 'Agotados y bajo mínimo', icon: Bell, onClick: () => changeTab('alerts') },
+                { label: 'Historial de movimientos', hint: 'Ventas, entradas y ajustes', icon: History, onClick: () => changeTab('movements') },
+              ].map(({ label, hint, icon: Icon, onClick }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={onClick}
+                  className="flex w-full items-center gap-3 rounded-xl border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm text-foreground">{label}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+                  </span>
+                </button>
+              ))}
+              <Link
+                href="/dashboard/inventory-count"
+                className="flex w-full items-center gap-3 rounded-xl border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <ScanBarcode className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm text-foreground">Toma de inventario</span>
+                  <span className="block truncate text-xs text-muted-foreground">Contar con el lector y ajustar diferencias</span>
+                </span>
+              </Link>
+            </section>
+          </div>
+        </TabsContent>
 
         <TabsContent value="products" className="space-y-6">
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#0d1117]" aria-labelledby="catalog-title">
@@ -624,9 +807,34 @@ export default function InventoryManagement() {
                       Limpiar filtros
                     </Button>
                   )}
+                  <div className="flex rounded-lg border bg-muted/40 p-0.5" role="group" aria-label="Vista del catálogo">
+                    {([
+                      { value: 'table', label: 'Tabla', icon: Rows3 },
+                      { value: 'grid', label: 'Tarjetas', icon: LayoutGrid },
+                    ] as const).map(({ value, label, icon: Icon }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={catalogView === value}
+                        onClick={() => changeCatalogView(value)}
+                        className={cn(
+                          'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors',
+                          catalogView === value ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" /> {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="grid gap-3 md:grid-cols-[minmax(16rem,1fr)_12rem_12rem]">
+              <div className="mb-4">
+                <CatalogGuide
+                  branchName={selectedBranch?.name || 'la sucursal activa'}
+                  onOpenFullGuide={() => setGuideOpen(true)}
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(16rem,1fr)_14rem]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input 
@@ -653,18 +861,33 @@ export default function InventoryManagement() {
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={filters.stockStatus} onValueChange={(val) => setFilters(prev => ({ ...prev, stockStatus: val }))}>
-                  <SelectTrigger className="w-full h-9 text-xs rounded-xl border-slate-200 dark:border-white/10 dark:bg-[#161b22] dark:text-white">
-                    <SelectValue placeholder="Stock" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los stocks</SelectItem>
-                    <SelectItem value="low">Stock bajo</SelectItem>
-                    <SelectItem value="out">Agotado</SelectItem>
-                    <SelectItem value="normal">Stock normal</SelectItem>
-                    <SelectItem value="high">Stock alto</SelectItem>
-                  </SelectContent>
-                </Select>
+              </div>
+              <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label="Filtrar por stock">
+                {STOCK_FILTER_CHIPS.map(({ value, label }) => {
+                  const count = value === 'out' ? snapshot?.outOfStock : value === 'low' ? snapshot?.lowStock : undefined
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={filters.stockStatus === value}
+                      onClick={() => {
+                        setPage(1)
+                        setFilters((prev) => ({ ...prev, stockStatus: value }))
+                      }}
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors',
+                        filters.stockStatus === value
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'bg-background text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {label}
+                      {count !== undefined && count > 0 && (
+                        <span className={cn('tabular-nums', filters.stockStatus === value ? 'opacity-80' : 'text-foreground')}>{count.toLocaleString()}</span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -673,6 +896,39 @@ export default function InventoryManagement() {
                 horizontal. En movil se cambia por tarjetas, que es el patron
                 que ya usaba la pestaña de Alertas dentro de esta misma
                 pantalla. */}
+            {catalogView === 'grid' ? (
+              !loading && products.length === 0 ? (
+                hasCatalogFilters ? (
+                  <EmptyState
+                    icon={Package}
+                    title="No hay resultados"
+                    description="Probá con otros términos o quitá los filtros aplicados."
+                    action={{ label: 'Limpiar filtros', onClick: clearCatalogFilters, icon: RotateCcw }}
+                    className="py-14"
+                  />
+                ) : (
+                  <CatalogFirstSteps
+                    categories={categories.length}
+                    suppliers={suppliers.length}
+                    onAddSupplier={() => changeTab('suppliers')}
+                    onAddProduct={() => {
+                      setActionError('')
+                      setIsAddDialogOpen(true)
+                    }}
+                  />
+                )
+              ) : (
+                <CatalogProductGrid
+                  products={products}
+                  loading={loading}
+                  onEdit={openEditDialog}
+                  onStock={(product) => openStockMovement({ id: product.id, name: product.name })}
+                  onVariants={(product) => openEditDialog(product, 'variants')}
+                  onDelete={(product) => { setSelectedProduct(product); setIsDeleteDialogOpen(true) }}
+                />
+              )
+            ) : (
+            <>
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm text-left">
                 <thead className="border-b border-slate-100 bg-slate-50/50 dark:border-white/5 dark:bg-white/[0.02]">
@@ -697,6 +953,17 @@ export default function InventoryManagement() {
                   ) : products.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-0">
+                        {!hasCatalogFilters ? (
+                          <CatalogFirstSteps
+                            categories={categories.length}
+                            suppliers={suppliers.length}
+                            onAddSupplier={() => changeTab('suppliers')}
+                            onAddProduct={() => {
+                              setActionError('')
+                              setIsAddDialogOpen(true)
+                            }}
+                          />
+                        ) : (
                         <EmptyState
                           icon={Package}
                           title={hasCatalogFilters ? 'No hay resultados' : 'Todavía no hay productos'}
@@ -715,6 +982,7 @@ export default function InventoryManagement() {
                               }}
                           className="py-14"
                         />
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -759,14 +1027,21 @@ export default function InventoryManagement() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 rounded-lg hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-500/20"
-                                onClick={() => {
-                                  setSelectedProduct(product)
-                                  setIsVariantDialogOpen(true)
-                                }}
+                                onClick={() => openEditDialog(product, 'variants')}
                                 title="Gestionar variantes"
                                 aria-label={`Gestionar variantes de ${product.name}`}
                               >
                                 <Layers className="h-3.5 w-3.5 text-purple-500" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/20"
+                                onClick={() => openStockMovement({ id: product.id, name: product.name })}
+                                title="Registrar movimiento de stock"
+                                aria-label={`Registrar movimiento de ${product.name}`}
+                              >
+                                <PackagePlus className="h-3.5 w-3.5 text-emerald-600" />
                               </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/20" onClick={() => openEditDialog(product)} title="Editar producto" aria-label={`Editar ${product.name}`}>
                                 <Edit className="h-3.5 w-3.5 text-blue-500" />
@@ -792,7 +1067,18 @@ export default function InventoryManagement() {
                   Cargando catálogo...
                 </div>
               )}
-              {!loading && products.length === 0 && (
+              {!loading && products.length === 0 && !hasCatalogFilters && (
+                <CatalogFirstSteps
+                  categories={categories.length}
+                  suppliers={suppliers.length}
+                  onAddSupplier={() => changeTab('suppliers')}
+                  onAddProduct={() => {
+                    setActionError('')
+                    setIsAddDialogOpen(true)
+                  }}
+                />
+              )}
+              {!loading && products.length === 0 && hasCatalogFilters && (
                 <EmptyState
                   icon={Package}
                   title={hasCatalogFilters ? 'No hay resultados' : 'Todavía no hay productos'}
@@ -825,8 +1111,16 @@ export default function InventoryManagement() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="h-8 flex-1 rounded-lg text-xs"
+                        onClick={() => openStockMovement({ id: product.id, name: product.name })}
+                      >
+                        <PackagePlus className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> Stock
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="h-8 rounded-lg text-xs"
-                        onClick={() => { setSelectedProduct(product); setIsVariantDialogOpen(true) }}
+                        onClick={() => openEditDialog(product, 'variants')}
                         aria-label={`Gestionar variantes de ${product.name}`}
                       >
                         <Layers className="h-3.5 w-3.5 text-purple-500" />
@@ -845,6 +1139,8 @@ export default function InventoryManagement() {
                 )
               })}
             </div>
+            </>
+            )}
             {/* Paginación */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
               <span className="text-xs text-muted-foreground">
@@ -891,33 +1187,20 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="categories">
-          <section className="overflow-hidden rounded-lg border bg-card">
-            <div className="border-b p-4">
-              <h3 className="font-semibold text-foreground">Categorías</h3>
-              <p className="mt-0.5 text-xs text-muted-foreground">Organización del catálogo compartido.</p>
-            </div>
-            {categories.length === 0 ? (
-              <EmptyState icon={FolderTree} title="No hay categorías" description="Crea categorías desde la sección de Productos para organizar el catálogo." />
-            ) : (
-              <div className="divide-y">
-                {categories.map((category) => (
-                  <div key={category.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-                        <Tag className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <p className="truncate text-sm font-medium text-foreground">{category.name}</p>
-                    </div>
-                    <Badge variant="secondary" className="rounded-md">{category.productCount || 0} productos</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <InventoryCategoriesPanel
+            uncategorized={snapshot?.health?.issues.missing_category ?? null}
+            onShowProducts={(categoryId) => {
+              setPage(1)
+              setFilters((current) => ({ ...current, search: '', category: categoryId, stockStatus: 'all' }))
+              changeTab('products')
+            }}
+            onOpenSample={openSample}
+            onChanged={() => void refreshCategories()}
+          />
         </TabsContent>
 
         <TabsContent value="variants">
-          <VariantManager />
+          <VariantsOverview onEditVariants={(productId) => void openVariantEditor(productId)} refreshKey={productSaves} />
         </TabsContent>
 
         <TabsContent value="promotions">
@@ -941,7 +1224,7 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="stock-control">
-          <StockControl />
+          <StockControl key={restock?.nonce ?? 'stock'} restock={restock} />
         </TabsContent>
 
         <TabsContent value="movements">
@@ -951,16 +1234,11 @@ export default function InventoryManagement() {
         <TabsContent value="alerts" className="space-y-6">
           <InventoryAlertsPanel
             branchName={snapshot?.branchScoped ? selectedBranch?.name : null}
-            onRestock={(productId) => {
-              const product = products.find((item) => item.id === productId)
-              if (product) {
-                openEditDialog(product)
-                return
-              }
-              // La alerta puede ser de un producto que no esta en la pagina
-              // cargada: se lo busca por su id en el catalogo.
-              setFilters((current) => ({ ...current, search: productId }))
-              changeTab('products')
+            onRestock={(productId, productName) => {
+              // Reponer es registrar una entrada de mercadería. Antes abría la
+              // edición del producto, y si no estaba en la página cargada lo
+              // buscaba por su id en el buscador, que no encontraba nada.
+              openStockMovement({ id: productId, name: productName ?? '' })
             }}
           />
         </TabsContent>
@@ -973,12 +1251,14 @@ export default function InventoryManagement() {
 
       {/* Dialogs: Create/Edit Product - Sincronizado con ProductModal completo de Dashboard */}
       <ProductModal
+        initialTab={modalTab}
         product={(selectedProduct as unknown as import('@/types/products').Product) || null}
         isOpen={isAddDialogOpen || isEditDialogOpen}
         onClose={() => {
           setIsAddDialogOpen(false)
           setIsEditDialogOpen(false)
           setSelectedProduct(null)
+          setModalTab('basic')
         }}
         categories={categories as unknown as import('@/types/products').Category[]}
         brands={[]}
@@ -988,6 +1268,7 @@ export default function InventoryManagement() {
             const result = await updateProduct(selectedProduct.id, productData as unknown as Parameters<typeof updateProduct>[1])
             if (!result.success) throw new Error(result.error || 'No fue posible actualizar el producto')
             setSuccessMessage('Producto actualizado correctamente')
+            setProductSaves((count) => count + 1)
           } else {
             const result = await createProduct(productData as unknown as Parameters<typeof createProduct>[0])
             if (!result.success) throw new Error(result.error || 'No fue posible crear el producto')
@@ -1018,28 +1299,6 @@ export default function InventoryManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Variant Dialog */}
-      <Dialog open={isVariantDialogOpen} onOpenChange={setIsVariantDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Layers className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              Variantes para: {selectedProduct?.name}
-            </DialogTitle>
-            <DialogDescription >
-              Administre variantes y opciones personalizadas (ej: Talla, Color, Capacidad) para este producto.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            {selectedProduct && (
-              <VariantManager productId={selectedProduct.id} />
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsVariantDialogOpen(false); setSelectedProduct(null); }}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -106,8 +106,8 @@ describe('la pantalla se puede volver a encontrar', () => {
     expect(PANTALLA).toContain('INVENTORY_TAB_VALUES.has(desdeUrl')
   })
 
-  it('«Catalogo» no ensucia la URL', () => {
-    expect(PANTALLA).toContain("if (value === 'products') url.searchParams.delete('tab')")
+  it('«Resumen», la pestaña de entrada, no ensucia la URL', () => {
+    expect(PANTALLA).toContain("if (value === 'overview') url.searchParams.delete('tab')")
   })
 })
 

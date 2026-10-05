@@ -28,7 +28,7 @@ const GUIDE_STORAGE_KEY = 'mipos:inventory:guide-open'
  * porque la confusion recurrente —«vendi y el stock no baja»— no se resuelve
  * diciendo «el stock es por sucursal», sino mostrando el numero moviendose.
  */
-export function InventoryGuide() {
+export function InventoryGuide({ embedded = false }: { embedded?: boolean } = {}) {
   const [open, setOpen] = useState(() => {
     try {
       return window.localStorage.getItem(GUIDE_STORAGE_KEY) === 'true'
@@ -49,6 +49,20 @@ export function InventoryGuide() {
     })
   }
 
+  const sections = (
+    <Accordion type="multiple" defaultValue={['modelo']} className="w-full">
+      <ModeloDeStock />
+      <Secciones />
+      <Movimientos />
+      <EstadosDeStock />
+      <Indicadores />
+      <Situaciones />
+    </Accordion>
+  )
+
+  // Dentro de un panel lateral la guía ya está abierta: no hace falta el plegado.
+  if (embedded) return sections
+
   return (
     <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-sm">
       <button
@@ -68,16 +82,7 @@ export function InventoryGuide() {
       </button>
 
       {open && (
-        <div className="border-t border-border px-4 pb-4">
-          <Accordion type="multiple" defaultValue={['modelo']} className="w-full">
-            <ModeloDeStock />
-            <Secciones />
-            <Movimientos />
-            <EstadosDeStock />
-            <Indicadores />
-            <Situaciones />
-          </Accordion>
-        </div>
+        <div className="border-t border-border px-4 pb-4">{sections}</div>
       )}
     </Card>
   )
@@ -179,6 +184,7 @@ function ModeloDeStock() {
 
 function Secciones() {
   const operacion = [
+    { nombre: 'Resumen', que: 'Indicadores, el asistente con lo que conviene hacer primero y los accesos rápidos.' },
     { nombre: 'Catálogo', que: 'Alta y edición de productos. El stock de la columna es el de la sucursal activa.' },
     { nombre: 'Stock por sucursal', que: 'Donde se mueve el stock: entradas, salidas, ajustes y transferencias.' },
     { nombre: 'Movimientos', que: 'El historial. Cada venta, ajuste y transferencia, con el stock anterior y el nuevo.' },
@@ -224,8 +230,8 @@ function Secciones() {
         </div>
       </div>
       <p className="text-[12px]">
-        La pestaña queda guardada en la dirección del navegador: podés recargar o compartir el enlace
-        y volvés al mismo lugar.
+        Las de gestión están en el menú «Más». La pestaña queda guardada en la dirección del
+        navegador: podés recargar o compartir el enlace y volvés al mismo lugar.
       </p>
     </Item>
   )

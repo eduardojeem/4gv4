@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Check,
   ChevronDown,
@@ -29,6 +29,7 @@ import {
   getVerticalAttributeSuggestions,
   getVerticalProductCopy,
 } from '@/lib/products/vertical-attributes'
+import { mergeAttributeSuggestions, type SavedAttribute } from '@/lib/inventory/variant-sync'
 
 interface LegacyVariantFields {
   variant_name?: string
@@ -179,7 +180,24 @@ export function ProductVariantsEditor({
   businessVertical,
   disabled = false,
 }: ProductVariantsEditorProps) {
-  const suggestions = getVerticalAttributeSuggestions(businessVertical)
+  // Los atributos guardados en Inventario → Variantes («Talle» con sus talles)
+  // se ofrecen primero, para no volver a cargarlos producto por producto.
+  const [savedAttributes, setSavedAttributes] = useState<SavedAttribute[]>([])
+  const wantsVariants = value.hasVariants
+  useEffect(() => {
+    if (!wantsVariants) return
+    let cancelled = false
+    fetch('/api/attributes', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { data?: SavedAttribute[] } | null) => {
+        if (!cancelled && Array.isArray(body?.data)) setSavedAttributes(body.data)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [wantsVariants])
+  const suggestions = mergeAttributeSuggestions(savedAttributes, getVerticalAttributeSuggestions(businessVertical))
   const copy = getVerticalProductCopy(businessVertical)
 
   // Estado local para input de nueva opción por atributo
@@ -515,7 +533,7 @@ export function ProductVariantsEditor({
               <div className="flex items-center gap-2">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shrink-0">1</span>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                  Elegí los atributos para tu rubro
+                  Elegí los atributos {savedAttributes.length > 0 ? '(primero los que guardaste)' : 'para tu rubro'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -538,6 +556,7 @@ export function ProductVariantsEditor({
                         : <Plus className="h-3 w-3 shrink-0" />
                       }
                       {suggestion.label}
+                      {suggestion.source === 'saved' && !selected && <span className="rounded bg-primary/10 px-1 text-[10px] text-primary">tuyo</span>}
                       {selected && <span className="text-[10px] text-primary/70 font-normal">agregado</span>}
                       {!selected && suggestion.examples.length > 0 && (
                         <span className="text-[10px] text-slate-400 font-normal">

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -147,13 +147,22 @@ const MOVEMENT_REASON_SUGGESTIONS: Record<StockMovementType, string[]> = {
   transferencia: ['Reposición de sucursal', 'Traslado interno', 'Balance de stock'],
 }
 
-const StockControl: React.FC = () => {
+/**
+ * Pedido para abrir el registro de movimiento al entrar. Con producto, llega ya
+ * elegido (por ejemplo, desde «Reponer» en una alerta).
+ */
+export interface StockRestockRequest {
+  productId?: string
+  productName?: string
+}
+
+const StockControl: React.FC<{ restock?: StockRestockRequest | null }> = ({ restock = null }) => {
   // Estados
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [alerts, setAlerts] = useState<StockAlert[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
+  const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(Boolean(restock))
   const [movementType, setMovementType] = useState<StockMovementType>('entrada')
   const [movementQuantity, setMovementQuantity] = useState<number>(0)
   const [movementReason, setMovementReason] = useState('')
@@ -162,8 +171,10 @@ const StockControl: React.FC = () => {
   const [movementError, setMovementError] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterDate, setFilterDate] = useState<string>('')
-  const [productSearchInput, setProductSearchInput] = useState('')
-  const [productSearch, setProductSearch] = useState('')
+  const [productSearchInput, setProductSearchInput] = useState(restock?.productName ?? '')
+  const [productSearch, setProductSearch] = useState(restock?.productName ?? '')
+  // Se elige solo una vez, cuando llega la primera lista que lo incluye.
+  const pendingRestockRef = useRef<string | null>(restock?.productId ?? null)
   const [productPage, setProductPage] = useState(1)
   const [productTotalCount, setProductTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
@@ -259,6 +270,13 @@ const StockControl: React.FC = () => {
       }))
       
       setProducts(formattedProducts)
+      if (pendingRestockRef.current) {
+        const wanted = formattedProducts.find((product) => product.id === pendingRestockRef.current)
+        if (wanted) {
+          setSelectedProduct(wanted)
+          pendingRestockRef.current = null
+        }
+      }
 
       // 2. Cargar Movimientos
       let movementsQuery = supabase

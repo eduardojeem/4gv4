@@ -1,3 +1,6 @@
+/** Ids por consulta: 200 uuids entran holgados en el largo de una URL. */
+const BRANCH_STOCK_ID_CHUNK = 200
+
 type ErrorLike = {
   message?: string | null
   code?: string | null
@@ -91,20 +94,29 @@ export async function loadBranchInventoryStockMap(
   }
 
   try {
-    const baseQuery = supabase
+    const branchQuery = () => supabase
       .from('branch_inventory')
       .select('product_id, stock_quantity, min_stock, max_stock, reserved_quantity')
+      .eq('branch_id', branchId)
 
-    const query = baseQuery.eq('branch_id', branchId)
-    const response = productIds && productIds.length > 0 && typeof query.in === 'function'
-      ? await query.in('product_id', productIds)
-      : await query
-
-    if (response.error) {
-      throw new Error(formatBranchInventoryError(response.error))
+    // Los ids van en la URL: con cientos de productos de una vez la consulta
+    // superaba el largo permitido y fallaba, y el indicador de la sucursal se
+    // caía entero. Se piden en lotes.
+    const rows: InventoryRow[] = []
+    const firstQuery = branchQuery()
+    if (productIds && productIds.length > 0 && typeof firstQuery.in === 'function') {
+      for (let index = 0; index < productIds.length; index += BRANCH_STOCK_ID_CHUNK) {
+        const chunk = productIds.slice(index, index + BRANCH_STOCK_ID_CHUNK)
+        const response = await (index === 0 ? firstQuery : branchQuery()).in('product_id', chunk)
+        if (response.error) throw new Error(formatBranchInventoryError(response.error))
+        rows.push(...((response.data ?? []) as InventoryRow[]))
+      }
+    } else {
+      const response = await firstQuery
+      if (response.error) throw new Error(formatBranchInventoryError(response.error))
+      rows.push(...((response.data ?? []) as InventoryRow[]))
     }
 
-    const rows = (response.data ?? []) as InventoryRow[]
     return {
       stockMap: new Map(rows.map((row) => [row.product_id, Number(row.stock_quantity || 0)])),
       thresholdMap: new Map(rows.map((row) => [row.product_id, {

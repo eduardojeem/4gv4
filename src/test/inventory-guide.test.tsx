@@ -182,7 +182,8 @@ describe('describe las diez secciones', () => {
 
 describe('la pantalla usa esta guia y no la vieja', () => {
   it('reemplaza al bloque de tres frases', () => {
-    expect(PANTALLA).toContain('<InventoryGuide />')
+    // Vive en un panel lateral que se abre con «Guía», ya desplegada.
+    expect(PANTALLA).toContain('<InventoryGuide embedded />')
     expect(PANTALLA).not.toContain('¿Cómo funciona la Gestión de Inventario?')
     expect(PANTALLA).not.toContain('Mostrar guía ↓')
   })

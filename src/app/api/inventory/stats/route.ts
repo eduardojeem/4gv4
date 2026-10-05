@@ -6,6 +6,8 @@ import type { AppRole } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { calculateInventoryStats, type InventoryStatsInput } from '@/lib/inventory/stock-status'
+import { calculateInventoryHealth, type InventoryHealthInput } from '@/lib/inventory/inventory-health'
+import { fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 
 /**
  * Indicadores de inventario de TODA la empresa (y de la sucursal activa), no de
@@ -18,6 +20,8 @@ import { calculateInventoryStats, type InventoryStatsInput } from '@/lib/invento
  * no, sin ninguna marca que las distinguiera.
  */
 const STATS_SCAN_CAP = 20000
+/** Supabase devuelve como mucho 1000 filas por consulta: se recorre por páginas. */
+const STATS_PAGE_SIZE = 1000
 
 export const GET = withTenantAuth(
   { permission: 'products.read', module: 'inventory' },
@@ -35,13 +39,27 @@ export const GET = withTenantAuth(
       const supabase = createAdminSupabase()
 
       // Se piden solo las columnas que entran en el calculo, y una fila de mas
-      // para saber de forma confiable si el barrido quedo corto.
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, stock_quantity, min_stock, max_stock, purchase_price, sale_price')
-        .eq('organization_id', organization.id)
-        .is('archived_by_plan_at', null)
-        .range(0, STATS_SCAN_CAP)
+      // para saber de forma confiable si el barrido quedo corto. Va por páginas:
+      // una sola consulta hasta 20.000 la cortaba Supabase en 1000 filas sin
+      // avisar, y con catálogos grandes los indicadores salían sobre los
+      // primeros mil productos.
+      let data: Array<InventoryHealthInput & InventoryStatsInput> | null = null
+      let error: { message: string; code?: string } | null = null
+      try {
+        data = await fetchAllRows<InventoryHealthInput & InventoryStatsInput>(
+          (from, to) => supabase
+            .from('products')
+            .select('id, name, sku, barcode, category_id, image_url, is_active, stock_quantity, min_stock, max_stock, purchase_price, sale_price')
+            .eq('organization_id', organization.id)
+            .is('archived_by_plan_at', null)
+            .order('id')
+            .range(from, to) as unknown as PromiseLike<{ data: Array<InventoryHealthInput & InventoryStatsInput> | null; error: { message: string } | null }>,
+          STATS_PAGE_SIZE,
+          STATS_SCAN_CAP + 1,
+        )
+      } catch (queryError) {
+        error = { message: queryError instanceof Error ? queryError.message : String(queryError) }
+      }
 
       if (error) {
         logger.error('Failed to read inventory stats', { error: error.message, code: error.code })
@@ -55,7 +73,7 @@ export const GET = withTenantAuth(
         )
       }
 
-      const rows = (data ?? []) as Array<InventoryStatsInput & { id: string }>
+      const rows = data ?? []
       const truncated = rows.length > STATS_SCAN_CAP
       const scanned = truncated ? rows.slice(0, STATS_SCAN_CAP) : rows
 
@@ -93,6 +111,9 @@ export const GET = withTenantAuth(
         success: true,
         data: {
           ...calculateInventoryStats(scopedProducts),
+          // Diagnóstico del catálogo para el asistente: con el stock y los
+          // mínimos de la sucursal activa.
+          health: calculateInventoryHealth(scopedProducts as InventoryHealthInput[]),
           branchId: branchScope.branchId ?? null,
           branchScoped,
           // Con esto en true las cifras son parciales y la pantalla lo dice.

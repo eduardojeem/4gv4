@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { InventoryHealth } from '@/lib/inventory/inventory-health'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 
@@ -76,6 +77,8 @@ export interface InventorySnapshot {
   branchScoped: boolean
   /** Las cifras son parciales: el barrido llego al tope. */
   truncated: boolean
+  /** Diagnóstico del catálogo para el asistente; null si el servidor no lo trajo. */
+  health: InventoryHealth | null
 }
 
 interface UseInventoryProps {
@@ -305,6 +308,7 @@ export function useInventory({
         maxStockQuantity: Number(payload.data.maxStockQuantity) || 0,
         branchScoped: Boolean(payload.data.branchScoped),
         truncated: Boolean(payload.data.truncated),
+        health: payload.data.health ?? null,
       })
     } catch (err) {
       console.error('Error fetching inventory stats:', err)
@@ -608,6 +612,7 @@ export function useInventory({
     createSupplier,
     updateSupplier,
     deleteSupplier,
-    refreshSuppliers: fetchSuppliers
+    refreshSuppliers: fetchSuppliers,
+    refreshCategories: fetchCategories,
   }
 }
