@@ -37,10 +37,10 @@ const MARKETPLACE_HOME_OFFER_LIMIT = 48
 
 export default async function MarketplacePage() {
   const [organizations, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
-    getMarketplaceOrganizations(),
-    getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT),
-    getMarketplaceBrands(30),
-    getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT),
+    getMarketplaceOrganizations().catch(() => []),
+    getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT).catch(() => ({ products: [], total: 0 })),
+    getMarketplaceBrands(30).catch(() => []),
+    getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT).catch(() => []),
     getPlatformAnnouncements().catch(() => []),
   ])
   const marketplaceProducts = marketplacePage.products

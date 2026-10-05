@@ -18,6 +18,10 @@ describe('entorno de compilación de CI', () => {
 
   it('el marketplace usa fallbacks públicos cuando la configuración privada no está disponible', () => {
     expect(marketplacePage).toContain('getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)')
+    expect(marketplacePage).toContain('getMarketplaceOrganizations().catch(() => [])')
+    expect(marketplacePage).toContain("getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT).catch(() => ({ products: [], total: 0 }))")
+    expect(marketplacePage).toContain('getMarketplaceBrands(30).catch(() => [])')
+    expect(marketplacePage).toContain('getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT).catch(() => [])')
     expect(marketplacePage).toContain('getPlatformAnnouncements().catch(() => [])')
   })
 })
