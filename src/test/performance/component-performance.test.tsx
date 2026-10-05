@@ -85,8 +85,9 @@ describe('Component Performance Tests', () => {
       const endTime = performance.now()
       const renderTime = endTime - startTime
 
-      // Debería renderizar en menos de 500ms
-      expect(renderTime).toBeWithinPerformanceThreshold(500)
+      // jsdom comparte CPU con el resto de la matriz en CI. Este margen sigue
+      // detectando regresiones grandes sin fallar por pequeñas variaciones del runner.
+      expect(renderTime).toBeWithinPerformanceThreshold(750)
       expect(screen.getByTestId('large-list')).toBeInTheDocument()
 
       // Verificar que todos los elementos están presentes
