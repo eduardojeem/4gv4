@@ -231,7 +231,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com https://images.openfoodfacts.org https://images.openbeautyfacts.org",
               `frame-src 'self' blob: https://challenges.cloudflare.com${isProd ? '' : ' http://localhost:* http://127.0.0.1:*'}`,
               "worker-src 'self' blob:",
               "manifest-src 'self'",

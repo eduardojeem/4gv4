@@ -797,7 +797,25 @@ export function ProductModal({
    * escribió el nombre o eligió la categoría, se respeta. La foto es la del
    * catálogo (no se vuelve a subir): una sola imagen para todas las tiendas.
    */
-  const applyGlobalProduct = (match: GlobalProductMatch) => {
+  /**
+   * La foto de una base abierta se copia al almacenamiento de la tienda: así no
+   * depende de que el sitio externo siga en pie. null si no se pudo bajar.
+   */
+  const copyExternalImage = async (url: string): Promise<string | null> => {
+    try {
+      const response = await fetch(url)
+      if (!response.ok) return null
+      const blob = await response.blob()
+      if (!blob.type.startsWith('image/') || blob.size > 5 * 1024 * 1024) return null
+      const extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
+      const [uploaded] = await handleUploadFiles([new File([blob], `producto.${extension}`, { type: blob.type })])
+      return uploaded ?? null
+    } catch {
+      return null
+    }
+  }
+
+  const applyGlobalProduct = async (match: GlobalProductMatch) => {
     const current = form.getValues()
     const filled: string[] = []
     const opts = { shouldDirty: true, shouldValidate: true } as const
@@ -813,14 +831,23 @@ export function ProductModal({
       filled.push('marca')
     }
     if (!current.category_id && match.tenantCategoryId) { setValue('category_id', match.tenantCategoryId, opts); filled.push('categoría') }
-    if ((current.images ?? []).length === 0 && match.imageUrl) { setValue('images', [match.imageUrl], opts); filled.push('foto') }
+    const external = Boolean(match.source && match.source !== 'catalog')
+    if ((current.images ?? []).length === 0 && match.imageUrl) {
+      const image = external ? await copyExternalImage(match.imageUrl) : match.imageUrl
+      // Mientras se copiaba la foto, la persona pudo haber subido otra.
+      if (image && (form.getValues('images') ?? []).length === 0) { setValue('images', [image], opts); filled.push('foto') }
+    }
 
     if (filled.length === 0) {
       toast.info('El formulario ya tenía esos datos: no se cambió nada.')
     } else {
       const missingCategory = !current.category_id && !match.tenantCategoryId && match.categoryName
       toast.success(`Completado: ${filled.join(', ')}`, {
-        description: missingCategory ? `Tu tienda no tiene una categoría vinculada a «${match.categoryName}»: elegila a mano.` : 'Revisá los datos y cargá precio y stock.',
+        description: missingCategory
+          ? `Tu tienda no tiene una categoría vinculada a «${match.categoryName}»: elegila a mano.`
+          : external
+            ? 'Vienen de una base abierta: revisá el nombre, elegí la categoría y cargá precio y stock.'
+            : 'Revisá los datos y cargá precio y stock.',
       })
     }
   }

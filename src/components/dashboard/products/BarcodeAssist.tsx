@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Barcode, BookOpenCheck, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { classifyBarcode } from '@/lib/products/barcode-catalog'
+import { OPEN_FACTS_LABELS, type OpenFactsSource } from '@/lib/products/open-product-facts'
 
 export type GlobalProductMatch = {
   id: string
@@ -15,6 +16,10 @@ export type GlobalProductMatch = {
   categoryName: string | null
   tenantBrandId: string | null
   tenantCategoryId: string | null
+  /** De dónde vienen los datos: el catálogo de la plataforma o una base abierta. */
+  source?: 'catalog' | OpenFactsSource
+  /** Ficha pública de la base abierta, para la atribución. */
+  sourceUrl?: string | null
 }
 
 type LookupResult = {
@@ -70,7 +75,7 @@ export function BarcodeAssist({
     <div className="mt-2 space-y-2" aria-live="polite">
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <Barcode className="h-3.5 w-3.5" aria-hidden="true" />
-        {kind === 'manufacturer' && 'Código del fabricante: se busca en el catálogo de la plataforma.'}
+        {kind === 'manufacturer' && 'Código del fabricante: se busca en el catálogo de la plataforma y en bases abiertas de productos.'}
         {kind === 'internal' && 'Código interno de tu tienda (no se comparte con otras).'}
         {kind === 'invalid' && 'No es un EAN/UPC válido: revisá que no falte ni sobre un número.'}
         {loading && <Loader2 className="h-3 w-3 animate-spin" aria-label="Buscando" />}
@@ -101,6 +106,17 @@ export function BarcodeAssist({
             <p className="truncate text-muted-foreground">
               {[result.global.brandName, result.global.categoryName].filter(Boolean).join(' · ') || 'Catálogo de la plataforma'}
             </p>
+            {result.global.source && result.global.source !== 'catalog' && (
+              <p className="text-[11px] text-muted-foreground">
+                Datos de{' '}
+                {result.global.sourceUrl ? (
+                  <a href={result.global.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+                    {OPEN_FACTS_LABELS[result.global.source]}
+                  </a>
+                ) : OPEN_FACTS_LABELS[result.global.source]}
+                {' '}· revisalos antes de guardar
+              </p>
+            )}
           </div>
           <Button
             type="button"

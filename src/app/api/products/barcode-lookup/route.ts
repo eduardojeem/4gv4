@@ -3,6 +3,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { barcodeSpellings, classifyBarcode, gtinKey } from '@/lib/products/barcode-catalog'
+import { lookupOpenFacts, openFactsSourcesFor } from '@/lib/products/open-product-facts'
 
 /**
  * GET /api/products/barcode-lookup?code=...&excludeId=...
@@ -12,7 +13,9 @@ import { barcodeSpellings, classifyBarcode, gtinKey } from '@/lib/products/barco
  *    porque la tabla no lo impide y terminaba con el mismo producto dos veces;
  *  - si es un código del fabricante y está en el catálogo global, devuelve sus
  *    datos con la marca y la categoría de ESTA tienda que les corresponden,
- *    para completar el formulario.
+ *    para completar el formulario;
+ *  - si no está, lo busca en Open Food Facts / Open Beauty Facts según el rubro
+ *    (alimentos, limpieza, cosmética), con la fuente para la atribución.
  */
 export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { organization }) => {
   const params = new URL(request.url).searchParams
@@ -32,7 +35,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       .limit(1)
     if (excludeId) productQuery = productQuery.neq('id', excludeId)
 
-    const [{ data: ownProducts }, { data: ownVariants }] = await Promise.all([
+    const [{ data: ownProducts }, { data: ownVariants }, { data: organizationRow }] = await Promise.all([
       productQuery,
       admin
         .from('product_variants')
@@ -40,6 +43,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         .eq('organization_id', organization.id)
         .in('barcode', spellings)
         .limit(1),
+      admin.from('organizations').select('business_vertical').eq('id', organization.id).maybeSingle(),
     ])
 
     const variant = (ownVariants ?? [])[0] as unknown as { product_id: string; variant_name: string | null; products: { name: string } | Array<{ name: string }> } | undefined
@@ -51,7 +55,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
         : null
 
     const gtin = gtinKey(code)
-    let global = null
+    let global: Record<string, unknown> | null = null
     if (gtin) {
       const { data: match, error } = await admin
         .from('global_products')
@@ -87,6 +91,39 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
           /** La marca y la categoría de esta tienda que corresponden, si las tiene. */
           tenantBrandId: (tenantBrand as { id: string } | null)?.id ?? null,
           tenantCategoryId: (tenantCategory as { id: string } | null)?.id ?? null,
+          source: 'catalog',
+          sourceUrl: null,
+        }
+      }
+    }
+
+    // Fuera del catálogo: las bases abiertas, si el rubro tiene sentido para ellas.
+    if (gtin && !global) {
+      const vertical = (organizationRow as { business_vertical?: string | null } | null)?.business_vertical ?? null
+      const external = await lookupOpenFacts(gtin, openFactsSourcesFor(vertical))
+      if (external) {
+        // La marca de la tienda con el mismo nombre, si ya la cargó.
+        const { data: tenantBrand } = external.brandName
+          ? await admin
+            .from('brands')
+            .select('id')
+            .eq('organization_id', organization.id)
+            .ilike('name', external.brandName.replace(/[\\%_]/g, (char) => `\\${char}`))
+            .limit(1)
+            .maybeSingle()
+          : { data: null }
+        global = {
+          id: `${external.source}:${external.gtin}`,
+          gtin: external.gtin,
+          name: external.name,
+          description: external.description,
+          imageUrl: external.imageUrl,
+          brandName: external.brandName,
+          categoryName: null,
+          tenantBrandId: (tenantBrand as { id: string } | null)?.id ?? null,
+          tenantCategoryId: null,
+          source: external.source,
+          sourceUrl: external.sourceUrl,
         }
       }
     }

@@ -31,6 +31,20 @@ describe('asistente del código de barras', () => {
     expect(screen.getByRole('button', { name: 'Completado' })).toBeInTheDocument()
   })
 
+  it('dice de qué base abierta vienen los datos', async () => {
+    lookup({
+      own: null,
+      global: {
+        ...nescafe, id: 'openfoodfacts:7891000315507', tenantBrandId: null, categoryName: null,
+        source: 'openfoodfacts', sourceUrl: 'https://world.openfoodfacts.org/product/7891000315507',
+      },
+    })
+    render(<BarcodeAssist code="7891000315507" onApply={vi.fn()} />)
+    const link = await screen.findByRole('link', { name: 'Open Food Facts' })
+    expect(link).toHaveAttribute('href', 'https://world.openfoodfacts.org/product/7891000315507')
+    expect(screen.getByText(/revisalos antes de guardar/)).toBeInTheDocument()
+  })
+
   it('un código inválido no consulta al servidor', () => {
     const fetchMock = lookup({ own: null, global: null })
     render(<BarcodeAssist code="7891000315508" onApply={vi.fn()} />)
