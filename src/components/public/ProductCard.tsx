@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
+import { ArrowRight, Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Minus, Package, Plus, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
@@ -55,7 +55,12 @@ export function ProductCard(props: ProductCardProps) {
   const { addProduct } = usePublicCart()
   const { settings: websiteSettings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
+  // Error de la foto de la tarjeta. El detalle lleva su propia lista: antes
+  // compartían el estado y una foto rota de la galería dejaba la tarjeta sin
+  // imagen hasta recargar.
   const [imageError, setImageError] = useState(false)
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set())
+  const markImageFailed = (src: string) => setFailedImages((current) => (current.has(src) ? current : new Set(current).add(src)))
   const [quickViewOpen, setQuickViewOpen] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
   const [activeImageIdx, setActiveImageIdx] = useState(0)
@@ -109,7 +114,6 @@ export function ProductCard(props: ProductCardProps) {
     const nextVariant = publicVariants.find((variant) => variant.id === variantId) ?? null
     const variantImageIdx = variantImageIndex(galleryImages, nextVariant, publicVariants)
     if (variantImageIdx === -1) return
-    setImageError(false)
     setActiveImageIdx(variantImageIdx)
   }
   const selectedPrice = selectedVariant
@@ -494,355 +498,371 @@ export function ProductCard(props: ProductCardProps) {
         </div>
       </article>
 
-      {/* ── Quick-view modal ── */}
+      {/* ── Detalle rápido: mismo diseño que el detalle de ofertas ── */}
       <Dialog open={quickViewOpen} onOpenChange={(open) => { setQuickViewOpen(open); if (!open) { setActiveImageIdx(0); setQuantity(1); setSelectedVariantId(null) } }}>
         <DialogContent
-          className="flex max-h-[90dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-xl"
+          className="flex max-h-[92dvh] w-[calc(100%-1rem)] sm:max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl border-border/80 p-0 shadow-2xl"
           showCloseButton
         >
           <DialogTitle className="sr-only">{product.name}</DialogTitle>
           <DialogDescription className="sr-only">Imágenes, precio, disponibilidad y opciones de compra del producto.</DialogDescription>
 
-          {/* ── Two-column layout ─────────────────────────────────────── */}
           <div className="min-h-0 overflow-y-auto overscroll-contain">
-
-            {/* ── Left column: image gallery ──────────────────────────── */}
-            <div className="relative bg-muted/30">
-              {/* Main image */}
-              <div className="relative h-40 sm:h-48 overflow-hidden">
-                {resolvedActive && !imageError ? (
+            {/* ── Galería ── */}
+            <div className="relative border-b border-border/60 bg-muted/30">
+              <div className="relative h-52 overflow-hidden sm:h-64">
+                {resolvedActive && resolvedActive !== '/placeholder-product.svg' && !failedImages.has(resolvedActive) ? (
                   <Image
+                    key={resolvedActive}
                     src={resolvedActive}
                     alt={product.name}
                     fill
-                    sizes="(max-width: 640px) 100vw, 320px"
-                    className="object-contain p-6 transition-opacity duration-200"
+                    sizes="(max-width: 640px) 100vw, 640px"
+                    className="object-contain p-4 transition-opacity duration-200"
                     quality={75}
-                    onError={() => setImageError(true)}
+                    onError={() => markImageFailed(resolvedActive)}
                     unoptimized={shouldBypassImageOptimization(resolvedActive)}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
-                    <Package className="h-20 w-20 text-muted-foreground/20" />
+                    <Package className="h-16 w-16 text-muted-foreground/30" />
                   </div>
                 )}
 
-                {/* Out-of-stock overlay */}
+                <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">
+                  {discountPct > 0 && (
+                    <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 via-red-500 to-amber-500 px-3 py-1 text-xs font-black tracking-wide text-white shadow-md">
+                      <TrendingDown className="h-3.5 w-3.5" />
+                      -{discountPct}% OFF
+                    </span>
+                  )}
+                  {product.featured && !hasOffer && (
+                    <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1 text-xs font-bold text-white shadow-md">
+                      <Sparkles className="h-3 w-3" />
+                      Destacado
+                    </span>
+                  )}
+                </div>
+
                 {!isInStock && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/65 backdrop-blur-[2px]">
-                    <span className="rounded-full bg-red-700/95 px-5 py-2 text-sm font-bold text-white shadow">
-                      Agotado
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
+                    <span className="rounded-full bg-red-700/95 px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest text-white shadow-md">
+                      Sin stock
                     </span>
                   </div>
                 )}
 
-                {/* Prev/Next gallery arrows */}
                 {galleryImages.length > 1 && (
                   <>
                     <button
                       type="button"
                       aria-label="Imagen anterior"
-                      onClick={(e) => { e.stopPropagation(); setImageError(false); setActiveImageIdx((i) => (i - 1 + galleryImages.length) % galleryImages.length) }}
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 shadow backdrop-blur-sm transition hover:bg-background"
+                      onClick={(e) => { e.stopPropagation(); setActiveImageIdx((i) => (i - 1 + galleryImages.length) % galleryImages.length) }}
+                      className="absolute left-3 top-1/2 z-30 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/85 shadow-md backdrop-blur-sm transition hover:bg-background"
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeft className="h-4 w-4 text-foreground" />
                     </button>
                     <button
                       type="button"
                       aria-label="Imagen siguiente"
-                      onClick={(e) => { e.stopPropagation(); setImageError(false); setActiveImageIdx((i) => (i + 1) % galleryImages.length) }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 shadow backdrop-blur-sm transition hover:bg-background"
+                      onClick={(e) => { e.stopPropagation(); setActiveImageIdx((i) => (i + 1) % galleryImages.length) }}
+                      className="absolute right-3 top-1/2 z-30 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/85 shadow-md backdrop-blur-sm transition hover:bg-background"
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="h-4 w-4 text-foreground" />
                     </button>
                   </>
                 )}
               </div>
 
-              {/* Gallery dots */}
               {galleryImages.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto px-3 py-2">
-                  {galleryImages.map((image, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      aria-label={`Ver imagen ${i + 1}`}
-                      aria-pressed={i === activeImageIdx}
-                      onClick={() => { setImageError(false); setActiveImageIdx(i) }}
-                      className={cn(
-                        'relative h-11 w-11 shrink-0 overflow-hidden rounded-md border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        i === activeImageIdx
-                          ? 'border-primary'
-                          : 'border-transparent'
-                      )}
-                    ><Image src={resolveProductImageUrl(image)} alt="" fill sizes="44px" className="object-contain" /></button>
-                  ))}
+                <div className="flex gap-2 overflow-x-auto border-t border-border/40 bg-background/50 px-4 py-2">
+                  {galleryImages.map((image, i) => {
+                    const thumb = resolveProductImageUrl(image)
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        aria-label={`Ver imagen ${i + 1}`}
+                        aria-pressed={i === activeImageIdx}
+                        onClick={() => setActiveImageIdx(i)}
+                        className={cn(
+                          'relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          i === activeImageIdx
+                            ? 'border-primary ring-2 ring-primary/30'
+                            : 'border-border/70 opacity-70 hover:border-foreground/30 hover:opacity-100'
+                        )}
+                      >
+                        {/* Miniaturas sin el optimizador: cada una era una transformación
+                            nueva (pedía 1536 px para un cuadro de 48) y sin cuota
+                            disponible en el servidor quedaban en blanco. */}
+                        {thumb !== '/placeholder-product.svg' && !failedImages.has(thumb) ? (
+                          <Image src={thumb} alt="" fill sizes="48px" unoptimized className="object-contain p-1" onError={() => markImageFailed(thumb)} />
+                        ) : (
+                          <Package className="m-auto h-5 w-5 text-muted-foreground/40" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── Información ── */}
+            <div className="flex flex-col gap-4 p-4 sm:p-6">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  {product.brand && (
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{product.brand}</p>
+                  )}
+                  <h2 className="mt-1 text-lg font-bold leading-snug text-foreground sm:text-xl">{product.name}</h2>
+                  {deviceCompatibility && (
+                    <p className="mt-1 text-xs font-semibold text-primary">Para {deviceCompatibility}</p>
+                  )}
+                  {(selectedVariant?.sku || product.sku) && (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">SKU: {selectedVariant?.sku || product.sku}</p>
+                  )}
+                </div>
+                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} />}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                  isInStock
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/50'
+                    : 'bg-destructive/10 text-destructive ring-1 ring-destructive/20'
+                )}>
+                  <span className={cn('h-1.5 w-1.5 rounded-full', isInStock ? 'animate-pulse bg-emerald-500' : 'bg-destructive')} />
+                  {hasVariants && !selectedVariant
+                    ? 'Elegí una variante'
+                    : isInStock
+                      ? (hasVariants && selectedVariant ? `${selectedVariant.stock_quantity} disponibles` : 'Disponible para entrega inmediata')
+                      : 'Agotado'}
+                </span>
+                {isLowStock && (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-800/40">
+                    Últimas {selectedStock} uds.
+                  </span>
+                )}
+                {product.category && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground ring-1 ring-border/70">
+                    {product.category.name}
+                  </span>
+                )}
+                {branchLabel && (
+                  <span title={branchTitle} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground ring-1 ring-border/70">
+                    <MapPin className="h-3 w-3 text-primary" />
+                    {branchLabel}
+                  </span>
+                )}
+              </div>
+
+              {/* ── Precio ── */}
+              {precioOculto ? (
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
+                  <p className="text-xl font-bold leading-none tracking-tight text-foreground">Precio a consultar</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Este producto se cotiza por WhatsApp. Escribinos y te pasamos el precio al instante.
+                  </p>
+                </div>
+              ) : (
+                <div className={cn(
+                  'rounded-2xl border p-4',
+                  selectedDiscountPct > 0 || discountPct > 0
+                    ? 'border-amber-500/25 bg-gradient-to-br from-amber-500/[0.07] via-rose-500/[0.04] to-transparent dark:border-amber-500/20'
+                    : 'border-border/70 bg-muted/30'
+                )}>
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="text-2xl font-black tabular-nums tracking-tight text-foreground sm:text-3xl">
+                      {formatPrice(selectedPrice)}
+                    </span>
+                    {selectedOriginalPrice && selectedPrice < selectedOriginalPrice && (
+                      <del className="text-sm font-semibold tabular-nums text-muted-foreground sm:text-base">
+                        {formatPrice(selectedOriginalPrice)}
+                      </del>
+                    )}
+                    {selectedDiscountPct > 0 && (
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-0.5 text-xs font-bold text-white shadow-xs">
+                        <TrendingDown className="h-3 w-3" />
+                        -{selectedDiscountPct}%
+                      </span>
+                    )}
+                  </div>
+                  {selectedOriginalPrice && selectedDiscountPct > 0 && (
+                    <p className="mt-2.5 flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      <Tag className="h-3.5 w-3.5" />
+                      ¡Ahorrás {formatPrice(selectedOriginalPrice - selectedPrice)} en esta compra!
+                    </p>
+                  )}
+                  {isWholesale && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-primary">Precio mayorista</p>
+                  )}
                 </div>
               )}
 
-              {/* Top-left badges */}
-              <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-                {discountPct > 0 && (
-                  <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-md">
-                    <TrendingDown className="h-2.5 w-2.5" />
-                    -{discountPct}%
-                  </span>
-                )}
-                {product.featured && !hasOffer && (
-                  <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-md">
-                    <Sparkles className="h-2.5 w-2.5" />
-                    Destacado
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* ── Right column: info panel ─────────────────────────────── */}
-            <div className="flex flex-col">
-
-              {/* Header bar */}
-              <div className="flex items-start justify-between gap-2 border-b border-border/60 px-4 py-3">
-                {favoriteSlug && <FavoriteButton item={{ productId: product.id, slug: favoriteSlug, name: product.name, store: websiteSettings?.company_info.name || favoriteSlug, image: product.image, price: product.sale_price }} />}
-                <div className="min-w-0">
-                  {product.brand && (
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
-                      {product.brand}
-                    </p>
-                  )}
-                  <h2 className="mt-0.5 text-base font-bold leading-snug text-foreground">
-                    {product.name}
-                  </h2>
-                  {/* SKU */}
-                  {(selectedVariant?.sku || product.sku) && (
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      SKU: {selectedVariant?.sku || product.sku}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Scrollable content */}
-              <div className="flex flex-col gap-3 px-4 py-3">
-
-                {/* Status / Category badges */}
-                <div className="flex flex-wrap gap-1.5">
-                  <span className={cn(
-                    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold',
-                    isInStock
-                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-800/40'
-                      : 'bg-destructive/10 text-destructive ring-1 ring-destructive/20'
-                  )}>
-                    <span className={cn('h-1.5 w-1.5 rounded-full', isInStock ? 'bg-emerald-500 animate-pulse' : 'bg-destructive')} />
-                    {isInStock ? (hasVariants && selectedVariant ? `${selectedVariant.stock_quantity} disponibles` : 'En stock') : 'Sin stock'}
-                  </span>
-                  {product.category && (
-                    <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
-                      {product.category.name}
-                    </span>
-                  )}
-                  {branchLabel && (
-                    <span title={branchTitle} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
-                      <MapPin className="h-2.5 w-2.5 text-primary" />
-                      {branchLabel}
-                    </span>
-                  )}
-                  {isLowStock && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-800/40">
-                      Últimas {selectedStock} uds.
-                    </span>
-                  )}
-                </div>
-
-                {/* ── Price block ── */}
-                {precioOculto ? (
-                  <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
-                    <p className="text-lg font-bold leading-none tracking-tight text-foreground">Precio a consultar</p>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      Este producto se cotiza por WhatsApp. Escribinos y te pasamos el precio al instante.
-                    </p>
-                  </div>
-                ) : (
-                <div className="rounded-2xl bg-muted/40 dark:bg-muted/20 px-4 py-3.5 ring-1 ring-border/60">
-                  <div className="flex items-end gap-3">
-                    <p className={cn(
-                      'text-2xl font-bold leading-none tracking-tight',
-                      hasOffer || isWholesaleDiscount
-                        ? 'text-rose-600 dark:text-rose-400'
-                        : 'text-foreground'
-                    )}>
-                      {formatPrice(selectedPrice)}
-                    </p>
-                    {selectedOriginalPrice && selectedPrice < selectedOriginalPrice && (
-                      <p className="mb-0.5 text-sm text-muted-foreground line-through">
-                        {formatPrice(selectedOriginalPrice)}
-                      </p>
+              {hasVariants && (
+                <fieldset className="space-y-2.5 rounded-2xl border border-border/70 bg-card/60 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <legend className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Variantes disponibles <span className="text-rose-500">*</span>
+                    </legend>
+                    {selectedVariant && (
+                      <span className="text-xs font-semibold text-primary">{selectedVariant.variant_name}</span>
                     )}
                   </div>
-                  {/* Savings chip */}
-                  {selectedOriginalPrice && selectedDiscountPct > 0 && (
-                    <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      <Tag className="h-3 w-3" />
-                      Ahorrás {formatPrice(selectedOriginalPrice - selectedPrice)} · {selectedDiscountPct}% OFF
-                    </p>
+                  <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                    {publicVariants.map((variant) => {
+                      const isSelected = selectedVariantId === variant.id
+                      const hasStock = variant.stock_quantity > 0
+                      const variantPrice = resolvePublicVariantPrice({ isWholesale, product, variant })
+                      const variantOriginalPrice = hasOffer && variantPrice < variant.sale_price ? variant.sale_price : null
+                      return (
+                        <button
+                          key={variant.id}
+                          type="button"
+                          onClick={() => handleVariantSelect(variant.id)}
+                          aria-pressed={isSelected}
+                          className={cn(
+                            'flex flex-col justify-between rounded-xl border p-2.5 text-left text-xs transition-all',
+                            isSelected
+                              ? 'border-primary bg-primary/10 text-foreground shadow-xs ring-2 ring-primary/20'
+                              : 'border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted/40',
+                            !hasStock && 'bg-muted/40 opacity-60'
+                          )}
+                        >
+                          <span className="flex items-start justify-between gap-1">
+                            <span className="line-clamp-1 font-semibold leading-tight">{variant.variant_name}</span>
+                            {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                          </span>
+                          <span className="mt-1.5 flex items-center justify-between gap-1 text-[11px]">
+                            <span className={hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}>
+                              {hasStock ? `${variant.stock_quantity} disp.` : 'Sin stock'}
+                            </span>
+                            {!precioOculto && (
+                              <span className="flex flex-col items-end leading-tight">
+                                <span className={cn('font-bold', variantOriginalPrice ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
+                                  {formatPrice(variantPrice)}
+                                </span>
+                                {variantOriginalPrice && (
+                                  <span className="text-[10px] text-muted-foreground line-through">{formatPrice(variantOriginalPrice)}</span>
+                                )}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {!selectedVariant && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">Seleccioná una variante para continuar.</p>
                   )}
-                </div>
-                )}
+                </fieldset>
+              )}
 
-                {hasVariants && (
-                  <fieldset className="space-y-2.5 rounded-xl border border-border/80 bg-muted/20 p-3">
-                    <div className="flex items-center justify-between">
-                      <legend className="text-xs font-bold text-foreground">
-                        Elegí una variante <span className="text-rose-500">*</span>
-                      </legend>
-                      {selectedVariant && (
-                        <span className="text-[11px] font-semibold text-primary">
-                          {selectedVariant.variant_name}
-                        </span>
-                      )}
-                    </div>
-                    {publicVariants.length > 0 ? (
-                      <div className="grid max-h-40 grid-cols-1 gap-2 sm:grid-cols-2 overflow-y-auto pr-1">
-                        {publicVariants.map((variant) => {
-                          const isSelected = selectedVariantId === variant.id
-                          const hasStock = variant.stock_quantity > 0
-                          const variantPrice = resolvePublicVariantPrice({ isWholesale, product, variant })
-                          const variantOriginalPrice = hasOffer && variantPrice < variant.sale_price
-                            ? variant.sale_price
-                            : null
-                          return (
-                            <button
-                              key={variant.id}
-                              type="button"
-                              onClick={() => handleVariantSelect(variant.id)}
-                              aria-pressed={isSelected}
-                              className={cn(
-                                'flex flex-col justify-between rounded-xl border p-2.5 text-left text-xs transition-all',
-                                isSelected
-                                  ? 'border-primary bg-primary/10 shadow-xs ring-2 ring-primary/20 text-foreground'
-                                  : 'border-border bg-card hover:border-primary/40 hover:bg-muted/40 text-foreground',
-                                !hasStock && 'opacity-60 bg-muted/40'
-                              )}
-                            >
-                              <div className="flex items-start justify-between gap-1">
-                                <span className="font-semibold leading-tight line-clamp-1">
-                                  {variant.variant_name}
-                                </span>
-                                {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                              </div>
-                              <div className="mt-1.5 flex items-center justify-between gap-1 text-[11px]">
-                                <span className={cn('font-medium', hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
-                                  {hasStock ? `${variant.stock_quantity} disp.` : 'Sin stock'}
-                                </span>
-                                <span className="flex flex-col items-end leading-tight">
-                                  <span className={cn(
-                                    'font-bold',
-                                    variantOriginalPrice
-                                      ? 'text-rose-600 dark:text-rose-400'
-                                      : 'text-foreground'
-                                  )}>
-                                    {formatPrice(variantPrice)}
-                                  </span>
-                                  {variantOriginalPrice && (
-                                    <span className="text-[10px] font-medium text-muted-foreground line-through">
-                                      {formatPrice(variantOriginalPrice)}
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-amber-200/70 bg-amber-50/80 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-                        Este producto posee variantes configuradas. Podés ver el detalle completo en la página del producto.
-                      </div>
-                    )}
-                    {!selectedVariant && publicVariants.length > 0 && (
-                      <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                        Seleccioná una variante para continuar.
-                      </p>
-                    )}
-                  </fieldset>
-                )}
+              {!precioOculto && installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
+                <InstallmentSelector price={selectedPrice * quantity} plans={product.installments_plans ?? []} compact />
+              )}
 
-                {/* Installments */}
-                {!precioOculto && installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
-                  <InstallmentSelector
-                    price={selectedPrice * quantity}
-                    plans={product.installments_plans ?? []}
-                    compact
-                  />
-                )}
-
-                {/* Description */}
-                {product.description?.trim() && (
-                  <details className="rounded-md border p-2 text-sm"><summary className="cursor-pointer font-medium">Descripción y características</summary><p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{product.description.trim().replace(/\n{3,}/g, '\n\n')}</p></details>
-                )}
-
-              </div>
-
+              {product.description?.trim() && (
+                // Plegada: el detalle rápido prioriza precio, variantes y compra.
+                <details className="group rounded-xl border border-border/70 bg-card/60 p-3.5">
+                  <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Descripción y detalles
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+                  </summary>
+                  <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                    {product.description.trim().replace(/\n{3,}/g, '\n\n')}
+                  </p>
+                </details>
+              )}
             </div>
           </div>
-              {/* Actions stay outside the scrollable product information. */}
-              <div className="shrink-0 flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
-                {precioOculto && (
-                  <PriceAccessDialog
-                    productName={product.name}
-                    whatsappHref={modalWhatsappHref || whatsappHref}
-                    variant="button"
-                  />
-                )}
-                {precioOculto && (modalWhatsappHref || whatsappHref) && (
-                  <a
-                    href={(modalWhatsappHref || whatsappHref)!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setQuickViewOpen(false)}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Preguntar el precio por WhatsApp
-                  </a>
-                )}
-                {!precioOculto && commerceMode === 'cart' && <div className="flex items-center justify-between gap-2 text-sm"><span>Cantidad</span><div className="flex items-center gap-3"><button type="button" aria-label="Reducir cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={quantity <= 1 || !isInStock} onClick={() => setQuantity(q => q - 1)}>−</button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Aumentar cantidad" className="h-10 w-10 rounded-md border disabled:opacity-40" disabled={!isInStock || (hasVariants && !selectedVariant) || quantity >= selectedStock} onClick={() => setQuantity(q => Math.min(selectedStock, q + 1))}>+</button></div></div>}
-                {!precioOculto && commerceMode === 'cart' && (
+
+          {/* ── Acciones, siempre a la vista ── */}
+          <div className="flex shrink-0 flex-col gap-2.5 border-t border-border/70 bg-background p-4">
+            {!precioOculto && commerceMode === 'cart' && isInStock && (!hasVariants || selectedVariant) && (
+              <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
+                <span className="text-muted-foreground">Cantidad:</span>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => addToCart(true)}
-                    disabled={!isInStock || (hasVariants && !selectedVariant)}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Reducir cantidad"
+                    disabled={quantity <= 1}
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-40"
                   >
-                    {justAdded ? (
-                      <><Check className="h-4 w-4" /> ¡Agregado al carrito!</>
-                    ) : hasVariants && !selectedVariant ? (
-                      <><ShoppingCart className="h-4 w-4" /> Elegí una variante para agregar</>
-                    ) : (
-                      <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(selectedPrice * quantity)}</>
-                    )}
+                    <Minus className="h-3.5 w-3.5" />
                   </button>
-                )}
-                {!precioOculto && commerceMode === 'whatsapp' && (modalWhatsappHref || whatsappHref) && (
+                  <span aria-live="polite" className="w-8 text-center font-bold tabular-nums text-foreground">{quantity}</span>
+                  <button
+                    type="button"
+                    aria-label="Aumentar cantidad"
+                    disabled={quantity >= selectedStock}
+                    onClick={() => setQuantity((q) => Math.min(selectedStock, q + 1))}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-40"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {precioOculto && (
+              <PriceAccessDialog productName={product.name} whatsappHref={modalWhatsappHref || whatsappHref} variant="button" />
+            )}
+
+            <div className="flex flex-col items-stretch gap-2 pt-1 sm:flex-row">
+              {precioOculto ? (
+                (modalWhatsappHref || whatsappHref) && (
                   <a
                     href={(modalWhatsappHref || whatsappHref)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setQuickViewOpen(false)}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
+                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.98]"
                   >
                     <MessageCircle className="h-4 w-4" />
-                    {selectedVariantInStock ? 'Pedir por WhatsApp' : 'Consultar por WhatsApp'}
+                    Preguntar el precio
                   </a>
-                )}
-                <Link
-                  href={productHref}
-                  onClick={() => setQuickViewOpen(false)}
-                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-2xl border border-border bg-background text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
+                )
+              ) : commerceMode === 'cart' ? (
+                <button
+                  type="button"
+                  onClick={() => addToCart(true)}
+                  disabled={!isInStock || (hasVariants && !selectedVariant)}
+                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Eye className="h-3.5 w-3.5" />
-                  Ver detalle completo
-                </Link>
-              </div>
+                  {justAdded ? (
+                    <><Check className="h-4 w-4" /> ¡Agregado al carrito!</>
+                  ) : hasVariants && !selectedVariant ? (
+                    <><ShoppingCart className="h-4 w-4" /> Elegí una variante para agregar</>
+                  ) : (
+                    <><ShoppingCart className="h-4 w-4" /> Agregar al carrito · {formatPrice(selectedPrice * quantity)}</>
+                  )}
+                </button>
+              ) : (modalWhatsappHref || whatsappHref) ? (
+                <a
+                  href={(modalWhatsappHref || whatsappHref)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setQuickViewOpen(false)}
+                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.98]"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {selectedVariantInStock ? 'Pedir por WhatsApp' : 'Consultar por WhatsApp'}
+                </a>
+              ) : null}
+
+              <Link
+                href={productHref}
+                onClick={() => setQuickViewOpen(false)}
+                className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background px-4 text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] sm:text-sm"
+              >
+                Ver detalle completo
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>
