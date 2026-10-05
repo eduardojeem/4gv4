@@ -265,7 +265,7 @@ export function ProductCard(props: ProductCardProps) {
           storefrontStyle === 'classic' && 'rounded-lg border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
           storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
-          storefrontStyle === 'tech' && 'rounded-xl border border-cyan-500/20 shadow-xs hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/10',
+          storefrontStyle === 'tech' && 'rounded-xl border border-primary/20 shadow-xs hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
           storefrontStyle === 'market' && 'rounded-md border border-border/70 shadow-2xs hover:border-primary/60 hover:shadow-xs',
           storefrontStyle === 'modern' && 'rounded-2xl border border-border/40 shadow-xs hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
           storefrontStyle === 'services' && 'rounded-2xl border border-border/50 shadow-xs hover:border-primary/40 hover:shadow-lg',

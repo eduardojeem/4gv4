@@ -126,8 +126,9 @@ function avisarSiFaltoElCelular(payload: unknown) {
   }
 }
 
-export function useProductsSupabase(options?: { enabled?: boolean }) {
+export function useProductsSupabase(options?: { enabled?: boolean; loadAllProducts?: boolean }) {
   const enabled = options?.enabled ?? true
+  const loadAllProducts = options?.loadAllProducts ?? false
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
@@ -263,7 +264,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       const params = new URLSearchParams({
         page: String(Math.max(1, activePagination.page)),
-        per_page: String(activePagination.limit > 0 ? activePagination.limit : 20),
+        per_page: String(loadAllProducts ? 1000 : (activePagination.limit > 0 ? activePagination.limit : 20)),
         sort: activeSort.field,
         direction: activeSort.direction,
         stock_status: activeFilters.stockStatus || 'all',
@@ -282,18 +283,33 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       if (activeFilters.deviceModel) params.set('device_model', activeFilters.deviceModel)
       if (selectedBranchId) params.set('strict_branch_stock', 'true')
 
-      const response = await fetch(`/api/products?${params.toString()}`, {
-        headers: branchHeaders(selectedBranchId),
-      })
-      const payload = await response.json().catch(() => null) as ProductsListApiPayload | null
+      const loadedProducts: Product[] = []
+      let requestedPage = loadAllProducts ? 1 : Math.max(1, activePagination.page)
+      let total = 0
+      let truncated = false
 
-      if (!response.ok || payload?.success === false || !Array.isArray(payload?.data?.products)) {
-        throw new Error(payload?.message || payload?.error || 'No se pudieron cargar los productos')
-      }
+      do {
+        params.set('page', String(requestedPage))
+        const response = await fetch(`/api/products?${params.toString()}`, {
+          headers: branchHeaders(selectedBranchId),
+        })
+        const payload = await response.json().catch(() => null) as ProductsListApiPayload | null
 
-      setProducts(payload.data.products)
-      setTotalCount(Number(payload.data.total || 0))
-      setResultTruncated(payload.data.truncated === true)
+        if (!response.ok || payload?.success === false || !Array.isArray(payload?.data?.products)) {
+          throw new Error(payload?.message || payload?.error || 'No se pudieron cargar los productos')
+        }
+
+        const pageProducts = payload.data.products
+        loadedProducts.push(...pageProducts)
+        total = Number(payload.data.total || loadedProducts.length)
+        truncated = truncated || payload.data.truncated === true
+        requestedPage += 1
+        if (pageProducts.length === 0) break
+      } while (loadAllProducts && loadedProducts.length < total && requestedPage <= 100)
+
+      setProducts(loadedProducts)
+      setTotalCount(total)
+      setResultTruncated(truncated)
     } catch (err) {
       console.error('Error fetching products:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -301,7 +317,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, filters, sort, pagination, enabled])
+  }, [selectedBranchId, filters, sort, pagination, enabled, loadAllProducts])
 
   // Función para obtener categorías
   const fetchCategories = useCallback(async () => {
@@ -681,7 +697,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     movementType: 'in' | 'out' | 'adjustment' | 'transfer',
     reason?: string,
     referenceId?: string,
-    referenceType?: string
+    referenceType?: string,
+    expectedPreviousStock?: number,
   ): Promise<ProductOperationResult> => {
     try {
       let data = null
@@ -704,6 +721,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
           p_reason: reason ?? null,
           p_reference_id: referenceId ?? null,
           p_reference_type: referenceType ?? null,
+          p_expected_previous_stock: expectedPreviousStock ?? null,
         })
 
         data = response.data

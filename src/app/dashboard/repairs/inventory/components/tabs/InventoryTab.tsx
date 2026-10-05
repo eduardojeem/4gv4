@@ -36,9 +36,17 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { Product } from '@/types/product-unified'
 import { formatPrice, cn } from '@/lib/utils'
+import { buildQuickStockAdjustment } from '@/lib/repairs/inventory-stock-adjustment'
+import { useAuth } from '@/contexts/auth-context'
 
 export function InventoryTab() {
   const { inventory, categories, loading, deleteItem, updateStock } = useInventory()
+  const { hasPermission, isAdmin } = useAuth()
+  const canUpdate = isAdmin || hasPermission('products.update')
+  const canDelete = isAdmin || hasPermission('products.delete')
+  // La RPC heredada de ajuste valida `inventory.manage`; no mostrar un control
+  // que el servidor va a rechazar con otro permiso de nombre parecido.
+  const canAdjustStock = isAdmin || hasPermission('inventory.manage')
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [stockFilter, setStockFilter] = useState("all")
@@ -62,7 +70,7 @@ export function InventoryTab() {
       const matchesCategory = categoryFilter === "all" || p.category_id === categoryFilter
 
       let matchesStock = true
-      if (stockFilter === "low") matchesStock = (p.stock_quantity || 0) <= (p.min_stock || 5)
+      if (stockFilter === "low") matchesStock = (p.stock_quantity || 0) <= (p.min_stock ?? 5)
       if (stockFilter === "out") matchesStock = (p.stock_quantity || 0) === 0
       if (stockFilter === "in") matchesStock = (p.stock_quantity || 0) > 0
 
@@ -101,14 +109,15 @@ export function InventoryTab() {
 
   const handleStockAdjust = async (product: Product, delta: number) => {
     const currentStock = product.stock_quantity ?? 0
-    const newStock = Math.max(0, currentStock + delta)
-    if (newStock === currentStock) return
+    const adjustment = buildQuickStockAdjustment(currentStock, delta)
+    if (!adjustment) return
 
     try {
       await updateStock(
         product.id,
-        newStock,
-        delta > 0 ? 'Ajuste rápido (+1) en tarjeta' : 'Ajuste rápido (-1) en tarjeta'
+        adjustment.quantityChange,
+        delta > 0 ? 'Ajuste rápido (+1) en tarjeta' : 'Ajuste rápido (-1) en tarjeta',
+        adjustment.expectedPreviousStock,
       )
     } catch {
       // Manejado en context
@@ -232,8 +241,9 @@ export function InventoryTab() {
               totalCatalogCount={inventory.length}
               loading={loading}
               onViewDetail={handleViewDetail}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
+              onEdit={canUpdate ? handleEdit : undefined}
+              onDelete={canDelete ? handleDelete : undefined}
+              canAdjustStock={canAdjustStock}
             />
           ) : (
             <InventoryCardsGrid
@@ -241,9 +251,9 @@ export function InventoryTab() {
               totalCatalogCount={inventory.length}
               loading={loading}
               onViewDetail={handleViewDetail}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStockAdjust={handleStockAdjust}
+              onEdit={canUpdate ? handleEdit : undefined}
+              onDelete={canDelete ? handleDelete : undefined}
+              onStockAdjust={canAdjustStock ? handleStockAdjust : undefined}
             />
           )}
 
@@ -272,7 +282,7 @@ export function InventoryTab() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               Estás a punto de eliminar <strong className="text-foreground">&quot;{productToDelete?.name}&quot;</strong>.
-              Esta acción no se puede deshacer y eliminará también todos los movimientos asociados.
+              Esta acción no se puede deshacer. Si tiene ventas o reparaciones asociadas, el sistema impedirá eliminarlo y tendrás que desactivarlo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -305,12 +315,14 @@ export function InventoryTab() {
         onEdit={handleEdit}
       />
 
-      <ProductEditDialog
-        product={selectedProduct}
-        open={isEditOpen}
-        onOpenChange={setIsEditOpen}
-        onSuccess={handleEditSuccess}
-      />
+      {canUpdate && (
+        <ProductEditDialog
+          product={selectedProduct}
+          open={isEditOpen}
+          onOpenChange={setIsEditOpen}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </>
   )
 }
@@ -331,9 +343,9 @@ function InventoryCardsGrid({
   totalCatalogCount?: number
   loading?: boolean
   onViewDetail: (p: Product) => void
-  onEdit: (p: Product) => void
-  onDelete: (p: Product) => void
-  onStockAdjust: (p: Product, delta: number) => void
+  onEdit?: (p: Product) => void
+  onDelete?: (p: Product) => void
+  onStockAdjust?: (p: Product, delta: number) => void
 }) {
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(12)
@@ -471,7 +483,7 @@ function InventoryCardsGrid({
                     )}>
                       {stock} u.
                     </span>
-                    <Button
+                    {onStockAdjust && <Button
                       type="button"
                       variant="outline"
                       size="icon"
@@ -481,8 +493,8 @@ function InventoryCardsGrid({
                       title="Reducir 1 u."
                     >
                       <Minus className="h-3 w-3" />
-                    </Button>
-                    <Button
+                    </Button>}
+                    {onStockAdjust && <Button
                       type="button"
                       variant="outline"
                       size="icon"
@@ -491,7 +503,7 @@ function InventoryCardsGrid({
                       title="Aumentar 1 u."
                     >
                       <Plus className="h-3 w-3" />
-                    </Button>
+                    </Button>}
                   </div>
                 </div>
 
@@ -522,7 +534,7 @@ function InventoryCardsGrid({
                   <Eye className="h-3.5 w-3.5 mr-1 text-emerald-500" /> Detalle
                 </Button>
                 <div className="flex items-center gap-1">
-                  <Button
+                  {onEdit && <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => onEdit(product)}
@@ -530,8 +542,8 @@ function InventoryCardsGrid({
                     title="Editar"
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
+                  </Button>}
+                  {onDelete && <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => onDelete(product)}
@@ -539,7 +551,7 @@ function InventoryCardsGrid({
                     title="Eliminar"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             </Card>

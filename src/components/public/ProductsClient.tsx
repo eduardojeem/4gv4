@@ -52,6 +52,11 @@ const PAGE_SIZE_OPTIONS = [12, 28, 48, 100]
 
 type Props = {
   products: MarketplaceProduct[]
+  /** Total del query filtrado; permite paginar mas alla del lote actual. */
+  totalProducts?: number
+  currentPage?: number
+  currentPageSize?: number
+  serverPaginated?: boolean
   categories?: MarketplaceCategory[]
   brands?: MarketplaceBrand[]
   initialQuery?: string
@@ -60,6 +65,7 @@ type Props = {
   initialBrand?: string
   /** Llega con `?ofertas=1`, desde «Ver todas las ofertas». */
   initialOnlyOffers?: boolean
+  initialSort?: SortKey
   /**
    * Oculta el buscador de esta barra. Lo usa /marketplace/buscar, que ya tiene el
    * suyo en el encabezado: dos buscadores sobre el mismo `?q=` se pisaban entre si.
@@ -78,6 +84,10 @@ const SORT_OPTIONS: { id: SortKey; label: string; shortLabel: string; icon: Reac
 
 export function ProductsClient({
   products,
+  totalProducts = products.length,
+  currentPage = 1,
+  currentPageSize = PAGE_SIZE,
+  serverPaginated = false,
   categories = [],
   brands = [],
   initialQuery = '',
@@ -85,6 +95,7 @@ export function ProductsClient({
   initialSubcategory = '',
   initialBrand = '',
   initialOnlyOffers = false,
+  initialSort = 'default',
   hideSearch = false,
 }: Props) {
   const router = useRouter()
@@ -92,19 +103,18 @@ export function ProductsClient({
   const searchParams = useSearchParams()
 
   const [query, setQuery] = useState(initialQuery)
-  const [onlyOffers, setOnlyOffers] = useState(initialOnlyOffers)
-  // «Ver todas las ofertas» navega a la misma página: el componente no se
-  // vuelve a montar, así que el pedido se aplica cuando cambia el parámetro.
-  const [lastOnlyOffersRequest, setLastOnlyOffersRequest] = useState(initialOnlyOffers)
-  if (lastOnlyOffersRequest !== initialOnlyOffers) {
-    setLastOnlyOffersRequest(initialOnlyOffers)
-    if (initialOnlyOffers) setOnlyOffers(true)
+  const onlyOffers = initialOnlyOffers
+  const [sort, setSort] = useState<SortKey>(initialSort)
+  const [lastInitialSort, setLastInitialSort] = useState(initialSort)
+  if (lastInitialSort !== initialSort) {
+    setLastInitialSort(initialSort)
+    setSort(initialSort)
   }
-  const [sort, setSort] = useState<SortKey>('default')
   const [sortOpen, setSortOpen] = useState(false)
   const [view, setView] = useState<ViewMode>('grid')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(PAGE_SIZE)
+  const [page, setPage] = useState(currentPage)
+  const [pageSize, setPageSize] = useState(currentPageSize)
+  const activePageSize = serverPaginated ? currentPageSize : pageSize
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   
   const sortRef = useRef<HTMLDivElement>(null)
@@ -145,6 +155,7 @@ export function ProductsClient({
       } else {
         params.delete('q')
       }
+      params.delete('pagina')
       setPage(1)
       router.push(`${pathname}?${params.toString()}`, { scroll: false })
     }, 400)
@@ -163,13 +174,13 @@ export function ProductsClient({
     if (key === 'categoria' && !value) {
       params.delete('subcategoria')
     }
+    params.delete('pagina')
     setPage(1)
     router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   const clearAllFilters = () => {
     setQuery('')
-    setOnlyOffers(false)
     setSort('default')
     setPage(1)
     router.push(pathname, { scroll: false })
@@ -236,6 +247,10 @@ export function ProductsClient({
     // se busca al filtrar ofertas.
     const effectiveSort: SortKey = onlyOffers && sort === 'default' ? 'discount_desc' : sort
 
+    // La pagina de catalogo ya llega ordenada desde el servidor. Mantener el
+    // orden local solo para usos embebidos que entregan el conjunto completo.
+    if (serverPaginated) return result
+
     // Ordenar localmente
     switch (effectiveSort) {
       case 'price_asc':
@@ -278,17 +293,42 @@ export function ProductsClient({
     }
 
     return result
-  }, [products, onlyOffers, sort])
+  }, [products, onlyOffers, sort, serverPaginated])
 
   // ─── Paginación ─────────────────────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const safePage = Math.min(page, totalPages)
-  const pageStart = (safePage - 1) * pageSize
-  const paginated = filtered.slice(pageStart, pageStart + pageSize)
+  const effectiveTotal = serverPaginated && !onlyOffers ? totalProducts : filtered.length
+  const totalPages = Math.max(1, Math.ceil(effectiveTotal / activePageSize))
+  const safePage = serverPaginated && !onlyOffers ? currentPage : Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * activePageSize
+  const paginated = serverPaginated ? filtered : filtered.slice(pageStart, pageStart + activePageSize)
 
   function goToPage(p: number) {
+    if (serverPaginated) {
+      const params = new URLSearchParams(searchParams.toString())
+      if (p > 1) params.set('pagina', String(p))
+      else params.delete('pagina')
+      router.push(`${pathname}?${params.toString()}#catalogo`, { scroll: false })
+      return
+    }
     setPage(p)
     gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function changePageSize(size: number) {
+    if (serverPaginated) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('porPagina', String(size))
+      params.delete('pagina')
+      router.push(`${pathname}?${params.toString()}#catalogo`, { scroll: false })
+      return
+    }
+    setPageSize(size)
+    setPage(1)
+  }
+
+  function changeSort(nextSort: SortKey) {
+    setSort(nextSort)
+    if (serverPaginated) updateUrlParam('orden', nextSort === 'default' ? '' : nextSort)
   }
 
   function pageNumbers(): (number | '…')[] {
@@ -352,10 +392,10 @@ export function ProductsClient({
           )}
 
           {/* Toggle Solo Ofertas */}
-          {offersCount > 0 && (
+          {offersCount > 0 && !serverPaginated && (
             <button
               type="button"
-              onClick={() => updateUrlParam('soloOfertas', onlyOffers ? '' : 'true')}
+              onClick={() => updateUrlParam('ofertas', onlyOffers ? '' : '1')}
               className={cn(
                 'shrink-0 flex items-center gap-1 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 h-8 sm:h-9 text-[11px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
                 onlyOffers
@@ -429,7 +469,7 @@ export function ProductsClient({
                 <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Ordenar por:
                 </div>
-                {SORT_OPTIONS.map((option) => {
+                {SORT_OPTIONS.filter((option) => !serverPaginated || option.id !== 'discount_desc').map((option) => {
                   const OptionIcon = option.icon
                   const isSelected = sort === option.id
                   return (
@@ -437,7 +477,7 @@ export function ProductsClient({
                       key={option.id}
                       type="button"
                       onClick={() => {
-                        setSort(option.id)
+                        changeSort(option.id)
                         setSortOpen(false)
                       }}
                       className={cn(
@@ -655,7 +695,7 @@ export function ProductsClient({
             {onlyOffers && (
               <button
                 type="button"
-                onClick={() => setOnlyOffers(false)}
+                onClick={() => updateUrlParam('ofertas', '')}
                 className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 dark:border-rose-800/40 dark:bg-rose-950/40 dark:text-rose-300"
               >
                 <span>Solo ofertas</span>
@@ -667,7 +707,7 @@ export function ProductsClient({
             {sort !== 'default' && (
               <button
                 type="button"
-                onClick={() => setSort('default')}
+                onClick={() => changeSort('default')}
                 className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-border bg-muted px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold text-foreground transition-colors hover:bg-muted/80"
               >
                 <span>Orden: {currentSortOption.shortLabel}</span>
@@ -919,13 +959,13 @@ export function ProductsClient({
       )}
 
       {/* ── PAGINACIÓN ─────────────────────────────────────────────────────── */}
-      {(totalPages > 1 || filtered.length > 12) && (
+      {(totalPages > 1 || effectiveTotal > 12) && (
         <div suppressHydrationWarning className="mt-10 pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-4">
           
           {/* Resumen de Resultados */}
           <div className="text-xs text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
-            Mostrando <strong className="text-foreground">{filtered.length > 0 ? pageStart + 1 : 0} - {Math.min(pageStart + pageSize, filtered.length)}</strong> de{' '}
-            <strong className="text-foreground">{filtered.length}</strong> productos
+            Mostrando <strong className="text-foreground">{paginated.length > 0 ? pageStart + 1 : 0} - {Math.min(pageStart + paginated.length, effectiveTotal)}</strong> de{' '}
+            <strong className="text-foreground">{effectiveTotal}</strong> productos
           </div>
 
           {/* Navegación de Páginas */}
@@ -983,13 +1023,10 @@ export function ProductsClient({
                 <button
                   key={size}
                   type="button"
-                  onClick={() => {
-                    setPageSize(size)
-                    setPage(1)
-                  }}
+                  onClick={() => changePageSize(size)}
                   className={cn(
                     'px-2 py-0.5 rounded-md text-[11px] font-bold transition-all',
-                    pageSize === size
+                    activePageSize === size
                       ? 'bg-background text-foreground shadow-2xs'
                       : 'text-muted-foreground hover:text-foreground'
                   )}

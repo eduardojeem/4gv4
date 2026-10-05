@@ -163,7 +163,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
     const catalogKind = parseProductCatalogKind(searchParams.get('catalog_kind'))
     const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1)
-    const perPage = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('per_page') || '50', 10) || 50))
+    const perPage = Math.min(1000, Math.max(1, Number.parseInt(searchParams.get('per_page') || '50', 10) || 50))
     const requestedBranchId = getRequestedBranchId(request)
     
     const branchScope = await resolveBranchScopeForUser({

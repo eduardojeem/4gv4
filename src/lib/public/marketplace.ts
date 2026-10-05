@@ -560,6 +560,8 @@ type MarketplaceProductFilters = {
   categoria?: string
   subcategoria?: string
   marca?: string
+  offset?: number
+  orden?: 'default' | 'price_asc' | 'price_desc' | 'newest' | 'name_asc'
 }
 
 // Solo se cachea informacion expresamente publica. Los argumentos forman parte
@@ -595,7 +597,14 @@ export const getMarketplaceOffers = unstable_cache(
 )
 
 function hasMarketplaceProductFilters(options?: MarketplaceProductFilters) {
-  return Boolean(options?.q || options?.categoria || options?.subcategoria || options?.marca)
+  return Boolean(
+    options?.q ||
+    options?.categoria ||
+    options?.subcategoria ||
+    options?.marca ||
+    options?.offset ||
+    (options?.orden && options.orden !== 'default')
+  )
 }
 
 export function getMarketplaceOrganizations(limit = 24, options?: { q?: string }) {
@@ -674,10 +683,28 @@ async function getMarketplaceProductsPageUncached(
     }
   }
 
-  const { data, count, error } = await query
-    .order('featured', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  switch (options?.orden) {
+    case 'price_asc':
+      query = query.order('sale_price', { ascending: true }).order('created_at', { ascending: false })
+      break
+    case 'price_desc':
+      query = query.order('sale_price', { ascending: false }).order('created_at', { ascending: false })
+      break
+    case 'name_asc':
+      query = query.order('name', { ascending: true }).order('created_at', { ascending: false })
+      break
+    case 'newest':
+      query = query.order('created_at', { ascending: false })
+      break
+    case 'default':
+    default:
+      query = query.order('featured', { ascending: false }).order('created_at', { ascending: false })
+      break
+  }
+
+  const offset = Math.max(0, Math.trunc(options?.offset ?? 0))
+  const safeLimit = Math.max(1, Math.trunc(limit))
+  const { data, count, error } = await query.range(offset, offset + safeLimit - 1)
 
   if (error || !data) {
 

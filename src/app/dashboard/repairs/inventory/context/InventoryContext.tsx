@@ -2,11 +2,12 @@
 "use client"
 import { logger } from '@/lib/logger'
 
-import { createContext, useContext, useCallback, useMemo, ReactNode, useState, useEffect } from 'react'
+import { createContext, useContext, useCallback, useMemo, ReactNode, useState } from 'react'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { toast } from 'sonner'
 import { formatPrice } from '@/lib/utils'
 import type { Product, ProductMovement, Category, Supplier } from '@/types/product-unified'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 
 interface InventoryFilters {
   search: string
@@ -39,7 +40,7 @@ interface InventoryContextValue {
   updateService: (id: string, data: Partial<Product> | Record<string, unknown>) => Promise<void>
   updateInventoryProduct: (id: string, data: Partial<Product> | Record<string, unknown>) => Promise<void>
   deleteItem: (id: string) => Promise<void>
-  updateStock: (id: string, quantity: number, reason?: string) => Promise<void>
+  updateStock: (id: string, quantityChange: number, reason?: string, expectedPreviousStock?: number) => Promise<void>
   
   // Utilidades
   exportPDF: () => void
@@ -78,13 +79,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     getProductMovements,
     getAllMovements,
     createCategory,
-    setPagination
-  } = useProductsSupabase()
-
-  // Cargar más productos para la vista de inventario (default es 20)
-  useEffect(() => {
-    setPagination({ page: 1, limit: 1000 })
-  }, [setPagination])
+  } = useProductsSupabase({ loadAllProducts: true })
 
   // Identificar categoría de servicios
   const serviceCategoryId = useMemo(() => {
@@ -101,42 +96,14 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     // Un ítem es "servicio" si está en la categoría Servicios o si su unidad de
     // medida es 'servicio' (lo setea createService). Evita clasificar por el
     // nombre, que antes ocultaba productos físicos como "Cambio de vidrio".
-    const servicesList = products.filter(p => {
-      const isServiceCategory = Boolean(serviceCategoryId && p.category_id === serviceCategoryId)
-      const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
-      return isServiceCategory || isServiceUnit
-    })
+    const servicesList = products.filter(isServiceLikeProduct)
     
     const serviceIds = new Set(servicesList.map(s => s.id))
     
-    // Para el inventario de repuestos, filtramos todo lo que sea servicio
-    // y también intentamos ocultar productos que sean claramente accesorios o teléfonos
-    const inventoryList = products.filter(p => {
-      if (serviceIds.has(p.id)) return false
-      
-      const category = categories?.find(c => c.id === p.category_id)
-      if (category) {
-        const catName = category.name.toLowerCase()
-        // Ocultar explícitamente accesorios y celulares del inventario de repuestos
-        if (
-          catName.includes('accesorio') || 
-          catName.includes('funda') || 
-          catName.includes('templado') || 
-          catName.includes('celular') || 
-          catName.includes('teléfono') || 
-          catName.includes('telefono') || 
-          catName.includes('smartphone') ||
-          catName.includes('cable') ||
-          catName.includes('cargador')
-        ) {
-          return false
-        }
-      }
-      return true
-    })
+    const inventoryList = products.filter(p => !serviceIds.has(p.id))
     
     return { services: servicesList, inventory: inventoryList }
-  }, [products, serviceCategoryId, categories])
+  }, [products])
 
   // Obtener movimientos (lazy load)
   const [movements, setMovements] = useState<ProductMovement[]>([])
@@ -265,13 +232,16 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     }
   }, [deleteProduct, refreshData])
 
-  const updateStock = useCallback(async (id: string, quantity: number, reason?: string) => {
+  const updateStock = useCallback(async (id: string, quantityChange: number, reason?: string, expectedPreviousStock?: number) => {
     try {
       const result = await supabaseUpdateStock(
         id,
-        quantity,
+        quantityChange,
         'adjustment',
-        reason || 'Ajuste manual desde inventario'
+        reason || 'Ajuste manual desde inventario',
+        undefined,
+        undefined,
+        expectedPreviousStock,
       )
       
       if (result.success) {

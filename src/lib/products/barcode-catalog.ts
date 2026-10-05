@@ -68,13 +68,14 @@ export type GlobalProductCandidate = {
   gtin: string
   name: string
   /** Otros nombres con que lo cargaron las tiendas. */
-  otherNames: string[]
-  brandName: string | null
-  globalBrandId: string | null
-  globalCategoryId: string | null
-  imageUrl: string | null
-  description: string | null
-  stores: number
+  otherNames?: string[] | null
+  other_names?: string[] | null
+  brandName?: string | null
+  globalBrandId?: string | null
+  globalCategoryId?: string | null
+  imageUrl?: string | null
+  description?: string | null
+  stores?: number
 }
 
 function mostFrequent(values: Array<string | null>): string | null {

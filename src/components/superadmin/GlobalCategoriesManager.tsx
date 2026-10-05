@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { LinkSuggestionsPanel, type LinkSuggestion } from './LinkSuggestionsPanel'
+import { CategorySyncAssistantPanel } from './CategorySyncAssistantPanel'
 import { UnmatchedCatalogPanel, type UnmatchedEntry } from './UnmatchedCatalogPanel'
 import { CatalogDeactivateDialog, CatalogStats } from './CatalogDeactivateDialog'
 import { CatalogUsageDialog } from './CatalogUsageDialog'
@@ -83,6 +84,7 @@ export function GlobalCategoriesManager() {
   const [linkingName, setLinkingName] = useState<string | null>(null)
   const [usageOf, setUsageOf] = useState<GlobalCategory | null>(null)
   const [verticalFilter, setVerticalFilter] = useState<string | null>(null)
+  const [assistantSourceVersion, setAssistantSourceVersion] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -99,6 +101,7 @@ export function GlobalCategoriesManager() {
       })
       setSuggestions(payload.suggestions ?? [])
       setUnmatched(payload.unmatched ?? [])
+      setAssistantSourceVersion((version) => version + 1)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la taxonomía.')
     } finally {
@@ -356,6 +359,13 @@ export function GlobalCategoriesManager() {
         itemLabel="categoría"
         busy={linking}
         onApply={(ids) => void linkExisting(ids)}
+      />
+
+      <CategorySyncAssistantPanel
+        targets={linkTargets}
+        onLinked={load}
+        onCreated={load}
+        sourceVersion={assistantSourceVersion}
       />
 
       <UnmatchedCatalogPanel

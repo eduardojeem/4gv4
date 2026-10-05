@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { SupplierProduct } from '@/components/suppliers/SupplierProductsList'
 
 // Mock next/navigation
 const mockPush = vi.fn()
@@ -30,6 +31,18 @@ const mockSupplierDb = {
   updated_at: '2025-02-15T14:30:00Z',
 }
 
+const mockOrderProduct: SupplierProduct = {
+  id: 'prod-1',
+  name: 'Módulo Pantalla',
+  sku: 'MOD-PANTALLA-1',
+  category: 'Repuestos',
+  purchasePrice: 45000,
+  salePrice: 65000,
+  stock: 8,
+  minStock: 2,
+  imageUrl: null,
+}
+
 // Stable mock client
 const mockClient = {
   from: vi.fn((table: string) => {
@@ -56,9 +69,9 @@ vi.mock('@/lib/supabase/client', () => ({
 
 // Mock heavy children components
 vi.mock('@/components/suppliers/SupplierProductsList', () => ({
-  SupplierProductsList: ({ onOrderProduct }: { onOrderProduct?: (p: any) => void }) => (
+  SupplierProductsList: ({ onOrderProduct }: { onOrderProduct?: (product: SupplierProduct) => void }) => (
     <div data-testid="supplier-products-list">
-      <button onClick={() => onOrderProduct?.({ id: 'prod-1', name: 'Módulo Pantalla', purchasePrice: 45000 })}>
+      <button onClick={() => onOrderProduct?.(mockOrderProduct)}>
         Pedir Módulo
       </button>
     </div>

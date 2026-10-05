@@ -48,6 +48,7 @@ import {
   ChevronRight, SlidersHorizontal
 } from 'lucide-react'
 import type { Product } from '@/types/product-unified'
+import { buildQuickStockAdjustment } from '@/lib/repairs/inventory-stock-adjustment'
 import { formatPrice } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useInventory } from '../context/InventoryContext'
@@ -59,6 +60,7 @@ interface InventoryTableProps {
   onDelete?: (product: Product) => void
   onViewDetail?: (product: Product) => void
   loading?: boolean
+  canAdjustStock?: boolean
 }
 
 type SortColumn = 'name' | 'category' | 'stock' | 'price' | 'margin'
@@ -73,12 +75,14 @@ const InventoryRow = memo(({
   onDelete,
   onViewDetail,
   onStockAdjust,
+  canAdjustStock,
 }: {
   product: Product
   onEdit?: (product: Product) => void
   onDelete?: (product: Product) => void
   onViewDetail?: (product: Product) => void
   onStockAdjust: (product: Product, delta: number) => void
+  canAdjustStock: boolean
 }) => {
   const stock = product.stock_quantity ?? 0
   const minStock = product.min_stock ?? 5
@@ -226,7 +230,7 @@ const InventoryRow = memo(({
       {/* Ajuste Rápido de Stock (+1 / -1) */}
       <TableCell className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1">
-          <Button
+          {canAdjustStock && <Button
             type="button"
             variant="outline"
             size="icon"
@@ -236,8 +240,8 @@ const InventoryRow = memo(({
             title="Reducir 1 unidad"
           >
             <Minus className="h-3.5 w-3.5" />
-          </Button>
-          <Button
+          </Button>}
+          {canAdjustStock && <Button
             type="button"
             variant="outline"
             size="icon"
@@ -246,7 +250,7 @@ const InventoryRow = memo(({
             title="Aumentar 1 unidad"
           >
             <Plus className="h-3.5 w-3.5" />
-          </Button>
+          </Button>}
         </div>
       </TableCell>
 
@@ -264,16 +268,16 @@ const InventoryRow = memo(({
             <DropdownMenuItem onClick={() => onViewDetail?.(product)} className="cursor-pointer gap-2 text-xs">
               <Eye className="h-3.5 w-3.5 text-blue-600" /> Ver Ficha Técnica
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onEdit?.(product)} className="cursor-pointer gap-2 text-xs">
+            {onEdit && <DropdownMenuItem onClick={() => onEdit(product)} className="cursor-pointer gap-2 text-xs">
               <Pencil className="h-3.5 w-3.5 text-amber-600" /> Editar Información
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => onDelete?.(product)}
+            </DropdownMenuItem>}
+            {onDelete && <DropdownMenuSeparator />}
+            {onDelete && <DropdownMenuItem
+              onClick={() => onDelete(product)}
               className="cursor-pointer gap-2 text-xs text-red-600 dark:text-red-400 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30"
             >
               <Trash2 className="h-3.5 w-3.5" /> Eliminar Repuesto
-            </DropdownMenuItem>
+            </DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -293,6 +297,7 @@ export function InventoryTable({
   onDelete,
   onViewDetail,
   loading,
+  canAdjustStock = false,
 }: InventoryTableProps) {
   const { updateStock } = useInventory()
 
@@ -367,14 +372,15 @@ export function InventoryTable({
 
   const handleStockAdjust = async (product: Product, delta: number) => {
     const currentStock = product.stock_quantity ?? 0
-    const newStock = Math.max(0, currentStock + delta)
-    if (newStock === currentStock) return
+    const adjustment = buildQuickStockAdjustment(currentStock, delta)
+    if (!adjustment) return
 
     try {
       await updateStock(
         product.id,
-        newStock,
-        delta > 0 ? 'Ajuste rápido (+1) en tabla' : 'Ajuste rápido (-1) en tabla'
+        adjustment.quantityChange,
+        delta > 0 ? 'Ajuste rápido (+1) en tabla' : 'Ajuste rápido (-1) en tabla',
+        adjustment.expectedPreviousStock,
       )
     } catch {
       // Manejado por context toast
@@ -500,6 +506,7 @@ export function InventoryTable({
                 onDelete={onDelete}
                 onViewDetail={onViewDetail}
                 onStockAdjust={handleStockAdjust}
+                canAdjustStock={canAdjustStock}
               />
             ))}
           </TableBody>

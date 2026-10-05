@@ -30,9 +30,12 @@ function createFakeClient() {
                 Promise.resolve({ data: null, count: 0, error: { message: 'column does not exist' } }).then(onFulfilled, onRejected)
             }
 
+            const rangeCall = calls.find((call) => call.method === 'range')
             const limitCall = calls.find((call) => call.method === 'limit')
             const limit = Number(limitCall?.args[0] ?? productRows.length)
-            const data = table === 'products' ? productRows.slice(0, limit) : []
+            const rangeStart = Number(rangeCall?.args[0] ?? 0)
+            const rangeEnd = Number(rangeCall?.args[1] ?? (rangeStart + limit - 1))
+            const data = table === 'products' ? productRows.slice(rangeStart, rangeEnd + 1) : []
             const result = table === 'products'
               ? { data, count: productRows.length, error: null }
               : { data, count: 0, error: null }
@@ -113,5 +116,13 @@ describe('getMarketplaceProductsPage', () => {
       method: 'or',
       args: ['name.ilike.%funda%,sku.ilike.%funda%,brand.ilike.%funda%,description.ilike.%funda%'],
     })
+  })
+
+  it('consulta el rango real de la pagina sin perder el total filtrado', async () => {
+    const result = await getMarketplaceProductsPage(2, { offset: 2 })
+
+    expect(result.products.map((product) => product.id)).toEqual(['3'])
+    expect(result.total).toBe(3)
+    expect(productCalls).toContainEqual({ method: 'range', args: [2, 3] })
   })
 })

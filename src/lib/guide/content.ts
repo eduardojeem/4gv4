@@ -374,6 +374,86 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: 'quotes',
+    title: 'Presupuestos y Cotizaciones',
+    summary: 'Cotizaciones con validez comercial, envío por WhatsApp y conversión directa a venta en POS en un solo clic.',
+    group: 'operations',
+    href: '/dashboard/quotes',
+    module: 'pos',
+    keywords: ['presupuestos', 'presupuesto', 'cotizaciones', 'cotizar', 'whatsapp', 'facturar presupuesto', 'validez', 'condiciones comerciales'],
+    steps: [
+      {
+        title: 'Armado por bloques temáticos',
+        description: 'La pantalla organiza el armado en pasos visuales: datos del cliente (azul), productos del catálogo o líneas libres de mano de obra (índigo) y condiciones comerciales (ámbar).',
+      },
+      {
+        title: 'Validez y condiciones de pago',
+        description: 'Definís el plazo de validez de la oferta (ej. 7, 15 o 30 días) y las modalidades de cobro acordadas para dar seguridad comercial a ambas partes.',
+      },
+      {
+        title: 'Envío por WhatsApp y facturación en POS',
+        description: 'Compartís el ticket formal con un clic. Cuando el cliente acepta, el botón «Facturar en POS» traspasa todos los ítems directamente al carrito sin volver a cargarlos.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Enviar una cotización formal por WhatsApp y cobrarla en el mostrador cuando el cliente la apruebe',
+        setup: [
+          'Creás el presupuesto con los repuestos del catálogo y la mano de obra libre del servicio.',
+          'Pulsás «Compartir por WhatsApp» y se lo enviás al cliente.',
+          'Cuando el cliente confirma la aceptación, tocás «Facturar en POS».',
+        ],
+        result: 'El carrito del POS se llena automáticamente con los precios pactados y el stock se descuenta al momento de cobrar.',
+      },
+    ],
+    tips: [
+      'Podés mezclar artículos con stock y conceptos de mano de obra en el mismo presupuesto sin necesidad de crear un producto fijo en el catálogo.',
+    ],
+    faq: [
+      {
+        question: '¿Qué pasa si un presupuesto vence?',
+        answer: 'El estado pasa a Vencido para alertarte que los precios pueden requerir actualización antes de concretar la venta.',
+      },
+    ],
+  },
+  {
+    id: 'agenda',
+    title: 'Agenda y Reservas de Turnos',
+    summary: 'Gestión de turnos por profesional, franjas horarias y reservas de citas online desde la tienda pública.',
+    group: 'operations',
+    href: '/dashboard/agenda',
+    module: 'services',
+    keywords: ['agenda', 'turnos', 'citas', 'reservas', 'profesionales', 'horarios', 'servicios', 'calendario'],
+    steps: [
+      {
+        title: 'Configurar profesionales y disponibilidad',
+        description: 'En Configuración de Agenda definís qué profesionales atienden, sus días laborales, horarios y descansos.',
+      },
+      {
+        title: 'Asignar servicios y duraciones',
+        description: 'Cada servicio tiene un tiempo asignado (ej. 30 min, 1 hora) para calcular los bloques libres sin superposiciones.',
+      },
+      {
+        title: 'Carga de turnos y reserva online',
+        description: 'Podés agendar clientes desde el panel o permitir que ellos elijan día, hora y especialista desde tu tienda pública.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Organizar la atención de varios especialistas sin que se crucen los clientes',
+        setup: [
+          'Creás la ficha de cada profesional con sus horarios de atención en la semana.',
+          'Asignás qué servicios realiza cada uno con su tiempo de duración.',
+          'Agendás los turnos en el calendario visual con recordatorios.',
+        ],
+        result: 'El mostrador sabe con precisión quién atiende a cada cliente y los horarios quedan perfectamente distribuidos.',
+      },
+    ],
+    tips: [
+      'Al marcar un turno como completado podés pasar directamente a cobrarlo al punto de venta para registrar la venta en la caja.',
+    ],
+  },
+  {
     id: 'customers',
     title: 'Clientes y CRM',
     summary: 'Historial de compras, cuenta corriente, límites de crédito y contacto directo por WhatsApp.',
@@ -500,6 +580,81 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     tips: [
       'Imprimir el ticket con código QR de la orden de reparación genera confianza y evita que los clientes llamen reiteradamente a preguntar el estado.',
       'Configurá siempre el plazo de garantía de servicio técnico (ej: 60 a 90 días): queda impreso en el ticket de entrega y protege legalmente a tu negocio.',
+    ],
+  },
+  {
+    id: 'technician',
+    title: 'Panel del Técnico de Taller',
+    summary: 'Vista ágil y enfocada para especialistas de taller: diagnóstico rápido, checklist de calidad y consumo de repuestos.',
+    group: 'operations',
+    href: '/dashboard/technician',
+    module: 'repairs',
+    keywords: ['tecnico', 'panel tecnico', 'taller', 'reparacion rapida', 'checklist', 'repuestos', 'banco de trabajo', 'diagnostico'],
+    steps: [
+      {
+        title: 'Ver órdenes asignadas',
+        description: 'El técnico entra a su panel dedicado donde solo ve las órdenes que tiene asignadas o las pendientes de taller, sin distracciones de caja.',
+      },
+      {
+        title: 'Carga de diagnóstico y repuestos',
+        description: 'Inspecciona el equipo, selecciona los repuestos necesarios del catálogo y calcula el tiempo de mano de obra.',
+      },
+      {
+        title: 'Checklist de control de calidad',
+        description: 'Antes de dar por finalizado el trabajo, marca cada punto del checklist (cámara, carga, táctil, audio, wifi) y pasa la orden a «Listo para Entrega».',
+      },
+    ],
+    examples: [
+      {
+        goal: 'El técnico del taller recibe una orden asignada y realiza la reparación con checklist completo',
+        setup: [
+          'Abre su panel en /dashboard/technician y selecciona el equipo en su lista de trabajo.',
+          'Agrega el repuesto de pantalla y pasa el estado a «En Reparación».',
+          'Al terminar la colocación, prueba parlante, micrófono y brillo en el checklist interactivo.',
+          'Presiona «Marcar Listo»: el sistema avisa automáticamente por WhatsApp al cliente para que pase a retirar.',
+        ],
+        result: 'El flujo de taller es veloz, no hay errores en repuestos y el cliente recibe la notificación de inmediato.',
+      },
+    ],
+    tips: [
+      'El panel del técnico funciona de forma óptima en tablets o pantallas secundarias en el banco de trabajo.',
+    ],
+  },
+  {
+    id: 'after-sales',
+    title: 'Posventa y Garantías',
+    summary: 'Gestión de cambios, devoluciones, garantías de fábrica o taller y notas de crédito asociadas.',
+    group: 'operations',
+    href: '/dashboard/after-sales',
+    module: 'crm',
+    keywords: ['posventa', 'garantia', 'garantias', 'cambios', 'devoluciones', 'reintegro', 'nota de credito', 'falla de fabrica', 'rma'],
+    steps: [
+      {
+        title: 'Búsqueda de la venta original',
+        description: 'Identificás la compra por número de ticket, factura o por el teléfono del cliente para verificar la fecha y condiciones de garantía.',
+      },
+      {
+        title: 'Motivo del reclamo y evaluación',
+        description: 'Seleccionás si es falla de fábrica, rotura, disconformidad o cambio por talle/modelo, y adjuntás notas o comprobante de diagnóstico.',
+      },
+      {
+        title: 'Resolución y ajuste de stock',
+        description: 'El sistema gestiona el cambio directo, la emisión de una nota de crédito o el envío al servicio técnico, reintegrando o aislando el producto defectuoso.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Un cliente vuelve con un accesorio que dejó de funcionar a los 15 días y solicita cambio',
+        setup: [
+          'Buscás el comprobante original en Posventa con el WhatsApp del cliente.',
+          'Verificás que la garantía de 30 días siga vigente.',
+          'Procesás el cambio directo por una unidad nueva del inventario.',
+        ],
+        result: 'El cliente se va con su reemplazo en el acto, el producto fallado sale a descarte o reclamo a proveedor y el stock queda perfectamente cuadrado.',
+      },
+    ],
+    tips: [
+      'Al tramitar un cambio por un producto de mayor valor podés cobrar la diferencia directamente en el Punto de Venta.',
     ],
   },
   {
@@ -703,6 +858,81 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         ],
         result: 'El stock queda igual al del depósito, y el ajuste queda registrado con motivo, fecha y responsable.',
       },
+    ],
+  },
+  {
+    id: 'inventory-count',
+    title: 'Toma de Inventario Físico',
+    summary: 'Auditorías de stock por escaneo o planilla, detección de sobrantes y faltantes, y ajuste automático del catálogo.',
+    group: 'operations',
+    href: '/dashboard/inventory-count',
+    module: 'inventory',
+    keywords: ['toma de inventario', 'conteo fisico', 'auditoria de stock', 'sobrantes', 'faltantes', 'ajuste de stock', 'lector de barras', 'deposito'],
+    steps: [
+      {
+        title: 'Iniciar sesión de conteo',
+        description: 'Creás una nueva toma de inventario eligiendo si vas a contar todo el local, un depósito específico o una categoría particular.',
+      },
+      {
+        title: 'Escaneo físico de productos',
+        description: 'Con el lector de código de barras o ingresando manualmente, vas sumando cada unidad que tenés en el mostrador o estante.',
+      },
+      {
+        title: 'Comparación y cierre con ajuste',
+        description: 'El sistema contrasta lo contado contra el stock teórico en sistema, resalta las diferencias (faltantes o sobrantes) y permite aplicar el ajuste registrado con firma del responsable.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Realizar el recuento semanal de accesorios para verificar que no haya pérdidas ni mercadería sin ingresar',
+        setup: [
+          'Creás la toma de inventario seleccionando la categoría «Fundas y Protectores».',
+          'Escaneás cada funda en el depósito con el lector.',
+          'El sistema muestra 95 unidades contadas contra 98 en sistema (-3 de diferencia).',
+          'Confirmás el cierre y el ajuste con motivo «Diferencia de conteo semanal».',
+        ],
+        result: 'El catálogo pasa a reflejar exactamente las 95 unidades reales y queda el registro firmado de quién hizo la auditoría.',
+      },
+    ],
+    tips: [
+      'Podés pausar una toma de inventario y continuar al día siguiente si tenés un depósito grande.',
+    ],
+  },
+  {
+    id: 'vencimientos',
+    title: 'Control de Vencimientos y Lotes',
+    summary: 'Monitoreo preventivo de fechas de caducidad por lote para evitar pérdidas y liquidar mercadería a tiempo.',
+    group: 'operations',
+    href: '/dashboard/vencimientos',
+    module: 'inventory',
+    keywords: ['vencimientos', 'fechas de caducidad', 'lotes', 'perecederos', 'alerta de vencimiento', 'merma', 'oferta por vencimiento'],
+    steps: [
+      {
+        title: 'Registro de lote y caducidad al ingresar mercadería',
+        description: 'Al cargar la factura o compra de productos perecederos, registrás el número de lote y su fecha de vencimiento.',
+      },
+      {
+        title: 'Tablero de alertas preventivas',
+        description: 'El panel agrupa los productos en tres columnas: vencidos, por vencer en los próximos 15/30 días, y en fecha segura.',
+      },
+      {
+        title: 'Acción rápida: liquidación o descarte',
+        description: 'Con los que están próximos a caducar podés crear una promoción o combo con descuento para rotarlos antes de que se pierdan, o registrarlos como merma si ya caducaron.',
+      },
+    ],
+    examples: [
+      {
+        goal: 'Detectar qué productos caducan en las próximas dos semanas para armar un combo promocional',
+        setup: [
+          'Abrís el tablero de Vencimientos y filtrás por «Vence en los próximos 15 días».',
+          'Identificás 12 unidades de artículos próximos a vencer.',
+          'Creás una promoción del 30% en Promociones y las colocás en el mostrador.',
+        ],
+        result: 'Vendés el lote rápidamente recuperando el costo y evitando mermas o pérdidas económicas.',
+      },
+    ],
+    tips: [
+      'Configurá notificaciones tempranas (30 o 45 días) para tener margen suficiente de maniobra comercial.',
     ],
   },
   {

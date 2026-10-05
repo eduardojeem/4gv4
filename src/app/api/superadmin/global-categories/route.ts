@@ -4,11 +4,13 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { categorySlug, normalizeCategoryName, sortGlobalCategories, suggestCategoryLinks, type GlobalCategory } from '@/lib/categories/global-catalog'
+import { analyzeUnlinkedBatch, groupUnlinkedCategoriesByContext } from '@/lib/categories/category-sync-assistant'
 import { groupUnmatched } from '@/lib/catalog/unmatched'
 import { BUSINESS_VERTICALS } from '@/lib/organization/business-profile'
 import { logger } from '@/lib/logger'
 import { handleManualLinkAction, handleUsageRequest } from '@/lib/catalog/manual-link-actions'
 import { bulkResultSucceeded, isBulkCatalogResult } from '@/lib/catalog/bulk-result'
+import { rateLimiter } from '@/lib/rate-limiter'
 
 /**
  * Taxonomía global de categorías: la administra solo la plataforma.
@@ -143,6 +145,15 @@ export async function POST(request: NextRequest) {
       return await createFromTenant(user, request, body.entries)
     }
 
+    // Análisis inteligente bajo demanda con motor determinista local
+    if (body?.action === 'analyze-unlinked') {
+      return await analyzeUnlinkedAction(body, user)
+    }
+
+    if (body?.action === 'link-analyzed-batch') {
+      return await linkAnalyzedBatch(user, request, body.entries)
+    }
+
     const validation = categorySchema.safeParse(body)
     if (!validation.success) {
       return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá los datos.' }, { status: 400 })
@@ -195,6 +206,54 @@ export async function POST(request: NextRequest) {
     logger.error('[superadmin/global-categories] POST', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear la categoría.' }, { status: 500 })
   }
+}
+
+const analyzedBatchSchema = z.object({
+  entries: z.array(z.object({
+    targetId: z.string().uuid(),
+    name: z.string().trim().min(2).max(120),
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    alias: z.string().trim().min(1).max(120).nullable().optional(),
+  })).min(1).max(200),
+})
+
+async function linkAnalyzedBatch(
+  user: { id: string; email: string | null },
+  request: NextRequest,
+  entries: unknown,
+) {
+  const validation = analyzedBatchSchema.safeParse({ entries })
+  if (!validation.success) {
+    return NextResponse.json({ success: false, error: validation.error.issues[0]?.message || 'Revisá el lote.' }, { status: 400 })
+  }
+
+  const links = validation.data.entries.flatMap((entry) => entry.ids.map((id) => ({
+    tenant_id: id,
+    target_id: entry.targetId,
+    expected_name: entry.name,
+    alias: entry.alias ?? null,
+  })))
+  if (links.length > 2000) {
+    return NextResponse.json({ success: false, error: 'El lote supera el máximo de 2.000 categorías.' }, { status: 400 })
+  }
+
+  const admin = createAdminSupabase()
+  const { data, error } = await admin.rpc('apply_global_category_links', {
+    p_links: links,
+    p_actor_user_id: user.id,
+  })
+  if (error || !isBulkCatalogResult(data)) throw error ?? new Error('Invalid analyzed category batch result')
+
+  await logSuperAdminAction({
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'update',
+    resource: 'categories',
+    newValues: { ...data, action: 'link-analyzed-batch', groups: validation.data.entries.length },
+    request,
+  })
+
+  return NextResponse.json({ success: bulkResultSucceeded(data), ...data }, { status: bulkResultSucceeded(data) ? 200 : 409 })
 }
 
 const createFromTenantSchema = z.object({
@@ -333,6 +392,84 @@ async function linkExisting(user: { id: string; email: string | null }, request:
   })
 
   return NextResponse.json({ success: bulkResultSucceeded(data), ...data }, { status: bulkResultSucceeded(data) ? 200 : 409 })
+}
+
+/**
+ * Análisis bajo demanda de categorías de tiendas no vinculadas (global_category_id is null).
+ * Es una operación 100% de sólo lectura que no altera datos ni crea categorías.
+ */
+async function analyzeUnlinkedAction(body: Record<string, unknown> | null, user: { id: string }) {
+  const allowed = await rateLimiter.check(`superadmin:category-analysis:${user.id}`, 10, 60_000)
+  if (!allowed) {
+    return NextResponse.json({ success: false, error: 'Demasiados análisis. Esperá un minuto e intentá de nuevo.' }, { status: 429 })
+  }
+
+  const admin = createAdminSupabase()
+  const limitValidation = z.coerce.number().int().min(10).max(200).safeParse(body?.limit ?? 120)
+  if (!limitValidation.success) {
+    return NextResponse.json({ success: false, error: 'El límite debe estar entre 10 y 200.' }, { status: 400 })
+  }
+  const limit = limitValidation.data
+
+  const [{ data: catalogData, error: catalogError }, { data: tenantCategories, error: tenantError }] =
+    await Promise.all([
+      selectCatalog(admin),
+      admin
+        .from('categories')
+        .select('id, name, parent_id, global_category_id, organization_id, organizations(name, business_vertical)')
+        .is('global_category_id', null)
+        .limit(2000),
+    ])
+
+  if (catalogError || tenantError) {
+    logger.error('[superadmin/global-categories] analyze-unlinked error', { catalogError, tenantError })
+    return NextResponse.json({ success: false, error: 'No se pudieron consultar las categorías para análisis.' }, { status: 500 })
+  }
+
+  const catalog = (catalogData ?? []) as GlobalCategory[]
+  const rows = (tenantCategories ?? []) as unknown as Array<{
+    id: string
+    name: string
+    parent_id?: string | null
+    global_category_id?: string | null
+    organization_id?: string
+    organizations?: { name?: string; business_vertical?: string | null } | Array<{ name?: string; business_vertical?: string | null }> | null
+  }>
+
+  const parentIds = [...new Set(rows.map((row) => row.parent_id).filter((id): id is string => Boolean(id)))]
+  const parentNameById = new Map(rows.map((row) => [row.id, row.name]))
+  if (parentIds.some((id) => !parentNameById.has(id))) {
+    const { data: parents, error: parentsError } = await admin.from('categories').select('id, name').in('id', parentIds)
+    if (parentsError) {
+      logger.error('[superadmin/global-categories] analyze parent lookup error', { parentsError })
+      return NextResponse.json({ success: false, error: 'No se pudo completar el contexto de las categorías.' }, { status: 500 })
+    }
+    for (const parent of parents ?? []) parentNameById.set(parent.id, parent.name)
+  }
+
+  const inputs = groupUnlinkedCategoriesByContext(
+    rows.map((row) => {
+      const organization = organizationOf(row as unknown as TenantCategoryRow)
+      const rawVertical = organization?.business_vertical?.trim() || null
+      return {
+        id: row.id,
+        name: row.name,
+        organizationName: organization?.name ?? null,
+        vertical: rawVertical === 'other' || rawVertical === 'general' ? null : rawVertical,
+        parentName: row.parent_id ? parentNameById.get(row.parent_id) ?? null : null,
+      }
+    }),
+    limit,
+  )
+
+  const results = analyzeUnlinkedBatch(inputs, catalog)
+
+  return NextResponse.json({
+    success: true,
+    data: results,
+    totalUnlinkedRows: rows.length,
+    groupsAnalyzed: results.length,
+  })
 }
 
 export async function PUT(request: NextRequest) {

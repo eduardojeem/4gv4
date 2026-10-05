@@ -7,18 +7,25 @@ import {
   AlertTriangle,
   ArrowRight,
   BookOpen,
-  Building2, ChevronRight,
+  Bot,
+  Building2,
+  CalendarClock,
+  CalendarX2,
+  ChevronRight,
   ChevronsDown,
   ChevronsUp,
+  ClipboardCheck,
   Clock,
   CreditCard,
   ExternalLink,
+  FileText,
   HelpCircle,
   LayoutDashboard,
   Lightbulb,
   Package,
   Printer,
   RotateCcw,
+  ScanBarcode,
   Search,
   ShieldCheck,
   ShoppingBag,
@@ -26,10 +33,11 @@ import {
   Store,
   Sun,
   Sunrise,
-  Sunset, Users,
+  Sunset,
+  Users,
   Wrench,
   X,
-  type LucideIcon
+  type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +60,7 @@ import type { BusinessVertical } from '@/lib/organization/business-profile'
 import { cn } from '@/lib/utils'
 import { FirstStepsPanel } from './FirstStepsPanel'
 import { GuideSectionCard } from './GuideSectionCard'
+import { AdminGuideAssistant } from './AdminGuideAssistant'
 
 const CONCEPT_ICONS: Record<string, LucideIcon> = {
   plataforma: Building2,
@@ -59,12 +68,18 @@ const CONCEPT_ICONS: Record<string, LucideIcon> = {
   plan: CreditCard,
   pos: ShoppingBag,
   caja: CreditCard,
+  quotes: FileText,
+  agenda: CalendarClock,
   customers: Users,
+  'after-sales': RotateCcw,
   orders: Package,
   repairs: Wrench,
+  technician: ClipboardCheck,
   promotions: Sparkles,
   credits: CreditCard,
   suppliers: Store,
+  'inventory-count': ScanBarcode,
+  vencimientos: CalendarX2,
 }
 
 const VERTICAL_OPTIONS: { id: BusinessVertical; label: string; icon: string }[] = [
@@ -121,10 +136,16 @@ const QUICK_SEARCH_CHIPS = ['caja', 'stock', 'roles', 'transferencia', 'publicar
 const DASHBOARD_SECTION_IDS = [
   'pos',
   'caja',
+  'quotes',
+  'agenda',
   'inventory',
+  'inventory-count',
+  'vencimientos',
   'customers',
+  'after-sales',
   'orders',
   'repairs',
+  'technician',
   'promotions',
   'credits',
   'suppliers',
@@ -140,7 +161,7 @@ function iconFor(section: GuideSection): LucideIcon {
   return CONCEPT_ICONS[section.id] ?? Sparkles
 }
 
-export type MainGuideTab = 'summary' | 'all' | 'dashboard' | 'admin' | 'rubro' | 'first-steps' | 'faq'
+export type MainGuideTab = 'summary' | 'assistant' | 'all' | 'dashboard' | 'admin' | 'rubro' | 'first-steps' | 'faq'
 
 export function GuideView() {
   const hydrated = useHydrated()
@@ -291,6 +312,17 @@ function GuideViewContent() {
     })
   }
 
+  const handleSelectSectionFromAssistant = (sectionId: string) => {
+    setActiveTab('all')
+    setExpandedMap((prev) => ({ ...prev, [sectionId]: true }))
+    setTimeout(() => {
+      const el = document.getElementById(`guia-${sectionId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 120)
+  }
+
   const readCount = readSections.filter((id) => available.some((a) => a.id === id)).length
   const readPercent = available.length > 0 ? Math.min(100, Math.round((readCount / available.length) * 100)) : 0
 
@@ -411,6 +443,24 @@ function GuideViewContent() {
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
               <span>Resumen</span>
+            </button>
+
+            {/* 0.1 Asistente Operativo Interactivo (Índigo) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('assistant')}
+              className={cn(
+                'flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all sm:justify-start shadow-2xs active:scale-95',
+                activeTab === 'assistant'
+                  ? 'bg-indigo-600 text-white shadow-sm border-2 border-indigo-600 ring-2 ring-indigo-400/30'
+                  : 'border-2 border-indigo-200/80 bg-indigo-50/60 text-indigo-900 hover:border-indigo-400 hover:bg-indigo-100/70 hover:shadow-xs dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-900/50',
+              )}
+            >
+              <Bot className={cn('h-3.5 w-3.5', activeTab === 'assistant' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400')} />
+              <span>Asistente</span>
+              <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-extrabold', activeTab === 'assistant' ? 'bg-indigo-700 text-white' : 'bg-indigo-200/90 text-indigo-950 dark:bg-indigo-900 dark:text-indigo-200')}>
+                IA
+              </span>
             </button>
 
             {/* 1. Dashboard / Operaciones (Azul) */}
@@ -535,7 +585,7 @@ function GuideViewContent() {
             )}
           </div>
 
-          {(searching || (activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && activeTab !== 'summary')) && (
+          {(searching || (activeTab !== 'first-steps' && activeTab !== 'faq' && activeTab !== 'rubro' && activeTab !== 'summary' && activeTab !== 'assistant')) && (
             <div className="flex items-center gap-1">
               <Button
                 type="button"
@@ -561,6 +611,16 @@ function GuideViewContent() {
           )}
         </div>
       </header>
+
+      {/* ── SECCIÓN ASISTENTE OPERATIVO DEDICADO ── */}
+      {activeTab === 'assistant' && !searching && (
+        <div className="space-y-4">
+          <AdminGuideAssistant
+            availableSections={available}
+            onSelectSection={handleSelectSectionFromAssistant}
+          />
+        </div>
+      )}
 
       {/* ── SECCIÓN 1: DASHBOARD / OPERACIONES ── */}
       {activeTab === 'dashboard' && !searching && (
@@ -595,6 +655,18 @@ function GuideViewContent() {
                   className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-blue-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-blue-400 hover:bg-blue-100/60 active:scale-95 transition-all dark:border-blue-800/80 dark:hover:bg-blue-950/50"
                 >
                   <span>Cajas del Día</span>
+                </Link>
+                <Link
+                  href="/dashboard/quotes"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-blue-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-blue-400 hover:bg-blue-100/60 active:scale-95 transition-all dark:border-blue-800/80 dark:hover:bg-blue-950/50"
+                >
+                  <span>Presupuestos</span>
+                </Link>
+                <Link
+                  href="/dashboard/repairs"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border-2 border-blue-200/90 bg-background px-3 text-xs font-bold text-foreground shadow-2xs hover:border-blue-400 hover:bg-blue-100/60 active:scale-95 transition-all dark:border-blue-800/80 dark:hover:bg-blue-950/50"
+                >
+                  <span>Reparaciones</span>
                 </Link>
                 <Link
                   href="/dashboard/products"
@@ -898,6 +970,27 @@ function GuideViewContent() {
               <strong className="text-blue-600 dark:text-blue-400">Operaciones Diarias</strong> (caja y mostrador) y{' '}
               <strong className="text-purple-600 dark:text-purple-400">Panel de Administración</strong> (gestión del negocio).
             </p>
+          </div>
+
+          {/* Banner al Asistente Operativo */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border-2 border-indigo-200/90 bg-indigo-50/70 p-4 shadow-xs dark:border-indigo-900/60 dark:bg-indigo-950/30">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+                <Bot className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Asistente Operativo del Sistema</h3>
+                <p className="text-xs text-muted-foreground">Respuestas instantáneas, paso a paso de aperturas, presupuestos, cierres, taller y accesos directos.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('assistant')}
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 active:scale-95 transition-all self-start sm:self-auto"
+            >
+              <span>Consultar Asistente</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* Grid de los 2 Pilares Principales */}
@@ -1207,7 +1300,7 @@ function GuideViewContent() {
             </Button>
           </div>
         </section>
-      ) : activeTab !== 'rubro' ? (
+      ) : activeTab !== 'rubro' && activeTab !== 'assistant' ? (
         /* ── Lista de Secciones ── */
         groups.map((group) => {
           const theme = GROUP_HEADER_THEMES[group.id]

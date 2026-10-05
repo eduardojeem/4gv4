@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Check, CheckCircle2, ChevronDown, ChevronUp, ImageOff, Loader2, Plus, Search, Sparkles, Store, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, ImageOff, Loader2, Plus, Search, Sparkles, Store, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,13 @@ interface GlobalProductCandidatesProps {
   busy: boolean
   optionName: (kind: 'brand' | 'category', id: string | null) => string | null
   onImport: (entries: GlobalProductCandidate[]) => void
+}
+
+function resolveOtherNames(candidate: GlobalProductCandidate): string[] {
+  if (Array.isArray(candidate.otherNames)) return candidate.otherNames
+  const raw = candidate as unknown as { other_names?: string[] | null }
+  if (Array.isArray(raw.other_names)) return raw.other_names
+  return []
 }
 
 export function GlobalProductCandidates({
@@ -30,12 +37,15 @@ export function GlobalProductCandidates({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return candidates
-    return candidates.filter((c) =>
-      c.name.toLowerCase().includes(q) ||
-      c.gtin.includes(q) ||
-      (c.brandName && c.brandName.toLowerCase().includes(q)) ||
-      c.otherNames.some((o) => o.toLowerCase().includes(q)),
-    )
+    return candidates.filter((c) => {
+      const other = resolveOtherNames(c)
+      return (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.gtin || '').includes(q) ||
+        Boolean(c.brandName && c.brandName.toLowerCase().includes(q)) ||
+        other.some((o) => o && o.toLowerCase().includes(q))
+      )
+    })
   }, [candidates, search])
 
   const toggle = (gtin: string) =>
@@ -150,6 +160,7 @@ export function GlobalProductCandidates({
               const isChecked = selected.has(candidate.gtin)
               const brand = optionName('brand', candidate.globalBrandId) ?? candidate.brandName
               const category = optionName('category', candidate.globalCategoryId)
+              const otherNames = resolveOtherNames(candidate)
 
               return (
                 <div
@@ -187,9 +198,9 @@ export function GlobalProductCandidates({
                       {brand && <span className="font-medium text-foreground/80">• {brand}</span>}
                       {category && <span className="truncate text-muted-foreground">• {category}</span>}
                     </div>
-                    {candidate.otherNames.length > 0 && (
+                    {otherNames.length > 0 && (
                       <p className="text-[10px] text-muted-foreground/75 truncate mt-0.5">
-                        Otros nombres: {candidate.otherNames.slice(0, 2).join(', ')}
+                        Otros nombres: {otherNames.slice(0, 2).join(', ')}
                       </p>
                     )}
                   </div>
@@ -197,7 +208,7 @@ export function GlobalProductCandidates({
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0 h-5 font-medium">
                       <Store className="h-2.5 w-2.5" />
-                      {candidate.stores} {candidate.stores === 1 ? 'tienda' : 'tiendas'}
+                      {candidate.stores ?? 1} {(candidate.stores ?? 1) === 1 ? 'tienda' : 'tiendas'}
                     </Badge>
                     <Button
                       size="sm"

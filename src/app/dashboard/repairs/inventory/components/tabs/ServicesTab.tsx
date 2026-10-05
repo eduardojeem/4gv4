@@ -46,9 +46,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { Product } from '@/types/product-unified'
 import { formatPrice, cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/auth-context'
 
 export function ServicesTab() {
   const { services, loading, deleteItem, updateService } = useInventory()
+  const { hasPermission, isAdmin } = useAuth()
+  const canCreate = isAdmin || hasPermission('products.create')
+  const canUpdate = isAdmin || hasPermission('products.update')
+  const canDelete = isAdmin || hasPermission('products.delete')
   const [searchTerm, setSearchTerm] = useState("")
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [displayFormat, setDisplayFormat] = useState<'table' | 'cards'>('table')
@@ -92,6 +97,7 @@ export function ServicesTab() {
   }, [searchTerm, viewMode])
 
   const handleEdit = (service: Product) => {
+    if (!canUpdate) return
     setEditingService(service)
     setIsDialogOpen(true)
   }
@@ -102,15 +108,18 @@ export function ServicesTab() {
   }
 
   const handleNew = () => {
+    if (!canCreate) return
     setEditingService(null)
     setIsDialogOpen(true)
   }
 
   const handleDelete = (service: Product) => {
+    if (!canDelete) return
     setServiceToDelete(service)
   }
 
   const handleToggleWeb = async (service: Product) => {
+    if (!canUpdate) return
     const isVisible = (service.visibility || 'public') === 'public'
     setTogglingId(service.id)
     try {
@@ -263,7 +272,7 @@ export function ServicesTab() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <Button onClick={handleNew} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shrink-0 text-xs rounded-xl">
+                <Button disabled={!canCreate} onClick={handleNew} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shrink-0 text-xs rounded-xl">
                   <Plus className="mr-1.5 h-4 w-4" /> <span className="hidden sm:inline">Nuevo Servicio</span>
                 </Button>
               </div>
@@ -392,7 +401,7 @@ export function ServicesTab() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleToggleWeb(service)}
-                                disabled={togglingId === service.id}
+                                disabled={!canUpdate || togglingId === service.id}
                                 className={cn(
                                   "h-8 w-8 rounded-lg transition-colors",
                                   (service.visibility || 'public') === 'public'
@@ -426,6 +435,7 @@ export function ServicesTab() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleEdit(service)}
+                                disabled={!canUpdate}
                                 className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40 h-8 w-8 rounded-lg"
                                 title="Editar"
                               >
@@ -436,6 +446,7 @@ export function ServicesTab() {
                                 size="icon"
                                 className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 h-8 w-8 rounded-lg"
                                 onClick={() => handleDelete(service)}
+                                disabled={!canDelete}
                                 title="Eliminar"
                               >
                                 <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -477,11 +488,13 @@ export function ServicesTab() {
         </CardContent>
       </Card>
 
-      <ServiceDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        service={editingService}
-      />
+      {(canCreate || canUpdate) && (
+        <ServiceDialog
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          service={editingService}
+        />
+      )}
 
       <ServiceDetailDialog
         open={isDetailOpen}

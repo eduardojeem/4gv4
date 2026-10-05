@@ -461,9 +461,14 @@ export function PublicHeader({
               }}
               className={cn(
                 'w-full rounded-full border transition-all duration-300 outline-none placeholder:text-muted-foreground',
+                companyInfo?.headerStyle === 'dark' && 'placeholder:text-slate-400 border-slate-700 bg-slate-900 text-white',
                 searchFocused
-                  ? 'h-10 border-primary bg-background pl-10 pr-20 text-sm ring-2 ring-primary/25 shadow-md text-foreground'
-                  : 'h-9 border-border/70 bg-muted/35 pl-9 pr-8 text-xs text-foreground hover:border-border hover:bg-muted/60'
+                  ? companyInfo?.headerStyle === 'dark'
+                    ? 'h-10 border-primary bg-slate-900 pl-10 pr-20 text-sm ring-2 ring-primary/25 shadow-md text-white'
+                    : 'h-10 border-primary bg-background pl-10 pr-20 text-sm ring-2 ring-primary/25 shadow-md text-foreground'
+                  : companyInfo?.headerStyle === 'dark'
+                    ? 'h-9 border-slate-800 bg-slate-900/80 pl-9 pr-8 text-xs text-white hover:border-slate-700'
+                    : 'h-9 border-border/70 bg-muted/35 pl-9 pr-8 text-xs text-foreground hover:border-border hover:bg-muted/60'
               )}
             />
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -511,9 +516,13 @@ export function PublicHeader({
                   active
                     ? companyInfo?.headerStyle === 'accent'
                       ? 'text-primary bg-white shadow-xs'
+                      : companyInfo?.headerStyle === 'dark'
+                      ? 'text-white bg-white/15 ring-1 ring-white/20'
                       : 'text-primary bg-primary/10 ring-1 ring-primary/20'
                     : companyInfo?.headerStyle === 'accent'
                     ? 'text-white/85 hover:text-white hover:bg-white/10'
+                    : companyInfo?.headerStyle === 'dark'
+                    ? 'text-slate-300 hover:text-white hover:bg-white/10'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                 )}
               >

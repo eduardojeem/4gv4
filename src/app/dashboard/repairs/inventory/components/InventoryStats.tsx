@@ -30,7 +30,7 @@ export function InventoryStats() {
 
     // Alertas de stock bajo
     const lowStockCount = inventory.filter(
-      p => (p.stock_quantity || 0) <= (p.min_stock || 5) && (p.stock_quantity || 0) > 0
+      p => (p.stock_quantity || 0) <= (p.min_stock ?? 5) && (p.stock_quantity || 0) > 0
     ).length
 
     // Repuestos agotados (0 unidades)
@@ -40,7 +40,7 @@ export function InventoryStats() {
 
     // Repuestos con stock normal (óptimo)
     const inStockCount = inventory.filter(
-      p => (p.stock_quantity || 0) > (p.min_stock || 5)
+      p => (p.stock_quantity || 0) > (p.min_stock ?? 5)
     ).length
 
     // Margen de ganancia promedio de servicios

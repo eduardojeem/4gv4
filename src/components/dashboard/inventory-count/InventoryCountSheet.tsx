@@ -18,11 +18,13 @@ import {
   countDifference,
   countToCsv,
   findByCode,
+  getInventoryCountDetailGuidance,
   parseScan,
   summarizeCount,
   type CountItem,
   type CountStatus,
 } from '@/lib/inventory/inventory-count'
+import { InventoryCountAssistant } from './InventoryCountAssistant'
 
 type Relation = { name: string } | Array<{ name: string }> | null
 const relationName = (value: Relation) => (Array.isArray(value) ? value[0]?.name : value?.name) ?? null
@@ -83,6 +85,13 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
   const open = count?.status === 'counting'
   const editable = open && canAdjust
   const summary = useMemo(() => summarizeCount(items), [items])
+  const guidance = useMemo(() => getInventoryCountDetailGuidance({
+    status: count?.status ?? 'counting',
+    canAdjust,
+    counted: summary.counted,
+    notCounted: summary.notCounted,
+    withDifference: summary.withDifference,
+  }), [count?.status, canAdjust, summary])
 
   const save = useCallback(async (updates: Array<{ item_id: string; counted_qty: number | null; match_system?: boolean }>) => {
     const previous = items
@@ -198,6 +207,14 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
     URL.revokeObjectURL(url)
   }
 
+  const followGuidance = () => {
+    if (guidance.kind === 'count') scanRef.current?.focus()
+    else if (guidance.kind === 'continue') {
+      setFilter('pending')
+      setLimit(PAGE)
+    } else if (guidance.kind === 'review') setReviewOpen(true)
+  }
+
   if (loading || !count) {
     return <p className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando la toma…</p>
   }
@@ -227,6 +244,8 @@ export function InventoryCountSheet({ countId }: { countId: string }) {
           )}
         </div>
       </div>
+
+      <InventoryCountAssistant guidance={guidance} onAction={guidance.actionLabel ? followGuidance : undefined} />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="rounded-xl"><CardContent className="space-y-2 p-4">

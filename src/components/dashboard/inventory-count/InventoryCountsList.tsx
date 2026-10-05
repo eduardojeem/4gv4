@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { ClipboardCheck, Loader2, Plus, RefreshCw, ScanBarcode } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,8 @@ import { useBranch } from '@/contexts/branch-context'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { COUNT_STATUS_LABELS, type CountStatus } from '@/lib/inventory/inventory-count'
+import { getInventoryCountListGuidance } from '@/lib/inventory/inventory-count'
+import { InventoryCountAssistant } from './InventoryCountAssistant'
 
 type Relation = { name: string } | Array<{ name: string }> | null
 const relationName = (value: Relation) => (Array.isArray(value) ? value[0]?.name : value?.name) ?? null
@@ -140,6 +142,7 @@ function NewCountDialog({
 }
 
 export function InventoryCountsList() {
+  const router = useRouter()
   const [counts, setCounts] = useState<CountRow[]>([])
   const [progress, setProgress] = useState<Record<string, { total: number; counted: number }>>({})
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
@@ -164,6 +167,12 @@ export function InventoryCountsList() {
   }, [])
   useEffect(() => { void load() }, [load])
 
+  const guidance = useMemo(() => getInventoryCountListGuidance({ available, canAdjust, counts, progress }), [available, canAdjust, counts, progress])
+  const followGuidance = () => {
+    if (guidance.kind === 'start') setDialogOpen(true)
+    else if (guidance.countId) router.push(`/dashboard/inventory-count/${guidance.countId}`)
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -178,6 +187,8 @@ export function InventoryCountsList() {
           {canAdjust && <Button size="sm" onClick={() => setDialogOpen(true)} disabled={!available}><Plus className="h-4 w-4" /> Nueva toma</Button>}
         </div>
       </div>
+
+      {!loading && <InventoryCountAssistant guidance={guidance} onAction={guidance.actionLabel ? followGuidance : undefined} />}
 
       {!available && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">

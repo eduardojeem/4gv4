@@ -15,6 +15,112 @@ export const COUNT_STATUS_LABELS: Record<CountStatus, string> = {
   cancelled: 'Anulada',
 }
 
+export type InventoryCountGuidanceKind =
+  | 'unavailable'
+  | 'read-only'
+  | 'start'
+  | 'count'
+  | 'continue'
+  | 'review'
+  | 'closed'
+
+export type InventoryCountGuidance = {
+  kind: InventoryCountGuidanceKind
+  title: string
+  description: string
+  actionLabel?: string
+  countId?: string
+  pending?: number
+}
+
+export function getInventoryCountListGuidance(input: {
+  available: boolean
+  canAdjust: boolean
+  counts: Array<{ id: string; number: number; status: CountStatus }>
+  progress: Record<string, { total: number; counted: number }>
+}): InventoryCountGuidance {
+  if (!input.available) return {
+    kind: 'unavailable',
+    title: 'Activación pendiente',
+    description: 'La base de datos todavía no tiene habilitada la toma física de inventario.',
+  }
+  if (!input.canAdjust) return {
+    kind: 'read-only',
+    title: 'Consulta disponible',
+    description: 'Podés revisar tomas anteriores. Para contar o ajustar stock necesitás permiso de gestión de inventario.',
+  }
+
+  const open = input.counts.find((count) => count.status === 'counting')
+  if (!open) return {
+    kind: 'start',
+    title: 'Empezá una toma física',
+    description: 'Elegí una sucursal y contá todo el inventario o una categoría específica.',
+    actionLabel: 'Nueva toma',
+  }
+
+  const progress = input.progress[open.id]
+  const pending = Math.max(0, (progress?.total ?? 0) - (progress?.counted ?? 0))
+  if (progress?.total && pending === 0) return {
+    kind: 'review',
+    title: `La toma #${open.number} está lista para revisar`,
+    description: 'Ya se contaron todos los productos. Revisá las diferencias antes de aplicar los ajustes.',
+    actionLabel: 'Revisar toma',
+    countId: open.id,
+    pending: 0,
+  }
+  return {
+    kind: 'continue',
+    title: `Continuá la toma #${open.number}`,
+    description: pending > 0 ? `Quedan ${pending} productos sin contar.` : 'La toma está abierta y lista para comenzar.',
+    actionLabel: 'Continuar conteo',
+    countId: open.id,
+    pending,
+  }
+}
+
+export function getInventoryCountDetailGuidance(input: {
+  status: CountStatus
+  canAdjust: boolean
+  counted: number
+  notCounted: number
+  withDifference: number
+}): InventoryCountGuidance {
+  if (input.status !== 'counting') return {
+    kind: 'closed',
+    title: input.status === 'applied' ? 'Toma aplicada' : 'Toma anulada',
+    description: input.status === 'applied'
+      ? 'El stock ya fue ajustado y podés consultar o exportar el resultado.'
+      : 'Esta toma quedó cerrada sin modificar el stock.',
+  }
+  if (!input.canAdjust) return {
+    kind: 'read-only',
+    title: 'Vista de consulta',
+    description: 'Podés revisar el avance, pero necesitás permiso de gestión de inventario para contar o aplicar.',
+  }
+  if (input.counted === 0) return {
+    kind: 'count',
+    title: 'Empezá por el primer producto',
+    description: 'Escaneá un código o cargá la cantidad física. Activá el conteo a ciegas para evitar copiar el número del sistema.',
+    actionLabel: 'Ir a contar',
+  }
+  if (input.notCounted > 0) return {
+    kind: 'continue',
+    title: 'Continuá con los pendientes',
+    description: `Todavía quedan ${input.notCounted} productos sin contar. Esos productos no se modificarán si aplicás ahora.`,
+    actionLabel: 'Ver pendientes',
+    pending: input.notCounted,
+  }
+  return {
+    kind: 'review',
+    title: input.withDifference > 0 ? 'Revisá las diferencias' : 'El conteo está completo',
+    description: input.withDifference > 0
+      ? `${input.withDifference} productos cambiarán de stock. Confirmá las cantidades antes de aplicar.`
+      : 'Todo coincide con el sistema. Aplicá la toma para cerrarla y guardar el resultado.',
+    actionLabel: 'Revisar y aplicar',
+    pending: 0,
+  }
+}
+
 export type CountItem = {
   id: string
   product_id: string

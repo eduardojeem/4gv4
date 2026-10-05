@@ -314,6 +314,7 @@ async function countActiveProducts(organizationId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .is('archived_by_plan_at', null)
+    .or('unit_measure.is.null,unit_measure.neq.servicio')
 
   if (error) {
     throw new Error(`No se pudo contar products: ${error.message}`)
@@ -387,6 +388,7 @@ async function countServices(organizationId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .eq('unit_measure', 'servicio')
+    .is('archived_by_plan_at', null)
 
   if (error) {
     throw new Error(`No se pudieron contar los servicios: ${error.message}`)

@@ -5,7 +5,7 @@ describe('filterProductsByCatalogKind', () => {
   const products = [
     { id: 'part-1', name: 'Módulo A05', unit_measure: 'unidad', category: { name: 'Repuestos' } },
     { id: 'service-1', name: 'Mantenimiento premium', unit_measure: 'unidad', category: { name: 'Servicios' } },
-    { id: 'service-2', name: 'Cambio de batería', unit_measure: 'unidad', category: { name: 'General' } },
+    { id: 'service-2', name: 'Cambio de batería', unit_measure: 'servicio', category: { name: 'General' } },
   ]
 
   it('filters services before endpoint pagination using the canonical classifier', () => {

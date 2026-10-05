@@ -119,7 +119,7 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
                       className="w-full rounded-xl gap-2 font-semibold text-xs"
                     >
                       <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>Escribir a esta sucursal</span>
                       </a>
                     </Button>
