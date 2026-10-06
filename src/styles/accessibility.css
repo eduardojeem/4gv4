@@ -44,43 +44,46 @@
   scroll-behavior: auto !important;
 }
 
-/* Tamaños de Fuente */
-.font-small {
+/* Tamaños de Fuente
+   Solo sobre <html>: `.font-medium` a secas también es la clase de Tailwind para
+   el peso seminegrita, y como este CSS no está en una capa le ganaba a
+   `text-xs`/`text-sm`. Todo texto seminegrita del sitio quedaba en 16 px. */
+html.font-small {
   font-size: 14px;
 }
 
-.font-medium {
+html.font-medium {
   font-size: 16px;
 }
 
-.font-large {
+html.font-large {
   font-size: 18px;
 }
 
-.font-extra-large {
+html.font-extra-large {
   font-size: 20px;
 }
 
-.font-small h1 { font-size: 1.75rem; }
-.font-small h2 { font-size: 1.5rem; }
-.font-small h3 { font-size: 1.25rem; }
-.font-small h4 { font-size: 1.125rem; }
-.font-small h5 { font-size: 1rem; }
-.font-small h6 { font-size: 0.875rem; }
+html.font-small h1 { font-size: 1.75rem; }
+html.font-small h2 { font-size: 1.5rem; }
+html.font-small h3 { font-size: 1.25rem; }
+html.font-small h4 { font-size: 1.125rem; }
+html.font-small h5 { font-size: 1rem; }
+html.font-small h6 { font-size: 0.875rem; }
 
-.font-large h1 { font-size: 2.5rem; }
-.font-large h2 { font-size: 2rem; }
-.font-large h3 { font-size: 1.75rem; }
-.font-large h4 { font-size: 1.5rem; }
-.font-large h5 { font-size: 1.25rem; }
-.font-large h6 { font-size: 1.125rem; }
+html.font-large h1 { font-size: 2.5rem; }
+html.font-large h2 { font-size: 2rem; }
+html.font-large h3 { font-size: 1.75rem; }
+html.font-large h4 { font-size: 1.5rem; }
+html.font-large h5 { font-size: 1.25rem; }
+html.font-large h6 { font-size: 1.125rem; }
 
-.font-extra-large h1 { font-size: 3rem; }
-.font-extra-large h2 { font-size: 2.5rem; }
-.font-extra-large h3 { font-size: 2rem; }
-.font-extra-large h4 { font-size: 1.75rem; }
-.font-extra-large h5 { font-size: 1.5rem; }
-.font-extra-large h6 { font-size: 1.25rem; }
+html.font-extra-large h1 { font-size: 3rem; }
+html.font-extra-large h2 { font-size: 2.5rem; }
+html.font-extra-large h3 { font-size: 2rem; }
+html.font-extra-large h4 { font-size: 1.75rem; }
+html.font-extra-large h5 { font-size: 1.5rem; }
+html.font-extra-large h6 { font-size: 1.25rem; }
 
 /* Indicadores de Foco Mejorados */
 .enhanced-focus *:focus {
@@ -313,11 +316,11 @@
 
 /* Mejoras para Pantallas Pequeñas */
 @media (max-width: 768px) {
-  .font-large {
+  html.font-large {
     font-size: 16px;
   }
   
-  .font-extra-large {
+  html.font-extra-large {
     font-size: 18px;
   }
 }

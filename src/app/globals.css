@@ -805,23 +805,23 @@ html .text-primary {
   }
 
   /* Tamaños de fuente */
-  .font-normal {
+  html.font-normal {
     font-size: 1rem;
   }
 
-  .font-large {
+  html.font-large {
     font-size: 1.125rem;
   }
 
-  .font-extra-large {
+  html.font-extra-large {
     font-size: 1.25rem;
   }
 
-  .font-large * {
+  html.font-large * {
     font-size: inherit;
   }
 
-  .font-extra-large * {
+  html.font-extra-large * {
     font-size: inherit;
   }
 
