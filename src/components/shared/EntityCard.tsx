@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MoreVertical, LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 
 // ============================================================================
 // Types

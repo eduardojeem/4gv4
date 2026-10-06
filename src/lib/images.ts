@@ -1,12 +1,15 @@
 import { getPublicUrl } from './supabase-storage'
 import { isSupportedImageSource } from './image-url-policy'
 
-const ALREADY_OPTIMIZED_IMAGE_HOSTS = new Set([
-  'pyunicentroprod.vtexassets.com',
-  'images.napali.app',
-])
-
-/** Evita pagar una segunda transformación para recursos que no la necesitan. */
+/**
+ * Qué imágenes NO pasan por el optimizador de Vercel (`/_next/image`).
+ *
+ * Las de las tiendas y de otros sitios se sirven directo: las fotos se
+ * comprimen a WebP al subirlas, y cada transformación de Vercel cuenta contra
+ * un cupo pago que, agotado, responde 402 y deja la foto en blanco. Solo las
+ * imágenes fijas del propio sitio (`/images/...`), que son pocas y siempre las
+ * mismas, se siguen optimizando.
+ */
 export const shouldBypassImageOptimization = (source?: string | null): boolean => {
   if (!source) return true
   const value = source.trim()
@@ -16,15 +19,14 @@ export const shouldBypassImageOptimization = (source?: string | null): boolean =
   // exact search pattern is configured. These assets are already WebP files.
   if (value.startsWith('/') && /[?#]/.test(value)) return true
   if (value === '/placeholder-product.svg' || /\.(?:svg|gif)(?:$|[?#])/i.test(value)) return true
+  // Protocolo relativo («//cdn…»): también es de otro sitio.
+  if (value.startsWith('//')) return true
 
   try {
     const url = new URL(value)
-    if (ALREADY_OPTIMIZED_IMAGE_HOSTS.has(url.hostname)) return true
-
-    return url.hostname.endsWith('.supabase.co')
-      && url.pathname.includes('/storage/v1/object/public/product-images/')
-      && /\.webp$/i.test(url.pathname)
+    return url.protocol === 'https:' || url.protocol === 'http:'
   } catch {
+    // Ruta del propio sitio («/images/…» o «product-images/…» ya resuelta aparte).
     return false
   }
 }

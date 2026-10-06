@@ -13,7 +13,7 @@ import {
   Laptop, RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import { useAuth } from '@/contexts/auth-context'
 import {
   Dialog,

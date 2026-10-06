@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { FavoriteButton } from './Favorites'
 import Link from 'next/link'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import { ArrowRight, Check, ChevronLeft, ChevronRight, CreditCard, Eye, MapPin, MessageCircle, Minus, Package, Plus, ShoppingCart, Sparkles, Tag, TrendingDown, Zap } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'

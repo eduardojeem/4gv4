@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname, useRouter } from 'next/navigation'

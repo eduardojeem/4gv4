@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import { Minus, Package, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl } from '@/lib/images'

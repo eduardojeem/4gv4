@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ElementType } from 'react'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {

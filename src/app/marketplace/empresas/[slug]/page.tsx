@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { rubroLabel } from '@/lib/public/organization-rubro'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {

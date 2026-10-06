@@ -19,9 +19,14 @@ describe('AppImage', () => {
     expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-height', '1')
   })
 
-  it('optimiza una URL real de Supabase Storage cuando recibe dimensiones utilizables', () => {
+  it('sirve directo una foto de Supabase Storage aunque reciba dimensiones (el cupo de Vercel responde 402)', () => {
     render(<AppImage src="https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg" alt="Producto" width={400} height={400} />)
-    expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'false')
+    expect(screen.getByRole('img', { name: 'Producto' })).toHaveAttribute('data-unoptimized', 'true')
+  })
+
+  it('sigue optimizando las imágenes fijas del sitio cuando recibe dimensiones', () => {
+    render(<AppImage src="/images/portada.png" alt="Portada" width={1200} height={600} />)
+    expect(screen.getByRole('img', { name: 'Portada' })).toHaveAttribute('data-unoptimized', 'false')
   })
 
   it('evita el optimizador para un WebP normalizado de Supabase Storage', () => {

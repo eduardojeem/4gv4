@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
@@ -403,7 +403,6 @@ function ClassicCategoryShowcase() {
                           fill
                           sizes="40px"
                           className="object-cover"
-                          unoptimized={coverUrl.startsWith('data:')}
                         />
                       </div>
                     )}

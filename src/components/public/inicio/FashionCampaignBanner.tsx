@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useHydrated } from '@/hooks/use-hydrated'
 import Link from 'next/link'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import {

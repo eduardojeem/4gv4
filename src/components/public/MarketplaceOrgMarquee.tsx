@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'

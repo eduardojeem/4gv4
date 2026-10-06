@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -712,7 +712,7 @@ export function CartPageClient({
                       <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl border bg-muted flex items-center justify-center">
                         {image
                           ? <Image src={image} alt={item.name} fill className="object-contain p-2" sizes="72px"
-                              unoptimized={image.startsWith('data:') || image === '/placeholder-product.svg'} />
+                              />
                           : <Package className="h-6 w-6 text-muted-foreground/40" />
                         }
                       </div>

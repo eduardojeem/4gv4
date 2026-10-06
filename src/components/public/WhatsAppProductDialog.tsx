@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import {
   MessageCircle,
   ShoppingCart,

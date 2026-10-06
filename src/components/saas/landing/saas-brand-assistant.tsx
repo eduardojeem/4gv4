@@ -1,4 +1,4 @@
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import styles from './saas-brand-assistant.module.css'
 
 type SaaSBrandAssistantProps = {

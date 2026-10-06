@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import {
   ArrowUpDown, ArrowUp, ArrowDown,
   Edit, Trash2, Copy, Eye, Package, AlertTriangle, XCircle,

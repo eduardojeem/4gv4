@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useSyncExternalStore } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname, useRouter } from 'next/navigation'
@@ -226,7 +226,6 @@ export function HeroCampaign({
                           priority={index === 0}
                           sizes="(max-width: 1024px) 50vw, 30vw"
                           className="object-cover transition-transform duration-700 group-hover:scale-105"
-                          unoptimized={src.startsWith('data:')}
                           onError={() => setFailedImageIds((ids) => [...ids, product.id])}
                         />
                         <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-4 pb-4 pt-16 text-xs font-semibold text-white sm:text-sm">

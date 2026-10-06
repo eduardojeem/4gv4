@@ -3,7 +3,7 @@
 import { AppImage } from '@/components/ui/app-image'
 
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

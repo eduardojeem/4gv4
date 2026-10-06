@@ -8,7 +8,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import {
   Package,
   Edit,

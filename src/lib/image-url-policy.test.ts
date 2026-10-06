@@ -44,21 +44,23 @@ describe('image URL policy', () => {
     expect(shouldBypassImageOptimization('/placeholder-product.svg')).toBe(true)
     expect(shouldBypassImageOptimization('/images/products/item.webp?v=abc123')).toBe(true)
     expect(shouldBypassImageOptimization('data:image/webp;base64,AAAA')).toBe(true)
-    expect(shouldBypassImageOptimization('https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images/item.jpg')).toBe(false)
   })
 
-  it('bypasses normalized Supabase WebP but keeps legacy raster compatibility', () => {
+  it('serves every store image straight from storage, whatever its format', () => {
+    // El cupo de /_next/image se agota y responde 402: las fotos de las tiendas no pasan por ahí.
     const base = 'https://cswtugmwazxdktntndpy.supabase.co/storage/v1/object/public/product-images'
     expect(shouldBypassImageOptimization(`${base}/products/item.webp`)).toBe(true)
     expect(shouldBypassImageOptimization(`${base}/products/item.webp?download=1`)).toBe(true)
-    expect(shouldBypassImageOptimization(`${base}/products/item.jpg`)).toBe(false)
-    expect(shouldBypassImageOptimization(`${base}/products/item.png`)).toBe(false)
+    expect(shouldBypassImageOptimization(`${base}/products/item.jpg`)).toBe(true)
+    expect(shouldBypassImageOptimization(`${base}/website/logos/org/logo.png?v=1`)).toBe(true)
+    expect(shouldBypassImageOptimization('https://images.example.com/item.webp')).toBe(true)
+    expect(shouldBypassImageOptimization('//cdn.example.com/item.png')).toBe(true)
   })
 
-  it('keeps external and local raster assets eligible for optimization', () => {
-    expect(shouldBypassImageOptimization('https://images.example.com/item.webp')).toBe(false)
+  it('keeps the site own static images eligible for optimization', () => {
     expect(shouldBypassImageOptimization('/images/item.webp')).toBe(false)
     expect(shouldBypassImageOptimization('/images/item.png')).toBe(false)
+    expect(shouldBypassImageOptimization('/branding/mitiendapy-logo.png')).toBe(false)
   })
 
   it('bypasses GIF, SVG, data and blob sources', () => {

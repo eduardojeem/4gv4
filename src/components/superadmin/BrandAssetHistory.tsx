@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import { AlertTriangle, Check, ImageOff, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 

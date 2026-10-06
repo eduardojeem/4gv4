@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronLeft, ChevronRight, Pause, Play, Sparkles, ArrowRight } from 'lucide-react'

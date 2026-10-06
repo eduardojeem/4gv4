@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import {
   AlertTriangle, ArrowLeft, Calendar, Check, CheckCircle2,
   ChevronLeft, ChevronRight, Clock, Coins, Copy, CreditCard, Download,

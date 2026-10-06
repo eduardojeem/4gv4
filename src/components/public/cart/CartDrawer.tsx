@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
@@ -117,10 +117,6 @@ export function CartDrawer() {
                           fill
                           className="object-contain p-2"
                           sizes="80px"
-                          unoptimized={
-                            image.startsWith('data:') ||
-                            image === '/placeholder-product.svg'
-                          }
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center">

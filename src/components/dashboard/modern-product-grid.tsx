@@ -43,7 +43,7 @@ interface ModernProductGridProps {
 
 import { formatCurrency } from '@/lib/currency'
 import { resolveProductImageUrl } from '@/lib/images'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 
 const getStockStatus = (stock: number) => {
   if (stock === 0) return { 

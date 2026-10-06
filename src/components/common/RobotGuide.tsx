@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import { cn } from '@/lib/utils'
 
 export type RobotColorVariant =

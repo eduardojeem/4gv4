@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Package, Tag } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'

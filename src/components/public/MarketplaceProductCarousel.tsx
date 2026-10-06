@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Eye, Pause, Play, Sparkles, Store, Tag, ArrowRight, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'

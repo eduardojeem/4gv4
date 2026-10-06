@@ -1,7 +1,7 @@
 'use client'
 
 import { useHydrated } from '@/hooks/use-hydrated'
-import Image from 'next/image'
+import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
@@ -122,7 +122,6 @@ export function CategoryCollections({ style }: { style: Exclude<StorefrontStyle,
                       fill
                       sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
                       className="object-cover transition-transform duration-700 ease-out group-hover:scale-108"
-                      unoptimized={col.imageUrl.startsWith('data:')}
                     />
                   )}
 
