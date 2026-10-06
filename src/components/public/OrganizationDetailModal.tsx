@@ -3,7 +3,6 @@
 import { AppImage } from '@/components/ui/app-image'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -409,7 +408,8 @@ export function OrganizationDetailModal({ organization, open, onClose }: Props) 
                     >
                       <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted/30 mb-2">
                         {img ? (
-                          <Image
+                          // AppImage: las fotos ya optimizadas al subirlas no pasan por el optimizador de Vercel.
+                          <AppImage
                             src={img}
                             alt={prod.name}
                             fill

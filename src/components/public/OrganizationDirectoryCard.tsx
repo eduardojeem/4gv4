@@ -6,7 +6,6 @@ import { AppImage } from '@/components/ui/app-image'
 // porque la tarjeta entera ya es un `<Link>`, y anidar anclas es HTML invalido—.
 // Sin esta directiva, Next lo renderiza como componente de servidor y falla con
 // «Event handlers cannot be passed to Client Component props».
-import Image from 'next/image'
 import { describeCatalogState } from '@/lib/public/catalog-state'
 import { organizationAccentColor } from '@/lib/public/organization-brand'
 import Link from 'next/link'
@@ -80,7 +79,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
             return (
               <div key={product.id} className={cn('relative overflow-hidden', i === 0 && previewProducts.length === 1 && 'col-span-3')}>
                 {src ? (
-                  <Image
+                  // AppImage: las fotos ya optimizadas al subirlas no pasan por el optimizador de Vercel.
+                  <AppImage
                     src={src}
                     alt={product.name}
                     fill
