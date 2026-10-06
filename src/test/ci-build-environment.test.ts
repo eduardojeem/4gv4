@@ -8,6 +8,7 @@ const workflows = ['ci.yml', 'test.yml'].map((file) => ({
 }))
 
 const marketplacePage = readFileSync(resolve(process.cwd(), 'src/app/marketplace/page.tsx'), 'utf8')
+const categoryCarousel = readFileSync(resolve(process.cwd(), 'src/components/public/CategoryCarouselSection.tsx'), 'utf8')
 
 describe('entorno de compilación de CI', () => {
   it.each(workflows)('$file permite prerenderizar páginas con el cliente público de Supabase', ({ source }) => {
@@ -23,5 +24,6 @@ describe('entorno de compilación de CI', () => {
     expect(marketplacePage).toContain('getMarketplaceBrands(30).catch(() => [])')
     expect(marketplacePage).toContain('getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT).catch(() => [])')
     expect(marketplacePage).toContain('getPlatformAnnouncements().catch(() => [])')
+    expect(categoryCarousel).toContain('getMarketplaceCategories().catch(() => [])')
   })
 })

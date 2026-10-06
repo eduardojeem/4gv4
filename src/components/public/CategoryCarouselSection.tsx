@@ -17,7 +17,7 @@ export async function CategoryCarouselSection({
   showViewAll = true,
   showCount = true,
 }: Props) {
-  const categories = await getMarketplaceCategories()
+  const categories = await getMarketplaceCategories().catch(() => [])
   if (!categories.length) return null
 
   return (
