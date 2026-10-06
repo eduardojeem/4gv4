@@ -61,8 +61,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
     <Link
       href={storeUrl}
       className={cn(
-        'group flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card transition-all duration-200',
-        'hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg',
+        'group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card transition-all duration-200 sm:rounded-2xl',
+        'hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md',
         className
       )}
       // El color que la tienda eligio para su pagina publica: la tarjeta
@@ -72,7 +72,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
         : undefined}
     >
       {/* Product preview thumbnails + logo overlay */}
-      <div className="relative grid h-28 grid-cols-3 overflow-visible bg-muted/40">
+      {/* En el celular entran dos tarjetas por fila: todo se achica un escalón. */}
+      <div className="relative grid h-20 grid-cols-3 overflow-visible bg-muted/40 sm:h-24">
         {previewProducts.length > 0 ? (
           previewProducts.map((product, i) => {
             const src = resolveProductImageUrl(product.image)
@@ -84,12 +85,12 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
                     src={src}
                     alt={product.name}
                     fill
-                    className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-                    sizes="120px"
+                    className="object-contain p-1.5 transition-transform duration-300 group-hover:scale-105 sm:p-2"
+                    sizes="100px"
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
-                    <Package className="h-6 w-6 text-muted-foreground/40" />
+                    <Package className="h-5 w-5 text-muted-foreground/40" />
                   </div>
                 )}
               </div>
@@ -97,12 +98,12 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
           })
         ) : (
           <div className="col-span-3 flex items-center justify-center">
-            <Package className="h-8 w-8 text-muted-foreground/40" />
+            <Package className="h-7 w-7 text-muted-foreground/40" />
           </div>
         )}
 
         {/* Logo superpuesto con Identidad de Marca */}
-        <div className="absolute -bottom-5 left-3.5 z-10 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-background bg-card p-1 shadow-md">
+        <div className="absolute -bottom-4 left-2.5 z-10 flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border-2 border-background bg-card p-0.5 shadow-md sm:-bottom-5 sm:left-3 sm:h-11 sm:w-11 sm:rounded-xl sm:p-1">
           {organization.logo_url ? (
             <AppImage
               src={organization.logo_url}
@@ -113,7 +114,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
           ) : (
             <div
               className={cn(
-                'flex h-full w-full items-center justify-center rounded-lg font-bold text-xs text-white shadow-2xs bg-gradient-to-br',
+                'flex h-full w-full items-center justify-center rounded-md font-bold text-[11px] text-white shadow-2xs bg-gradient-to-br sm:rounded-lg sm:text-xs',
                 organization.brand_color === 'green' && 'from-emerald-600 to-teal-700',
                 organization.brand_color === 'purple' && 'from-purple-600 to-pink-700',
                 organization.brand_color === 'orange' && 'from-orange-600 to-amber-700',
@@ -136,28 +137,28 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-1 px-4 pt-7 pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
+      <div className="flex flex-1 flex-col gap-1 px-2.5 pt-6 pb-2.5 sm:px-3.5 sm:pt-7 sm:pb-3">
+        <div className="flex flex-col items-start gap-1">
+          <div className="w-full min-w-0">
+            <h3 className="truncate text-sm font-bold text-foreground transition-colors group-hover:text-primary sm:text-[15px]">
               {organization.name}
             </h3>
-            <p className="truncate text-xs text-muted-foreground">/{organization.slug}</p>
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">/{organization.slug}</p>
           </div>
 
-          {/* Badge de Rubro */}
+          {/* Badge de Rubro debajo del nombre: en la misma fila le cortaba el nombre a la tienda. */}
           <span className={cn(
-            'shrink-0 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+            'flex max-w-full shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold sm:px-2',
             rubroMeta.color
           )}>
-            <RubroIcon className="h-3 w-3" />
-            <span className="truncate max-w-[80px]">{rubroMeta.label}</span>
+            <RubroIcon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{rubroMeta.label}</span>
           </span>
         </div>
 
         {/* Ubicación, Dirección y Botón de Mapa */}
         {(normalizedCity || organization.address) && (
-          <div className="mt-1.5 flex items-center justify-between gap-1.5 rounded-lg bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground border border-border/50">
+          <div className="mt-0.5 flex items-center justify-between gap-1 text-[11px] text-muted-foreground sm:mt-1.5 sm:gap-1.5 sm:rounded-lg sm:border sm:border-border/50 sm:bg-muted/40 sm:px-2.5 sm:py-1">
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
               <MapPin className="h-3 w-3 text-primary shrink-0" />
               <div className="min-w-0 truncate text-[11px] leading-tight">
@@ -165,7 +166,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
                   <span className="font-semibold text-foreground mr-1">{normalizedCity.display}</span>
                 )}
                 {organization.address && (
-                  <span className="text-muted-foreground truncate">{organization.address}</span>
+                  // En el celular solo la ciudad: la dirección no entra en media pantalla.
+                  <span className="hidden truncate text-muted-foreground sm:inline">{organization.address}</span>
                 )}
               </div>
             </div>
@@ -187,7 +189,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
                   }
                 }}
                 title="Ver ubicación en Google Maps"
-                className="shrink-0 inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs"
+                // En el celular no: el área táctil mínima (44 px) duplicaba el alto de la tarjeta, y el mapa está en «Detalles».
+                className="hidden shrink-0 items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs sm:inline-flex"
               >
                 <Navigation className="h-2.5 w-2.5" />
                 <span>Mapa</span>
@@ -197,16 +200,16 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
         )}
 
         {/* Estadísticas de la tienda */}
-        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground sm:mt-2 sm:text-xs">
           {/* «0 productos» no distinguia una tienda vacia de una que carga su
               catalogo para uso interno y no publica al marketplace. */}
-          <p className="flex items-center gap-1 font-medium" title={describeCatalogState(organization).hint ?? undefined}>
-            <Package className="h-3.5 w-3.5 opacity-70" />
+          <p className="flex min-w-0 items-center gap-1 text-[11px] font-medium sm:text-xs" title={describeCatalogState(organization).hint ?? undefined}>
+            <Package className="h-3.5 w-3.5 shrink-0 opacity-70" />
             {describeCatalogState(organization).label}
           </p>
 
           {(organization.review_count ?? 0) > 0 && (
-            <p className="flex items-center gap-1 text-xs font-semibold text-foreground shrink-0">
+            <p className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-foreground sm:text-xs">
               <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
               {Number(organization.review_rating_avg ?? 0).toFixed(1)}
               <span className="text-[10px] text-muted-foreground font-normal">({organization.review_count})</span>
@@ -216,7 +219,7 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between border-t border-border/60 px-3.5 py-2 bg-muted/10 text-xs font-semibold">
+      <div className="flex items-center justify-between gap-1 border-t border-border/60 bg-muted/10 px-2 py-1.5 text-xs font-semibold sm:px-3.5 sm:py-2">
         {onOpenDetails ? (
           <button
             type="button"
@@ -225,10 +228,12 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
               e.stopPropagation()
               onOpenDetails(organization)
             }}
-            className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors py-1 px-1.5 rounded-md hover:bg-muted cursor-pointer text-xs"
+            aria-label={`Ver detalles de ${organization.name}`}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors py-1 px-1 rounded-md hover:bg-muted cursor-pointer text-xs sm:px-1.5"
           >
             <Info className="h-3.5 w-3.5 text-primary" />
-            <span>Ver detalles</span>
+            <span className="sm:hidden">Detalles</span>
+            <span className="hidden sm:inline">Ver detalles</span>
           </button>
         ) : (
           <span />
@@ -238,7 +243,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
           className="flex items-center gap-1 text-primary group-hover:underline transition-colors"
           style={accentColor ? { color: accentColor } : undefined}
         >
-          <span>Visitar tienda</span>
+          <span className="sm:hidden">Visitar</span>
+          <span className="hidden sm:inline">Visitar tienda</span>
           <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </div>
       </div>

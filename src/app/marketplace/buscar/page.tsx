@@ -109,7 +109,7 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
               <Building2 className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
               <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50">Empresas encontradas</h2>
             </div>
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {organizations.map((organization) => (
                 <OrganizationDirectoryCard key={organization.id} organization={organization} />
               ))}
