@@ -4,7 +4,8 @@ import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
-import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
+import { resolvePublicCheckout } from '@/lib/website/commerce-mode'
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 import { restrictPublicSettingsToModules } from '@/lib/website/public-section-availability'
 import type { WebsiteSettings } from '@/types/website-settings'
 import { headers } from 'next/headers'
@@ -59,9 +60,14 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
     }
     if (organization) {
       normalized.company_info.slug = organization.slug
-      normalized.checkout.commerceMode = resolvePublicCommerceMode(normalized.checkout.commerceMode, {
-        ordersEnabled: await isOrganizationModuleEnabled(organization.id, 'orders'),
-        hasWhatsapp: Boolean(normalized.company_info.whatsapp?.trim()),
+      const [ordersEnabled, deliveryEnabled] = await Promise.all([
+        isOrganizationModuleEnabled(organization.id, 'orders'),
+        isOrganizationModuleEnabled(organization.id, 'delivery'),
+      ])
+      normalized.checkout = resolvePublicCheckout(normalized.checkout, {
+        ordersEnabled,
+        deliveryEnabled,
+        hasWhatsapp: hasStoreWhatsapp(normalized.company_info),
       })
       return restrictPublicSettingsToModules(normalized, organization.id)
     }

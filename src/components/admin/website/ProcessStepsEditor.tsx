@@ -4,22 +4,25 @@ import { useEffect, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  Check, Footprints,
+  CalendarClock,
+  Check,
+  ClipboardList,
   Landmark,
   Loader2,
   MessagesSquare,
   Plus,
   RotateCcw,
   Save,
+  Shirt,
   ShoppingBag,
   Trash2,
+  UtensilsCrossed,
   Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { cn } from '@/lib/utils'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
-import { SectionHowItWorks } from '@/components/admin/website/SectionHowItWorks'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,12 +47,18 @@ import {
   PROCESS_STEP_TEMPLATES,
   type ProcessStepTemplateId,
 } from '@/lib/website/process-steps'
+import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import { PROCESS_TEMPLATES_BY_FAMILY, guidanceFamily, showsFinancialServices } from '@/lib/website/vertical-guidance'
 
 const TEMPLATE_ICONS = {
   repairs: Wrench,
   purchase: ShoppingBag,
   payments: Landmark,
   personalized: MessagesSquare,
+  fashion: Shirt,
+  appointment: CalendarClock,
+  food: UtensilsCrossed,
+  quote: ClipboardList,
 } satisfies Record<ProcessStepTemplateId, typeof Wrench>
 
 let entityIdSequence = 0
@@ -73,7 +82,7 @@ function normalizeFlows(flows: ProcessFlow[]): ProcessFlow[] {
   }))
 }
 
-export function ProcessStepsEditor() {
+export function ProcessStepsEditor({ capabilities }: { capabilities?: StorefrontCapabilities } = {}) {
   const {
     settings,
     isLoading,
@@ -87,6 +96,17 @@ export function ProcessStepsEditor() {
   const [pendingTemplateId, setPendingTemplateId] =
     useState<ProcessStepTemplateId | null>(null)
   const [pendingDeleteFlowId, setPendingDeleteFlowId] = useState<string | null>(null)
+
+  // Primero los recorridos del rubro; el resto queda a un clic. Los de pagos y
+  // giros solo se ofrecen a un comercio general.
+  const family = capabilities ? guidanceFamily(capabilities) : 'general'
+  const recommendedIds = PROCESS_TEMPLATES_BY_FAMILY[family]
+  const recommendedTemplates = recommendedIds
+    .map((id) => PROCESS_STEP_TEMPLATES.find((template) => template.id === id))
+    .filter((template): template is (typeof PROCESS_STEP_TEMPLATES)[number] => Boolean(template))
+  const otherTemplates = PROCESS_STEP_TEMPLATES.filter(
+    (template) => !recommendedIds.includes(template.id) && (template.id !== 'payments' || showsFinancialServices(family)),
+  )
 
   const defaults = getWebsiteSettingsDefaults()
   const configuredFlows = getConfiguredProcessFlows(
@@ -314,67 +334,37 @@ export function ProcessStepsEditor() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Footprints className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h2 className="text-lg font-semibold">Procesos públicos</h2>
-          </div>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Publica recorridos diferentes para reparaciones, compras, pagos u
-            otros tipos de atención.
-          </p>
-        </div>
-        <Button
-          type="button"
-          onClick={handleAddProcess}
-          disabled={flows.length >= 6}
-          className="h-10 shrink-0 rounded-md"
-        >
-          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-          Nuevo proceso
-        </Button>
-      </div>
-
       <PublicVisibilityCard
         compact
-        title="Visualización de la Sección de Procesos"
-        badgeLabel="Cómo Trabajamos"
+        title="Mostrar «Cómo trabajamos» en tu inicio"
+        badgeLabel="Cómo trabajamos"
         description={processEnabled
-          ? `Sección activa: ${activeFlowsCount} de ${flows.length} procesos configurados se mostrarán en la portada.`
-          : 'Sección oculta: Los procesos se conservan pero no se muestran a los clientes en la portada.'}
+          ? `Se muestran ${activeFlowsCount} de ${flows.length} recorridos.`
+          : 'Oculta: los recorridos se guardan, pero tus clientes no los ven.'}
         enabled={processEnabled !== false}
         onToggle={setProcessEnabledDraft}
       />
-      <SectionHowItWorks
-          sectionName="los procesos públicos"
-          steps={[
-            {
-              title: 'Crea uno o varios procesos',
-              description: 'Cada proceso tiene nombre, descripción y sus propios pasos.',
-            },
-            {
-              title: 'Decide cuáles mostrar',
-              description: 'Puedes ocultar un proceso sin eliminar su configuración.',
-            },
-            {
-              title: 'Guarda y publica',
-              description: 'El cliente elegirá el proceso desde pestañas en la página de inicio.',
-            },
-          ]}
-        />
-
       <section className="rounded-lg border p-4" aria-labelledby="process-selector-title">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 id="process-selector-title" className="text-sm font-semibold">
-              Tus procesos
+              Tus recorridos <span className="text-muted-foreground">({flows.length}/6)</span>
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Selecciona uno para editarlo. Puedes crear hasta 6.
+              Cada uno es una pestaña en tu tienda. Elegí uno para editarlo.
             </p>
           </div>
-          <span className="text-xs text-muted-foreground">{flows.length}/6</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddProcess}
+            disabled={flows.length >= 6}
+            className="shrink-0"
+          >
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Nuevo recorrido
+          </Button>
         </div>
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Procesos configurados">
           {flows.map((flow) => {
@@ -416,10 +406,10 @@ export function ProcessStepsEditor() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 id="selected-process-title" className="text-sm font-semibold">
-                  Información del proceso
+                  Nombre y descripción
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Este nombre será la pestaña que verá el cliente.
+                  El nombre es el título de la pestaña en tu tienda.
                 </p>
               </div>
               <Button
@@ -437,7 +427,7 @@ export function ProcessStepsEditor() {
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
               <div className="space-y-1.5">
-                <Label htmlFor="process-title">Nombre del proceso</Label>
+                <Label htmlFor="process-title">Nombre</Label>
                 <Input
                   id="process-title"
                   value={selectedFlow.title}
@@ -472,7 +462,7 @@ export function ProcessStepsEditor() {
             <div className="mt-4 flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2">
               <div>
                 <Label htmlFor={`flow-active-${selectedFlow.id}`} className="text-sm font-medium">
-                  Mostrar este proceso
+                  Mostrar este recorrido
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
                   Puedes ocultarlo sin perder sus pasos.
@@ -491,15 +481,15 @@ export function ProcessStepsEditor() {
             </div>
           </section>
 
-          <section className="rounded-lg border p-4" aria-labelledby="process-templates-title">
+          <section className="rounded-lg border bg-primary/[0.03] p-4" aria-labelledby="process-templates-title">
             <h3 id="process-templates-title" className="text-sm font-semibold">
-              Aplicar plantilla al proceso seleccionado
+              Recorridos listos{capabilities ? ` para ${capabilities.businessLabel.toLowerCase()}` : ''}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Reemplaza solamente los pasos de “{selectedFlow.title}”.
+              Reemplazan los pasos de «{selectedFlow.title}». Después ajustá los textos a tu negocio.
             </p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {PROCESS_STEP_TEMPLATES.map((template) => {
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {recommendedTemplates.map((template) => {
                 const TemplateIcon = TEMPLATE_ICONS[template.id]
                 return (
                   <Button
@@ -507,12 +497,12 @@ export function ProcessStepsEditor() {
                     type="button"
                     variant="outline"
                     onClick={() => setPendingTemplateId(template.id)}
-                    className="h-auto min-h-[72px] justify-start gap-3 rounded-md px-3 py-3 text-left"
+                    className="h-auto min-h-[64px] justify-start gap-3 rounded-md px-3 py-2.5 text-left"
                   >
                     <TemplateIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                     <span className="min-w-0">
                       <span className="block text-xs font-semibold">{template.label}</span>
-                      <span className="mt-1 block whitespace-normal text-[11px] font-normal leading-snug text-muted-foreground">
+                      <span className="mt-0.5 block whitespace-normal text-[11px] leading-snug text-muted-foreground">
                         {template.description}
                       </span>
                     </span>
@@ -520,13 +510,40 @@ export function ProcessStepsEditor() {
                 )
               })}
             </div>
+            {otherTemplates.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-primary">Ver otros recorridos</summary>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {otherTemplates.map((template) => {
+                const TemplateIcon = TEMPLATE_ICONS[template.id]
+                return (
+                  <Button
+                    key={template.id}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPendingTemplateId(template.id)}
+                    className="h-auto min-h-[64px] justify-start gap-3 rounded-md px-3 py-2.5 text-left"
+                  >
+                    <TemplateIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold">{template.label}</span>
+                      <span className="mt-0.5 block whitespace-normal text-[11px] leading-snug text-muted-foreground">
+                        {template.description}
+                      </span>
+                    </span>
+                  </Button>
+                )
+              })}
+                </div>
+              </details>
+            )}
           </section>
 
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">Pasos de {selectedFlow.title}</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Entre 1 y 8 pasos por proceso.
+                Entre 1 y 8 pasos, cortos y en el orden en que pasan.
               </p>
             </div>
             <Button

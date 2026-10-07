@@ -16,6 +16,8 @@ import { AnnouncementEditor } from '@/components/admin/website/AnnouncementEdito
 import { BrandsSectionEditor } from '@/components/admin/website/BrandsSectionEditor'
 import { WebsiteHowItWorksDialog } from '@/components/admin/website/WebsiteHowItWorksDialog'
 import { WebsiteSectionIntro } from '@/components/admin/website/WebsiteSectionIntro'
+import { SectionAssistant } from '@/components/admin/website/SectionAssistant'
+import type { CoachSection } from '@/lib/website/section-coach'
 import { WebsiteOverview } from '@/components/admin/website/WebsiteOverview'
 import { WebsiteAssistantDialog } from '@/components/admin/website/WebsiteAssistant'
 import { ArrowLeft, Lock, ArrowRight, ExternalLink, Globe, Images, MoreHorizontal, RotateCw, Sparkles } from 'lucide-react'
@@ -39,6 +41,7 @@ import {
   type WebsiteSectionId,
 } from '@/lib/website/setup-checklist'
 import { isSectionAvailable, resolveSectionAvailability, type WebsiteEditableSection } from '@/lib/website/section-availability'
+import { resolveStorefrontStyle } from '@/lib/website/storefront-style'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -71,6 +74,10 @@ export default function WebsiteAdminPage() {
   )
   // Las secciones de módulos que la cuenta no tiene no se editan ni se publican.
   const availability = useMemo(() => resolveSectionAvailability(storefrontCapabilities), [storefrontCapabilities])
+  // La plantilla que ve el cliente: los editores piden solo lo que ella muestra.
+  const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, businessVertical, {
+    servicesAvailable: storefrontCapabilities.hasServices,
+  })
 
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [tab, setTab] = useState<string>('overview')
@@ -151,6 +158,20 @@ export default function WebsiteAdminPage() {
     window.addEventListener('website-slug-updated', handleSlugUpdate)
     return () => window.removeEventListener('website-slug-updated', handleSlugUpdate)
   }, [])
+
+  // Título de la sección y, debajo, su asistente con lo que conviene corregir.
+  const intro = (section: CoachSection) => (
+    <>
+      <WebsiteSectionIntro section={section} />
+      <SectionAssistant
+        section={section}
+        settings={settings}
+        context={{ capabilities: storefrontCapabilities, storefrontStyle, effectiveModules }}
+        onNavigate={(target) => navigateTo(target)}
+        onOpenAssistant={openAssistant}
+      />
+    </>
+  )
 
   const show = (section: WebsiteEditableSection) => tab === section && availability[section].available
   const lockedSection = tab !== 'overview' && tab in availability && !availability[tab as WebsiteEditableSection].available
@@ -282,23 +303,23 @@ export default function WebsiteAdminPage() {
             <div className="h-64 animate-pulse rounded-2xl border bg-muted/30" aria-label="Cargando resumen" />
           )
         )}
-        {show('company') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="company" /><CompanyInfoForm /></section>}
-        {show('hero') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="hero" /><HeroEditor capabilities={storefrontCapabilities} /></section>}
-        {show('trust_bar') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="trust_bar" /><TrustBarEditor /></section>}
-        {show('brands') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="brands" /><BrandsSectionEditor /></section>}
-        {show('carousel') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="carousel" /><PromotionalCarouselEditor /></section>}
-        {show('offers') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="offers" /><OffersSectionEditor /></section>}
-        {show('announcement') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="announcement" /><AnnouncementEditor /></section>}
+        {show('company') && <section aria-label="Editor de sección">{intro('company')}<CompanyInfoForm /></section>}
+        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
+        {show('trust_bar') && <section aria-label="Editor de sección">{intro('trust_bar')}<TrustBarEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
+        {show('brands') && <section aria-label="Editor de sección">{intro('brands')}<BrandsSectionEditor /></section>}
+        {show('carousel') && <section aria-label="Editor de sección">{intro('carousel')}<PromotionalCarouselEditor /></section>}
+        {show('offers') && <section aria-label="Editor de sección">{intro('offers')}<OffersSectionEditor /></section>}
+        {show('announcement') && <section aria-label="Editor de sección">{intro('announcement')}<AnnouncementEditor capabilities={storefrontCapabilities} /></section>}
         {show('services') && (
           <section aria-label="Catálogo de servicios">
-            <WebsiteSectionIntro section="services" />
-            <ServicesManager orgSlug={orgSlug} servicesModuleEnabled={servicesModuleEnabled} />
+            {intro('services')}
+            <ServicesManager orgSlug={orgSlug} servicesModuleEnabled={servicesModuleEnabled} capabilities={storefrontCapabilities} />
           </section>
         )}
-        {show('gallery') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="gallery" /><GalleryEditor /></section>}
-        {show('booking') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="booking" /><BookingSectionEditor orgSlug={orgSlug} /></section>}
-        {show('process') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="process" /><ProcessStepsEditor /></section>}
-        {show('checkout') && <section aria-label="Editor de sección"><WebsiteSectionIntro section="checkout" /><CheckoutSettingsEditor /></section>}
+        {show('gallery') && <section aria-label="Editor de sección">{intro('gallery')}<GalleryEditor /></section>}
+        {show('booking') && <section aria-label="Editor de sección">{intro('booking')}<BookingSectionEditor orgSlug={orgSlug} /></section>}
+        {show('process') && <section aria-label="Editor de sección">{intro('process')}<ProcessStepsEditor capabilities={storefrontCapabilities} /></section>}
+        {show('checkout') && <section aria-label="Editor de sección">{intro('checkout')}<CheckoutSettingsEditor capabilities={storefrontCapabilities} onNavigate={(target) => navigateTo(target)} /></section>}
 
         {lockedSection && (
           <section aria-label="Sección no disponible" className="rounded-2xl border bg-card p-6 text-center shadow-2xs">

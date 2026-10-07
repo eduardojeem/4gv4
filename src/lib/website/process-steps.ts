@@ -5,6 +5,10 @@ export type ProcessStepTemplateId =
   | 'purchase'
   | 'payments'
   | 'personalized'
+  | 'fashion'
+  | 'appointment'
+  | 'food'
+  | 'quote'
 
 export type ProcessSaveTarget = 'steps' | 'visibility'
 
@@ -57,6 +61,49 @@ export const PROCESS_STEP_TEMPLATES: ProcessStepTemplate[] = [
       { title: 'Contanos qué necesitás', description: 'Escuchamos tu consulta y reunimos la información clave.' },
       { title: 'Te proponemos una solución', description: 'Explicamos alternativas, costos y próximos pasos.' },
       { title: 'Acompañamos el resultado', description: 'Damos seguimiento hasta completar la atención.' },
+    ],
+  },
+  {
+    id: 'fashion',
+    label: 'Compra de ropa',
+    description: 'Elegí, consultá el talle, recibí y cambiá si hace falta.',
+    steps: [
+      { title: 'Elegí tus prendas', description: 'Mirá la colección y guardá lo que te guste.' },
+      { title: 'Consultá el talle', description: 'Te ayudamos a elegir el talle justo antes de pagar.' },
+      { title: 'Pagá y recibí', description: 'Coordinamos el pago y el envío o retiro en el local.' },
+      { title: 'Cambios sin vueltas', description: 'Si no te queda, lo cambiamos según nuestras condiciones.' },
+    ],
+  },
+  {
+    id: 'appointment',
+    label: 'Turnos',
+    description: 'Reservá, te confirmamos, te atendemos y volvés.',
+    steps: [
+      { title: 'Elegí servicio y horario', description: 'Reservá el turno que te quede mejor.' },
+      { title: 'Te confirmamos', description: 'Recibís la confirmación con el día y la hora.' },
+      { title: 'Te atendemos', description: 'Llegá unos minutos antes y disfrutá el servicio.' },
+      { title: 'Volvé cuando quieras', description: 'Reservá tu próximo turno en un minuto.' },
+    ],
+  },
+  {
+    id: 'food',
+    label: 'Pedidos y delivery',
+    description: 'Pedí, lo preparamos y te lo llevamos.',
+    steps: [
+      { title: 'Hacé tu pedido', description: 'Elegí los productos y la forma de entrega.' },
+      { title: 'Lo preparamos', description: 'Armamos tu pedido con productos frescos.' },
+      { title: 'Delivery o retiro', description: 'Te lo llevamos o lo pasás a buscar listo.' },
+    ],
+  },
+  {
+    id: 'quote',
+    label: 'Presupuesto y entrega',
+    description: 'Contanos tu proyecto, te cotizamos y te lo llevamos.',
+    steps: [
+      { title: 'Contanos tu proyecto', description: 'Enviá la lista de materiales o qué querés hacer.' },
+      { title: 'Te cotizamos', description: 'Recibís precios y disponibilidad, sin compromiso.' },
+      { title: 'Confirmás y pagás', description: 'Coordinamos el pago y la forma de entrega.' },
+      { title: 'Retiro o envío a obra', description: 'Lo retirás en el local o lo llevamos a tu obra.' },
     ],
   },
 ]

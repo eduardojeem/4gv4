@@ -16,7 +16,7 @@ const COMMERCE_MODES = [
     details: {
       howItWorks: 'Tus clientes eligen productos, los agregan a su bolsa, seleccionan la forma de entrega (Delivery a domicilio o Retiro en local) y confirman el pago (Efectivo, Tarjeta, Transferencia o QR).',
       whatCustomerSees: 'Botón "Agregar al carrito" en cada producto, icono de bolsa de compras en el encabezado y pantalla de confirmación de pedido.',
-      bestFor: 'Tiendas de accesorios, repuestos y tecnología que quieren automatizar ventas y recibir pedidos organizados.',
+      bestFor: 'Tiendas con precios y stock al día que quieren recibir pedidos ordenados, con el pago y la entrega ya elegidos.',
     },
   },
   {
@@ -29,7 +29,7 @@ const COMMERCE_MODES = [
     details: {
       howItWorks: 'El carrito se oculta. Al hacer clic en un producto, el cliente es redirigido a WhatsApp con un mensaje automático que dice: "Hola, me interesa [Nombre del Producto] por [Precio]".',
       whatCustomerSees: 'Botón verde destacado "Consultar por WhatsApp" en cada artículo. No se solicita dirección ni métodos de pago en la web.',
-      bestFor: 'Negocios que prefieren asesorar al cliente, verificar compatibilidad técnica o negociar precios y formas de entrega por chat.',
+      bestFor: 'Negocios que asesoran antes de vender: talles, compatibilidad, cotizaciones o productos por encargo.',
     },
   },
   {

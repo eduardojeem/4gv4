@@ -14,6 +14,8 @@ import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import { deliveryZoneMatchesLocation } from '@/lib/checkout/delivery-zone'
 import type { CheckoutSettings } from '@/types/website-settings'
+import { missingForMinimumOrder } from '@/lib/website/commerce-mode'
+import { formatPrice } from '@/lib/utils'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 
 const ORDER_RATE_LIMIT = 5
@@ -271,6 +273,17 @@ export async function POST(request: NextRequest) {
       }, { status: 409 })
     }
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
+
+    // El pedido mínimo se mide sobre los productos, con los precios del servidor.
+    const missingForMinimum = missingForMinimumOrder(checkout.minOrderAmount, subtotal)
+    if (missingForMinimum > 0) {
+      return NextResponse.json({
+        success: false,
+        code: 'MIN_ORDER_NOT_REACHED',
+        error: `El pedido mínimo es de ${formatPrice(checkout.minOrderAmount)}. Te faltan ${formatPrice(missingForMinimum)}.`,
+        data: { minOrderAmount: checkout.minOrderAmount, missing: missingForMinimum },
+      }, { status: 422 })
+    }
 
     if (input.fulfillmentType === 'DELIVERY' && !checkout.delivery.enabled) {
       return NextResponse.json({ success: false, error: 'El delivery no está disponible.' }, { status: 422 })

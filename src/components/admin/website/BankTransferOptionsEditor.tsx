@@ -138,7 +138,7 @@ export function BankTransferOptionsEditor({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor={`${fieldPrefix}-account`} className="text-xs">Cuenta / CBU / CCI</Label>
+                    <Label htmlFor={`${fieldPrefix}-account`} className="text-xs">Número de cuenta</Label>
                     <Input
                       id={`${fieldPrefix}-account`}
                       value={option.accountNumber ?? ''}

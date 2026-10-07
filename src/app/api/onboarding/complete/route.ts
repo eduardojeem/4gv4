@@ -19,6 +19,7 @@ import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organizat
 import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { applyCheckoutChoices, checkoutChoicesError } from '@/lib/onboarding/checkout-choices'
 import type { CheckoutSettings } from '@/types/website-settings'
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 import { buildStarterCheckout, buildStarterTrustBar, provisionStarterKit } from '@/lib/organization/starter-kit'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { DEFAULT_BRAND_COLOR, isKnownBrandColor } from '@/lib/website/brand-colors'
@@ -327,7 +328,7 @@ export async function POST(request: Request) {
   // mostraba los predeterminados genéricos —tarjeta a domicilio, transferencia
   // sin cuentas, «Envíos rápidos»— aunque no ofreciera nada de eso.
   const starterCheckout = buildStarterCheckout(getWebsiteSettingsDefaults().checkout, {
-    hasWhatsapp: Boolean(input.whatsapp || input.phone),
+    hasWhatsapp: hasStoreWhatsapp({ whatsapp: input.whatsapp, phone: input.phone }),
   })
   // Lo que eligió en «Cobro y entrega»: sobre el cobro que ya tenga, o sobre
   // el inicial si todavía no existe. El resto de su configuración se conserva.

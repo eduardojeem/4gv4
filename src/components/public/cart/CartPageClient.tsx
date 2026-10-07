@@ -7,7 +7,7 @@ import {
   ArrowLeft, Building2, CheckCircle2, CreditCard, Loader2,
   LogIn, Minus, Package, Phone, Plus, ShoppingCart, Store,
   Tag, Trash2, Truck, User, Wallet, X, Copy, Check,
-  HelpCircle, ChevronDown, ChevronUp, Sparkles, Receipt, FileText,
+  HelpCircle, ChevronDown, ChevronUp, Sparkles, Receipt, FileText, MapPin, Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,6 +27,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
 import { trackSiteEvent } from '@/lib/site-analytics/client'
 import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
+import { missingForMinimumOrder } from '@/lib/website/commerce-mode'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -268,6 +269,9 @@ export function CartPageClient({
   const { items, subtotal, setQuantity, setAvailableStock, setUnitPrice, removeItem, clear } = usePublicCart()
   const { settings: siteSettings } = useWebsiteSettings()
   const checkout = siteSettings?.checkout ?? getWebsiteSettingsDefaults().checkout
+  const pickupAddress = siteSettings?.company_info?.address?.trim() ?? ''
+  const pickupMapsUrl = siteSettings?.company_info?.mapsUrl?.trim() ?? ''
+  const pickupHours = [siteSettings?.company_info?.hours?.weekdays?.trim(), siteSettings?.company_info?.hours?.saturday?.trim() && `Sábados: ${siteSettings.company_info.hours.saturday.trim()}`].filter(Boolean).join(' · ')
   const transferOptions = checkout.payment.transfer.transferOptions ?? []
   const deliveryZones = useMemo(() => checkout.delivery.zoneOptions ?? [], [checkout.delivery.zoneOptions])
 
@@ -354,6 +358,8 @@ export function CartPageClient({
 
   // ── Shipping cost: pre-load from settings when DELIVERY selected ─────────
   const isFreeDelivery = checkout.delivery.freeThreshold > 0 && subtotal >= checkout.delivery.freeThreshold
+  // Pedido mínimo de la tienda: el servidor también lo exige.
+  const missingForMinimum = missingForMinimumOrder(checkout.minOrderAmount, subtotal)
   const selectedDeliveryZone = deliveryZones.find((zone) => zone.id === selectedDeliveryZoneId)
   const isOtherDeliveryZone = selectedDeliveryZoneId === OTHER_DELIVERY_ZONE_ID
 
@@ -1009,6 +1015,31 @@ export function CartPageClient({
                   ))}
                 </div>
 
+                {/* Dónde y cuándo retirar: sin esto el cliente elegía retiro sin saber a dónde ir. */}
+                {fulfillmentType === 'PICKUP' && (pickupAddress || pickupHours || checkout.pickup.instructions?.trim()) && (
+                  <div className="space-y-1.5 rounded-2xl border bg-muted/20 p-3.5 text-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Dónde retirar</p>
+                    {pickupAddress && (
+                      <p className="flex items-start gap-2 text-foreground">
+                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        <span>
+                          {pickupAddress}
+                          {pickupMapsUrl && (
+                            <a href={pickupMapsUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs font-semibold text-primary underline-offset-2 hover:underline">Ver en el mapa</a>
+                          )}
+                        </span>
+                      </p>
+                    )}
+                    {pickupHours && (
+                      <p className="flex items-start gap-2 text-muted-foreground">
+                        <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{pickupHours}</span>
+                      </p>
+                    )}
+                    {checkout.pickup.instructions?.trim() && <p className="text-xs text-muted-foreground">{checkout.pickup.instructions}</p>}
+                  </div>
+                )}
+
                 {fulfillmentType === 'DELIVERY' && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -1311,10 +1342,16 @@ export function CartPageClient({
                 <p className="text-[10px] text-right text-muted-foreground">{notes.length}/500</p>
               </div>
 
+              {missingForMinimum > 0 && (
+                <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  El pedido mínimo es de <strong>{formatMoney(checkout.minOrderAmount)}</strong>. Agregá {formatMoney(missingForMinimum)} más para continuar.
+                </p>
+              )}
+
               {/* ── Submit ── */}
               <Button
                 className="w-full h-12 rounded-2xl text-base font-bold gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                disabled={loading || items.length === 0}
+                disabled={loading || items.length === 0 || missingForMinimum > 0}
                 onClick={reviewOrder}
               >
                 {loading

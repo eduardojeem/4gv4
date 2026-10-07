@@ -3,6 +3,8 @@ import { STOREFRONT_STYLE_PREFERENCES } from '@/lib/website/storefront-style'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 import { socialHandle, type SocialPlatform } from '@/lib/public/social-links'
+import { cartConfigErrors } from '@/lib/checkout/cart-setup'
+import type { CheckoutSettings } from '@/types/website-settings'
 
 /**
  * Los mensajes de Zod salen en castellano. Varios campos no tienen mensaje
@@ -557,6 +559,12 @@ export const CheckoutSettingsSchema = z.object({
       path: ['delivery'],
       message: 'Habilitá delivery o retiro en local',
     })
+  }
+
+  // Cuentas, alias, zonas y tiempos: lo mismo que pide el editor del carrito.
+  for (const issue of cartConfigErrors(value as CheckoutSettings)) {
+    if (issue.id === 'no-payment') continue
+    ctx.addIssue({ code: 'custom', path: [issue.step], message: issue.message })
   }
 })
 

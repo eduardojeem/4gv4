@@ -52,7 +52,8 @@ describe('publication API safety', () => {
     expect(state.updates).toHaveLength(0)
   })
   it('checks WhatsApp configuration server-side', async () => {
-    expect((await PUT(request({ publicationConfirmed: true, whatsapp: '' }))).status).toBe(422)
+    // Sin WhatsApp y con un teléfono fijo que no sirve para WhatsApp.
+    expect((await PUT(request({ publicationConfirmed: true, whatsapp: '', phone: '021 1234' }))).status).toBe(422)
     expect(state.updates).toHaveLength(0)
   })
   it('publishes only after company data has been persisted', async () => {

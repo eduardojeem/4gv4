@@ -18,6 +18,10 @@ describe('process step templates', () => {
       'purchase',
       'payments',
       'personalized',
+      'fashion',
+      'appointment',
+      'food',
+      'quote',
     ])
   })
 

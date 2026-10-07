@@ -5,7 +5,8 @@ import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { restrictPublicSettingsToModules } from '@/lib/website/public-section-availability'
-import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
+import { resolvePublicCheckout } from '@/lib/website/commerce-mode'
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 
 /**
  * GET /api/public/website/settings
@@ -47,12 +48,17 @@ export async function GET(request: NextRequest) {
     }
     normalized.company_info.slug = organization.slug
 
+    const [ordersEnabled, deliveryEnabled] = await Promise.all([
+      isOrganizationModuleEnabled(organization.id, 'orders'),
+      isOrganizationModuleEnabled(organization.id, 'delivery'),
+    ])
+    const publicCheckout = resolvePublicCheckout(normalized.checkout, {
+      ordersEnabled,
+      deliveryEnabled,
+      hasWhatsapp: hasStoreWhatsapp(normalized.company_info),
+    })
     normalized.checkout = {
-      ...normalized.checkout,
-      commerceMode: resolvePublicCommerceMode(normalized.checkout.commerceMode, {
-        ordersEnabled: await isOrganizationModuleEnabled(organization.id, 'orders'),
-        hasWhatsapp: Boolean(normalized.company_info.whatsapp?.trim()),
-      }),
+      ...publicCheckout,
       payment: {
         ...normalized.checkout.payment,
         transfer: {

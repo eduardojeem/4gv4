@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronUp, Eye, Loader2, Megaphone, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Eye, Lightbulb, Loader2, Megaphone, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -184,6 +184,7 @@ export function AnnouncementsManager({
   previewScope,
   upload,
   onSave,
+  ideas = [],
 }: {
   initial: Announcement[]
   max: number
@@ -192,6 +193,8 @@ export function AnnouncementsManager({
   previewScope: string
   upload: (file: File) => Promise<string>
   onSave: (announcements: Announcement[]) => Promise<Announcement[] | void>
+  /** Avisos de ejemplo para empezar: se cargan como borrador para editar. */
+  ideas?: Array<{ title: string; message: string }>
 }) {
   const [items, setItems] = useState<Announcement[]>(initial)
   const [saved, setSaved] = useState<Announcement[]>(initial)
@@ -224,6 +227,16 @@ export function AnnouncementsManager({
       return
     }
     const created = newAnnouncement()
+    setItems((current) => [...current, created])
+    setEditingId(created.id)
+  }
+
+  const addFromIdea = (idea: { title: string; message: string }) => {
+    if (items.length >= max) {
+      toast.error(`Se pueden cargar hasta ${max} avisos`)
+      return
+    }
+    const created = { ...newAnnouncement(), title: idea.title, message: idea.message }
     setItems((current) => [...current, created])
     setEditingId(created.id)
   }
@@ -298,9 +311,33 @@ export function AnnouncementsManager({
       </div>
 
       {items.length === 0 && (
-        <p className="rounded-xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+        <p className="rounded-xl border border-dashed border-border px-6 py-8 text-center text-sm text-muted-foreground">
           Cargá un aviso para anunciar una campaña, un horario especial o una novedad en {audience}.
         </p>
+      )}
+
+      {ideas.length > 0 && items.length < max && (
+        <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3.5">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Lightbulb aria-hidden="true" className="h-4 w-4 text-primary" />
+            Ideas para empezar
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Se cargan como borrador: cambiá el texto a tu medida y guardá.</p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {ideas.map((idea) => (
+              <button
+                key={idea.title}
+                type="button"
+                onClick={() => addFromIdea(idea)}
+                title={idea.message}
+                className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
+              >
+                <Plus aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
+                {idea.title}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       <ul className="space-y-3">

@@ -17,6 +17,7 @@ import { usePublicCart } from '@/hooks/use-public-cart'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { missingForMinimumOrder } from '@/lib/website/commerce-mode'
 
 export function CartDrawer() {
   const router = useRouter()
@@ -24,6 +25,8 @@ export function CartDrawer() {
   const { tenantSlug, items, count, subtotal, setQuantity, removeItem, clear } = usePublicCart()
   const { settings } = useWebsiteSettings()
   const commerceMode = settings?.checkout.commerceMode ?? 'cart'
+  const minOrderAmount = settings?.checkout.minOrderAmount ?? 0
+  const missingForMinimum = missingForMinimumOrder(minOrderAmount, subtotal)
 
   const productsHref = tenantSlug ? `/${tenantSlug}/productos` : '/productos'
   const cartHref = tenantSlug ? `/${tenantSlug}/carrito` : '/carrito'
@@ -206,6 +209,11 @@ export function CartDrawer() {
                 <span>Total a pagar</span>
                 <span className="text-primary">{formatPrice(subtotal)}</span>
               </div>
+              {missingForMinimum > 0 && (
+                <p role="status" className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  Pedido mínimo {formatPrice(minOrderAmount)}: agregá {formatPrice(missingForMinimum)} más.
+                </p>
+              )}
             </div>
             
             <Button

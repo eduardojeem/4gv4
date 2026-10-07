@@ -11,13 +11,15 @@ import {
 import { WebsiteMediaQuotaBanner } from '@/components/admin/website/WebsiteMediaQuotaBanner'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
+import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import { ANNOUNCEMENT_IDEAS, guidanceFamily } from '@/lib/website/vertical-guidance'
 
 /**
  * Los carteles que ve el cliente al entrar a la tienda. Misma lista y mismo
  * formulario que usa el superadmin para el marketplace; aca el tope es mas bajo
  * y se guarda como una opcion mas del sitio.
  */
-export function AnnouncementEditor() {
+export function AnnouncementEditor({ capabilities }: { capabilities?: StorefrontCapabilities } = {}) {
   const { settings, isLoading, updateSetting } = useAdminWebsiteSettings()
   const { isAtLimit: isMediaAtLimit } = useWebsiteMediaQuota()
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false)
@@ -66,6 +68,7 @@ export function AnnouncementEditor() {
         previewScope="tienda"
         upload={upload}
         onSave={save}
+        ideas={ANNOUNCEMENT_IDEAS[capabilities ? guidanceFamily(capabilities) : 'general']}
       />
       <WebsiteMediaLibraryDialog
         open={mediaDialogOpen}

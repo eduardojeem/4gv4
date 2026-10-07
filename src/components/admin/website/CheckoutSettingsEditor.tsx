@@ -7,6 +7,8 @@ import { CheckoutCustomerPreview } from '@/components/admin/website/CheckoutCust
 import { BankTransferOptionsEditor } from '@/components/admin/website/BankTransferOptionsEditor'
 import { DeliveryZoneOptionsEditor } from '@/components/admin/website/DeliveryZoneOptionsEditor'
 import { CommerceModeSelector } from '@/components/admin/website/CommerceModeSelector'
+import { CartSetupGuide } from '@/components/admin/website/CartSetupGuide'
+import { fillCartTextsFromCompany, reviewCartSetup } from '@/lib/checkout/cart-setup'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { resolvePublicCommerceMode } from '@/lib/website/commerce-mode'
 import { upgradePlanNameFor } from '@/lib/saas/upgrade-plan'
@@ -29,12 +31,18 @@ import {
   Save,
   Store,
   Truck,
-  Wallet, QrCode,
-  Banknote, MapPin,
-  Images
+  QrCode,
+  Banknote,
+  Images,
+  Lightbulb,
+  ArrowRight,
 } from 'lucide-react'
 import { WebsiteMediaLibraryDialog } from '@/components/admin/website/WebsiteMediaLibraryDialog'
 import { cn } from '@/lib/utils'
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
+import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import { CHECKOUT_RECOMMENDATIONS, guidanceFamily } from '@/lib/website/vertical-guidance'
+import type { CoachSection } from '@/lib/website/section-coach'
 
 // ─── Payment method labels & icons ───────────────────────────────────────────
 const PM_META = {
@@ -59,7 +67,7 @@ const PM_META = {
     Icon: CreditCard,
     accentColor: 'text-purple-600 dark:text-purple-400',
     accentBg: 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800',
-    hint: 'Carga tus datos bancarios (Banco, Alias, CBU y Titular) para mostrarlos al cliente.',
+    hint: 'Cargá banco, alias o número de cuenta y titular para mostrárselos al cliente.',
     placeholder: 'Ej. Realizá la transferencia y envianos el comprobante por WhatsApp con tu número de orden.',
   },
   digital_wallet: {
@@ -239,7 +247,14 @@ function PaymentMethodCard({
 }
 
 // ─── Main editor ──────────────────────────────────────────────────────────────
-export function CheckoutSettingsEditor() {
+export function CheckoutSettingsEditor({
+  capabilities,
+  onNavigate,
+}: {
+  capabilities?: StorefrontCapabilities
+  /** Para llevar al dueño a la sección donde se arregla lo que falta. */
+  onNavigate?: (section: CoachSection) => void
+} = {}) {
   const { settings, isLoading, isSaving, updateSetting } = useAdminWebsiteSettings()
   const defaultCheckout = getWebsiteSettingsDefaults().checkout
 
@@ -253,45 +268,38 @@ export function CheckoutSettingsEditor() {
   // Sin el módulo de pedidos el carrito no puede cobrar: se muestra bloqueado
   // y el editor trabaja con el mismo modo que ve el cliente en la tienda.
   // Una lista de módulos vacía es "todavía no se sabe", no "sin pedidos".
-  const { modules, effectiveModules, modulePlanAvailability } = useSubscriptionStatus()
+  const { modules, effectiveModules, entitledModules, modulePlanAvailability } = useSubscriptionStatus()
   const ordersEnabled = modules.length === 0 || effectiveModules.includes('orders')
   const ordersPlan = upgradePlanNameFor('orders', modulePlanAvailability)
   const cartUnavailableReason = ordersEnabled ? null : ordersPlan ? `Disponible en ${ordersPlan}` : 'No incluido en tu plan'
+  // El delivery necesita el módulo de entregas: sin él, el servidor rechaza el
+  // pedido al confirmar. Puede faltar en el plan o estar apagado en la cuenta.
+  const deliveryModuleEnabled = modules.length === 0 || effectiveModules.includes('delivery')
+  const deliveryPlan = upgradePlanNameFor('delivery', modulePlanAvailability)
+  const deliveryUnavailableReason = deliveryModuleEnabled
+    ? null
+    : entitledModules.includes('delivery')
+      ? 'El módulo Entregas está apagado en Configuración de tu cuenta.'
+      : deliveryPlan
+        ? `El envío a domicilio está disponible en el plan ${deliveryPlan}.`
+        : 'Tu plan no incluye envíos a domicilio.'
+  const storeHasWhatsapp = hasStoreWhatsapp(settings?.company_info)
   const commerceMode = resolvePublicCommerceMode(current.commerceMode, {
     ordersEnabled,
-    hasWhatsapp: Boolean(settings?.company_info?.whatsapp?.trim()),
+    hasWhatsapp: storeHasWhatsapp,
   })
-  const enabledPaymentCount = (Object.keys(PM_META) as PMKey[])
-    .filter((key) => current.payment[key].enabled).length
-  const hasPaymentMethod = enabledPaymentCount > 0
-  const hasFulfillmentOption = current.delivery.enabled || current.pickup.enabled
-  const hasValidTransferOptions = !current.payment.transfer.enabled ||
-    (current.payment.transfer.transferOptions ?? []).every((option) => (
-      option.bankName.trim().length >= 2 &&
-      Boolean(option.alias?.trim() || option.accountNumber?.trim())
-    ))
-  const hasValidDeliveryZones = (current.delivery.zoneOptions ?? []).every((zone) => (
-    zone.name.trim().length >= 2 &&
-    zone.cost >= 0 &&
-    zone.cost <= 9_999_999
-  ))
-  const isCheckoutReady = commerceMode !== 'cart' || (
-    hasPaymentMethod &&
-    hasFulfillmentOption &&
-    hasValidTransferOptions &&
-    hasValidDeliveryZones
-  )
-  const checkoutIssue = commerceMode !== 'cart'
-    ? null
-    : !hasPaymentMethod
-    ? 'Habilita al menos un método de pago.'
-    : !hasFulfillmentOption
-      ? 'Habilita al menos delivery o retiro en local.'
-      : !hasValidTransferOptions
-        ? 'Cada cuenta bancaria necesita nombre y al menos un alias o número.'
-        : !hasValidDeliveryZones
-          ? 'Revisa que las zonas de delivery tengan nombre y tarifa válida.'
-          : null
+  const deliveryOffered = current.delivery.enabled && deliveryModuleEnabled
+  const whatsappMissing = commerceMode === 'whatsapp' && !storeHasWhatsapp
+  const recommendation = capabilities ? CHECKOUT_RECOMMENDATIONS[guidanceFamily(capabilities)] : null
+  // Mismas reglas que valida el servidor, más lo que depende de la empresa y del plan.
+  const cartIssues = commerceMode === 'cart'
+    ? reviewCartSetup(current, { company: settings?.company_info, deliveryModuleEnabled })
+    : []
+  const cartErrors = cartIssues.filter((issue) => issue.level === 'error')
+  const isCheckoutReady = commerceMode === 'whatsapp' ? !whatsappMissing : cartErrors.length === 0
+  const checkoutIssue = whatsappMissing
+    ? 'Cargá un WhatsApp válido para recibir las consultas.'
+    : cartErrors[0]?.message ?? null
 
   const dirtyCtx = useWebsiteEditorDirty()
   useEffect(() => {
@@ -324,17 +332,49 @@ export function CheckoutSettingsEditor() {
     }))
   }
 
+  // Aplica lo que conviene al rubro sin tocar lo que necesita datos (cuentas, alias).
+  function applyRecommendation() {
+    if (!recommendation) return
+    const mode = recommendation.mode === 'cart' && !ordersEnabled
+      ? (storeHasWhatsapp ? 'whatsapp' : 'catalog')
+      : recommendation.mode
+    setDraft((prev) => {
+      const base = prev ?? baseline
+      return {
+        ...base,
+        commerceMode: mode,
+        pickup: { ...base.pickup, enabled: recommendation.pickup || base.pickup.enabled },
+        delivery: { ...base.delivery, enabled: deliveryModuleEnabled && (recommendation.delivery || base.delivery.enabled) },
+        payment: {
+          ...base.payment,
+          cash: { ...base.payment.cash, enabled: recommendation.cash || base.payment.cash.enabled },
+          card: { ...base.payment.card, enabled: recommendation.card || base.payment.card.enabled },
+        },
+      }
+    })
+    toast.success('Recomendación aplicada', { description: 'Revisala y guardá para publicarla.' })
+  }
+
+  function fillTextsFromCompany() {
+    setDraft((prev) => fillCartTextsFromCompany(prev ?? baseline, settings?.company_info))
+    toast.success('Textos completados con los datos de tu empresa', { description: 'Solo donde estaba vacío. Revisalos y guardá.' })
+  }
+
+  function changeMode(mode: CheckoutSettings['commerceMode']) {
+    patch('commerceMode', mode)
+    if (mode === 'cart' && commerceMode !== 'cart') {
+      toast.info('Seguí los pasos para empezar a recibir pedidos')
+      window.setTimeout(() => document.getElementById('checkout-readiness')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    }
+  }
+
   async function handleSave() {
     if (!draft) return
     if (!isCheckoutReady) {
-      toast.error('El checkout todavía está incompleto', {
-        description: !hasPaymentMethod
-          ? 'Habilitá al menos un método de pago.'
-          : !hasFulfillmentOption
-            ? 'Habilitá delivery o retiro en local.'
-            : !hasValidTransferOptions
-              ? 'Cada cuenta necesita banco y al menos un alias o número de cuenta.'
-              : 'Cada zona necesita un nombre y una tarifa válida.',
+      toast.error(whatsappMissing ? 'Falta tu WhatsApp' : 'Al carrito le faltan datos', {
+        description: whatsappMissing
+          ? 'Cargalo en Empresa y publicación: ahí llegan las consultas de tus clientes.'
+          : checkoutIssue ?? undefined,
       })
       return
     }
@@ -363,14 +403,47 @@ export function CheckoutSettingsEditor() {
       {/* Selector de Modo Comercial */}
       <CommerceModeSelector
         value={commerceMode}
-        onChange={(mode) => patch('commerceMode', mode)}
+        onChange={changeMode}
         cartUnavailableReason={cartUnavailableReason}
       />
       {!ordersEnabled && (
         <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-          Tu plan no incluye pedidos online: tu tienda muestra el catálogo y los clientes te escriben por WhatsApp.
+          {storeHasWhatsapp
+            ? 'Tu plan no incluye pedidos online: los clientes ven el catálogo y te escriben por WhatsApp.'
+            : 'Tu plan no incluye pedidos online y no hay un WhatsApp cargado: tu tienda queda como catálogo, sin forma de pedir.'}
           {ordersPlan ? ` Con ${ordersPlan} activás el carrito y los pedidos en línea.` : ''}
         </p>
+      )}
+
+      {whatsappMissing && (
+        <div role="alert" className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>Elegiste consultas por WhatsApp, pero no hay un número válido cargado. Sin él, el botón no le llega a nadie.</span>
+          {onNavigate && (
+            <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => onNavigate('company')}>
+              Cargar WhatsApp <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
+
+      {recommendation && (
+        <section aria-labelledby="checkout-recommendation" className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h3 id="checkout-recommendation" className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <Lightbulb className="h-4 w-4 text-primary" aria-hidden="true" />
+                Recomendado para {capabilities?.businessLabel.toLowerCase()}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">{recommendation.summary}</p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+                {recommendation.tips.map((tip) => <li key={tip}>{tip}</li>)}
+              </ul>
+            </div>
+            <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={applyRecommendation}>
+              Aplicar recomendación
+            </Button>
+          </div>
+        </section>
       )}
 
       {/* Checklist de Preparación del Checkout */}
@@ -421,50 +494,14 @@ export function CheckoutSettingsEditor() {
           </div>
         </div>
 
-        {/* Mini Checklist Visual cuando está en modo carrito */}
         {commerceMode === 'cart' && (
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 pt-2 border-t border-border/60">
-            <div className={cn(
-              'p-3 rounded-xl border flex items-center gap-2.5 text-xs font-semibold',
-              hasPaymentMethod ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 text-amber-800 dark:text-amber-300'
-            )}>
-              <CreditCard className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {hasPaymentMethod ? `✓ ${enabledPaymentCount} métodos de pago` : '⚠️ Falta método de pago'}
-              </span>
-            </div>
-
-            <div className={cn(
-              'p-3 rounded-xl border flex items-center gap-2.5 text-xs font-semibold',
-              hasFulfillmentOption ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 text-amber-800 dark:text-amber-300'
-            )}>
-              <Truck className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {hasFulfillmentOption
-                  ? `✓ ${[current.delivery.enabled && 'Delivery', current.pickup.enabled && 'Retiro'].filter(Boolean).join(' y ')}`
-                  : '⚠️ Falta entrega o retiro'}
-              </span>
-            </div>
-
-            <div className={cn(
-              'p-3 rounded-xl border flex items-center gap-2.5 text-xs font-semibold',
-              hasValidTransferOptions ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 text-amber-800 dark:text-amber-300'
-            )}>
-              <Wallet className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {hasValidTransferOptions ? '✓ Cuentas bancarias OK' : '⚠️ Revisar cuentas'}
-              </span>
-            </div>
-
-            <div className={cn(
-              'p-3 rounded-xl border flex items-center gap-2.5 text-xs font-semibold',
-              hasValidDeliveryZones ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 text-amber-800 dark:text-amber-300'
-            )}>
-              <MapPin className="h-4 w-4 shrink-0" />
-              <span className="truncate">
-                {hasValidDeliveryZones ? '✓ Zonas de envío OK' : '⚠️ Revisar tarifas'}
-              </span>
-            </div>
+          <div className="border-t border-border/60 pt-4">
+            <CartSetupGuide
+              issues={cartIssues}
+              activeSteps={{ payments: true, delivery: deliveryOffered, pickup: current.pickup.enabled, order: true }}
+              onFillTexts={fillTextsFromCompany}
+              onFixInCompany={onNavigate ? () => onNavigate('company') : undefined}
+            />
           </div>
         )}
       </div>
@@ -474,7 +511,7 @@ export function CheckoutSettingsEditor() {
           {commerceMode === 'cart' ? (
             <>
               {/* ── Métodos de Pago ── */}
-              <Card className="rounded-2xl border bg-card shadow-2xs overflow-hidden">
+              <Card id="checkout-payments" className="scroll-mt-24 rounded-2xl border bg-card shadow-2xs overflow-hidden">
                 <CardHeader className="p-5 sm:p-6 pb-4">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2.5">
@@ -502,7 +539,7 @@ export function CheckoutSettingsEditor() {
               </Card>
 
               {/* ── Envío a Domicilio (Delivery) ── */}
-              <Card className="rounded-2xl border bg-card shadow-2xs overflow-hidden">
+              <Card id="checkout-delivery" className="scroll-mt-24 rounded-2xl border bg-card shadow-2xs overflow-hidden">
                 <CardHeader className="p-5 sm:p-6 pb-4">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2.5">
@@ -526,13 +563,19 @@ export function CheckoutSettingsEditor() {
                       </p>
                     </div>
                     <Switch
-                      checked={current.delivery.enabled}
+                      checked={deliveryOffered}
+                      disabled={!deliveryModuleEnabled}
                       onCheckedChange={(v) => patchDelivery('enabled', v)}
-                      aria-label={`${current.delivery.enabled ? 'Deshabilitar' : 'Habilitar'} envío a domicilio`}
+                      aria-label={`${deliveryOffered ? 'Deshabilitar' : 'Habilitar'} envío a domicilio`}
                     />
                   </div>
+                  {deliveryUnavailableReason && (
+                    <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                      {deliveryUnavailableReason} Mientras tanto, tus clientes solo pueden retirar en el local.
+                    </p>
+                  )}
 
-                  {current.delivery.enabled && (
+                  {deliveryOffered && (
                     <div className="space-y-4 pt-1">
                       <div className="grid gap-3.5 sm:grid-cols-3">
                         <div className="space-y-1.5">
@@ -621,7 +664,7 @@ export function CheckoutSettingsEditor() {
               </Card>
 
               {/* ── Retiro en Local ── */}
-              <Card className="rounded-2xl border bg-card shadow-2xs overflow-hidden">
+              <Card id="checkout-pickup" className="scroll-mt-24 rounded-2xl border bg-card shadow-2xs overflow-hidden">
                 <CardHeader className="p-5 sm:p-6 pb-4">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2.5">
@@ -686,7 +729,7 @@ export function CheckoutSettingsEditor() {
               </Card>
 
               {/* ── Ajustes Generales & Confirmación ── */}
-              <Card className="rounded-2xl border bg-card shadow-2xs overflow-hidden">
+              <Card id="checkout-order" className="scroll-mt-24 rounded-2xl border bg-card shadow-2xs overflow-hidden">
                 <CardHeader className="p-5 sm:p-6 pb-4">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2.5">
@@ -766,7 +809,7 @@ export function CheckoutSettingsEditor() {
         </div>
 
         {/* Panel lateral de vista previa en vivo */}
-        <CheckoutCustomerPreview settings={current} />
+        <CheckoutCustomerPreview settings={deliveryModuleEnabled ? current : { ...current, delivery: { ...current.delivery, enabled: false } }} />
       </div>
 
       {/* ── Barra de guardado persistente ── */}

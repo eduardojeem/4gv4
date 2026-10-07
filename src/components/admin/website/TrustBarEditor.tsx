@@ -35,6 +35,10 @@ import {
 import type { TrustBarSettings, TrustBarItem } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { cn } from '@/lib/utils'
+import { StoreTrustBar } from '@/components/public/inicio/StoreTrustBar'
+import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import { STOREFRONT_STYLE_LABELS, type StorefrontStyle } from '@/lib/website/storefront-style'
+import { TRUST_BAR_IDEAS, guidanceFamily } from '@/lib/website/vertical-guidance'
 
 const ICON_OPTIONS: Array<{ value: string; label: string; icon: LucideIcon }> = [
   { value: 'truck', label: 'Envíos / Delivery', icon: Truck },
@@ -54,7 +58,25 @@ const ICON_OPTIONS: Array<{ value: string; label: string; icon: LucideIcon }> = 
   { value: 'check', label: 'Verificado', icon: CheckCircle2 },
 ]
 
-export function TrustBarEditor() {
+let benefitSequence = 0
+function newBenefitId() {
+  benefitSequence += 1
+  return `item-${Date.now()}-${benefitSequence}`
+}
+
+const POSITION_OPTIONS: Array<{ value: NonNullable<TrustBarSettings['position']>; label: string; description: string }> = [
+  { value: 'above_carousel', label: 'Arriba de los banners', description: 'Apenas debajo de la portada.' },
+  { value: 'below_carousel', label: 'Debajo de los banners', description: 'Antes de las categorías.' },
+  { value: 'bottom', label: 'Al final', description: 'Antes del contacto y el pie de página.' },
+]
+
+export function TrustBarEditor({
+  capabilities,
+  storefrontStyle = 'classic',
+}: {
+  capabilities?: StorefrontCapabilities
+  storefrontStyle?: StorefrontStyle
+} = {}) {
   const { settings, isSaving, updateSetting } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults().trust_bar!
   const [draft, setDraft] = useState<TrustBarSettings | null>(null)
@@ -84,7 +106,7 @@ export function TrustBarEditor() {
       return
     }
     const newItem: TrustBarItem = {
-      id: `item-${Date.now()}`,
+      id: newBenefitId(),
       icon: 'shield',
       title: 'Nuevo Beneficio',
       description: 'Descripción breve de tu servicio o garantía',
@@ -100,6 +122,24 @@ export function TrustBarEditor() {
     }
     const updated = current.items.filter((_, i) => i !== index)
     patch('items', updated)
+  }
+
+  // Ideas del rubro que todavía no están cargadas (se comparan por título).
+  const family = capabilities ? guidanceFamily(capabilities) : 'general'
+  const loadedTitles = new Set(current.items.map((item) => item.title.trim().toLowerCase()))
+  const ideas = TRUST_BAR_IDEAS[family].filter((idea) => !loadedTitles.has(idea.title.toLowerCase()))
+
+  const addIdea = (idea: (typeof ideas)[number]) => {
+    if (current.items.length >= 6) {
+      toast.error('Podés mostrar hasta 6 beneficios. Quitá uno para sumar otro.')
+      return
+    }
+    patch('items', [...current.items, { ...idea, id: newBenefitId(), active: true }])
+  }
+
+  const applyVerticalIdeas = () => {
+    if (!window.confirm('¿Reemplazar tus beneficios por los sugeridos para tu rubro? Podés descartar el cambio antes de guardar.')) return
+    patch('items', TRUST_BAR_IDEAS[family].map((idea) => ({ ...idea, id: newBenefitId(), active: true })))
   }
 
   const restoreDefaults = () => {
@@ -131,21 +171,19 @@ export function TrustBarEditor() {
 
   return (
     <div className="space-y-6">
-      {/* ── Tarjeta de Control Principal ── */}
       <SectionCard
-        title="Barra de Beneficios y Confianza"
-        description="Configurá las tarjetas de beneficios comerciales que ven los clientes en tu portada."
+        title="Dónde se muestran"
+        description="Una franja con pocas ventajas concretas, cerca del inicio de tu tienda."
         icon={ShieldCheck}
       >
-        <div className="space-y-6">
-          {/* Switch de Visibilidad */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-2xl border bg-muted/20">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-3.5">
             <div>
-              <Label htmlFor="trustbar-enabled" className="text-sm font-bold text-foreground cursor-pointer">
-                Mostrar barra de beneficios en la portada
+              <Label htmlFor="trustbar-enabled" className="cursor-pointer text-sm font-semibold text-foreground">
+                Mostrar beneficios en el inicio
               </Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Al desactivarlo, la sección completa se oculta de la página de inicio.
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Si la apagás, tus beneficios se guardan pero no se ven.
               </p>
             </div>
             <Switch
@@ -155,72 +193,88 @@ export function TrustBarEditor() {
             />
           </div>
 
-          {/* Selector de Ubicación / Posición */}
-          <div className="space-y-3">
-            <div>
-              <Label className="text-sm font-bold text-foreground">Ubicación en la página de inicio</Label>
-              <p className="text-xs text-muted-foreground">Elegí dónde querés que se muestren los beneficios de compra.</p>
+          {storefrontStyle === 'classic' ? (
+            <div role="radiogroup" aria-label="Ubicación en el inicio" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {POSITION_OPTIONS.map((option) => {
+                const selected = (current.position ?? 'above_carousel') === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => patch('position', option.value)}
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-colors',
+                      selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border/80 hover:bg-muted/50'
+                    )}
+                  >
+                    <span className="text-xs font-semibold text-foreground">{option.label}</span>
+                    <span className="text-[11px] leading-tight text-muted-foreground">{option.description}</span>
+                  </button>
+                )
+              })}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => patch('position', 'above_carousel')}
-                className={cn(
-                  'flex flex-col items-start gap-1 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                  current.position === 'above_carousel' || !current.position
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border/80 hover:bg-muted/50'
-                )}
-              >
-                <span className="text-xs font-bold text-foreground">⬆️ Arriba del Carrusel</span>
-                <span className="text-[11px] text-muted-foreground leading-tight">
-                  Ubicado inmediatamente debajo del Hero de portada y antes del banner promocional.
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => patch('position', 'below_carousel')}
-                className={cn(
-                  'flex flex-col items-start gap-1 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                  current.position === 'below_carousel'
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border/80 hover:bg-muted/50'
-                )}
-              >
-                <span className="text-xs font-bold text-foreground">⬇️ Debajo del Carrusel</span>
-                <span className="text-[11px] text-muted-foreground leading-tight">
-                  Ubicado justo después del carrusel promocional y antes de las categorías.
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => patch('position', 'bottom')}
-                className={cn(
-                  'flex flex-col items-start gap-1 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                  current.position === 'bottom'
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border/80 hover:bg-muted/50'
-                )}
-              >
-                <span className="text-xs font-bold text-foreground">📍 Al Pie de Página</span>
-                <span className="text-[11px] text-muted-foreground leading-tight">
-                  Ubicado en la parte inferior, antes del centro de contacto y footer.
-                </span>
-              </button>
-            </div>
-          </div>
+          ) : (
+            <p className="rounded-xl border border-dashed px-3.5 py-2.5 text-xs text-muted-foreground">
+              Tu plantilla <strong className="text-foreground">{STOREFRONT_STYLE_LABELS[storefrontStyle]}</strong> los ubica sola, debajo de la portada.
+            </p>
+          )}
         </div>
       </SectionCard>
+
+      {ideas.length > 0 && (
+        <section aria-labelledby="trustbar-ideas" className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 id="trustbar-ideas" className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+                Ideas{capabilities ? ` para ${capabilities.businessLabel.toLowerCase()}` : ''}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">Tocá una para sumarla. Usá solo las que cumplís de verdad.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={applyVerticalIdeas} className="text-xs">
+              Usar todas
+            </Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {ideas.map((idea) => {
+              const IdeaIcon = ICON_OPTIONS.find((option) => option.value === idea.icon)?.icon ?? ShieldCheck
+              return (
+                <button
+                  key={idea.title}
+                  type="button"
+                  onClick={() => addIdea(idea)}
+                  className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
+                >
+                  <Plus className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  <IdeaIcon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                  {idea.title}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Vista previa con el mismo componente que usa la tienda. */}
+      <section aria-label="Vista previa de los beneficios" className="overflow-hidden rounded-2xl border">
+        <p className="border-b bg-muted/40 px-4 py-2 text-xs font-semibold text-muted-foreground">Así se ve en tu tienda</p>
+        {current.enabled !== false && current.items.some((item) => item.active !== false && item.title.trim()) ? (
+          <div className="pointer-events-none bg-background" aria-hidden="true">
+            <StoreTrustBar settings={current} className="py-4" />
+          </div>
+        ) : (
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">{current.enabled === false ? 'Oculta: tus clientes no la ven.' : 'Activá al menos un beneficio para verla.'}</p>
+        )}
+      </section>
 
       {/* ── Editor de Tarjetas de Beneficios ── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-foreground">Tarjetas de Beneficios</h3>
-            <p className="text-xs text-muted-foreground">Personalizá los textos, iconos y visibilidad de cada tarjeta ({current.items.length}/6).</p>
+            <h3 className="text-base font-semibold text-foreground">Tus beneficios <span className="text-muted-foreground">({current.items.length}/6)</span></h3>
+            <p className="text-xs text-muted-foreground">Recomendamos 3 o 4: título corto y una línea que lo explique.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -232,7 +286,7 @@ export function TrustBarEditor() {
               className="text-xs font-semibold gap-1.5"
             >
               <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Predeterminados</span>
+              <span>Restaurar</span>
             </Button>
 
             <Button
@@ -243,7 +297,7 @@ export function TrustBarEditor() {
               className="font-bold gap-1.5 text-xs"
             >
               <Plus className="h-4 w-4" />
-              <span>Agregar beneficio</span>
+              <span>Agregar</span>
             </Button>
           </div>
         </div>
@@ -329,7 +383,7 @@ export function TrustBarEditor() {
                   {/* Selector de Icono */}
                   <div>
                     <Label className="text-xs font-semibold text-foreground">Icono</Label>
-                    <div className="mt-1.5 grid grid-cols-5 gap-1.5">
+                    <div className="mt-1.5 grid grid-cols-8 gap-1">
                       {ICON_OPTIONS.map((opt) => {
                         const OptIcon = opt.icon
                         const isSelected = (item.icon || 'shield').toLowerCase() === opt.value
@@ -340,15 +394,16 @@ export function TrustBarEditor() {
                             type="button"
                             onClick={() => updateItem(index, { icon: opt.value })}
                             title={opt.label}
+                            aria-label={opt.label}
+                            aria-pressed={isSelected}
                             className={cn(
-                              'flex flex-col items-center justify-center p-2 rounded-xl border text-[10px] font-medium transition-all cursor-pointer gap-1',
+                              'flex h-8 items-center justify-center rounded-lg border transition-colors cursor-pointer',
                               isSelected
-                                ? 'border-primary bg-primary text-primary-foreground shadow-xs font-bold'
+                                ? 'border-primary bg-primary text-primary-foreground shadow-xs'
                                 : 'border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
                             )}
                           >
                             <OptIcon className="h-4 w-4" />
-                            <span className="truncate max-w-full text-[9px]">{opt.label.split('/')[0].trim()}</span>
                           </button>
                         )
                       })}

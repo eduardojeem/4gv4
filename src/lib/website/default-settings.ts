@@ -466,16 +466,20 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       message: 'Estamos realizando mejoras en nuestro sitio. Volveremos pronto.',
       estimatedEnd: ''
     },
+    // Lo mínimo que cualquier comercio puede cumplir sin configurar nada: efectivo
+    // y retiro en el local. Antes, una tienda sin onboarding (creada desde el
+    // superadmin o sin terminar el alta) ofrecía tarjeta, transferencia sin
+    // cuentas y delivery. El resto se activa cuando la tienda carga sus datos.
     checkout: {
       commerceMode: 'cart',
       payment: {
-        cash:           { enabled: true,  label: 'Efectivo',          instructions: 'Pagás al retirar en el local o al recibir el delivery.' },
-        card:           { enabled: true,  label: 'Tarjeta',           instructions: 'Posnet inalámbrico disponible en el local o a domicilio.' },
-        transfer:       { enabled: true,  label: 'Transferencia',     instructions: 'Te enviaremos los datos bancarios por WhatsApp o email.' },
-        digital_wallet: { enabled: true,  label: 'Billetera digital', instructions: 'Te enviaremos el QR o link de pago tras confirmar el pedido.' },
+        cash:           { enabled: true,  label: 'Efectivo',          instructions: 'Pagás al retirar en el local.' },
+        card:           { enabled: false, label: 'Tarjeta',           instructions: 'Posnet inalámbrico disponible en el local o a domicilio.' },
+        transfer:       { enabled: false, label: 'Transferencia',     instructions: 'Te enviaremos los datos bancarios por WhatsApp o email.' },
+        digital_wallet: { enabled: false, label: 'Billetera digital', instructions: 'Te enviaremos el QR o link de pago tras confirmar el pedido.' },
       },
       delivery: {
-        enabled: true,
+        enabled: false,
         defaultCost: 0,
         freeThreshold: 0,
         estimatedTime: '30–60 min',

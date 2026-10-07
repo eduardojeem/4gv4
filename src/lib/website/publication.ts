@@ -1,3 +1,4 @@
+import { hasStoreWhatsapp } from '@/lib/whatsapp-number'
 import type { CompanyInfo, PublicCommerceMode } from '@/types/website-settings'
 
 export function resolvePublicationUpdate(
@@ -15,8 +16,9 @@ export function getPublicationIssues(company: Partial<Pick<CompanyInfo, 'name' |
   const issues: string[] = []
   if (!company.name || company.name.trim().length < 2) issues.push('Completá el nombre comercial.')
   if ((company.phone?.replace(/\D/g, '').length ?? 0) < 6) issues.push('Completá un teléfono de contacto válido.')
-  if (mode === 'whatsapp' && !/^[1-9]\d{7,14}$/.test(company.whatsapp?.replace(/\D/g, '') ?? '')) {
-    issues.push('Configurá un WhatsApp válido con código de país para recibir consultas.')
+  // La misma regla que usa la tienda: el WhatsApp o, si falta, el teléfono.
+  if (mode === 'whatsapp' && !hasStoreWhatsapp(company)) {
+    issues.push('Cargá un WhatsApp válido (por ejemplo 0981 123456) para recibir consultas.')
   }
   return issues
 }

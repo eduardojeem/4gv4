@@ -15,6 +15,7 @@ const base = () => {
       ...checkout.payment,
       transfer: {
         ...checkout.payment.transfer,
+        enabled: true,
         instructions: 'Mandanos el comprobante',
         transferOptions: [
           { id: 'a', bankName: 'Banco Viejo', accountNumber: '111' },
@@ -22,6 +23,8 @@ const base = () => {
         ],
       },
     },
+    // Una tienda que ya configuró envíos: el inicial los trae apagados.
+    delivery: { ...checkout.delivery, enabled: true },
     minOrderAmount: 50000,
   }
 }

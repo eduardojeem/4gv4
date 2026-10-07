@@ -27,6 +27,8 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getActivePublicServices } from '@/lib/website/services'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 import { formatPrice, cn } from '@/lib/utils'
+import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import { SERVICES_SECTION_IDEAS, SERVICE_PRESET_CATEGORY, guidanceFamily, showsFinancialServices } from '@/lib/website/vertical-guidance'
 import {
   Dialog,
   DialogContent,
@@ -221,6 +223,104 @@ const PRESET_SERVICES: PresetServiceItem[] = [
     ctaUrl: '/inicio#contacto',
   },
 
+  {
+    verticalCategory: 'Belleza',
+    verticalBadge: '💄 Estética & Cuidado',
+    title: 'Manicura y esmaltado semipermanente',
+    description: 'Limpieza, forma y esmaltado de larga duración con colores de temporada.',
+    icon: 'sparkles',
+    color: 'rose',
+    benefits: ['Productos de calidad', 'Herramientas esterilizadas', 'Dura hasta 3 semanas'],
+    active: true,
+    price: 'Gs. 80.000',
+    priceNote: 'por sesión',
+    duration: '60 min',
+    category: 'Belleza & Cuidado',
+    ctaUrl: '/inicio#contacto',
+  },
+
+  // ── Barbería & Peluquería ──
+  {
+    verticalCategory: 'Barbería',
+    verticalBadge: '💈 Barbería',
+    title: 'Corte de cabello',
+    description: 'Corte a tijera o máquina, lavado y peinado según tu estilo.',
+    icon: 'sparkles',
+    color: 'indigo',
+    benefits: ['Asesoramiento de estilo', 'Lavado incluido', 'Turno sin espera'],
+    active: true,
+    price: 'Gs. 50.000',
+    priceNote: 'precio fijo',
+    duration: '30 min',
+    category: 'Barbería',
+    featured: true,
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    verticalCategory: 'Barbería',
+    verticalBadge: '💈 Barbería',
+    title: 'Barba y perfilado',
+    description: 'Arreglo de barba con navaja, toalla caliente y productos de cuidado.',
+    icon: 'sparkles',
+    color: 'amber',
+    benefits: ['Toalla caliente', 'Perfilado a navaja', 'Aceites y bálsamos'],
+    active: true,
+    price: 'Gs. 35.000',
+    priceNote: 'precio fijo',
+    duration: '20 min',
+    category: 'Barbería',
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    verticalCategory: 'Barbería',
+    verticalBadge: '💈 Barbería',
+    title: 'Corte + barba',
+    description: 'El combo completo: corte de cabello y arreglo de barba en un solo turno.',
+    icon: 'clock',
+    color: 'orange',
+    benefits: ['Ahorrás con el combo', 'Toalla caliente', 'Un solo turno'],
+    active: true,
+    price: 'Gs. 75.000',
+    priceNote: 'combo',
+    duration: '50 min',
+    category: 'Barbería',
+    featured: true,
+    ctaUrl: '/inicio#contacto',
+  },
+
+  // ── Gastronomía ──
+  {
+    verticalCategory: 'Gastronomía',
+    verticalBadge: '🍰 Gastronomía',
+    title: 'Tortas y postres por encargo',
+    description: 'Tortas personalizadas para cumpleaños y eventos, con el sabor y diseño que elijas.',
+    icon: 'package',
+    color: 'pink',
+    benefits: ['Diseño personalizado', 'Ingredientes frescos', 'Entrega coordinada'],
+    active: true,
+    price: 'Desde Gs. 150.000',
+    priceNote: 'según tamaño',
+    duration: 'Pedí con 48 hs',
+    category: 'Encargos',
+    featured: true,
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    verticalCategory: 'Gastronomía',
+    verticalBadge: '🍰 Gastronomía',
+    title: 'Catering para eventos',
+    description: 'Bocaditos, bandejas y menús para reuniones, cumpleaños y eventos de empresa.',
+    icon: 'clock',
+    color: 'amber',
+    benefits: ['Menús a medida', 'Entrega en tu evento', 'Presupuesto sin cargo'],
+    active: true,
+    price: 'A presupuestar',
+    priceNote: 'según invitados',
+    duration: 'A coordinar',
+    category: 'Eventos',
+    ctaUrl: '/inicio#contacto',
+  },
+
   // ── Ferretería & Hogar ──
   {
     verticalCategory: 'Ferretería',
@@ -383,10 +483,22 @@ interface ImportableProduct {
 export function ServicesManager({
   orgSlug,
   servicesModuleEnabled = true,
+  capabilities,
 }: {
   orgSlug?: string | null
   servicesModuleEnabled?: boolean
+  capabilities?: StorefrontCapabilities
 }) {
+  // Ejemplos y textos del rubro primero; pagos y giros solo para comercio general.
+  const family = capabilities ? guidanceFamily(capabilities) : 'general'
+  const verticalPresetCategory = SERVICE_PRESET_CATEGORY[family]
+  const allowedPresets = PRESET_SERVICES.filter((preset) => preset.verticalCategory !== 'Financiero' || showsFinancialServices(family))
+  const presetCategories = Array.from(new Set(allowedPresets.map((preset) => preset.verticalCategory)))
+    .sort((a, b) => Number(b === verticalPresetCategory) - Number(a === verticalPresetCategory))
+  const quickFillPresets = verticalPresetCategory
+    ? allowedPresets.filter((preset) => preset.verticalCategory === verticalPresetCategory)
+    : allowedPresets
+  const sectionIdeas = SERVICES_SECTION_IDEAS[family]
   const { settings, isLoading, error, isSaving, updateSetting: _updateSetting, updateSettings } = useAdminWebsiteSettings()
   const [servicesDraft, setServicesDraft] = useState<Service[] | null>(null)
   const [sectionDraft, setSectionDraft] = useState<ServicesSectionSettings | null>(null)
@@ -422,7 +534,7 @@ export function ServicesManager({
 
   // Plantillas expandibles y filtros
   const [presetsOpen, setPresetsOpen]                 = useState(false)
-  const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>('all')
+  const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>(() => verticalPresetCategory ?? 'all')
 
   // Filtro lista
   const [searchQuery, setSearchQuery]     = useState('')
@@ -886,7 +998,7 @@ export function ServicesManager({
             className="h-9 rounded-xl gap-2 text-sm"
           >
             <LayoutGrid className="h-4 w-4" />
-            <span>Plantillas</span>
+            <span>Ejemplos</span>
             {presetsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </Button>
           <Button onClick={handleOpenAdd} disabled={services.length >= 10} className="h-9 rounded-xl gap-2 text-sm">
@@ -917,27 +1029,8 @@ export function ServicesManager({
 
           {/* Plantillas Rápidas de Encabezado */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-bold text-muted-foreground mr-1">Plantillas rápidas:</span>
-            {[
-              {
-                label: '🛠️ Taller & Reparaciones',
-                badge: '🛠️ Soporte & Reparaciones Especializadas',
-                title: 'Soluciones y reparaciones especializadas para tus equipos',
-                subtitle: 'Diagnóstico profesional, repuestos de calidad y atención rápida con presupuesto directo por WhatsApp.',
-              },
-              {
-                label: '⚡ Servicio Express',
-                badge: '⚡ Servicio Express & Garantía',
-                title: 'Mantenimiento express y puesta a punto garantizada',
-                subtitle: 'Cuidamos tus dispositivos con técnicos certificados y entregas en el menor tiempo posible.',
-              },
-              {
-                label: '⭐ Soluciones Pro',
-                badge: '⭐ Servicios Profesionales',
-                title: 'Soluciones y servicios profesionales a tu medida',
-                subtitle: 'Conocé nuestro catálogo de servicios, compará opciones y pedí presupuesto directo por WhatsApp.',
-              },
-            ].map((tmpl) => (
+            <span className="text-[11px] font-bold text-muted-foreground mr-1">Textos listos:</span>
+            {sectionIdeas.map((tmpl) => (
               <button
                 key={tmpl.label}
                 type="button"
@@ -976,13 +1069,7 @@ export function ServicesManager({
               />
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 <span className="text-[10.5px] font-medium text-violet-700 dark:text-violet-300">✨ Sugerencias de etiqueta:</span>
-                {[
-                  '🛠️ Soporte Técnico Especializado',
-                  '⭐ Servicios Profesionales',
-                  '⚡ Reparaciones Express',
-                  '🛡️ Garantía Escrita',
-                  '✨ Calidad & Confianza',
-                ].map((sug) => (
+                {sectionIdeas.map((idea) => idea.badge).map((sug) => (
                   <button
                     key={sug}
                     type="button"
@@ -1010,12 +1097,7 @@ export function ServicesManager({
               />
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 <span className="text-[10.5px] font-medium text-sky-700 dark:text-sky-300">💬 Sugerencias de título:</span>
-                {[
-                  'Soluciones y servicios para tu día a día',
-                  'Reparaciones y soporte técnico garantizado',
-                  'Servicios especializados para tus dispositivos',
-                  'Mantenimiento express y puesta a punto',
-                ].map((sug) => (
+                {sectionIdeas.map((idea) => idea.title).map((sug) => (
                   <button
                     key={sug}
                     type="button"
@@ -1043,11 +1125,7 @@ export function ServicesManager({
               />
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 <span className="text-[10.5px] font-medium text-emerald-700 dark:text-emerald-300">📝 Sugerencias de subtítulo:</span>
-                {[
-                  'Conocé nuestros servicios, compará opciones y coordiná directamente por WhatsApp.',
-                  'Diagnóstico profesional, repuestos de calidad y atención rápida por especialistas.',
-                  'Consultá precios estimados y solicitá tu presupuesto directo con nuestros técnicos.',
-                ].map((sug) => (
+                {sectionIdeas.map((idea) => idea.subtitle).map((sug) => (
                   <button
                     key={sug}
                     type="button"
@@ -1363,15 +1441,15 @@ export function ServicesManager({
         <div className="rounded-2xl border bg-muted/30 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <p className="text-sm font-bold text-foreground">Plantillas de servicios por rubro</p>
+              <p className="text-sm font-bold text-foreground">Servicios de ejemplo</p>
               <p className="text-xs text-muted-foreground">
-                Hacé 1 clic para agregar un servicio editable a tu catálogo.
+                Empezamos por los de tu rubro. Revisá precio y duración antes de guardar.
               </p>
             </div>
 
             {/* Filtros de Categoría de Plantillas */}
             <div className="flex flex-wrap gap-1">
-              {['all', 'Tecnología', 'Moda', 'Belleza', 'Ferretería', 'Financiero'].map((cat) => (
+              {['all', ...presetCategories].map((cat) => (
                 <button
                   key={cat}
                   type="button"
@@ -1390,7 +1468,7 @@ export function ServicesManager({
           </div>
 
           <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-            {PRESET_SERVICES
+            {allowedPresets
               .filter(p => presetCategoryFilter === 'all' || p.verticalCategory === presetCategoryFilter)
               .map(preset => {
               const IconComp = getIconComp(preset.icon)
@@ -1472,7 +1550,7 @@ export function ServicesManager({
             <div>
               <p className="text-sm font-semibold">Sin servicios en el catálogo</p>
               <p className="mt-1 text-xs text-muted-foreground max-w-xs">
-                Crea tu primer servicio, importá desde el inventario de reparaciones, o usá una plantilla.
+                Creá tu primer servicio, importalo desde tu inventario o empezá con un ejemplo de tu rubro.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
@@ -1483,7 +1561,7 @@ export function ServicesManager({
                 <Download className="h-4 w-4" />Importar del inventario
               </Button>
               <Button variant="outline" onClick={() => setPresetsOpen(true)} className="h-9 rounded-xl gap-2">
-                <LayoutGrid className="h-4 w-4" />Usar plantilla
+                <LayoutGrid className="h-4 w-4" />Ver ejemplos
               </Button>
             </div>
           </div>
@@ -1720,7 +1798,7 @@ export function ServicesManager({
                       <span className="text-[10px] text-muted-foreground">1 toque rellena todo</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                      {PRESET_SERVICES.map(p => (
+                      {quickFillPresets.map(p => (
                         <button
                           key={p.title}
                           type="button"

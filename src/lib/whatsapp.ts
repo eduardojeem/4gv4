@@ -5,33 +5,15 @@
 
 import { formatCurrency } from '@/lib/currency'
 import { trackSiteEvent } from '@/lib/site-analytics/client'
+import { formatWhatsAppPhone } from '@/lib/whatsapp-number'
 
 export interface WhatsAppMessageOptions {
   phone: string
   message?: string
 }
 
-/**
- * Formats a phone number for WhatsApp
- * Removes spaces, dashes, and ensures it starts with country code
- */
-export function formatWhatsAppPhone(phone: string, defaultCountryCode = '595'): string {
-  let cleaned = phone.replace(/\D/g, '')
-
-  if (cleaned.startsWith('0')) {
-    cleaned = cleaned.substring(1)
-  }
-
-  if (!cleaned.startsWith(defaultCountryCode)) {
-    cleaned = defaultCountryCode + cleaned
-  } else if (cleaned.startsWith(`${defaultCountryCode}0`)) {
-    // Guardado como «595» + «0981…»: el 0 es del formato local y wa.me lo
-    // rechaza. Hay números así cargados en las tiendas.
-    cleaned = defaultCountryCode + cleaned.slice(defaultCountryCode.length + 1)
-  }
-
-  return cleaned
-}
+// La regla vive en un módulo sin dependencias del navegador para usarla también en el servidor.
+export { formatWhatsAppPhone } from '@/lib/whatsapp-number'
 
 /**
  * Generates a WhatsApp Web link

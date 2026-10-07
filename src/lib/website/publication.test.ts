@@ -17,7 +17,10 @@ describe('store publication', () => {
       .toEqual({ storefrontPublic: true, marketplacePublic: false })
   })
   it('requires contact details and a WhatsApp number for WhatsApp commerce', () => {
-    expect(getPublicationIssues({ name: 'Mi tienda', phone: '0981123456' }, 'whatsapp')).toContain('Configurá un WhatsApp válido con código de país para recibir consultas.')
+    // El teléfono celular sirve de WhatsApp, igual que en la tienda.
+    expect(getPublicationIssues({ name: 'Mi tienda', phone: '0981123456' }, 'whatsapp')).toEqual([])
+    expect(getPublicationIssues({ name: 'Mi tienda', phone: '0981123456', whatsapp: '12' }, 'whatsapp')).toEqual([])
+    expect(getPublicationIssues({ name: 'Mi tienda', phone: '021 1234' }, 'whatsapp')).toContain('Cargá un WhatsApp válido (por ejemplo 0981 123456) para recibir consultas.')
     expect(getPublicationIssues({ name: 'Mi tienda', phone: '0981123456', whatsapp: '595981123456' }, 'whatsapp')).toEqual([])
     expect(getPublicationIssues({ name: 'Mi tienda', phone: '0981123456' }, 'catalog')).toEqual([])
   })

@@ -1,47 +1,38 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { SectionCard } from '@/components/admin/website/SectionCard'
-import { Card } from '@/components/ui/card'
+import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import {
-  Loader2,
   AlertTriangle,
-  Save,
-  Sparkles,
-  TrendingUp,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  EyeOff, HelpCircle,
-  Plus, Tag,
-  Wrench,
-  Smartphone,
-  ShoppingBag,
-  Monitor,
-  ShieldCheck,
-  Truck, MessageCircle, Award,
-  Briefcase,
-  ThumbsUp,
-  Clock,
   ArrowRight,
-  Package,
-  Search
+  BarChart3,
+  Check,
+  ChevronDown,
+  Eye,
+  Images,
+  Loader2,
+  MessageCircle,
+  MousePointerClick,
+  RotateCcw,
+  Save,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Type,
+  Wrench,
 } from 'lucide-react'
-import { HeroContent, HeroStats } from '@/types/website-settings'
+import type { HeroContent, HeroStats } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
-import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
-import { PublicVisibilityCard } from '@/components/admin/website/PublicVisibilityCard'
 import { cn } from '@/lib/utils'
 import {
   getCompatibleHeroPresetIds,
@@ -49,6 +40,13 @@ import {
   type HeroPresetId,
   type StorefrontCapabilities,
 } from '@/lib/website/storefront-capabilities'
+import {
+  STOREFRONT_EYEBROW_CLASS,
+  STOREFRONT_HEADING_CLASS,
+  STOREFRONT_STYLE_LABELS,
+  type StorefrontStyle,
+} from '@/lib/website/storefront-style'
+import { heroFieldsForStyle } from '@/lib/website/vertical-guidance'
 
 export interface HeroPreset {
   id: HeroPresetId
@@ -63,12 +61,13 @@ export interface HeroPreset {
   stats: { repairs: string; satisfaction: string; avgTime: string }
 }
 
+/** Textos de partida por rubro. Las cifras son ejemplos: el dueño pone las suyas. */
 export const HERO_PRESETS: HeroPreset[] = [
   {
     id: 'tech',
     label: 'Tecnología & Celulares',
     icon: '📱',
-    badge: '✨ Tecnología & Celulares',
+    badge: 'Tecnología & celulares',
     title: 'Lo último en tecnología con atención personalizada',
     subtitle: 'Equipos, accesorios y productos originales con garantía y entrega rápida.',
     ctaPrimaryText: 'Ver productos',
@@ -80,7 +79,7 @@ export const HERO_PRESETS: HeroPreset[] = [
     id: 'fashion',
     label: 'Moda, Calzado & Accesorios',
     icon: '👗',
-    badge: '🔥 Nueva Temporada & Tendencias',
+    badge: 'Nueva temporada',
     title: 'Estilo, calidad y las mejores marcas para vos',
     subtitle: 'Encontrá las últimas novedades, ofertas exclusivas y envíos rápidos a tu puerta.',
     ctaPrimaryText: 'Ver colección',
@@ -92,21 +91,45 @@ export const HERO_PRESETS: HeroPreset[] = [
     id: 'cosmetics',
     label: 'Cosmética & Belleza',
     icon: '✨',
-    badge: 'Cuidado & Belleza',
+    badge: 'Cuidado & belleza',
     title: 'Realzá tu belleza con productos de confianza',
     subtitle: 'Cosmética y cuidado personal originales, con asesoramiento y entregas rápidas.',
     ctaPrimaryText: 'Ver catálogo',
     ctaSecondaryText: 'Pedir asesoramiento',
     trustBadges: ['Productos originales', 'Asesoría personalizada', 'Envíos disponibles'],
-    stats: { repairs: 'Clientes', satisfaction: 'Valoración', avgTime: 'Entrega' },
+    stats: { repairs: '2.000+', satisfaction: '4.9★', avgTime: '24h' },
+  },
+  {
+    id: 'barbershop',
+    label: 'Barbería & Peluquería',
+    icon: '💈',
+    badge: 'Reservá tu turno',
+    title: 'Tu estilo, en buenas manos',
+    subtitle: 'Cortes, barba y color con profesionales. Elegí el servicio y reservá en un minuto.',
+    ctaPrimaryText: 'Reservar turno',
+    ctaSecondaryText: 'Escribinos',
+    trustBadges: ['Turnos online', 'Profesionales', 'Higiene garantizada'],
+    stats: { repairs: '3.000+', satisfaction: '4.9★', avgTime: 'Sin espera' },
+  },
+  {
+    id: 'food',
+    label: 'Alimentos & Gastronomía',
+    icon: '🥖',
+    badge: 'Fresco todos los días',
+    title: 'Lo rico de siempre, directo a tu mesa',
+    subtitle: 'Hacé tu pedido online y recibilo en tu casa o pasá a retirarlo listo.',
+    ctaPrimaryText: 'Hacer mi pedido',
+    ctaSecondaryText: 'Escribinos',
+    trustBadges: ['Productos frescos', 'Delivery en el día', 'Retiro en el local'],
+    stats: { repairs: '5.000+', satisfaction: '4.8★', avgTime: 'En el día' },
   },
   {
     id: 'electro',
-    label: 'Electro, Hogar & Bazar',
+    label: 'Ferretería, Hogar & Bazar',
     icon: '🏠',
-    badge: '🏆 Ofertas Directas para tu Hogar',
+    badge: 'Todo para tu hogar',
     title: 'Todo lo que tu hogar necesita al mejor precio',
-    subtitle: 'Grandes descuentos en electrodomésticos, bazar y equipamiento con despacho inmediato.',
+    subtitle: 'Herramientas, materiales y equipamiento con stock disponible y envíos a domicilio u obra.',
     ctaPrimaryText: 'Ver catálogo',
     ctaSecondaryText: 'Pedir cotización',
     trustBadges: ['Stock inmediato', 'Garantía oficial', 'Precios especiales'],
@@ -116,19 +139,19 @@ export const HERO_PRESETS: HeroPreset[] = [
     id: 'services',
     label: 'Servicios Profesionales',
     icon: '🧰',
-    badge: 'Atención Profesional',
+    badge: 'Atención profesional',
     title: 'Soluciones profesionales a tu medida',
     subtitle: 'Servicios claros, atención personalizada y presupuestos sin sorpresas.',
     ctaPrimaryText: 'Ver servicios',
     ctaSecondaryText: 'Solicitar presupuesto',
     trustBadges: ['Atención directa', 'Presupuestos claros', 'Trabajo garantizado'],
-    stats: { repairs: 'Servicios', satisfaction: 'Satisfacción', avgTime: 'Respuesta' },
+    stats: { repairs: '500+', satisfaction: '98%', avgTime: '24h' },
   },
   {
     id: 'repairs',
     label: 'Servicio Técnico & Reparaciones',
     icon: '🔧',
-    badge: '🔧 Laboratorio Técnico Especializado',
+    badge: 'Servicio técnico',
     title: 'Reparamos tu equipo en tiempo récord con total confianza',
     subtitle: 'Diagnóstico sin costo, repuestos certificados y seguimiento online de tu reparación.',
     ctaPrimaryText: 'Ver servicios',
@@ -140,7 +163,7 @@ export const HERO_PRESETS: HeroPreset[] = [
     id: 'general',
     label: 'Comercio General / Multi-rubro',
     icon: '🏪',
-    badge: '⭐ Tienda Oficial & Stock Garantizado',
+    badge: 'Tienda oficial',
     title: 'Los mejores productos con atención personalizada',
     subtitle: 'Explorá nuestro catálogo online con stock actualizado, promociones exclusivas y envíos rápidos.',
     ctaPrimaryText: 'Explorar tienda',
@@ -150,49 +173,15 @@ export const HERO_PRESETS: HeroPreset[] = [
   },
 ]
 
-const BADGE_SUGGESTIONS = [
-  '✨ Tienda Oficial',
-  '🔥 Ofertas de Temporada',
-  '🚚 Envíos a todo el país',
-  '⭐ Calidad Garantizada',
-  '⚡ Stock Inmediato',
-  '🏆 Más de 10 años de experiencia',
-  '💎 Productos 100% Originales',
-]
-
 const TRACK_REPAIR_SUGGESTIONS = [
   '¿Tenés una reparación? Rastreá tu equipo',
-  '¿Hiciste un pedido? Rastreá tu compra',
-  'Consultar estado de orden en vivo',
-  'Rastrear equipo con número de orden',
+  'Consultá el estado de tu reparación',
 ]
-
-const TRUST_BADGE_CATEGORIES = [
-  {
-    category: 'Garantía & Calidad',
-    icon: '🛡️',
-    items: ['Garantía escrita', 'Repuestos originales', '100% Calidad', 'Técnicos certificados', 'Productos oficiales'],
-  },
-  {
-    category: 'Envíos & Stock',
-    icon: '🚚',
-    items: ['Envíos a todo el país', 'Entrega en el día', 'Stock inmediato', 'Despacho en 24h', 'Retiro en local'],
-  },
-  {
-    category: 'Atención & Beneficios',
-    icon: '💳',
-    items: ['Atención directa', 'Pago 100% seguro', 'Cuotas sin interés', 'Precios de fábrica', 'Cambio fácil'],
-  },
-]
-
-const STAT_REPAIRS_SUGGESTIONS = ['10K+', '5.000+', '15K+', '50K+', '100%', '10+ Años', '1.000+']
-const STAT_SATISFACTION_SUGGESTIONS = ['99%', '98%', '100%', '4.9★', '⭐ 5 Estrellas', '99.5%']
-const STAT_AVG_TIME_SUGGESTIONS = ['24-48h', '1-3 horas', 'En el día', 'Despacho 24h', 'Inmediato', '6 Meses']
 
 interface HeroEditorProps {
-  initialContent?: HeroContent
-  initialStats?: HeroStats
   capabilities?: StorefrontCapabilities
+  /** Plantilla de la tienda: el editor pide solo lo que esa portada muestra. */
+  storefrontStyle?: StorefrontStyle
 }
 
 const DEFAULT_CAPABILITIES = resolveStorefrontCapabilities({
@@ -201,29 +190,55 @@ const DEFAULT_CAPABILITIES = resolveStorefrontCapabilities({
   effectiveModules: ['inventory', 'ecommerce', 'orders'],
 })
 
-export function HeroEditor({ initialContent: _initialContent, initialStats: _initialStats, capabilities = DEFAULT_CAPABILITIES }: HeroEditorProps = {}) {
+/** Ejemplos tocables debajo de un campo. */
+function Ideas({ items, current, onPick }: { items: string[]; current?: string; onPick: (value: string) => void }) {
+  const unique = Array.from(new Set(items.filter(Boolean)))
+  if (unique.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-muted-foreground">Ideas:</span>
+      {unique.map((idea) => (
+        <button
+          key={idea}
+          type="button"
+          onClick={() => onPick(idea)}
+          title={idea}
+          className={cn(
+            'max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11px] transition-colors',
+            current === idea
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-border/70 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+          )}
+        >
+          {idea}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyle = 'classic' }: HeroEditorProps = {}) {
   const { settings, isLoading, error, isSaving, updateSettings } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults()
   const [heroContentDraft, setHeroContentDraft] = useState<HeroContent | null>(null)
   const [heroStatsDraft, setHeroStatsDraft] = useState<HeroStats | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const heroContent = heroContentDraft ?? settings?.hero_content ?? defaults.hero_content
   const heroStats = heroStatsDraft ?? settings?.hero_stats ?? defaults.hero_stats
   const hasChanges = heroContentDraft !== null || heroStatsDraft !== null
+  const fields = heroFieldsForStyle(storefrontStyle, capabilities)
   const compatiblePresetIds = getCompatibleHeroPresetIds(capabilities)
-  const compatiblePresets = HERO_PRESETS.filter((preset) => compatiblePresetIds.includes(preset.id))
+  const compatiblePresets = compatiblePresetIds
+    .map((id) => HERO_PRESETS.find((preset) => preset.id === id))
+    .filter((preset): preset is HeroPreset => Boolean(preset))
   const recommendedPreset = compatiblePresets[0] ?? HERO_PRESETS[HERO_PRESETS.length - 1]
-  const titleSuggestions = compatiblePresets.map((preset) => preset.title)
-  const subtitleSuggestions = compatiblePresets.map((preset) => preset.subtitle)
-  const primarySuggestions = Array.from(new Set(compatiblePresets.map((preset) => preset.ctaPrimaryText)))
-  const secondarySuggestions = Array.from(new Set(compatiblePresets.map((preset) => preset.ctaSecondaryText)))
-  const trustBadgeCategories = capabilities.hasRepairs
-    ? TRUST_BADGE_CATEGORIES
-    : TRUST_BADGE_CATEGORIES.map((category) => ({
-        ...category,
-        items: category.items.filter((item) => !/repuesto|técnic|diagnóstico/i.test(item)),
-      })).filter((category) => category.items.length > 0)
+
+  // En las plantillas que no son Clásica, los banners activos ocupan el lugar de la portada.
+  const bannersReplaceHero = storefrontStyle !== 'classic' &&
+    Boolean(settings?.promotional_carousel?.slides?.some((slide) => slide.active))
+
   const currentHeroCopy = [
     heroContent.badge,
     heroContent.title,
@@ -231,21 +246,14 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
     heroContent.ctaPrimaryText,
     heroContent.ctaSecondaryText,
     heroContent.trackRepairText,
-    ...(heroContent.trustBadges ?? []),
   ].filter(Boolean).join(' ')
   const hasIncompatibleRepairCopy = !capabilities.hasRepairs &&
     /reparaci|servicio técnico|soporte técnico|diagnóstico|repuestos?|técnicos?/i.test(currentHeroCopy)
 
-  void (getBrandTheme(settings?.company_info?.brandColor));
+  const brandColor = settings?.company_info?.brandColor
   const customBrandColor = settings?.company_info?.customBrandColor
-  const hasValidCustomBrand =
-    settings?.company_info?.brandColor === 'custom' && isValidBrandHexColor(customBrandColor)
-  const customBrandStyle =
-    hasValidCustomBrand
-      ? { '--brand-primary': customBrandColor } as React.CSSProperties
-      : undefined
+  const hasValidCustomBrand = brandColor === 'custom' && isValidBrandHexColor(customBrandColor)
 
-  // Report unsaved changes so the tabs page can warn before switching away.
   const dirtyCtx = useWebsiteEditorDirty()
   useEffect(() => {
     dirtyCtx?.setDirty(hasChanges)
@@ -263,21 +271,9 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
     setHeroContentDraft((c) => ({ ...(c ?? heroContent), [field]: value }))
   }
 
-  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
-  const [activeSection, setActiveSection] = useState('texts')
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const focusValidationError = useRef(false)
-  useEffect(() => {
-    const firstError = Object.keys(errors)[0]
-    if (focusValidationError.current && activeSection === 'texts' && firstError) {
-      focusValidationError.current = false
-      document.getElementById(firstError)?.focus()
-    }
-  }, [activeSection, errors])
-  const [showHeroGuide, setShowHeroGuide] = useState(false)
-  const [showButtonsGuide, setShowButtonsGuide] = useState(false)
-  const [showBadgesGuide, setShowBadgesGuide] = useState(false)
-  const [showStatsGuide, setShowStatsGuide] = useState(false)
+  const updateStat = <K extends keyof HeroStats>(field: K, value: HeroStats[K]) => {
+    setHeroStatsDraft((s) => ({ ...(s ?? heroStats), [field]: value }))
+  }
 
   const applyHeroPreset = (preset: HeroPreset) => {
     setHeroContentDraft((c) => ({
@@ -289,21 +285,25 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
       ctaSecondaryText: preset.ctaSecondaryText,
       trustBadges: [...preset.trustBadges],
     }))
-    setHeroStatsDraft((s) => ({
-      ...(s ?? heroStats),
-      repairs: preset.stats.repairs,
-      satisfaction: preset.stats.satisfaction,
-      avgTime: preset.stats.avgTime,
-    }))
+    // Las cifras solo se tocan donde se muestran (Clásica).
+    if (fields.stats) {
+      setHeroStatsDraft((s) => ({
+        ...(s ?? heroStats),
+        repairs: preset.stats.repairs,
+        satisfaction: preset.stats.satisfaction,
+        avgTime: preset.stats.avgTime,
+      }))
+    }
     setErrors({})
-    toast.success(`Plantilla "${preset.label}" aplicada`, {
-      icon: <Check className="h-4 w-4 text-emerald-500" />,
-      description: 'Podés personalizar cualquier campo antes de guardar.',
+    toast.success(`Textos de «${preset.label}» aplicados`, {
+      description: 'Ajustalos a tu negocio antes de guardar.',
     })
   }
 
-  const updateStat = <K extends keyof HeroStats>(field: K, value: HeroStats[K]) => {
-    setHeroStatsDraft((s) => ({ ...(s ?? heroStats), [field]: value }))
+  const discard = () => {
+    setHeroContentDraft(null)
+    setHeroStatsDraft(null)
+    setErrors({})
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -320,12 +320,11 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
       nextErrors.title = 'El título debe tener al menos 10 caracteres.'
     }
     if (heroActive && (!heroContent.subtitle || heroContent.subtitle.trim().length < 10)) {
-      nextErrors.subtitle = 'El subtítulo debe tener al menos 10 caracteres.'
+      nextErrors.subtitle = 'La descripción debe tener al menos 10 caracteres.'
     }
     if (Object.keys(nextErrors).length > 0) {
-      focusValidationError.current = true
       setErrors(nextErrors)
-      setActiveSection('texts')
+      document.getElementById(Object.keys(nextErrors)[0])?.focus()
       toast.error('Revisá los campos marcados')
       return
     }
@@ -341,7 +340,7 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
       return
     }
 
-    toast.success('Hero actualizado', { icon: <Check className="h-4 w-4" /> })
+    toast.success('Portada guardada', { icon: <Check className="h-4 w-4" /> })
     setHeroContentDraft(null)
     setHeroStatsDraft(null)
   }
@@ -363,35 +362,33 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
     )
   }
 
+  const visible = heroContent.enabled !== false
+  const primaryText = heroContent.ctaPrimaryText || recommendedPreset.ctaPrimaryText
+  const secondaryText = heroContent.ctaSecondaryText || recommendedPreset.ctaSecondaryText
+
   return (
     <form onSubmit={handleSave} className="space-y-4 pb-6">
       <PublicVisibilityCard
         compact
         title="Portada principal"
-        description="Es lo primero que ven tus clientes. Editá el contenido, revisá la vista previa y guardá para publicarlo."
-        enabled={heroContent.enabled !== false}
+        description="Lo primero que ven tus clientes al entrar a tu tienda."
+        enabled={visible}
         onToggle={(checked) => updateContent('enabled', checked)}
       />
 
-      <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-semibold text-foreground">{capabilities.businessLabel}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            La portada se adapta a las funciones disponibles y oculta acciones que tu organización no tiene habilitadas.
+      <p className="text-xs text-muted-foreground">
+        Tu plantilla <strong className="text-foreground">{STOREFRONT_STYLE_LABELS[storefrontStyle]}</strong> · {capabilities.businessLabel}.
+        {' '}Te pedimos solo lo que esa portada muestra.
+      </p>
+
+      {bannersReplaceHero && (
+        <div role="note" className="flex items-start gap-2.5 rounded-xl border border-sky-500/30 bg-sky-500/10 p-3 text-xs">
+          <Images className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden="true" />
+          <p className="text-foreground">
+            Tenés <strong>banners activos</strong>: en tu plantilla se muestran en lugar de esta portada. Si querés ver la portada, desactivá los banners.
           </p>
         </div>
-        <div className="flex flex-wrap gap-1.5 text-[11px] font-medium">
-          <span className={cn('rounded-full border px-2 py-1', capabilities.hasCatalog ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border bg-muted text-muted-foreground')}>
-            {capabilities.hasCatalog ? 'Catálogo activo' : 'Sin catálogo'}
-          </span>
-          <span className={cn('rounded-full border px-2 py-1', capabilities.hasServices ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border bg-muted text-muted-foreground')}>
-            {capabilities.hasServices ? 'Servicios activos' : 'Sin servicios'}
-          </span>
-          <span className={cn('rounded-full border px-2 py-1', capabilities.hasRepairs ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border bg-muted text-muted-foreground')}>
-            {capabilities.hasRepairs ? 'Reparaciones activas' : 'Sin reparaciones'}
-          </span>
-        </div>
-      </div>
+      )}
 
       {hasIncompatibleRepairCopy && (
         <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:flex-row sm:items-center sm:justify-between">
@@ -399,7 +396,7 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <div>
               <p className="text-sm font-semibold text-foreground">El contenido actual menciona reparaciones o servicio técnico.</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Ese módulo no está activo. Actualizá los textos antes de publicar para no ofrecer una función inexistente.</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Ese módulo no está activo. Cambiá los textos para no ofrecer algo que tu tienda no tiene.</p>
             </div>
           </div>
           <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => applyHeroPreset(recommendedPreset)}>
@@ -409,984 +406,280 @@ export function HeroEditor({ initialContent: _initialContent, initialStats: _ini
       )}
 
       <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-      <aside aria-label="Vista previa de la portada" className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1">
-        <Button type="button" variant="outline" className="w-full justify-between xl:hidden" aria-expanded={previewOpen} aria-controls="hero-preview" onClick={() => setPreviewOpen((open) => !open)}>
-          <span className="flex items-center gap-2"><Eye className="h-4 w-4" />{previewOpen ? 'Ocultar vista previa' : 'Ver vista previa'}</span>
-          <ChevronDown className={cn('h-4 w-4 transition-transform', previewOpen && 'rotate-180')} />
-        </Button>
-      <div id="hero-preview" className={cn('mt-3 xl:mt-0 xl:block', !previewOpen && 'hidden')}>
-      <Card className="relative gap-0 overflow-hidden py-0 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              <Eye className="h-3.5 w-3.5 text-primary" />
-              Vista previa en vivo
-            </span>
+        {/* ── Vista previa ── */}
+        <aside aria-label="Vista previa de la portada" className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1">
+          <Button type="button" variant="outline" className="w-full justify-between xl:hidden" aria-expanded={previewOpen} aria-controls="hero-preview" onClick={() => setPreviewOpen((open) => !open)}>
+            <span className="flex items-center gap-2"><Eye className="h-4 w-4" />{previewOpen ? 'Ocultar vista previa' : 'Ver vista previa'}</span>
+            <ChevronDown className={cn('h-4 w-4 transition-transform', previewOpen && 'rotate-180')} />
+          </Button>
+          <div id="hero-preview" className={cn('mt-3 xl:mt-0 xl:block', !previewOpen && 'hidden')}>
+            <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+              <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <Eye className="h-3.5 w-3.5 text-primary" />
+                  Así se ve
+                </span>
+                <span className={cn('flex items-center gap-1.5 text-xs font-semibold', visible ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                  <span className={cn('h-2 w-2 rounded-full', visible ? 'bg-emerald-500' : 'bg-muted-foreground')} />
+                  {visible ? 'Visible' : 'Oculta'}
+                </span>
+              </div>
 
-            {/* Selector de Dispositivo */}
-            <div className="flex items-center rounded-lg border border-border/80 bg-background p-0.5 shadow-2xs">
-              <button
-                type="button"
-                aria-pressed={previewDevice === 'desktop'}
-                onClick={() => setPreviewDevice('desktop')}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer',
-                  previewDevice === 'desktop'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
+              <div
+                data-color-scheme={brandColor && brandColor !== 'custom' ? brandColor : undefined}
+                data-custom-brand={hasValidCustomBrand ? '' : undefined}
+                style={hasValidCustomBrand ? ({ '--brand-primary': customBrandColor } as React.CSSProperties) : undefined}
+                className={cn('transition-opacity', !visible && 'opacity-40')}
               >
-                <Monitor className="h-3.5 w-3.5" />
-                <span>Escritorio</span>
-              </button>
-              <button
-                type="button"
-                aria-pressed={previewDevice === 'mobile'}
-                onClick={() => setPreviewDevice('mobile')}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer',
-                  previewDevice === 'mobile'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Smartphone className="h-3.5 w-3.5" />
-                <span>Celular</span>
-              </button>
-            </div>
-          </div>
-
-          <span className={`text-xs font-bold flex items-center gap-1.5 ${heroContent.enabled !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
-            <span className={cn('h-2 w-2 rounded-full', heroContent.enabled !== false ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground')} />
-            {heroContent.enabled !== false ? 'Visible en tu web' : 'Oculto al público'}
-          </span>
-        </div>
-
-        {/* Contenedor del Preview */}
-        <div className={cn(
-          'transition-all duration-300',
-          previewDevice === 'mobile' ? 'bg-muted/30 p-4 sm:p-6 flex justify-center' : ''
-        )}>
-          <div
-            className={cn(
-              'relative overflow-hidden transition-opacity',
-              'border-b border-border/80 bg-gradient-to-b from-primary/[0.06] via-background to-background',
-              heroContent.enabled !== false ? '' : 'opacity-45',
-              previewDevice === 'mobile'
-                ? 'w-full max-w-[390px] rounded-3xl border-4 border-slate-800 shadow-2xl p-5 text-center'
-                : 'px-4 py-6'
-            )}
-            data-custom-brand={hasValidCustomBrand ? '' : undefined}
-            style={customBrandStyle}
-          >
-            {/* Luces de ambiente sutiles */}
-            <div className="pointer-events-none absolute -left-10 -top-10 h-60 w-60 rounded-full bg-primary/10 blur-3xl" />
-            <div className="pointer-events-none absolute right-0 top-1/4 h-72 w-72 rounded-full bg-primary/5 blur-3xl" />
-
-            <div className="mx-auto max-w-5xl relative">
-              <div className={cn(
-                'grid items-center gap-8',
-                previewDevice === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 gap-5'
-              )}>
-                {/* ── Columna Izquierda: Mensaje Comercial ── */}
-                <div className={cn(
-                  'flex flex-col',
-                  previewDevice === 'mobile' ? 'items-center text-center' : 'items-start text-left'
-                )}>
-                  {/* Badges superiores */}
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-xs">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {heroContent.badge || 'Catálogo Oficial'}
-                    </span>
-
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Abierto hoy
-                    </span>
-                  </div>
-
-                  {/* Título Principal */}
-                  <h2 className={cn(
-                    'font-extrabold tracking-tight text-foreground',
-                    previewDevice === 'mobile' ? 'text-xl leading-snug' : 'text-2xl leading-tight'
-                  )}>
-                    {heroContent.title || 'Los mejores productos al mejor precio'}
-                  </h2>
-
-                  {/* Subtítulo */}
-                  <p className={cn(
-                    'mt-3 text-muted-foreground leading-relaxed',
-                    previewDevice === 'mobile' ? 'text-xs max-w-xs' : 'text-sm sm:text-base max-w-xl'
-                  )}>
-                    {heroContent.subtitle || 'Explorá nuestro catálogo con stock actualizado, promociones exclusivas y atención personalizada.'}
-                  </p>
-
-                  {/* Insignias de Confianza (Pills) */}
-                  <div className={cn(
-                    'mt-3.5 flex flex-wrap gap-1.5',
-                    previewDevice === 'mobile' ? 'justify-center' : ''
-                  )}>
-                    {(heroContent.trustBadges || recommendedPreset.trustBadges).map((label, i) => (
-                      <div key={i} className="rounded-full bg-muted border border-border/70 px-2.5 py-0.5 text-[11px] font-semibold text-foreground shadow-2xs">
-                        ✓ {label}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* ── Buscador Simulado ── */}
-                  {capabilities.hasCatalog && <div className="mt-5 flex w-full max-w-md items-center gap-2 rounded-2xl border border-border/80 bg-card p-1.5 shadow-md">
-                    <div className="relative flex-1 flex items-center pl-3">
-                      <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="ml-2 text-xs text-muted-foreground truncate">
-                        ¿Qué estás buscando hoy?...
-                      </span>
-                    </div>
-                    <div className="rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground shadow-xs flex items-center gap-1">
-                      <span>Buscar</span>
-                      <ArrowRight className="h-3 w-3" />
-                    </div>
-                  </div>}
-
-                  {/* CTAs Principales */}
-                  <div className={cn(
-                    'mt-4 flex flex-wrap items-center gap-2.5',
-                    previewDevice === 'mobile' ? 'w-full flex-col items-stretch' : ''
-                  )}>
-                    <div className="rounded-xl bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2 cursor-pointer hover:bg-primary/90">
-                      {capabilities.primaryAction.kind === 'services' ? <Briefcase className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
-                      <span>{heroContent.ctaPrimaryText || 'Ver productos'}</span>
-                    </div>
-
-                    <div className="rounded-xl border border-border bg-card text-foreground px-4 py-2.5 text-xs font-bold shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:bg-muted">
-                      <MessageCircle className="h-4 w-4 text-emerald-600" />
-                      <span>{heroContent.ctaSecondaryText || 'Escribinos'}</span>
+                {storefrontStyle === 'market' ? (
+                  <div className="bg-primary p-5 text-primary-foreground">
+                    <p className="text-xs font-semibold opacity-80">{heroContent.badge || settings?.company_info?.name || 'Tu súper'}</p>
+                    <p className="mt-1 text-xl font-black leading-tight">{heroContent.title || '¿Qué necesitás hoy?'}</p>
+                    {heroContent.subtitle && <p className="mt-1 text-xs opacity-85">{heroContent.subtitle}</p>}
+                    <div className="mt-3 flex items-center gap-2 rounded-full bg-white p-1 pl-3 text-xs text-slate-400">
+                      <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="flex-1">Buscá leche, arroz, detergente…</span>
+                      <span className="rounded-full bg-primary px-3 py-1 font-bold text-primary-foreground">Buscar</span>
                     </div>
                   </div>
-
-                  {/* Track Repair */}
-                  {capabilities.tracking.kind !== 'none' && <div className="mt-3.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-                    {capabilities.tracking.kind === 'repairs'
-                      ? <Wrench className="h-3.5 w-3.5 text-primary shrink-0" />
-                      : <Truck className="h-3.5 w-3.5 text-primary shrink-0" />}
-                    <span className="underline underline-offset-2">
-                      {capabilities.tracking.kind === 'repairs'
-                        ? heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'
-                        : 'Seguimiento de pedidos activo'}
+                ) : (
+                  <div className="bg-gradient-to-b from-primary/[0.07] to-background p-5">
+                    <span className={cn(STOREFRONT_EYEBROW_CLASS[storefrontStyle], 'text-[10px]')}>
+                      {heroContent.badge || recommendedPreset.badge}
                     </span>
-                    <ArrowRight className="h-3 w-3 opacity-60" />
-                  </div>}
-                </div>
-
-                {/* ── Columna Derecha: Tarjeta Comercial Destacada ── */}
-                <div className={cn(
-                  'flex',
-                  previewDevice === 'mobile' ? 'justify-center w-full mt-3' : 'justify-center w-full'
-                )}>
-                  <div className="w-full max-w-sm rounded-3xl border border-border/80 bg-card p-5 sm:p-6 shadow-xl space-y-4 text-left">
-
-                    {/* Header: Logo + Nombre de la Tienda */}
-                    <div className="flex items-center gap-3 pb-3 border-b border-border/60">
-                      {settings?.company_info?.logoUrl ? (
-                        <div className="relative h-11 max-w-[140px] shrink-0 overflow-hidden flex items-center justify-start">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={settings.company_info.logoUrl}
-                            alt="Logo"
-                            className="h-11 w-auto max-h-11 max-w-full object-contain"
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-extrabold text-xs shadow-xs">
-                          {settings?.company_info?.name?.slice(0, 2).toUpperCase() || '4G'}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate font-bold text-sm text-foreground">
-                          {settings?.company_info?.name || 'Tienda Oficial'}
-                        </h3>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {settings?.company_info?.address || 'Ubicación y atención personalizada'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Estadísticas */}
-                    {heroStats.enabled !== false && (
-                      <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-muted/40 p-3 text-center border border-border/40">
-                        <div>
-                          <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.repairs || '100%'}</div>
-                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">{capabilities.metricLabels[0]}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.satisfaction || '4.9★'}</div>
-                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">{capabilities.metricLabels[1]}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm sm:text-base font-extrabold text-foreground">{heroStats.avgTime || '24h'}</div>
-                          <div className="text-[9px] font-semibold text-muted-foreground mt-0.5">{capabilities.metricLabels[2]}</div>
-                        </div>
+                    <p className={cn('mt-2 text-xl leading-tight text-foreground', STOREFRONT_HEADING_CLASS[storefrontStyle])}>
+                      {heroContent.title || recommendedPreset.title}
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      {heroContent.subtitle || recommendedPreset.subtitle}
+                    </p>
+                    {fields.buttons && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+                          <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" />
+                          {primaryText}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-2 text-xs font-semibold text-foreground">
+                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                          {secondaryText}
+                        </span>
                       </div>
                     )}
-
-                    {/* Accesos Rápidos */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between rounded-xl border border-border/70 bg-background p-2.5 text-xs font-bold text-foreground">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Package className="h-3.5 w-3.5" />
+                    {fields.tracking && (
+                      <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Wrench className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                        <span className="underline underline-offset-2">{heroContent.trackRepairText || TRACK_REPAIR_SUGGESTIONS[0]}</span>
+                        <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                      </p>
+                    )}
+                    {fields.stats && heroStats.enabled !== false && (
+                      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl border bg-muted/40 p-2.5 text-center">
+                        {[heroStats.repairs, heroStats.satisfaction, heroStats.avgTime].map((value, index) => (
+                          <div key={capabilities.metricLabels[index]}>
+                            <div className="text-sm font-extrabold text-foreground">{value || '—'}</div>
+                            <div className="text-[9px] text-muted-foreground">{capabilities.metricLabels[index]}</div>
                           </div>
-                          <span>Ver catálogo completo</span>
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        ))}
                       </div>
-
-                      <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/50 p-2.5 text-xs font-bold text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-200 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
-                            <Sparkles className="h-3.5 w-3.5" />
-                          </div>
-                          <span>Ofertas y promociones</span>
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-rose-500" />
-                      </div>
-                    </div>
-
-                    {/* Horarios */}
-                    <div className="flex items-center justify-between pt-2 text-[10px] text-muted-foreground border-t border-border/60">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Horario:
-                      </span>
-                      <span className="font-semibold text-foreground">
-                        {settings?.company_info?.hours?.weekdays || 'Lunes a Sábados'}
-                      </span>
-                    </div>
-
+                    )}
                   </div>
-                </div>
-
+                )}
               </div>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">Vista aproximada. Se publica al guardar.</p>
           </div>
-        </div>
+        </aside>
 
-        {heroContent.enabled === false && (
-          <div className="absolute inset-x-0 bottom-0 top-12 z-20 flex items-center justify-center bg-background/50 p-6 backdrop-blur-[2px]">
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-4 shadow-xl">
-              <EyeOff className="h-6 w-6 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-sm font-bold text-foreground">Hero actualmente oculto</p>
-                <p className="text-xs text-muted-foreground">La página principal comenzará con la siguiente sección activa.</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
-      <p className="mt-2 text-xs text-muted-foreground">Vista orientativa. Los cambios se publican únicamente al guardar.</p>
-      </div>
-      </aside>
-
-      <Tabs value={activeSection} onValueChange={setActiveSection} className="min-w-0 xl:col-start-1 xl:row-start-1 [&_[data-slot=card]]:gap-0 [&_[data-slot=card]]:py-0 [&_[data-slot=card-header]]:p-4 [&_[data-slot=card-content]]:p-4">
-        <TabsList aria-label="Editar portada" className="grid h-11 w-full grid-cols-3">
-          <TabsTrigger value="texts">Textos</TabsTrigger>
-          <TabsTrigger value="buttons">Botones</TabsTrigger>
-          <TabsTrigger value="trust">Confianza</TabsTrigger>
-        </TabsList>
-      <TabsContent value="texts">
-      <SectionCard icon={Sparkles} title="Presentá tu negocio" description="Una etiqueta breve, un título claro y una descripción de lo que ofrecés.">
-        <div className="space-y-6">
-
-          {/* ── Plantillas por Rubro ── */}
-          <details className="rounded-xl border bg-muted/20 p-3">
-            <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Usar una plantilla</summary>
-            <p className="my-3 text-xs text-muted-foreground">Mostramos únicamente plantillas compatibles con tu rubro y módulos. Revisá las cifras antes de guardar: son ejemplos, no datos reales de tu negocio.</p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+        {/* ── Edición ── */}
+        <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
+          <section aria-labelledby="hero-presets" className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
+            <h3 id="hero-presets" className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+              Empezá con un texto de tu rubro
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Completa todo de una vez. Después cambiá lo que quieras.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
               {compatiblePresets.map((preset, index) => (
                 <button
                   key={preset.id}
                   type="button"
                   aria-label={preset.label}
                   onClick={() => applyHeroPreset(preset)}
-                  className="flex flex-col items-center justify-center p-3 rounded-xl border border-border/80 bg-background/80 hover:bg-primary/10 hover:border-primary/40 transition-all text-center group cursor-pointer shadow-2xs"
+                  className="inline-flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-left text-xs transition-colors hover:border-primary/50 hover:bg-primary/5"
                 >
-                  <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">{preset.icon}</span>
-                  <span className="text-xs font-bold text-foreground group-hover:text-primary leading-tight line-clamp-2">
-                    {preset.label}
-                  </span>
-                  {index === 0 && (
-                    <span className="mt-1 text-[9px] font-bold uppercase tracking-wider text-primary">Recomendada</span>
-                  )}
+                  <span aria-hidden="true" className="text-base">{preset.icon}</span>
+                  <span className="font-semibold text-foreground">{preset.label}</span>
+                  {index === 0 && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Recomendado</span>}
                 </button>
               ))}
             </div>
-          </details>
+          </section>
 
-          {/* ── Guía Visual Desplegable ── */}
-          <div className="border-b border-border/60 pb-4">
-            <button
-              type="button"
-              onClick={() => setShowHeroGuide((prev) => !prev)}
-              aria-expanded={showHeroGuide}
-              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
-            >
-              <HelpCircle className="h-4 w-4" />
-              <span>{showHeroGuide ? 'Ocultar guía de redacción' : '¿Cómo redactar un Hero que aumente tus ventas? (Guía y Tips)'}</span>
-              {showHeroGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-
-            {showHeroGuide && (
-              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-3 animate-in fade-in-50 duration-200">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <p className="font-bold text-foreground flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                      1. Badge Superior
-                    </p>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Debe ser breve (2 a 5 palabras). Resalta tu autoridad, temporada o beneficio principal (ej: <em>&quot;✨ Tienda Oficial&quot;</em> o <em>&quot;🚚 Envíos a todo el país&quot;</em>).
-                    </p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <p className="font-bold text-foreground flex items-center gap-1.5">
-                      <Tag className="h-3.5 w-3.5 text-primary" />
-                      2. Título Principal
-                    </p>
-                    <p className="text-muted-foreground leading-relaxed">
-                      La promesa central de tu negocio. Explicá qué vendés y por qué deben elegirte de forma clara y atractiva.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <p className="font-bold text-foreground flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      3. Subtítulo & Garantías
-                    </p>
-                    <p className="text-muted-foreground leading-relaxed">
-                      Detalla beneficios clave: medios de pago, tiempos de entrega, garantía escrita y atención directa.
-                    </p>
-                  </div>
+          <SectionCard icon={Type} title="Textos" description="Una etiqueta corta, un título claro y una línea que diga qué ofrecés.">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="badge" className="text-sm font-semibold">Etiqueta</Label>
+                  <span className="text-xs text-muted-foreground">{heroContent.badge.length}/100</span>
                 </div>
+                <Input
+                  id="badge"
+                  value={heroContent.badge}
+                  onChange={(e) => updateContent('badge', e.target.value)}
+                  placeholder={recommendedPreset.badge}
+                  maxLength={100}
+                  aria-invalid={!!errors.badge}
+                  aria-describedby={errors.badge ? 'badge-error' : undefined}
+                  className="h-10"
+                />
+                {errors.badge && <p id="badge-error" role="alert" className="text-xs text-destructive">{errors.badge}</p>}
+                <Ideas items={compatiblePresets.map((preset) => preset.badge)} current={heroContent.badge} onPick={(value) => updateContent('badge', value)} />
               </div>
-            )}
-          </div>
 
-          {/* ── Campo 1: Badge Superior ── */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="badge" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-amber-500" />
-                Etiqueta superior
-              </Label>
-              <span className="text-xs text-muted-foreground">{heroContent.badge.length}/100</span>
-            </div>
-
-            <Input
-              id="badge"
-              value={heroContent.badge}
-              onChange={(e) => updateContent('badge', e.target.value)}
-              placeholder="✨ Más de 10 años de experiencia"
-              maxLength={100}
-              aria-invalid={!!errors.badge}
-              aria-describedby={errors.badge ? 'badge-error' : undefined}
-              className="h-11"
-            />
-            {errors.badge && <p id="badge-error" role="alert" className="text-xs text-destructive">{errors.badge}</p>}
-
-            {/* Sugerencias rápidas Badge */}
-            <details className="pt-1">
-              <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-              <div className="flex flex-wrap gap-1.5">
-                {BADGE_SUGGESTIONS.map((sug, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => updateContent('badge', sug)}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
-                      heroContent.badge === sug
-                        ? 'border-primary bg-primary/10 font-bold text-primary'
-                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                    )}
-                  >
-                    <span>{sug}</span>
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
-
-          {/* ── Campo 2: Título Principal ── */}
-          <div className="space-y-2.5 pt-2 border-t border-border/40">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="title" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <Tag className="h-4 w-4 text-primary" />
-                Título principal
-              </Label>
-              <span className="text-xs text-muted-foreground">{heroContent.title.length}/150</span>
-            </div>
-
-            <Input
-              id="title"
-              value={heroContent.title}
-              onChange={(e) => updateContent('title', e.target.value)}
-              placeholder={recommendedPreset.title}
-              maxLength={150}
-              aria-invalid={!!errors.title}
-              aria-describedby={errors.title ? 'title-error' : undefined}
-              className="h-11"
-            />
-            {errors.title && <p id="title-error" role="alert" className="text-xs text-destructive">{errors.title}</p>}
-
-            {/* Sugerencias rápidas Título */}
-            <details className="pt-1">
-              <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-              <div className="flex flex-wrap gap-1.5">
-                {titleSuggestions.map((sug, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => updateContent('title', sug)}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors text-left cursor-pointer',
-                      heroContent.title === sug
-                        ? 'border-primary bg-primary/10 font-bold text-primary'
-                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                    )}
-                  >
-                    <span>{sug}</span>
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
-
-          {/* ── Campo 3: Subtítulo ── */}
-          <div className="space-y-2.5 pt-2 border-t border-border/40">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="subtitle" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Subtítulo
-              </Label>
-              <span className="text-xs text-muted-foreground">{heroContent.subtitle.length}/300</span>
-            </div>
-
-            <Textarea
-              id="subtitle"
-              value={heroContent.subtitle}
-              onChange={(e) => updateContent('subtitle', e.target.value)}
-              placeholder={recommendedPreset.subtitle}
-              rows={2}
-              maxLength={300}
-              aria-invalid={!!errors.subtitle}
-              aria-describedby={errors.subtitle ? 'subtitle-error' : undefined}
-              className="text-sm"
-            />
-            {errors.subtitle && <p id="subtitle-error" role="alert" className="text-xs text-destructive">{errors.subtitle}</p>}
-
-            {/* Sugerencias rápidas Subtítulo */}
-            <details className="pt-1">
-              <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-              <div className="flex flex-wrap gap-1.5">
-                {subtitleSuggestions.map((sug, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => updateContent('subtitle', sug)}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors text-left cursor-pointer',
-                      heroContent.subtitle === sug
-                        ? 'border-primary bg-primary/10 font-bold text-primary'
-                        : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                    )}
-                  >
-                    <span>{sug}</span>
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
-
-        </div>
-      </SectionCard>
-      </TabsContent>
-
-      {/* Action Buttons & Links */}
-      <TabsContent value="buttons">
-      <SectionCard icon={TrendingUp} title="Acciones del visitante" description="Elegí textos cortos que indiquen qué puede hacer el cliente, por ejemplo: Ver productos.">
-        <div className="space-y-6">
-
-          {/* Guía Desplegable Botones */}
-          <div className="border-b border-border/60 pb-3">
-            <button
-              type="button"
-              onClick={() => setShowButtonsGuide((prev) => !prev)}
-              aria-expanded={showButtonsGuide}
-              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
-            >
-              <HelpCircle className="h-4 w-4" />
-              <span>{showButtonsGuide ? 'Ocultar consejos de botones' : '¿Cómo elegir botones que conviertan visitas en compras?'}</span>
-              {showButtonsGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-
-            {showButtonsGuide && (
-              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
-                <p className="font-bold text-foreground">💡 Consejos para tus llamados a la acción (CTAs):</p>
-                <ul className="space-y-1.5 text-muted-foreground list-disc list-inside leading-relaxed">
-                  <li><strong className="text-foreground">Botón Principal:</strong> Dirige al catálogo o tienda online. Usá verbos de acción claros (ej: <em>&quot;Ver productos&quot;</em> o <em>&quot;Explorar catálogo&quot;</em>).</li>
-                  <li><strong className="text-foreground">Botón Secundario:</strong> Abre la comunicación directa (WhatsApp / Contacto). Ideal para consultas de stock, fallas o presupuestos personalizados.</li>
-                  <li><strong className="text-foreground">Enlace de Rastreo:</strong> Permite a clientes con órdenes de servicio o envíos consultar su estado en tiempo real con su código.</li>
-                </ul>
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Botón Principal */}
-            <div className="space-y-2.5">
-              <Label htmlFor="ctaPrimaryText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <ShoppingBag className="h-4 w-4 text-primary" />
-                Botón principal (Catálogo / Tienda)
-              </Label>
-              <Input
-                id="ctaPrimaryText"
-                value={heroContent.ctaPrimaryText ?? 'Ver productos'}
-                onChange={(e) => updateContent('ctaPrimaryText', e.target.value)}
-                placeholder="Ej: Ver catálogo, Productos"
-                maxLength={40}
-                className="h-11"
-              />
-              {/* Sugerencias Botón Principal */}
-              <details className="pt-1">
-                <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-                <div className="flex flex-wrap gap-1.5">
-                  {primarySuggestions.map((sug, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => updateContent('ctaPrimaryText', sug)}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
-                        heroContent.ctaPrimaryText === sug
-                          ? 'border-primary bg-primary/10 font-bold text-primary'
-                          : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                      )}
-                    >
-                      <span>{sug}</span>
-                    </button>
-                  ))}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="title" className="text-sm font-semibold">Título principal</Label>
+                  <span className="text-xs text-muted-foreground">{heroContent.title.length}/150</span>
                 </div>
-              </details>
-            </div>
-
-            {/* Botón Secundario */}
-            <div className="space-y-2.5">
-              <Label htmlFor="ctaSecondaryText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <MessageCircle className="h-4 w-4 text-emerald-500" />
-                Botón secundario (Contacto / WhatsApp)
-              </Label>
-              <Input
-                id="ctaSecondaryText"
-                value={heroContent.ctaSecondaryText ?? 'Escribinos'}
-                onChange={(e) => updateContent('ctaSecondaryText', e.target.value)}
-                placeholder="Ej: Contáctanos, Escribinos"
-                maxLength={40}
-                className="h-11"
-              />
-              {/* Sugerencias Botón Secundario */}
-              <details className="pt-1">
-                <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-                <div className="flex flex-wrap gap-1.5">
-                  {secondarySuggestions.map((sug, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => updateContent('ctaSecondaryText', sug)}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
-                        heroContent.ctaSecondaryText === sug
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
-                          : 'border-border/60 bg-background text-muted-foreground hover:border-emerald-400 hover:text-foreground'
-                      )}
-                    >
-                      <span>{sug}</span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </div>
-
-            {/* Enlace de Rastreo */}
-            {capabilities.tracking.kind === 'repairs' ? <div className="space-y-2.5 md:col-span-2 pt-2 border-t border-border/40">
-              <Label htmlFor="trackRepairText" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <ArrowRight className="h-4 w-4 text-primary" />
-                Texto del enlace inferior (Rastreo / Seguimiento)
-              </Label>
-              <Input
-                id="trackRepairText"
-                value={heroContent.trackRepairText ?? '¿Tenés una reparación? Rastreá tu equipo'}
-                onChange={(e) => updateContent('trackRepairText', e.target.value)}
-                placeholder="Ej: ¿Tenés una reparación? Rastreá tu equipo"
-                maxLength={100}
-                className="h-11"
-              />
-              {/* Sugerencias Enlace de Rastreo */}
-              <details className="pt-1">
-                <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-                <div className="flex flex-wrap gap-1.5">
-                  {TRACK_REPAIR_SUGGESTIONS.map((sug, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => updateContent('trackRepairText', sug)}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
-                        heroContent.trackRepairText === sug
-                          ? 'border-primary bg-primary/10 font-bold text-primary'
-                          : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                      )}
-                    >
-                      <span>{sug}</span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </div> : (
-              <div className="md:col-span-2 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-                {capabilities.tracking.kind === 'orders'
-                  ? 'Seguimiento de pedidos activo: la portada enlazará al estado de compra sin mencionar reparaciones.'
-                  : 'No se mostrará un enlace de seguimiento porque la organización no tiene pedidos ni reparaciones habilitados.'}
+                <Input
+                  id="title"
+                  value={heroContent.title}
+                  onChange={(e) => updateContent('title', e.target.value)}
+                  placeholder={recommendedPreset.title}
+                  maxLength={150}
+                  aria-invalid={!!errors.title}
+                  aria-describedby={errors.title ? 'title-error' : undefined}
+                  className="h-10"
+                />
+                {errors.title && <p id="title-error" role="alert" className="text-xs text-destructive">{errors.title}</p>}
+                <Ideas items={compatiblePresets.map((preset) => preset.title)} current={heroContent.title} onPick={(value) => updateContent('title', value)} />
               </div>
-            )}
-          </div>
 
-        </div>
-      </SectionCard>
-      </TabsContent>
-
-      {/* Trust Badges */}
-      <TabsContent value="trust" className="space-y-4">
-      <SectionCard icon={ShieldCheck} title="Insignias de Confianza" description="Sellos de garantía y beneficios que disipan dudas de los clientes">
-        <div className="space-y-6">
-
-          {/* Guía Desplegable Insignias */}
-          <div className="border-b border-border/60 pb-3">
-            <button
-              type="button"
-              onClick={() => setShowBadgesGuide((prev) => !prev)}
-              aria-expanded={showBadgesGuide}
-              className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
-            >
-              <HelpCircle className="h-4 w-4" />
-              <span>{showBadgesGuide ? 'Ocultar guía de insignias' : '¿Por qué las insignias de confianza aumentan tus ventas?'}</span>
-              {showBadgesGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-
-            {showBadgesGuide && (
-              <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
-                <p className="font-bold text-foreground">🛡️ Impacto de las insignias de confianza:</p>
-                <p className="text-muted-foreground leading-relaxed">
-                  Los nuevos visitantes tardan menos de 3 segundos en decidir si confían en una tienda. Mostrar sellos como <strong>Garantía escrita</strong>, <strong>Envíos a todo el país</strong> o <strong>Repuestos originales</strong> reduce la fricción y aumenta la conversión hasta un 25%.
-                </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="subtitle" className="text-sm font-semibold">Descripción</Label>
+                  <span className="text-xs text-muted-foreground">{heroContent.subtitle.length}/300</span>
+                </div>
+                <Textarea
+                  id="subtitle"
+                  value={heroContent.subtitle}
+                  onChange={(e) => updateContent('subtitle', e.target.value)}
+                  placeholder={recommendedPreset.subtitle}
+                  rows={2}
+                  maxLength={300}
+                  aria-invalid={!!errors.subtitle}
+                  aria-describedby={errors.subtitle ? 'subtitle-error' : undefined}
+                  className="text-sm"
+                />
+                {errors.subtitle && <p id="subtitle-error" role="alert" className="text-xs text-destructive">{errors.subtitle}</p>}
               </div>
-            )}
-          </div>
+            </div>
+          </SectionCard>
 
-          {/* 3 Slots de Insignias */}
-          <div className="space-y-3">
-            <Label className="text-sm font-bold text-foreground">Tus 3 Insignias de Portada</Label>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {[0, 1, 2].map((idx) => {
-                const badges = heroContent.trustBadges || recommendedPreset.trustBadges
-                return (
-                  <div key={idx} className="space-y-1.5">
-                    <Label htmlFor={`hero-trust-badge-${idx}`} className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Insignia {idx + 1}
-                    </Label>
+          {fields.buttons ? (
+            <SectionCard icon={MousePointerClick} title="Botones" description="Qué puede hacer el cliente: ver tus productos o escribirte.">
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ctaPrimaryText" className="text-sm font-semibold">
+                    Botón principal <span className="text-muted-foreground">({capabilities.primaryAction.kind === 'services' ? 'lleva a tus servicios' : 'lleva a tus productos'})</span>
+                  </Label>
+                  <Input
+                    id="ctaPrimaryText"
+                    value={heroContent.ctaPrimaryText ?? ''}
+                    onChange={(e) => updateContent('ctaPrimaryText', e.target.value)}
+                    placeholder={recommendedPreset.ctaPrimaryText}
+                    maxLength={40}
+                    className="h-10"
+                  />
+                  <Ideas items={compatiblePresets.map((preset) => preset.ctaPrimaryText)} current={heroContent.ctaPrimaryText} onPick={(value) => updateContent('ctaPrimaryText', value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ctaSecondaryText" className="text-sm font-semibold">
+                    Botón de contacto <span className="text-muted-foreground">(abre WhatsApp)</span>
+                  </Label>
+                  <Input
+                    id="ctaSecondaryText"
+                    value={heroContent.ctaSecondaryText ?? ''}
+                    onChange={(e) => updateContent('ctaSecondaryText', e.target.value)}
+                    placeholder={recommendedPreset.ctaSecondaryText}
+                    maxLength={40}
+                    className="h-10"
+                  />
+                  <Ideas items={compatiblePresets.map((preset) => preset.ctaSecondaryText)} current={heroContent.ctaSecondaryText} onPick={(value) => updateContent('ctaSecondaryText', value)} />
+                </div>
+                {fields.tracking && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="trackRepairText" className="text-sm font-semibold">Texto del enlace inferior (seguimiento de reparaciones)</Label>
                     <Input
-                      id={`hero-trust-badge-${idx}`}
-                      value={badges[idx] || ''}
-                      onChange={(e) => {
-                        const newBadges = [...badges]
-                        newBadges[idx] = e.target.value
-                        updateContent('trustBadges', newBadges)
-                      }}
-                      placeholder={`Ej: Insignia ${idx + 1}`}
-                      maxLength={30}
-                      className="h-11 text-sm font-semibold"
+                      id="trackRepairText"
+                      value={heroContent.trackRepairText ?? ''}
+                      onChange={(e) => updateContent('trackRepairText', e.target.value)}
+                      placeholder={TRACK_REPAIR_SUGGESTIONS[0]}
+                      maxLength={100}
+                      className="h-10"
                     />
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Banco Categorizado de Insignias */}
-          <details className="rounded-xl border bg-muted/20 p-3 space-y-3">
-            <summary className="cursor-pointer text-xs font-medium text-primary">Ver ejemplos de insignias</summary>
-            <p className="text-xs text-muted-foreground">Se agrega al primer espacio vacío. Si los tres están completos, reemplaza la primera insignia.</p>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              {trustBadgeCategories.map((cat, catIdx) => (
-                <div key={catIdx} className="space-y-2">
-                  <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <span>{cat.icon}</span>
-                    <span>{cat.category}</span>
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {cat.items.map((badgeSug, i) => {
-                      const currentBadges = heroContent.trustBadges || recommendedPreset.trustBadges
-                      const isSelected = currentBadges.includes(badgeSug)
-
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => {
-                            const newBadges = [...currentBadges]
-                            const emptyIndex = newBadges.findIndex((b) => !b?.trim())
-                            if (emptyIndex !== -1) {
-                              newBadges[emptyIndex] = badgeSug
-                            } else {
-                              newBadges[0] = badgeSug
-                            }
-                            updateContent('trustBadges', newBadges)
-                          }}
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors cursor-pointer',
-                            isSelected
-                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
-                              : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                          )}
-                        >
-                          <Plus className="h-3 w-3 opacity-60" />
-                          <span>{badgeSug}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-
-        </div>
-      </SectionCard>
-
-      {/* Stats */}
-      <SectionCard icon={TrendingUp} title="Estadísticas de confianza" description={`Métricas adaptadas a tu negocio: ${capabilities.metricLabels.join(', ')}.`}>
-        <div className="space-y-6">
-
-          <PublicVisibilityCard
-            title="Visualización de Estadísticas"
-            badgeLabel="Métricas de Confianza"
-            description="Muestra los 3 contadores numéricos (Reparaciones/Clientes, Satisfacción y Tiempo promedio) en la portada."
-            enabled={heroStats.enabled !== false}
-            onToggle={(checked) => updateStat('enabled', checked)}
-            compact
-          />
-
-          {heroStats.enabled !== false && (
-            <>
-              {/* Guía Desplegable Estadísticas */}
-              <div className="border-b border-border/60 pb-3">
-                <button
-                  type="button"
-                  onClick={() => setShowStatsGuide((prev) => !prev)}
-                  aria-expanded={showStatsGuide}
-                  className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline cursor-pointer"
-                >
-                  <HelpCircle className="h-4 w-4" />
-                  <span>{showStatsGuide ? 'Ocultar guía de métricas' : '¿Qué números generan mayor impacto y credibilidad?'}</span>
-                  {showStatsGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                </button>
-
-                {showStatsGuide && (
-                  <div className="mt-3 rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs space-y-2.5 animate-in fade-in-50 duration-200">
-                    <p className="font-bold text-foreground">📊 Consejos para tus contadores:</p>
-                    <ul className="space-y-1.5 text-muted-foreground list-disc list-inside leading-relaxed">
-                      <li><strong className="text-foreground">Métrica 1 (Volumen o Trayectoria):</strong> Muestra experiencia acumulada (ej: <em>&quot;10K+&quot;</em>, <em>&quot;5.000+&quot;</em> o <em>&quot;10+ Años&quot;</em>).</li>
-                      <li><strong className="text-foreground">Métrica 2 (Satisfacción):</strong> Transmite calidad garantizada (ej: <em>&quot;99%&quot;</em> o <em>&quot;4.9★&quot;</em>).</li>
-                      <li><strong className="text-foreground">Métrica 3 (Velocidad o Garantía):</strong> Da certeza de entrega o soporte (ej: <em>&quot;24-48h&quot;</em>, <em>&quot;En el día&quot;</em> o <em>&quot;6 Meses&quot;</em>).</li>
-                    </ul>
+                    <Ideas items={TRACK_REPAIR_SUGGESTIONS} current={heroContent.trackRepairText} onPick={(value) => updateContent('trackRepairText', value)} />
                   </div>
                 )}
               </div>
-
-              <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-                {/* Métrica 1 */}
-                <div className="space-y-2.5">
-                  <Label htmlFor="repairs" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                    <Award className="h-4 w-4 text-primary" />
-                    Métrica 1 ({capabilities.metricLabels[0]})
-                  </Label>
-                  <Input
-                    id="repairs"
-                    value={heroStats.repairs}
-                    onChange={(e) => updateStat('repairs', e.target.value)}
-                    placeholder="10K+"
-                    maxLength={20}
-                    className="h-11 font-extrabold text-base"
-                  />
-                  {/* Sugerencias Métrica 1 */}
-                  <details className="pt-1">
-                    <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-                    <div className="flex flex-wrap gap-1">
-                      {STAT_REPAIRS_SUGGESTIONS.map((sug, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => updateStat('repairs', sug)}
-                          className={cn(
-                            'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
-                            heroStats.repairs === sug
-                              ? 'border-primary bg-primary/10 text-primary'
-                              : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40'
-                          )}
-                        >
-                          {sug}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                </div>
-
-                {/* Métrica 2 */}
-                <div className="space-y-2.5">
-                  <Label htmlFor="satisfaction" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                    <ThumbsUp className="h-4 w-4 text-emerald-500" />
-                    Métrica 2 ({capabilities.metricLabels[1]})
-                  </Label>
-                  <Input
-                    id="satisfaction"
-                    value={heroStats.satisfaction}
-                    onChange={(e) => updateStat('satisfaction', e.target.value)}
-                    placeholder="98%"
-                    maxLength={20}
-                    className="h-11 font-extrabold text-base"
-                  />
-                  {/* Sugerencias Métrica 2 */}
-                  <details className="pt-1">
-                    <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-                    <div className="flex flex-wrap gap-1">
-                      {STAT_SATISFACTION_SUGGESTIONS.map((sug, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => updateStat('satisfaction', sug)}
-                          className={cn(
-                            'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
-                            heroStats.satisfaction === sug
-                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
-                              : 'border-border/60 bg-background text-muted-foreground hover:border-emerald-400'
-                          )}
-                        >
-                          {sug}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                </div>
-
-                {/* Métrica 3 */}
-                <div className="space-y-2.5">
-                  <Label htmlFor="avgTime" className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-amber-500" />
-                    Métrica 3 ({capabilities.metricLabels[2]})
-                  </Label>
-                  <Input
-                    id="avgTime"
-                    value={heroStats.avgTime}
-                    onChange={(e) => updateStat('avgTime', e.target.value)}
-                    placeholder="24-48h"
-                    maxLength={20}
-                    className="h-11 font-extrabold text-base"
-                  />
-                  {/* Sugerencias Métrica 3 */}
-                  <details className="pt-1">
-                    <summary className="cursor-pointer text-xs font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Ver ejemplos para aplicar</summary>
-                    <div className="flex flex-wrap gap-1">
-                      {STAT_AVG_TIME_SUGGESTIONS.map((sug, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => updateStat('avgTime', sug)}
-                          className={cn(
-                            'rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors cursor-pointer',
-                            heroStats.avgTime === sug
-                              ? 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'
-                              : 'border-border/60 bg-background text-muted-foreground hover:border-amber-400'
-                          )}
-                        >
-                          {sug}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                </div>
-              </div>
-            </>
+            </SectionCard>
+          ) : (
+            <p className="rounded-xl border border-dashed px-3.5 py-2.5 text-xs text-muted-foreground">
+              En tu plantilla la portada lleva un buscador y el acceso a ofertas en lugar de botones.
+            </p>
           )}
 
+          {fields.stats && (
+            <SectionCard icon={BarChart3} title="Números de confianza" description="Tres cifras reales de tu negocio debajo de la portada.">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-3">
+                  <Label htmlFor="hero-stats-enabled" className="cursor-pointer text-sm">Mostrar los números</Label>
+                  <Switch
+                    id="hero-stats-enabled"
+                    checked={heroStats.enabled !== false}
+                    onCheckedChange={(checked) => updateStat('enabled', checked)}
+                  />
+                </div>
+                {heroStats.enabled !== false && (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {(['repairs', 'satisfaction', 'avgTime'] as const).map((key, index) => (
+                      <div key={key} className="space-y-1.5">
+                        <Label htmlFor={key} className="text-xs font-semibold">
+                          Métrica {index + 1} ({capabilities.metricLabels[index]})
+                        </Label>
+                        <Input
+                          id={key}
+                          value={heroStats[key] ?? ''}
+                          onChange={(e) => updateStat(key, e.target.value)}
+                          maxLength={20}
+                          className="h-10"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">Usá cifras reales: los ejemplos de los textos de rubro no son datos de tu negocio.</p>
+              </div>
+            </SectionCard>
+          )}
         </div>
-      </SectionCard>
-
-      </TabsContent>
-      </Tabs>
       </div>
-      {/* Save bar */}
-      <div className="sticky bottom-4 z-30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border bg-background/95 p-3 sm:p-4 shadow-xl backdrop-blur">
-        <div className="flex items-center gap-2 text-xs">
-          <span
-            className={cn(
-              'h-2.5 w-2.5 rounded-full shrink-0',
-              hasChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
-            )}
-            aria-hidden="true"
-          />
-          <div>
-            <p className="font-semibold text-foreground">
-              {hasChanges ? 'Cambios pendientes en la portada' : 'Portada actualizada'}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              {heroContent.enabled !== false ? 'La sección se mostrará al guardar.' : 'La sección se ocultará al guardar.'}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 justify-end">
+      <div className="sticky bottom-4 z-30 flex flex-col gap-3 rounded-2xl border bg-background/95 p-3 shadow-xl backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <div className="flex items-center gap-2 text-xs">
+          <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', hasChanges ? 'bg-amber-500' : 'bg-emerald-500')} aria-hidden="true" />
+          <span className="font-semibold text-foreground">{hasChanges ? 'Hay cambios sin guardar' : 'Portada guardada'}</span>
+        </div>
+        <div className="flex items-center justify-end gap-2">
           {hasChanges && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setHeroContentDraft(null)
-                setHeroStatsDraft(null)
-                setErrors({})
-              }}
-              className="h-10 px-4 rounded-xl text-xs font-semibold flex-1 sm:flex-none"
-            >
+            <Button type="button" variant="outline" onClick={discard} className="h-10 flex-1 rounded-xl px-4 text-xs sm:flex-none">
+              <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
               Descartar
             </Button>
           )}
-          <Button
-            type="submit"
-            disabled={isSaving || !hasChanges}
-            className="h-10 px-5 rounded-xl text-xs font-bold gap-2 flex-1 sm:flex-none"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Guardando...</span>
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                <span>Guardar portada</span>
-              </>
-            )}
+          <Button type="submit" disabled={isSaving || !hasChanges} className="h-10 flex-1 gap-2 rounded-xl px-5 text-xs font-bold sm:flex-none">
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
+            {isSaving ? 'Guardando...' : 'Guardar portada'}
           </Button>
         </div>
       </div>

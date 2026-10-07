@@ -75,7 +75,7 @@ export const WEBSITE_SECTION_HELP = {
     title: 'Modalidad comercial, pagos y entregas', description: 'Elegí cómo querés recibir las consultas o los pedidos.',
     steps: ['Consulta por WhatsApp: el visitante coordina la compra por mensaje.', 'Solo catálogo: mostrás productos sin compra por carrito.', 'Carrito: configurá los métodos de pago y al menos una opción de entrega o retiro.'],
     examples: ['Ropa: WhatsApp para confirmar talle y stock antes del pago.', 'Ferretería: carrito con retiro en local y pago en efectivo.'],
-    note: 'Las nuevas organizaciones empiezan con WhatsApp. Una consulta no registra por sí sola una venta ni descuenta stock. Activar una modalidad no publica automáticamente la tienda.',
+    note: 'Las tiendas nuevas empiezan con consultas por WhatsApp si tienen un número cargado; si no, con carrito, efectivo y retiro en el local. El envío a domicilio necesita el módulo Entregas. Una consulta no registra por sí sola una venta ni descuenta stock.',
   },
 } as const
 

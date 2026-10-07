@@ -9,7 +9,7 @@ import {
   isPublicServicesPageAvailable,
 } from '@/lib/website/services'
 
-export type HeroPresetId = 'tech' | 'fashion' | 'cosmetics' | 'services' | 'repairs' | 'electro' | 'general'
+export type HeroPresetId = 'tech' | 'fashion' | 'cosmetics' | 'services' | 'repairs' | 'electro' | 'barbershop' | 'food' | 'general'
 export type StorefrontPrimaryAction = {
   kind: 'products' | 'services'
   href: '/productos' | '/servicios'
@@ -90,6 +90,10 @@ export function getCompatibleHeroPresetIds(capabilities: StorefrontCapabilities)
   if (capabilities.hasRepairs) {
     return ['repairs', 'tech', 'services', 'general']
   }
+  // Una barbería habla de cortes y turnos, no de «servicios profesionales».
+  if (capabilities.businessVertical === 'barbershop') {
+    return ['barbershop', 'services', 'general']
+  }
   if (capabilities.operatingModel === 'service' && capabilities.hasServices) {
     return ['services', 'general']
   }
@@ -99,6 +103,7 @@ export function getCompatibleHeroPresetIds(capabilities: StorefrontCapabilities)
     cosmetics: 'cosmetics',
     electronics: 'tech',
     hardware: 'electro',
+    food: 'food',
   }
   const preset = verticalPreset[capabilities.businessVertical]
   return preset ? [preset, 'general'] : ['general']
