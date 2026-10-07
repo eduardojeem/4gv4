@@ -1,5 +1,5 @@
 # Auditoría del formulario de productos y escaneo
-
+Publicación verificada desde GitHub.
 ## Alcance y evidencia
 
 Revisión estática del formulario `/dashboard/products`, `ProductModal`, `useProductsSupabase`, POST de `/api/products`, asistente de catálogo y escáner compartido. Pruebas automatizadas con cámara y consultas simuladas. No se creó ningún producto real ni se modificó la base remota.
