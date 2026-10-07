@@ -16,7 +16,7 @@ export interface CompanyInfo {
   customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   /** Aspecto de la tienda online. `auto` lo decide el rubro del negocio. */
-  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services'
+  storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty'
   /** Variante específica dentro de la plantilla elegida */
   storefrontVariant?: string
   headerColor?: string

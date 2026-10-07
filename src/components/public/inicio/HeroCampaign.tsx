@@ -37,6 +37,7 @@ interface HeroCampaignProps {
 const DEFAULT_HERO_COPY: Partial<Record<StorefrontStyle, { badge: string; title: string; subtitle: string; cta: string }>> = {
   tech: { badge: 'Tecnología', title: 'Lo último en tecnología', subtitle: 'Equipos, accesorios y servicio técnico con garantía y envíos a todo el país.', cta: 'Ver productos' },
   modern: { badge: 'Nuevo', title: 'Diseño que se nota', subtitle: 'Productos elegidos con cuidado para tu día a día.', cta: 'Ver productos' },
+  beauty: { badge: 'Belleza & cuidado', title: 'Tu rutina de belleza, en un solo lugar', subtitle: 'Maquillaje, skincare y fragancias para cuidarte todos los días.', cta: 'Ver productos' },
 }
 const FASHION_HERO_COPY = { badge: 'Nueva colección & Tendencias', title: 'Tu estilo, tu mejor versión', subtitle: 'Prendas de alta calidad, envíos a todo el país y las mejores marcas para toda la familia.', cta: 'Ver la colección' }
 
@@ -88,6 +89,8 @@ export function HeroCampaign({
   const photos = mounted ? pickCampaignProducts(data ?? [], failedImageIds) : []
   void (STOREFRONT_RADIUS_CLASS[style]);
   const isSport = style === 'sport'
+  // Cosmética se fotografía sobre blanco: las fotos van enteras, no recortadas.
+  const isBeauty = style === 'beauty'
   const defaults = DEFAULT_HERO_COPY[style] ?? FASHION_HERO_COPY
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -99,7 +102,9 @@ export function HeroCampaign({
   return (
     <section className="relative border-b border-border/80 bg-background overflow-hidden" data-storefront-hero={style}>
       {/* Fondo atmosférico sutil */}
-      <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
+      <div className={cn('pointer-events-none absolute inset-0', isBeauty
+        ? 'bg-gradient-to-br from-pink-50 via-rose-50/50 to-fuchsia-50/40 dark:from-pink-950/20 dark:via-transparent dark:to-fuchsia-950/10'
+        : 'bg-gradient-to-b from-primary/5 via-transparent to-transparent')} />
 
       <div className="container relative mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid items-center gap-8 py-8 sm:py-12 lg:grid-cols-12 lg:gap-14 lg:py-16">
@@ -217,7 +222,10 @@ export function HeroCampaign({
                     <li key={product.id} className={cn('relative', tileSpan(index, photos.length))}>
                       <Link
                         href={`${tenantPrefix}/productos/${product.id}`}
-                        className="group absolute inset-0 overflow-hidden rounded-2xl bg-muted shadow-sm hover:shadow-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        className={cn(
+                          'group absolute inset-0 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                          isBeauty ? 'rounded-3xl border border-pink-100 bg-white dark:border-pink-900/40' : 'rounded-2xl bg-muted'
+                        )}
                       >
                         <Image
                           src={src}
@@ -225,10 +233,12 @@ export function HeroCampaign({
                           fill
                           priority={index === 0}
                           sizes="(max-width: 1024px) 50vw, 30vw"
-                          className="object-cover transition-transform duration-700 group-hover:scale-105"
+                          className={cn('transition-transform duration-700 group-hover:scale-105', isBeauty ? 'object-contain p-6' : 'object-cover')}
                           onError={() => setFailedImageIds((ids) => [...ids, product.id])}
                         />
-                        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-4 pb-4 pt-16 text-xs font-semibold text-white sm:text-sm">
+                        <span className={cn('absolute inset-x-0 bottom-0 px-4 pb-4 text-xs font-semibold sm:text-sm', isBeauty
+                          ? 'bg-gradient-to-t from-white via-white/80 to-transparent pt-10 text-foreground dark:from-black/70 dark:via-black/30 dark:text-white'
+                          : 'bg-gradient-to-t from-black/80 via-black/30 to-transparent pt-16 text-white')}>
                           <span className="line-clamp-1 group-hover:text-primary-foreground transition-colors">
                             {product.name}
                           </span>
@@ -239,7 +249,7 @@ export function HeroCampaign({
                 })}
               </ul>
             ) : (
-              <div className="flex h-56 items-end rounded-2xl bg-gradient-to-tr from-primary to-primary/80 p-6 text-primary-foreground sm:h-[30rem] sm:p-10 lg:h-[34rem] shadow-lg">
+              <div className={cn('flex h-56 items-end p-6 text-primary-foreground shadow-lg sm:h-[30rem] sm:p-10 lg:h-[34rem]', isBeauty ? 'rounded-3xl bg-gradient-to-br from-pink-400 via-rose-400 to-fuchsia-500' : 'rounded-2xl bg-gradient-to-tr from-primary to-primary/80')}>
                 <p className={cn('text-balance text-4xl leading-none sm:text-6xl font-extrabold', STOREFRONT_HEADING_CLASS[style])}>
                   {companyInfo.name || 'Nueva colección'}
                 </p>

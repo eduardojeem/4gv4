@@ -175,6 +175,25 @@ export function StorefrontTemplateThumbnail({ style, className }: { style: Store
         </>
       )}
 
+      {style === 'beauty' && (
+        <>
+          <NavRow />
+          <div className="flex items-center justify-between rounded-xl bg-gradient-to-br from-pink-100 via-rose-50 to-fuchsia-100 px-2 py-2 dark:from-pink-950/40 dark:to-fuchsia-950/30">
+            <div className="space-y-1">
+              <span className="block font-serif text-[8px] text-foreground">Tu rutina</span>
+              <span className="block h-1 w-8 rounded-full bg-pink-400/70" />
+            </div>
+            <span className="h-6 w-4 rounded-md bg-white shadow-xs ring-1 ring-pink-200" />
+          </div>
+          <div className="flex justify-between">
+            {[0, 1, 2, 3].map((index) => (
+              <span key={index} className="h-4 w-4 rounded-full bg-pink-100 ring-1 ring-pink-300 dark:bg-pink-950/40" />
+            ))}
+          </div>
+          <ProductRow style={style} />
+        </>
+      )}
+
       {style === 'services' && (
         <>
           <NavRow dark />

@@ -63,8 +63,14 @@ export default async function PublicLayout({
   const catalogEnabled = storefrontOrganization
     ? await isOrganizationModuleEnabled(storefrontOrganization.id, 'inventory')
     : true
+  // «Servicios» necesita la agenda: sin el módulo, la tienda usa la plantilla de su rubro.
+  const servicesModuleEnabled = storefrontOrganization
+    ? await isOrganizationModuleEnabled(storefrontOrganization.id, 'services')
+    : true
   // El aspecto que eligio el dueño o, en «Automático», el de su rubro.
-  const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization?.business_vertical)
+  const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization?.business_vertical, {
+    servicesAvailable: servicesModuleEnabled,
+  })
 
   return (
     <MaintenanceGuard initialSettings={settings}>

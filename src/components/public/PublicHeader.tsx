@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Mail, MessageCircle, ShieldCheck, Heart } from 'lucide-react'
+import { ArrowLeft, Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag, ChevronRight, Search, MapPin, Mail, MessageCircle, ShieldCheck, Heart, Sparkles } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
+import { useStorefrontCompanyInfo, useStorefrontStyle } from '@/components/public/storefront-style-context'
+import { usePublicCategories } from '@/hooks/usePublicCategories'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
@@ -79,6 +80,22 @@ export function PublicHeader({
 
   // En la vista previa del editor, el header muestra el borrador sin guardar.
   const companyInfo = useStorefrontCompanyInfo(effectiveSettings?.company_info)
+  // Belleza: tonos rosados y una barra de categorías, salvo que el dueño haya
+  // elegido un header de color (acento u oscuro), que se respeta.
+  const storefrontStyle = useStorefrontStyle()
+  const isBeauty = storefrontStyle === 'beauty'
+  // Supermercado: los pasillos a mano y un buscador pensado para la lista del súper.
+  const isMarket = storefrontStyle === 'market'
+  const lightHeader = companyInfo?.headerStyle !== 'accent' && companyInfo?.headerStyle !== 'dark'
+  const beautyLight = isBeauty && lightHeader
+  const { categories } = usePublicCategories()
+  const beautyCategories = isBeauty || isMarket
+    ? categories
+        .filter((category) => !category.parent_id && (category.productCount ?? 0) > 0)
+        .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0) || a.name.localeCompare(b.name))
+        .slice(0, isMarket ? 10 : 8)
+    : []
+  const activeCategoryId = pathname.includes('/productos') ? searchParams?.get('category_id') : null
   // Only show the organization's own phone — never the platform-level env fallback.
   const phoneDisplay = companyInfo?.phone || ''
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
@@ -244,7 +261,8 @@ export function PublicHeader({
           : 'py-1.5 border-border/60',
         companyInfo?.headerStyle === 'accent' && 'bg-primary text-primary-foreground border-primary/20',
         companyInfo?.headerStyle === 'dark' && 'bg-slate-950 text-white border-slate-900',
-        companyInfo?.headerStyle === 'solid' && 'bg-background text-foreground border-border/80'
+        companyInfo?.headerStyle === 'solid' && 'bg-background text-foreground border-border/80',
+        beautyLight && 'border-pink-100 dark:border-pink-950/60'
       )}
     >
       {/* Top bar — only when the org provides contact or location info */}
@@ -254,6 +272,8 @@ export function PublicHeader({
             ? 'border-white/10 bg-black/15 text-primary-foreground/90'
             : companyInfo?.headerStyle === 'dark'
             ? 'border-slate-900 bg-slate-900/60 text-slate-400'
+            : beautyLight
+            ? 'border-pink-100 bg-gradient-to-r from-pink-50 via-rose-50 to-fuchsia-50 text-foreground/90 dark:border-pink-950/60 dark:from-pink-950/30 dark:via-rose-950/20 dark:to-fuchsia-950/30'
             : 'border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 text-foreground/90'
         }`}>
           <div className="container flex h-auto items-center justify-between gap-4">
@@ -408,16 +428,23 @@ export function PublicHeader({
               />
             </div>
           ) : (
-            <div className={`relative flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center overflow-hidden rounded-xl p-1 shadow-sm transition-all duration-300 group-hover:scale-105 ${
+            <div className={cn(
+              'relative flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center overflow-hidden p-1 shadow-sm transition-all duration-300 group-hover:scale-105',
+              isBeauty ? 'rounded-full' : 'rounded-xl',
               companyInfo?.headerStyle === 'accent'
                 ? 'bg-white text-primary'
+                : beautyLight
+                ? 'bg-gradient-to-br from-pink-400 to-fuchsia-500 text-white'
                 : 'bg-primary text-primary-foreground'
-            }`}>
-              <Store className="h-4.5 w-4.5" />
+            )}>
+              {isBeauty ? <Sparkles className="h-4.5 w-4.5" /> : <Store className="h-4.5 w-4.5" />}
             </div>
           )}
           <div className="hidden sm:block min-w-0">
-            <span className="block text-xs sm:text-sm font-extrabold leading-tight tracking-tight text-foreground truncate max-w-[140px] lg:max-w-[170px]">
+            <span className={cn(
+              'block leading-tight tracking-tight text-foreground truncate max-w-[140px] lg:max-w-[170px]',
+              isBeauty ? 'font-serif text-sm sm:text-lg font-semibold' : 'text-xs sm:text-sm font-extrabold'
+            )}>
               {companyInfo?.name || 'Tienda'}
             </span>
             {companyInfo?.slogan && (
@@ -448,7 +475,7 @@ export function PublicHeader({
             />
             <input
               type="search"
-              placeholder={`Buscar productos en ${companyInfo?.name || 'la tienda'}...`}
+              placeholder={isBeauty ? 'Buscá sérums, perfumes, labiales…' : isMarket ? 'Buscá leche, arroz, detergente…' : `Buscar productos en ${companyInfo?.name || 'la tienda'}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
@@ -468,6 +495,8 @@ export function PublicHeader({
                     : 'h-10 border-primary bg-background pl-10 pr-20 text-sm ring-2 ring-primary/25 shadow-md text-foreground'
                   : companyInfo?.headerStyle === 'dark'
                     ? 'h-9 border-slate-800 bg-slate-900/80 pl-9 pr-8 text-xs text-white hover:border-slate-700'
+                    : beautyLight
+                    ? 'h-9 border-pink-100 bg-pink-50/60 pl-9 pr-8 text-xs text-foreground hover:border-pink-200 dark:border-pink-950/60 dark:bg-pink-950/20'
                     : 'h-9 border-border/70 bg-muted/35 pl-9 pr-8 text-xs text-foreground hover:border-border hover:bg-muted/60'
               )}
             />
@@ -512,8 +541,13 @@ export function PublicHeader({
                 href={link.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200',
-                  active
+                  'relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all duration-200',
+                  isBeauty ? 'rounded-full' : 'rounded-xl',
+                  active && beautyLight
+                    ? 'text-pink-700 bg-pink-50 ring-1 ring-pink-200 dark:text-pink-300 dark:bg-pink-950/40 dark:ring-pink-900/60'
+                    : !active && beautyLight
+                    ? 'text-muted-foreground hover:text-pink-700 hover:bg-pink-50/70 dark:hover:text-pink-300 dark:hover:bg-pink-950/30'
+                    : active
                     ? companyInfo?.headerStyle === 'accent'
                       ? 'text-primary bg-white shadow-xs'
                       : companyInfo?.headerStyle === 'dark'
@@ -526,9 +560,9 @@ export function PublicHeader({
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                 )}
               >
-                {LinkIcon && <LinkIcon className={cn('h-3.5 w-3.5 shrink-0', isOffer && 'text-rose-500 animate-pulse')} />}
+                {LinkIcon && <LinkIcon className={cn('h-3.5 w-3.5 shrink-0', isOffer && 'text-rose-500', isOffer && !isBeauty && 'animate-pulse')} />}
                 <span>{link.label}</span>
-                {isOffer && (
+                {isOffer && !isBeauty && (
                   <span className="rounded-full bg-rose-600 px-1 py-0.2 text-[8px] font-black uppercase text-white shadow-2xs">
                     Hot
                   </span>
@@ -784,7 +818,7 @@ export function PublicHeader({
                 autoFocus
                 type="search"
                 aria-label="Buscar productos en la tienda"
-                placeholder={`Buscar en ${companyInfo?.name || 'la tienda'}...`}
+                placeholder={isBeauty ? 'Buscá sérums, perfumes, labiales…' : isMarket ? 'Buscá leche, arroz, detergente…' : `Buscar en ${companyInfo?.name || 'la tienda'}...`}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="h-10 w-full rounded-xl border border-border/80 bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -799,6 +833,54 @@ export function PublicHeader({
             </button>
           </form>
         </div>
+      )}
+
+      {beautyCategories.length >= 2 && (
+        <nav
+          aria-label="Categorías"
+          className={cn(
+            'border-t',
+            isMarket ? 'border-border/60' : beautyLight ? 'border-pink-100 dark:border-pink-950/60' : 'border-white/10'
+          )}
+        >
+          <ul className="container flex items-center gap-1 overflow-x-auto py-1.5 [scrollbar-width:none] md:justify-center md:gap-2">
+            {beautyCategories.map((category) => {
+              const active = activeCategoryId === category.id
+              return (
+                <li key={category.id} className="shrink-0">
+                  <Link
+                    href={`${withTenantPrefix('/productos')}?category_id=${encodeURIComponent(category.id)}`}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'block rounded-full px-3 py-1 text-xs tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                      isMarket && 'font-semibold',
+                      active
+                        ? isMarket ? 'bg-primary text-primary-foreground' : 'bg-pink-500 text-white'
+                        : isMarket && lightHeader
+                        ? 'text-foreground/80 hover:bg-primary/10 hover:text-primary'
+                        : beautyLight
+                        ? 'text-foreground/80 hover:bg-pink-50 hover:text-pink-700 dark:hover:bg-pink-950/40 dark:hover:text-pink-300'
+                        : 'opacity-85 hover:bg-white/10 hover:opacity-100'
+                    )}
+                  >
+                    {category.name}
+                  </Link>
+                </li>
+              )
+            })}
+            <li className="shrink-0">
+              <Link
+                href={withTenantPrefix('/productos')}
+                className={cn(
+                  'flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  isMarket && lightHeader ? 'font-semibold text-primary hover:bg-primary/10' : beautyLight ? 'text-pink-700 hover:bg-pink-50 dark:text-pink-300 dark:hover:bg-pink-950/40' : 'hover:bg-white/10'
+                )}
+              >
+                Ver todo <ChevronRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            </li>
+          </ul>
+        </nav>
       )}
 
       {tenantPrefix && (

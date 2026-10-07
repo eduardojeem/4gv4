@@ -25,6 +25,7 @@ import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { PriceAccessDialog } from '@/components/public/PriceAccessDialog'
 import { describeDeviceCompatibility } from '@/lib/products/device-compatibility'
 import { siteUrl } from '@/lib/site-url'
+import { marketUnitLabel } from '@/lib/public/market'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -52,7 +53,7 @@ export function ProductCard(props: ProductCardProps) {
     !branchName && productBranches && productBranches.length > 0
       ? productBranches.map((branch) => branch.name).join(', ')
       : undefined
-  const { addProduct } = usePublicCart()
+  const { addProduct, items: cartItems, setQuantity: setCartQuantity } = usePublicCart()
   const { settings: websiteSettings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
   // Error de la foto de la tarjeta. El detalle lleva su propia lista: antes
@@ -67,6 +68,9 @@ export function ProductCard(props: ProductCardProps) {
   const [quantity, setQuantity] = useState(1)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const storefrontStyle = useStorefrontStyle()
+  // Supermercado: compra rápida con cantidades en la misma tarjeta.
+  const isMarket = storefrontStyle === 'market'
+  const unitLabel = isMarket ? marketUnitLabel(product.unit_measure) : null
 
   // Publicado sin precio: donde iba el precio va un boton que abre WhatsApp.
   // El precio real no se muestra en ningun lado, ni siquiera en el mensaje.
@@ -233,6 +237,18 @@ export function ProductCard(props: ProductCardProps) {
       })
     : null
 
+  // La línea del carrito de este producto (sin variantes): la tarjeta del súper
+  // muestra cuántos hay y deja sumar o restar sin abrir nada.
+  const cartLine = isMarket && !hasVariants ? cartItems.find((item) => item.cartItemId === product.id) ?? null : null
+  const changeCartQuantity = (next: number) => {
+    if (!cartLine) return
+    if (cartLine.availableStock != null && next > cartLine.availableStock) {
+      toast.info(`Ya agregaste el máximo disponible (${cartLine.availableStock}).`)
+      return
+    }
+    setCartQuantity(cartLine.cartItemId, next)
+  }
+
   // ── Handlers ────────────────────────────────────────────────────────────
   function addToCart(closeModal = false) {
     if (commerceMode !== 'cart') return
@@ -266,8 +282,9 @@ export function ProductCard(props: ProductCardProps) {
           storefrontStyle === 'fashion' && 'rounded-none border border-transparent hover:border-border/60 hover:shadow-md',
           storefrontStyle === 'sport' && 'rounded-md border border-border/60 hover:border-foreground/40 hover:shadow-md',
           storefrontStyle === 'tech' && 'rounded-xl border border-primary/20 shadow-xs hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10',
-          storefrontStyle === 'market' && 'rounded-md border border-border/70 shadow-2xs hover:border-primary/60 hover:shadow-xs',
+          storefrontStyle === 'market' && 'rounded-2xl border border-border/70 shadow-2xs hover:border-primary/60 hover:shadow-md',
           storefrontStyle === 'modern' && 'rounded-2xl border border-border/40 shadow-xs hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5',
+          storefrontStyle === 'beauty' && 'rounded-3xl border border-pink-100 shadow-xs hover:border-pink-300 hover:shadow-lg hover:shadow-pink-500/10 dark:border-pink-900/40',
           storefrontStyle === 'services' && 'rounded-2xl border border-border/50 shadow-xs hover:border-primary/40 hover:shadow-lg',
           !isInStock && 'opacity-60 grayscale-[30%]'
         )}
@@ -278,8 +295,10 @@ export function ProductCard(props: ProductCardProps) {
           type="button"
           onClick={() => setQuickViewOpen(true)}
           className={cn(
-            'relative overflow-hidden bg-muted/30 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
-            portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]'
+            'relative overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
+            // Cosmética y súper: el envase sobre blanco, en cuadrado.
+            storefrontStyle === 'beauty' || isMarket ? 'aspect-square bg-white' : 'bg-muted/30',
+            storefrontStyle !== 'beauty' && !isMarket && (portraitMedia ? 'aspect-[3/4]' : 'aspect-[4/3]')
           )}
           aria-label={`Vista rápida de ${product.name}`}
         >
@@ -307,7 +326,13 @@ export function ProductCard(props: ProductCardProps) {
 
           {/* Badges — top left */}
           <div className="absolute left-2.5 top-2.5 z-10 flex flex-col gap-1.5">
-            {discountPct > 0 && (
+            {discountPct > 0 && isMarket && (
+              <span className="flex h-11 w-11 flex-col items-center justify-center rounded-full bg-red-600 leading-none text-white shadow-md" aria-label={`${discountPct}% de descuento`}>
+                <span className="text-sm font-black">{discountPct}%</span>
+                <span className="text-[8px] font-black tracking-wider">OFF</span>
+              </span>
+            )}
+            {discountPct > 0 && !isMarket && (
               <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-xs">
                 <Tag className="h-2.5 w-2.5" />
                 -{discountPct}%
@@ -360,9 +385,9 @@ export function ProductCard(props: ProductCardProps) {
         )}
 
         {/* ── Info area ── */}
-        <div className="flex flex-1 flex-col gap-1.5 px-3.5 pb-3.5 pt-3">
+        <div className={cn('flex flex-1 flex-col gap-1.5 px-3.5 pb-3.5 pt-3', isMarket && 'items-center gap-1 px-3 pb-3 pt-2 text-center')}>
           {/* Brand · Category */}
-          {(product.brand || product.category) && (
+          {!isMarket && (product.brand || product.category) && (
             <p className="truncate text-[11px] font-medium text-muted-foreground">
               {[product.brand, product.category?.name].filter(Boolean).join(' · ')}
             </p>
@@ -375,6 +400,18 @@ export function ProductCard(props: ProductCardProps) {
             </p>
           )}
 
+          {isMarket && !precioOculto && (
+            <div className="order-first min-w-0">
+              {originalPrice && (
+                <p className="text-xs text-muted-foreground line-through tabular-nums">{formatPrice(originalPrice)}</p>
+              )}
+              <p className={cn('text-xl font-black leading-tight tracking-tight tabular-nums', hasOffer || isWholesaleDiscount ? 'text-red-600 dark:text-red-400' : 'text-foreground')}>
+                {formatPrice(displayPrice)}
+              </p>
+              {unitLabel && <p className="text-[11px] font-semibold text-muted-foreground">{unitLabel}</p>}
+            </div>
+          )}
+
           {/* Product name */}
           <h3 className={cn(
             'line-clamp-2 flex-1 text-sm leading-snug text-foreground',
@@ -384,10 +421,14 @@ export function ProductCard(props: ProductCardProps) {
             storefrontStyle === 'tech' && 'font-semibold tracking-tight group-hover:text-primary transition-colors',
             storefrontStyle === 'market' && 'font-bold text-xs sm:text-sm',
             storefrontStyle === 'modern' && 'font-bold tracking-tight text-foreground/90',
-            storefrontStyle === 'services' && 'font-semibold'
+            storefrontStyle === 'services' && 'font-semibold',
+            storefrontStyle === 'beauty' && 'group-hover:text-pink-700 transition-colors dark:group-hover:text-pink-300'
           )}>
             {product.name}
           </h3>
+          {isMarket && product.category && (
+            <p className="truncate text-[11px] text-muted-foreground">{product.category.name}</p>
+          )}
 
           {/* Price row */}
           {precioOculto ? (
@@ -401,13 +442,12 @@ export function ProductCard(props: ProductCardProps) {
                 <PriceAccessDialog productName={product.name} whatsappHref={whatsappHref} />
               </div>
             </div>
-          ) : (
+          ) : isMarket ? null : (
           <div className="mt-2 min-w-0">
             <p
               className={cn(
                 'text-lg font-bold leading-tight',
-                // En un súper el precio decide: más grande. En deporte, con la misma tipografía de los títulos.
-                storefrontStyle === 'market' && 'text-xl font-black tracking-tight',
+                // En deporte, con la misma tipografía de los títulos.
                 storefrontStyle === 'sport' && 'font-black italic tracking-tight',
                 hasOffer || isWholesaleDiscount
                   ? 'text-rose-600 dark:text-rose-400'
@@ -430,7 +470,49 @@ export function ProductCard(props: ProductCardProps) {
           </div>
           )}
 
-          {/* Action buttons */}
+          {/* Súper: «Agregar» a lo ancho; ya en el carrito, se cambia la cantidad ahí mismo. */}
+          {isMarket && !precioOculto && commerceMode === 'cart' ? (
+            <div
+              className="relative z-20 mt-2 w-full"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {cartLine ? (
+                <div className="flex h-10 items-center justify-between rounded-full bg-primary/10 p-1 ring-1 ring-primary/30" role="group" aria-label={`Cantidad de ${product.name} en el carrito`}>
+                  <button
+                    type="button"
+                    onClick={() => changeCartQuantity(cartLine.quantity - 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-background text-primary shadow-xs transition hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-label={cartLine.quantity === 1 ? `Quitar ${product.name} del carrito` : `Quitar uno de ${product.name}`}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="text-base font-black tabular-nums text-foreground" aria-live="polite">
+                    {cartLine.quantity}<span className="sr-only"> en el carrito</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => changeCartQuantity(cartLine.quantity + 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                    aria-label={`Sumar uno de ${product.name}`}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => addToCart(false)}
+                  disabled={!isInStock}
+                  className="flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-primary text-xs font-black uppercase tracking-wide text-primary-foreground shadow-xs shadow-primary/20 transition hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={hasVariants ? `Elegir opción de ${product.name}` : `Agregar ${product.name} al carrito`}
+                >
+                  <ShoppingCart className="h-4 w-4 shrink-0" />
+                  {!isInStock ? 'Sin stock' : hasVariants ? 'Elegir' : 'Agregar'}
+                </button>
+              )}
+            </div>
+          ) : (
           <div
             className="mt-3 flex items-center gap-2"
             onClick={(e) => e.stopPropagation()}
@@ -495,6 +577,7 @@ export function ProductCard(props: ProductCardProps) {
               </a>
             )}
           </div>
+          )}
         </div>
       </article>
 

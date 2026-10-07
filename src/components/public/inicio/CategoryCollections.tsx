@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 const COLLECTION_COPY: Partial<Record<StorefrontStyle, { eyebrow: string; title: string; text: string; cta: string }>> = {
   fashion: { eyebrow: 'Colecciones', title: 'Comprá por categoría', text: 'Encontrá el corte, modelo y color ideal para tu estilo.', cta: 'Ver colección' },
   sport: { eyebrow: 'Equipate', title: 'Comprá por categoría', text: 'Todo lo que necesitás para entrenar, ordenado por tipo.', cta: 'Ver todo' },
+  beauty: { eyebrow: 'Comprá por necesidad', title: 'Encontrá lo que buscás', text: 'Rostro, cabello, maquillaje, fragancias: elegí por dónde empezar.', cta: 'Ver productos' },
 }
 const DEFAULT_COLLECTION_COPY = { eyebrow: 'Explorá nuestras categorías', title: 'Categorías destacadas', text: 'Recorré la tienda por tipo de producto.', cta: 'Ver categoría' }
 import type { PublicProduct } from '@/types/public'
@@ -85,6 +86,45 @@ export function CategoryCollections({ style }: { style: Exclude<StorefrontStyle,
       count: cat.productCount,
     }
   })
+
+  if (style === 'beauty') {
+    return (
+      <section aria-labelledby="categorias-principales-titulo" className="border-b border-border/70 bg-background py-12 sm:py-14">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8 flex flex-col items-center text-center">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-pink-700 dark:text-pink-300">{copy.eyebrow}</span>
+            <h2 id="categorias-principales-titulo" className={cn('mt-2 text-2xl text-foreground sm:text-3xl', STOREFRONT_HEADING_CLASS[style])}>
+              {copy.title}
+            </h2>
+            <p className="mt-2 max-w-lg text-sm text-muted-foreground">{copy.text}</p>
+          </div>
+          {/* Círculos con foto: se recorren de costado en el celular. */}
+          <ul className="-mx-4 flex snap-x gap-5 overflow-x-auto px-4 pb-2 sm:mx-0 sm:flex-wrap sm:justify-center sm:gap-8 sm:overflow-visible sm:px-0">
+            {displayCollections.map((col) => (
+              <li key={col.id} className="shrink-0 snap-start">
+                <Link
+                  href={col.href}
+                  className="group flex w-24 flex-col items-center gap-2 text-center focus-visible:outline-none sm:w-28"
+                >
+                  <span className="relative block h-24 w-24 overflow-hidden rounded-full border-2 border-pink-200/70 bg-gradient-to-br from-pink-50 to-rose-100 shadow-sm transition-all duration-300 group-hover:border-pink-400 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-primary dark:border-pink-900/50 dark:from-pink-950/40 dark:to-rose-950/30 sm:h-28 sm:w-28">
+                    {col.imageUrl ? (
+                      <Image src={col.imageUrl} alt="" fill sizes="112px" className="object-contain p-3 transition-transform duration-500 group-hover:scale-110" />
+                    ) : (
+                      <span className="flex h-full items-center justify-center text-2xl text-pink-400" aria-hidden="true">{col.name.charAt(0)}</span>
+                    )}
+                  </span>
+                  <span className="line-clamp-2 text-sm leading-tight text-foreground">{col.name}</span>
+                  {typeof col.count === 'number' && col.count > 0 && (
+                    <span className="text-[11px] text-muted-foreground">{col.count} {col.count === 1 ? 'producto' : 'productos'}</span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section aria-labelledby="categorias-principales-titulo" className="border-b border-border/70 bg-background py-12 sm:py-16">

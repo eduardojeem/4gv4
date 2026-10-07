@@ -28,8 +28,9 @@ import { StorefrontAudienceLinks } from '@/components/public/inicio/StorefrontAu
 import { FashionCampaignBanner } from '@/components/public/inicio/FashionCampaignBanner'
 import { HeroCampaign } from '@/components/public/inicio/HeroCampaign'
 import { CategoryCollections } from '@/components/public/inicio/CategoryCollections'
+import { BeautyRoutine } from '@/components/public/inicio/BeautyRoutine'
 import { SportHero } from '@/components/public/inicio/SportHero'
-import { MarketAisles, MarketDeals, MarketHero } from '@/components/public/inicio/MarketSections'
+import { MarketAisleRows, MarketAisles, MarketDeals, MarketHero } from '@/components/public/inicio/MarketSections'
 import { BookingSection, ServiceGallery, ServiceMenu, ServiceTeam, ServicesHero, ServicesLocation, buildServiceMenu, useNextFreeSlot, usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { FloatingWhatsAppButton } from '@/components/public/FloatingWhatsAppButton'
 import { useStorefrontCompanyInfo, useStorefrontStyle } from '@/components/public/storefront-style-context'
@@ -247,9 +248,12 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
 
       {isClassic && <CategoryShowcase />}
       {isShowcase && <CategoryCollections style={storefrontStyle} />}
+      {storefrontStyle === 'beauty' && <BeautyRoutine />}
 
       {isMarket && <MarketAisles />}
       {isMarket && <MarketDeals />}
+      {/* Góndolas: una fila por cada pasillo grande, antes de los destacados. */}
+      {isMarket && <MarketAisleRows />}
 
       {/* Servicios: la carta y el equipo van antes que cualquier producto. */}
       {isServices && <ServiceMenu menu={serviceMenu} bookingHref={bookingHref} onBook={inlineBooking ? bookService : undefined} />}

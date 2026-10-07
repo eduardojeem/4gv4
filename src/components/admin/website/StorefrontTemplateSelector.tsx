@@ -6,6 +6,7 @@ import {
   STOREFRONT_STYLE_LABELS,
   STOREFRONT_STYLE_OPTIONS,
   STOREFRONT_TEMPLATES_METADATA,
+  isStorefrontStyleAvailable,
   resolveStorefrontStyle,
   type StorefrontStylePreference,
 } from '@/lib/website/storefront-style'
@@ -17,17 +18,19 @@ interface StorefrontTemplateSelectorProps {
   businessVertical?: string | null
   /** Plantilla que sugiere el asistente, para marcarla en la grilla. */
   suggestedStyle?: StorefrontStylePreference
+  /** Sin la agenda (módulo Servicios) no se ofrece la plantilla «Servicios». */
+  servicesAvailable?: boolean
 }
 
 /**
  * Grilla de plantillas. Las miniaturas toman el color de marca del contenedor
  * (ver BrandColorScope), así el dueño ve cada plantilla con su color.
  */
-export function StorefrontTemplateSelector({ value, onChange, businessVertical, suggestedStyle }: StorefrontTemplateSelectorProps) {
+export function StorefrontTemplateSelector({ value, onChange, businessVertical, suggestedStyle, servicesAvailable }: StorefrontTemplateSelectorProps) {
   return (
     <div role="group" aria-labelledby="storefrontStyleLabel" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-      {STOREFRONT_STYLE_OPTIONS.map((option) => {
-        const style = resolveStorefrontStyle(option.value, businessVertical)
+      {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, { servicesAvailable })).map((option) => {
+        const style = resolveStorefrontStyle(option.value, businessVertical, { servicesAvailable })
         const selected = value === option.value
         const isAuto = option.value === 'auto'
         return (

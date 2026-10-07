@@ -283,16 +283,19 @@ describe('la tienda recibe el aspecto', () => {
   it('por /[slug], con el rubro de la organización', () => {
     const layout = leer('src/app/[organizationSlug]/layout.tsx')
     expect(layout).toContain(
-      'resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization.business_vertical)'
+      'resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization.business_vertical, {'
     )
+    // «Servicios» solo con la agenda activa.
+    expect(layout).toContain('servicesAvailable: servicesModuleEnabled')
     expect(layout).toMatch(/<StorefrontStyleProvider style=\{storefrontStyle\}>\s*<CartProviderWithDrawer>/)
   })
 
   it('por subdominio también, y sin taller no ofrece seguimiento de reparaciones', () => {
     const layout = leer('src/app/(public)/layout.tsx')
     expect(layout).toContain(
-      'resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization?.business_vertical)'
+      'resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization?.business_vertical, {'
     )
+    expect(layout).toContain("await isOrganizationModuleEnabled(storefrontOrganization.id, 'services')")
     expect(layout).toMatch(/<StorefrontStyleProvider style=\{storefrontStyle\}>\s*<CartProviderWithDrawer>/)
     expect(layout).toContain("await isOrganizationModuleEnabled(storefrontOrganization.id, 'repairs')")
     expect(layout).toContain('<PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />')
@@ -422,9 +425,9 @@ describe('«Aspecto de la tienda» en Sitio Web', () => {
     render(<CompanyInfoForm />)
     fireEvent.click(screen.getByRole('button', { name: /Diseñar en mi tienda/ }))
     const modal = within(screen.getByRole('dialog'))
-    fireEvent.click(modal.getByRole('radio', { name: /^Servicios/ }))
+    fireEvent.click(modal.getByRole('radio', { name: /^Supermercado/ }))
     fireEvent.click(modal.getByRole('button', { name: 'Cancelar' }))
-    expect(screen.getByRole('button', { name: /^Servicios/ })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /^Supermercado/ })).toHaveAttribute('aria-pressed', 'false')
   })
 })
 
