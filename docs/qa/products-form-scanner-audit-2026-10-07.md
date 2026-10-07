@@ -46,3 +46,7 @@ Con sesión y dispositivos reales: crear/editar producto, duplicado de producto 
 - Estado sin coincidencias con acción para limpiar búsqueda/filtros; no sustituye los mensajes de error de la API.
 - No se cambiaron permisos de costo, cálculos de stock, esquema SQL ni acciones masivas.
 - Verificación visual autenticada pendiente: el navegador volvió a redirigir a `/saas` por falta de sesión. No se subieron estos cambios a producción.
+
+## Publicación
+
+Cambios sincronizados con main en GitHub. Verificaciones locales: pruebas focalizadas, TypeScript, lint y diff-check aprobados. Se mantiene la política de commits verificados; el estado del despliegue se verifica por separado.
