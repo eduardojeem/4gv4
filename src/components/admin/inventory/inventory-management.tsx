@@ -1263,6 +1263,8 @@ export default function InventoryManagement() {
         categories={categories as unknown as import('@/types/products').Category[]}
         brands={[]}
         suppliers={suppliers as unknown as import('@/types/products').Supplier[]}
+        // Una categoría o proveedor creados desde el formulario aparecen también en los filtros.
+        onCatalogChange={() => { void refreshCategories(); void refreshSuppliers() }}
         onSave={async (productData) => {
           if (isEditDialogOpen && selectedProduct) {
             const result = await updateProduct(selectedProduct.id, productData as unknown as Parameters<typeof updateProduct>[1])
