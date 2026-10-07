@@ -1,5 +1,5 @@
 # Reconciliación de ramas (2026-10-07)
-
+Publicación verificada desde GitHub.
 Base revisada: `d86d6e09`.
 
 Las seis ramas se incorporan al historial preservando el árbol vigente de main.
