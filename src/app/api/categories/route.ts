@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { roleHasPermission, type OrganizationRole } from '@/lib/saas/permissions'
 
@@ -17,6 +18,40 @@ const categorySchema = z.object({
 const categoryUpdateSchema = categorySchema.partial().extend({
   id: z.string().uuid(),
 })
+
+type DbClient = Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminSupabase>
+
+/**
+ * Las escrituras van con la clave de servicio, como las de productos: el
+ * permiso y la organización ya los verifica withTenantAuth, y cada consulta
+ * filtra por organization_id. Con el cliente del usuario, las reglas de la
+ * base (la categoría y su registro de auditoría) rechazaban el alta con un
+ * 500 sin detalle.
+ */
+function writeClient() {
+  return createAdminSupabase()
+}
+
+/** El error de la base como Error, para que el registro guarde el código y el detalle. */
+function dbError(error: unknown, action: string): Error {
+  const value = error as { message?: string; code?: string; details?: string; hint?: string } | null
+  if (error instanceof Error && !value?.code) return error
+  const parts = [value?.code, value?.message, value?.details, value?.hint].filter(Boolean)
+  return new Error(`Categories ${action}: ${parts.join(' | ') || 'error sin detalle'}`)
+}
+
+/** Errores conocidos de la base con un mensaje que el usuario entienda. */
+function knownConflict(error: unknown): string | null {
+  const code = (error as { code?: string } | null)?.code
+  if (code === '23505') return 'Ya existe una categoria con este nombre.'
+  if (code === '23503') return 'La categoria padre ya no existe.'
+  return null
+}
+
+/** «%» y «_» son comodines en ilike: se escapan para comparar el nombre tal cual. */
+function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
 
 type CategoryRow = {
   id: string
@@ -36,7 +71,7 @@ function matchesSearch(category: CategoryRow, search?: string) {
 }
 
 async function assertParentIsValid(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: DbClient,
   organizationId: string,
   parentId: string | null | undefined,
   categoryId?: string
@@ -74,7 +109,7 @@ async function assertParentIsValid(
 }
 
 async function assertGlobalCategoryIsValid(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: DbClient,
   globalCategoryId: string | null | undefined
 ) {
   if (!globalCategoryId) return null
@@ -91,7 +126,7 @@ async function assertGlobalCategoryIsValid(
 }
 
 async function assertUniqueName(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: DbClient,
   organizationId: string,
   name: string,
   categoryId?: string
@@ -100,7 +135,7 @@ async function assertUniqueName(
     .from('categories')
     .select('id')
     .eq('organization_id', organizationId)
-    .ilike('name', name)
+    .ilike('name', escapeLike(name))
     .limit(1)
     .maybeSingle()
 
@@ -175,7 +210,7 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
     }
 
     const payload = validation.data
-    const supabase = await createClient()
+    const supabase = writeClient()
     const [parentError, globalCategoryError, uniqueNameError] = await Promise.all([
       assertParentIsValid(supabase, organization.id, payload.parent_id),
       assertGlobalCategoryIsValid(supabase, payload.global_category_id),
@@ -203,19 +238,15 @@ export const POST = withTenantAuth({ permission: 'products.create', module: 'inv
       .single()
 
     if (error) {
-      console.error('[CATEGORIES POST] Insert error:', error.message, error.code, error.details, error.hint)
-      throw error
+      const conflict = knownConflict(error)
+      if (conflict) return NextResponse.json({ success: false, error: conflict }, { status: 409 })
+      throw dbError(error, 'POST insert')
     }
 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : JSON.stringify(error)
-    const errObj = error as { code?: string; details?: string; hint?: string } | null
-    const errCode = errObj?.code || ''
-    const errDetails = errObj?.details || errObj?.hint || ''
-    console.error('[CATEGORIES POST] Failed:', errMsg, errCode, errDetails)
-    logger.error('Categories API POST error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo crear la categoria.', _debug: `${errMsg} | code: ${errCode} | ${errDetails}` }, { status: 500 })
+    logger.error(dbError(error, 'POST'))
+    return NextResponse.json({ success: false, error: 'No se pudo crear la categoria.' }, { status: 500 })
   }
 })
 
@@ -228,7 +259,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
     }
 
     const { id, ...updates } = validation.data
-    const supabase = await createClient()
+    const supabase = writeClient()
     const [parentError, globalCategoryError, uniqueNameError] = await Promise.all([
       updates.parent_id !== undefined ? assertParentIsValid(supabase, organization.id, updates.parent_id, id) : Promise.resolve(null),
       updates.global_category_id !== undefined ? assertGlobalCategoryIsValid(supabase, updates.global_category_id) : Promise.resolve(null),
@@ -251,11 +282,15 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       .select('*')
       .single()
 
-    if (error) throw error
+    if (error) {
+      const conflict = knownConflict(error)
+      if (conflict) return NextResponse.json({ success: false, error: conflict }, { status: 409 })
+      throw dbError(error, 'PUT update')
+    }
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
-    logger.error('Categories API PUT error', { error })
+    logger.error(dbError(error, 'PUT'))
     return NextResponse.json({ success: false, error: 'No se pudo actualizar la categoria.' }, { status: 500 })
   }
 })
@@ -269,7 +304,7 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       return NextResponse.json({ success: false, error: 'Category ID is required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = writeClient()
     const [{ count: childCount, error: childError }, { count: productCount, error: productError }] = await Promise.all([
       supabase
         .from('categories')
@@ -300,11 +335,11 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
       .eq('id', id)
       .eq('organization_id', organization.id)
 
-    if (error) throw error
+    if (error) throw dbError(error, 'DELETE')
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    logger.error('Categories API DELETE error', { error })
+    logger.error(dbError(error, 'DELETE'))
     return NextResponse.json({ success: false, error: 'No se pudo eliminar la categoria.' }, { status: 500 })
   }
 })
