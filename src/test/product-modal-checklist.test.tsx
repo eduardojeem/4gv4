@@ -68,6 +68,13 @@ function renderModal() {
 
 
 describe('ProductModal — progreso de campos obligatorios', () => {
+  it('Enter del lector confirma el código sin enviar el formulario', () => {
+    renderModal()
+    const input = screen.getByPlaceholderText('Ej: 7891000315507 (o escaneá con el lector)')
+    fireEvent.change(input, { target: { value: '789 1000315507' } })
+    expect(fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })).toBe(false)
+    expect(input).toHaveValue('7891000315507')
+  })
   beforeAll(() => {
     Element.prototype.hasPointerCapture = vi.fn(() => false)
     Element.prototype.setPointerCapture = vi.fn()

@@ -5,6 +5,7 @@ import { Camera, CameraOff, Check, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
 import type { Html5Qrcode } from 'html5-qrcode'
 
 /**
@@ -69,6 +70,11 @@ export function BarcodeScanner({
   hint,
 }: BarcodeScannerProps) {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'camera' | 'reader'>('camera')
+  const [manualCode, setManualCode] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const cameraSession = useRef(0)
+  const dialogSession = useRef(0)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastCode, setLastCode] = useState<string | null>(null)
@@ -87,14 +93,16 @@ export function BarcodeScanner({
   }, [onScan])
 
   const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
+    cameraSession.current += 1
+    const scanner = scannerRef.current
+    scannerRef.current = null
+    if (scanner) {
       try {
-        await scannerRef.current.stop()
-        scannerRef.current.clear()
+        await scanner.stop()
       } catch {
         // Scanner may already be stopped
       }
-      scannerRef.current = null
+      try { scanner.clear() } catch { /* Camera may still be starting. */ }
     }
     setScanning(false)
   }, [])
@@ -102,21 +110,22 @@ export function BarcodeScanner({
   const handleDecoded = useCallback(async (decodedText: string) => {
     const code = decodedText.trim()
     if (!code) return
-    if (!continuous) {
-      setLastCode(code)
-      void onScanRef.current(code)
-      void stopScanner()
-      setOpen(false)
-      return
-    }
     // Continuo: un código a la vez, y el mismo no se cuenta dos veces mientras sigue en cuadro.
     const now = Date.now()
     if (busyRef.current || isRepeatedScan(code, lastReadRef.current, now)) return
     busyRef.current = true
+    setProcessing(true)
     lastReadRef.current = { code, at: now }
     setLastCode(code)
+    const session = dialogSession.current
     try {
       const result = await onScanRef.current(code)
+      if (session !== dialogSession.current) return
+      if (!continuous && result !== null && !(typeof result === 'object' && result.ok === false)) {
+        await stopScanner()
+        setOpen(false)
+        return
+      }
       if (result === null) {
         setFeedback({ text: `No se encontró «${code}»`, ok: false })
       } else if (typeof result === 'object') {
@@ -129,30 +138,37 @@ export function BarcodeScanner({
         }
       } else {
         setReadCount((value) => value + 1)
+        setManualCode('')
         setFeedback({ text: result || code, ok: true })
         if (typeof navigator !== 'undefined') navigator.vibrate?.(60)
       }
     } catch {
-      setFeedback({ text: `No se pudo procesar «${code}»`, ok: false })
+      if (session === dialogSession.current) setFeedback({ text: `No se pudo procesar «${code}». Intentá nuevamente.`, ok: false })
     } finally {
       lastReadRef.current = { code, at: Date.now() }
       busyRef.current = false
+      setProcessing(false)
     }
   }, [continuous, stopScanner])
 
   const startScanner = useCallback(async () => {
     if (!containerRef.current) return
+    await stopScanner()
+    const session = cameraSession.current
     setError(null)
     setLastCode(null)
 
     try {
+      if (typeof window !== 'undefined' && window.isSecureContext === false) {
+        setError('La cámara necesita HTTPS o localhost. Podés usar el lector o ingresar el código manualmente.')
+        return
+      }
       // Dynamic import to avoid SSR issues
       const { Html5Qrcode } = await import('html5-qrcode')
+      if (session !== cameraSession.current || !containerRef.current) return
 
       const scanner = new Html5Qrcode(containerId)
       scannerRef.current = scanner
-
-      setScanning(true)
 
       await scanner.start(
         { facingMode: 'environment' },
@@ -161,32 +177,45 @@ export function BarcodeScanner({
           qrbox: scanBox,
           aspectRatio: 1.5,
         },
-        (decodedText) => { void handleDecoded(decodedText) },
+        (decodedText) => { if (session === cameraSession.current) void handleDecoded(decodedText) },
         () => {
           // Scan failure (frame without code) — ignore silently
         }
       )
+      if (session !== cameraSession.current) {
+        try { await scanner.stop() } finally { scanner.clear() }
+        return
+      }
+      setScanning(true)
     } catch (err) {
+      if (session !== cameraSession.current) return
       setScanning(false)
-      if (err instanceof Error) {
-        if (err.message.includes('Permission') || err.message.includes('NotAllowed')) {
-          setError('Permiso de cámara denegado. Habilitalo en la configuración del navegador.')
-        } else if (err.message.includes('NotFound') || err.message.includes('device')) {
-          setError('No se encontró una cámara disponible.')
-        } else {
-          setError(err.message)
-        }
+      const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      if (/Permission|NotAllowed/i.test(message)) {
+        setError('Permiso de cámara denegado. Habilitalo en la configuración del navegador.')
+      } else if (/NotFound|DevicesNotFound/i.test(message)) {
+        setError('No se encontró una cámara disponible.')
       } else {
-        setError('No se pudo iniciar la cámara.')
+        setError(/NotReadable|TrackStart/i.test(message)
+          ? 'La cámara está ocupada o no responde. Cerrá otras aplicaciones que la usen y reintentá.'
+          : 'No se pudo iniciar la cámara. Revisá los permisos o usá Lector o manual.')
       }
     }
-  }, [containerId, handleDecoded])
+  }, [containerId, handleDecoded, stopScanner])
 
   const openScanner = () => {
+    dialogSession.current += 1
     setFeedback(null)
     setReadCount(0)
+    setMode('camera')
+    setManualCode('')
     lastReadRef.current = null
     setOpen(true)
+  }
+
+  const changeOpen = (value: boolean) => {
+    if (!value) dialogSession.current += 1
+    setOpen(value)
   }
 
   // Cleanup on unmount or close
@@ -199,12 +228,12 @@ export function BarcodeScanner({
 
   // Auto-start when dialog opens
   useEffect(() => {
-    if (open) {
+    if (open && mode === 'camera') {
       // Small delay to let the DOM render the container
       const timer = setTimeout(startScanner, 300)
-      return () => clearTimeout(timer)
+      return () => { clearTimeout(timer); void stopScanner() }
     }
-  }, [open, startScanner])
+  }, [open, mode, startScanner, stopScanner])
 
   return (
     <>
@@ -221,7 +250,7 @@ export function BarcodeScanner({
         {size !== 'icon' && label}
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent className="max-w-sm overflow-hidden rounded-xl p-0" showCloseButton={false}>
           <DialogTitle className="sr-only">Escanear código de barras</DialogTitle>
 
@@ -238,7 +267,7 @@ export function BarcodeScanner({
             </div>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => changeOpen(false)}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
               aria-label="Cerrar"
             >
@@ -246,8 +275,20 @@ export function BarcodeScanner({
             </button>
           </div>
 
-          {/* Scanner area */}
-          <div className="relative bg-black">
+          <div className="flex gap-2 px-4 py-2" role="group" aria-label="Método de lectura">
+            <Button type="button" size="sm" variant={mode === 'camera' ? 'default' : 'outline'} aria-pressed={mode === 'camera'} onClick={() => setMode('camera')}>Cámara</Button>
+            <Button type="button" size="sm" variant={mode === 'reader' ? 'default' : 'outline'} aria-pressed={mode === 'reader'} onClick={() => setMode('reader')}>Lector o manual</Button>
+          </div>
+          {mode === 'reader' && <div className="space-y-3 px-4 py-3">
+            <label htmlFor={`${containerId}-input`} className="text-sm font-medium">Código leído</label>
+            <Input id={`${containerId}-input`} autoFocus autoComplete="off" value={manualCode} onChange={(event) => setManualCode(event.target.value)} onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); void handleDecoded(manualCode) }
+            }} />
+            <p className="text-xs text-muted-foreground">Conectá el lector USB o Bluetooth, dejá el foco en este campo y escaneá. Enter confirma el código; no guarda el producto.</p>
+            <Button type="button" disabled={processing || !manualCode.trim()} onClick={() => { void handleDecoded(manualCode) }}>Usar código</Button>
+          </div>}
+          {/* Keep the camera container mounted until asynchronous startup stops. */}
+          <div className={cn('relative bg-black', mode !== 'camera' && 'hidden')}>
             <div
               id={containerId}
               ref={containerRef}
@@ -267,7 +308,7 @@ export function BarcodeScanner({
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 px-6 text-center">
                 <CameraOff className="h-8 w-8 text-slate-500" />
                 <p className="text-xs text-slate-400">{error}</p>
-                <Button size="sm" variant="outline" onClick={startScanner} className="text-xs">
+                <Button type="button" size="sm" variant="outline" onClick={startScanner} className="text-xs">
                   Reintentar
                 </Button>
               </div>
@@ -276,12 +317,13 @@ export function BarcodeScanner({
 
           {/* Footer */}
           <div className="space-y-2 border-t px-4 py-3 text-center">
+            {processing && <p role="status" className="text-xs text-muted-foreground">Procesando código…</p>}
             <p className="text-xs text-slate-500">
-              {hint ?? (continuous
+              {mode === 'reader' ? 'Configurá el lector en modo teclado, con Enter al finalizar.' : hint ?? (continuous
                 ? 'Pasá los productos de a uno frente a la cámara'
                 : 'Apuntá la cámara al código de barras o al QR')}
             </p>
-            {continuous && feedback && (
+            {feedback && (
               <p
                 role="status"
                 className={cn(
@@ -299,7 +341,7 @@ export function BarcodeScanner({
               </p>
             )}
             {continuous && (
-              <Button type="button" size="sm" className="w-full" onClick={() => setOpen(false)}>
+              <Button type="button" size="sm" className="w-full" onClick={() => changeOpen(false)}>
                 Listo
               </Button>
             )}

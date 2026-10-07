@@ -44,6 +44,16 @@ describe('product barcode validation', () => {
     expect(result.success).toBe(false)
   })
 
+  it('rejects whitespace-only product names', () => {
+    expect(productSchema.safeParse({ ...validProduct, name: '   ' }).success).toBe(false)
+  })
+
+  it('normalizes names and barcode whitespace before saving', () => {
+    const result = productSchema.parse({ ...validProduct, name: '  Café  ', barcode: '750 1234567893' })
+    expect(result.name).toBe('Café')
+    expect(result.barcode).toBe('7501234567893')
+  })
+
   it('accepts an empty optional barcode', () => {
     const result = productSchema.safeParse({ ...validProduct, barcode: '' })
     expect(result.success).toBe(true)

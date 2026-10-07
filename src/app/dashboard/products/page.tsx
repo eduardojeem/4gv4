@@ -66,6 +66,7 @@ import type { QuickFilterCounts } from "@/components/dashboard/products-modern/Q
 import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
 import { useBranch } from "@/contexts/branch-context";
+import { ActiveProductFilters } from '@/components/dashboard/products-modern/ActiveProductFilters';
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext';
 import {
   PRODUCT_VIEW_PREFERENCES_KEY,
@@ -1190,6 +1191,13 @@ export default function ProductsPage() {
           onFilterClick={handleQuickFilter}
         />
 
+        <ActiveProductFilters
+          filters={filters} searchQuery={searchQuery} categories={categories} suppliers={suppliers}
+          onChange={handleFilterChange} onSearchChange={handleSearch} onClear={clearFilters}
+          total={totalItems} branchName={selectedBranch?.name} loading={loading || isRefreshing}
+          partial={resultTruncated} error={Boolean(productsError)}
+        />
+
         {/* Filter Panel (Collapsible) */}
         {isFilterPanelOpen && (
           <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
@@ -1302,7 +1310,13 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {groupBy !== "none" ? (
+            {!loading && !isRefreshing && !productsError && paginatedProducts.length === 0 ? (
+              <div className="space-y-3 py-10 text-center" role="status">
+                <h2 className="text-base font-semibold">No hay productos que coincidan</h2>
+                <p className="text-sm text-muted-foreground">Revisá la búsqueda, los filtros y la sucursal seleccionada. Limpiar vuelve al alcance inicial de esta sección.</p>
+                <Button type="button" variant="outline" onClick={clearFilters}>Limpiar búsqueda y filtros</Button>
+              </div>
+            ) : groupBy !== "none" ? (
               <ProductSectionGroup
                 products={paginatedProducts}
                 groupBy={groupBy}

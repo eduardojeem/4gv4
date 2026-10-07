@@ -33,6 +33,49 @@ async function read(code: string) {
 }
 
 describe('escáner por cámara', () => {
+  it('espera el procesamiento y no recibe dos veces el mismo código', async () => {
+    let finish!: () => void
+    const onScan = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    render(<BarcodeScanner onScan={onScan} label="Escanear con la cámara" />)
+    await openCamera('Escanear con la cámara')
+    await read('111')
+    await read('111')
+    expect(onScan).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Escanear código')).toBeInTheDocument()
+    await act(async () => { finish(); await Promise.resolve() })
+    expect(screen.queryByText('Escanear código')).not.toBeInTheDocument()
+  })
+
+  it('lector: Enter usa el código sin enviar el formulario', async () => {
+    const onSubmit = vi.fn((event) => event.preventDefault())
+    const onScan = vi.fn()
+    render(<form onSubmit={onSubmit}><BarcodeScanner onScan={onScan} /></form>)
+    fireEvent.click(screen.getByRole('button', { name: 'Escanear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lector o manual' }))
+    const input = screen.getByLabelText('Código leído')
+    fireEvent.change(input, { target: { value: '7891000315507' } })
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }) })
+    expect(onScan).toHaveBeenCalledWith('7891000315507')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('mantiene abierto el escáner y muestra una lectura rechazada', async () => {
+    const onScan = vi.fn(() => ({ ok: false, text: 'Código inválido' }))
+    render(<BarcodeScanner onScan={onScan} label="Escanear con la cámara" />)
+    await openCamera('Escanear con la cámara')
+    await read('bad-code')
+    expect(screen.getByRole('status')).toHaveTextContent('Código inválido')
+    expect(screen.getByText('Escanear código')).toBeInTheDocument()
+  })
+
+  it('maneja el rechazo asíncrono sin cerrar ni perder el mensaje', async () => {
+    const onScan = vi.fn(async () => { throw new Error('unavailable') })
+    render(<BarcodeScanner onScan={onScan} label="Escanear con la cámara" />)
+    await openCamera('Escanear con la cámara')
+    await read('111')
+    expect(screen.getByRole('status')).toHaveTextContent('No se pudo procesar')
+    expect(screen.getByText('Escanear código')).toBeInTheDocument()
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     camera.onDecode = null

@@ -88,7 +88,7 @@ import { removeFile, uploadFile } from '@/lib/supabase-storage'
 import { PUBLIC_IMAGE_CACHE_CONTROL } from '@/lib/images/upload-profiles'
 import { BarcodeScanner } from '@/components/ui/barcode-scanner'
 import { BarcodeAssist, type GlobalProductMatch } from '@/components/dashboard/products/BarcodeAssist'
-import { cleanBarcode } from '@/lib/products/barcode-catalog'
+import { classifyBarcode, cleanBarcode } from '@/lib/products/barcode-catalog'
 import { useForm, useFieldArray, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
@@ -729,7 +729,6 @@ export function ProductModal({
   useEffect(() => {
     if (!isDirty) return
     // React Hook Form exposes a subscription API that React Compiler cannot memoize.
-    // eslint-disable-next-line react-hooks/incompatible-library
     const subscription = form.watch((values) => {
       saveProductDraft(productId, values as Record<string, unknown>)
     })
@@ -906,7 +905,7 @@ export function ProductModal({
       supplier_id: data.supplier_id || null,
       brand: brandName,
       description: data.description?.trim() || null,
-      barcode: data.barcode?.trim() || null,
+      barcode: cleanBarcode(data.barcode || '') || null,
       unit_measure: data.unit_measure?.trim() || 'unidad',
       wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
       offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
@@ -987,7 +986,6 @@ export function ProductModal({
         delete (cleanedData as Record<string, unknown>).id
       }
 
-      console.log('Sending product data:', cleanedData)
       await onSave(cleanedData as unknown as ProductFormData)
 
       toast.success(
@@ -1870,12 +1868,23 @@ export function ProductModal({
                                       placeholder="Ej: 7891000315507 (o escaneá con el lector)"
                                       {...field}
                                       value={field.value || ""}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          setValue('barcode', cleanBarcode(field.value || ''), { shouldDirty: true, shouldValidate: true })
+                                        }
+                                      }}
                                     />
                                   </FormControl>
                                   <BarcodeScanner
                                     size="icon"
-                                    label="Escanear con la cámara"
-                                    onScan={(scanned) => setValue('barcode', cleanBarcode(scanned), { shouldDirty: true, shouldValidate: true })}
+                                    label="Escanear código"
+                                    onScan={(scanned) => {
+                                      const code = cleanBarcode(scanned)
+                                      if (classifyBarcode(code).kind === 'invalid') return { ok: false, text: 'Código inválido. Usá EAN-8, UPC-A o EAN-13 y revisá los números.' }
+                                      setValue('barcode', code, { shouldDirty: true, shouldValidate: true })
+                                    }}
                                   />
                                   <Button
                                     type="button"

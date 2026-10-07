@@ -46,9 +46,14 @@ export function BarcodeAssist({
   const [result, setResult] = useState<LookupResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [appliedId, setAppliedId] = useState<string | null>(null)
+  const [lookupError, setLookupError] = useState(false)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     setResult(null)
+    setLoading(false)
+    setAppliedId(null)
+    setLookupError(false)
     if (kind !== 'manufacturer' && kind !== 'internal') return
     const controller = new AbortController()
     // Espera a que termine de escribir (o de disparar el lector).
@@ -59,15 +64,17 @@ export function BarcodeAssist({
         if (excludeId) params.set('excludeId', excludeId)
         const response = await fetch(`/api/products/barcode-lookup?${params}`, { signal: controller.signal, cache: 'no-store' })
         const payload = await response.json().catch(() => null)
-        if (response.ok && payload?.success) setResult({ own: payload.data.own, global: payload.data.global })
+        if (controller.signal.aborted) return
+        if (!response.ok || !payload?.success || !payload.data) throw new Error('Lookup failed')
+        setResult({ own: payload.data.own, global: payload.data.global })
       } catch {
-        // Sin conexión o cancelado: el campo sigue funcionando igual.
+        if (!controller.signal.aborted) setLookupError(true)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
     }, 350)
     return () => { controller.abort(); clearTimeout(timer) }
-  }, [clean, kind, excludeId])
+  }, [clean, kind, excludeId, retry])
 
   if (kind === 'empty') return null
 
@@ -81,6 +88,11 @@ export function BarcodeAssist({
         {loading && <Loader2 className="h-3 w-3 animate-spin" aria-label="Buscando" />}
       </p>
 
+      {lookupError && <p role="status" className="text-xs text-amber-700">
+        No se pudo consultar el código. No se verificaron duplicados ni datos del catálogo.
+        <Button type="button" variant="ghost" size="sm" onClick={() => setRetry(value => value + 1)}>Reintentar búsqueda</Button>
+      </p>}
+      {result && !result.own && !result.global && <p className="text-xs text-muted-foreground">No se encontraron coincidencias. Completá los datos del producto manualmente.</p>}
       {result?.own && (
         <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />

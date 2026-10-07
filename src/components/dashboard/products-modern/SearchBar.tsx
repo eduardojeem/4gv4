@@ -8,6 +8,7 @@ import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { BarcodeScanner } from '@/components/ui/barcode-scanner'
 
 export interface SearchBarProps {
   value: string
@@ -19,7 +20,7 @@ export interface SearchBarProps {
 export const SearchBar = React.memo(function SearchBar({
   value,
   onChange,
-  placeholder = 'Buscar por nombre, código SKU o marca...',
+  placeholder = 'Nombre, SKU, código de barras o marca…',
   className
 }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -38,7 +39,8 @@ export const SearchBar = React.memo(function SearchBar({
   }, [])
 
   return (
-    <div className={cn('relative flex-1 group', className)}>
+    <div className={cn('flex min-w-0 flex-1 items-center gap-2', className)}>
+    <div className="relative min-w-0 flex-1 group">
       <label htmlFor="product-search" className="sr-only">
         Buscar productos
       </label>
@@ -51,10 +53,13 @@ export const SearchBar = React.memo(function SearchBar({
         id="product-search"
         type="search"
         role="searchbox"
-        aria-label="Buscar productos por nombre, SKU o marca"
+        aria-label="Buscar productos por nombre, SKU, código de barras o marca"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') { event.preventDefault(); onChange(event.currentTarget.value.trim()) }
+        }}
         className="pl-10 pr-20 h-10 rounded-xl text-xs sm:text-sm border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 shadow-2xs transition-all"
       />
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -77,6 +82,8 @@ export const SearchBar = React.memo(function SearchBar({
           Ctrl K
         </kbd>
       </div>
+    </div>
+    <BarcodeScanner size="icon" label="Escanear código para buscar" onScan={(code) => onChange(code.trim())} hint="Escaneá el código del producto. Si hay filtros activos, también se aplican a la búsqueda." />
     </div>
   )
 })

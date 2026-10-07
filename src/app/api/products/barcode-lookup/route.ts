@@ -35,16 +35,20 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       .limit(1)
     if (excludeId) productQuery = productQuery.neq('id', excludeId)
 
-    const [{ data: ownProducts }, { data: ownVariants }, { data: organizationRow }] = await Promise.all([
-      productQuery,
-      admin
+    let variantQuery = admin
         .from('product_variants')
         .select('product_id, variant_name, products!inner(name)')
         .eq('organization_id', organization.id)
         .in('barcode', spellings)
-        .limit(1),
+        .limit(1)
+    if (excludeId) variantQuery = variantQuery.neq('product_id', excludeId)
+
+    const [{ data: ownProducts, error: productError }, { data: ownVariants, error: variantError }, { data: organizationRow }] = await Promise.all([
+      productQuery,
+      variantQuery,
       admin.from('organizations').select('business_vertical').eq('id', organization.id).maybeSingle(),
     ])
+    if (productError || variantError) throw new Error('No se pudieron verificar los duplicados del código')
 
     const variant = (ownVariants ?? [])[0] as unknown as { product_id: string; variant_name: string | null; products: { name: string } | Array<{ name: string }> } | undefined
     const variantProduct = variant ? (Array.isArray(variant.products) ? variant.products[0] : variant.products) : null

@@ -11,6 +11,7 @@ export const productSchema = z
     id: z.string().optional(),
     name: z
       .string()
+      .trim()
       .min(3, "El nombre debe tener al menos 3 caracteres")
       .max(200, "El nombre no puede exceder 200 caracteres"),
     sku: z
@@ -154,6 +155,7 @@ export const productSchema = z
     unit_measure: z.string().optional().nullable(),
     barcode: z
       .string()
+      .transform(value => value.replace(/\s+/g, ''))
       .optional()
       .nullable()
       .refine(
