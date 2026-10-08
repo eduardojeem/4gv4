@@ -18,9 +18,10 @@ const ETIQUETAS: Record<string, string> = {
   automotor: 'Automotor',
   alimentos: 'Alimentos',
   belleza: 'Belleza',
+  barberia: 'Barbería & Peluquería',
   hogar: 'Hogar',
   salud: 'Salud',
-  comercio: 'Comercio',
+  comercio: 'Comercio general',
 }
 
 export function rubroLabel(rubro?: string | null): string | null {

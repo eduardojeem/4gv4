@@ -287,6 +287,13 @@ export function resolveOrganizationRubro(
 ): string {
   const vertical = (org.business_vertical ?? '').toLowerCase().trim()
   if (vertical) {
+    // Los rubros que elige la empresa se guardan con su código: sin traducirlos,
+    // el público veía «Clothing» o «General» y los filtros por rubro no los encontraban.
+    const byCode: Record<string, string> = {
+      electronics: 'tecnologia', clothing: 'indumentaria', hardware: 'ferreteria', food: 'alimentos',
+      cosmetics: 'belleza', barbershop: 'barberia', general: 'comercio', other: 'comercio',
+    }
+    if (byCode[vertical]) return byCode[vertical]
     if (vertical.includes('tecno') || vertical.includes('celular') || vertical.includes('comput') || vertical.includes('electr')) return 'tecnologia'
     if (vertical.includes('indum') || vertical.includes('ropa') || vertical.includes('calzad') || vertical.includes('moda')) return 'indumentaria'
     if (vertical.includes('gastro') || vertical.includes('comida') || vertical.includes('restaur') || vertical.includes('alimento') || vertical.includes('super')) return 'alimentos'

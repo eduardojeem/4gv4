@@ -172,8 +172,8 @@ describe('cada tienda con su color', () => {
 })
 
 describe('se muestra el logo de la tienda', () => {
-  it('la tarjeta y la cinta lo usan cuando existe', () => {
-    expect([...SAAS.matchAll(/src=\{store\.logo_url\}/g)].length).toBe(2)
+  it('la tarjeta lo usa cuando existe', () => {
+    expect([...SAAS.matchAll(/src=\{store\.logo_url\}/g)].length).toBe(1)
     expect(SAAS).toContain('alt={`Logo de ${store.name}`}')
   })
 

@@ -33,8 +33,17 @@ describe('solo se muestran negocios reales', () => {
     expect(PAGINA).toContain('const combinedStores = initialOrganizations')
   })
 
-  it('sin negocios no se muestra una cinta vacía dando vueltas', () => {
-    expect(PAGINA).toContain('{combinedStores.length > 0 && (')
+  it('las cifras y los filtros salen de las tiendas publicadas', () => {
+    // Antes había filtros fijos (Automotor, Ferreterías) que nunca devolvían nada.
+    expect(SOLO_CODIGO).not.toContain('CATEGORY_FILTERS')
+    expect(PAGINA).toContain('store.rubro === selectedRubro')
+    expect(PAGINA).toContain('combinedStores.reduce((total, store) => total + (store.products_count ?? 0), 0)')
+  })
+
+  it('no inventa textos ni promesas', () => {
+    expect(PAGINA).not.toContain('Tienda verificada en plataforma')
+    expect(PAGINA).not.toContain('Miles de clientes')
+    expect(PAGINA).not.toContain('100% Blindada')
   })
 
   it('distingue «no hay ninguno» de «el filtro no encontró»', () => {
@@ -68,15 +77,6 @@ describe('no se inventan datos de un negocio real', () => {
     expect(PAGINA).toContain('{(store.review_count ?? 0) > 0 ? (')
   })
 
-  it('la cinta tampoco muestra estrellas sin reseñas', () => {
-    const cinta = PAGINA.slice(
-      PAGINA.indexOf('CINTA MARQUEE'),
-      PAGINA.indexOf('SHOWCASE MODERNO')
-    )
-    expect(cinta).toContain('{(store.review_count ?? 0) > 0 && (')
-    expect(cinta).not.toContain('review_rating_avg ?? 4.9')
-  })
-
   it('el conteo ya no lleva un «+» delante de un número exacto', () => {
     // «+480 productos» se lee como «más de 480», y es el conteo exacto.
     expect(PAGINA).not.toContain('+{store.products_count')
@@ -98,4 +98,18 @@ describe('el conteo de productos es de cada empresa', () => {
   it('ya no se deriva del pozo de productos destacados', () => {
     expect(MARKETPLACE).not.toContain('products_count: organizationProducts.length')
   })
+})
+
+describe('el rubro se traduce desde el código que guarda la empresa', () => {
+  it('nunca muestra el código en inglés', async () => {
+    const { resolveOrganizationRubro } = await import('@/lib/public/marketplace')
+    const { rubroLabel } = await import('@/lib/public/organization-rubro')
+    // Antes una tienda de ropa mostraba «Clothing» y una general «General».
+    expect(rubroLabel(resolveOrganizationRubro({ business_vertical: 'clothing' }))).toBe('Moda & Retail')
+    expect(rubroLabel(resolveOrganizationRubro({ business_vertical: 'general' }))).toBe('Comercio general')
+    expect(rubroLabel(resolveOrganizationRubro({ business_vertical: 'hardware' }))).toBe('Ferretería')
+    expect(rubroLabel(resolveOrganizationRubro({ business_vertical: 'barbershop' }))).toBe('Barbería & Peluquería')
+    expect(rubroLabel(resolveOrganizationRubro({ business_vertical: 'electronics' }))).toBe('Tecnología')
+    // El primer import del marketplace es lento: no es una falla de la regla.
+  }, 30_000)
 })
