@@ -24,6 +24,7 @@ import {
   Tag,
   TrendingUp,
   Truck,
+  Undo2,
   Users,
   Wrench
 } from 'lucide-react'
@@ -110,6 +111,9 @@ export function BusinessProfileCard() {
     profile.enabledModules ?? profile.effectiveModules,
   )
   const [saving, setSaving] = useState(false)
+  // Lo que cambió al elegir el rubro, para mostrarlo y poder deshacerlo.
+  const [autoChange, setAutoChange] = useState<{ label: string; added: OrganizationModule[]; removed: OrganizationModule[]; previous: OrganizationModule[] } | null>(null)
+  const [prepareWebsite, setPrepareWebsite] = useState(false)
   const entitled = useMemo(
     () => new Set([...profile.entitledModules, ...profile.moduleTrials.map(trial => trial.module)]),
     [profile.entitledModules, profile.moduleTrials],
@@ -142,15 +146,47 @@ export function BusinessProfileCard() {
       .filter((group) => group.items.length > 0),
     [enabled, entitled],
   )
+  // Al elegir rubro o forma de trabajo se marcan solas las herramientas
+  // recomendadas que incluye el plan (una cosmética no necesita Reparaciones).
+  // Se muestra qué cambió y se puede deshacer.
+  const applyRecommendationFor = (nextVertical: BusinessVertical, nextModel: OperatingModel) => {
+    const recommended = getSuggestedModules(nextVertical, nextModel).filter(module => entitled.has(module))
+    const added = recommended.filter(module => !enabled.includes(module))
+    const removed = enabled.filter(module => !recommended.includes(module))
+    if (added.length === 0 && removed.length === 0) {
+      setAutoChange(null)
+      return
+    }
+    setAutoChange({ label: verticalLabels[nextVertical], added, removed, previous: enabled })
+    setEnabled(recommended)
+  }
+
   const changeVertical = (next: BusinessVertical) => {
-    setVertical(next)
+    let nextModel = model
     if (SERVICE_FIRST_VERTICALS.has(next) && model !== 'service' && model !== 'mixed') {
-      setModel('service')
+      nextModel = 'service'
       toast.info('Te propusimos «Prestación de servicios»: es como trabaja este rubro. Podés cambiarla.')
     }
+    setVertical(next)
+    setModel(nextModel)
+    applyRecommendationFor(next, nextModel)
+    // Cambiar de rubro propone preparar la página para el nuevo; volver al guardado, no.
+    setPrepareWebsite(next !== profile.businessVertical)
+  }
+
+  const changeModel = (next: OperatingModel) => {
+    setModel(next)
+    applyRecommendationFor(vertical, next)
+  }
+
+  const undoAutoChange = () => {
+    if (!autoChange) return
+    setEnabled(autoChange.previous)
+    setAutoChange(null)
   }
   const dirty = vertical !== profile.businessVertical
     || model !== profile.operatingModel
+    || prepareWebsite
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
 
   const applySuggestedModules = () => {
@@ -188,11 +224,24 @@ export function BusinessProfileCard() {
           businessVertical: vertical,
           operatingModel: model,
           enabledModules: enabled,
+          prepareWebsite,
         }),
       })
       const body = await response.json().catch(() => null)
       if (!response.ok || !body?.success) throw new Error(body?.error || 'No se pudo guardar el perfil.')
-      toast.success('Perfil del negocio actualizado.')
+      if (body.website?.prepared) {
+        toast.success('Perfil guardado y página web preparada.', {
+          description: (body.website.summary as string[]).join(' · '),
+        })
+      } else if (prepareWebsite) {
+        toast.warning('Perfil guardado, pero no se pudo preparar la página web.', {
+          description: 'Podés ajustarla desde Sitio web.',
+        })
+      } else {
+        toast.success('Perfil del negocio actualizado.')
+      }
+      setPrepareWebsite(false)
+      setAutoChange(null)
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo guardar el perfil.')
@@ -297,7 +346,7 @@ export function BusinessProfileCard() {
             <Label htmlFor="operating-model" className="text-xs font-medium text-foreground">
               Forma de trabajo
             </Label>
-            <Select value={model} onValueChange={value => setModel(value as OperatingModel)}>
+            <Select value={model} onValueChange={value => changeModel(value as OperatingModel)}>
               <SelectTrigger id="operating-model" aria-label="Forma de trabajo" className="h-10 border-border/80 bg-background transition-colors hover:border-border">
                 <SelectValue />
               </SelectTrigger>
@@ -310,6 +359,56 @@ export function BusinessProfileCard() {
             <p className="text-[11px] text-muted-foreground">{modelHints[model]}</p>
           </div>
         </div>
+
+        {autoChange && (
+          <div role="status" className="flex flex-col gap-2 rounded-xl border border-primary/25 bg-primary/5 p-3.5 text-xs sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+                Marcamos las herramientas recomendadas para {autoChange.label}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {autoChange.added.map((module) => (
+                  <Badge key={module} variant="secondary" className="border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-800 dark:text-emerald-300">+ {moduleLabels[module]}</Badge>
+                ))}
+                {autoChange.removed.map((module) => (
+                  <Badge key={module} variant="outline" className="text-[11px] text-muted-foreground line-through">{moduleLabels[module]}</Badge>
+                ))}
+              </div>
+              <p className="text-muted-foreground">Desactivar no borra datos. Revisalas abajo antes de guardar.</p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1.5 self-start text-xs" onClick={undoAutoChange}>
+              <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Deshacer
+            </Button>
+          </div>
+        )}
+
+        {/* La página pública lista para el rubro, como al terminar el alta. */}
+        <label
+          htmlFor="prepare-website"
+          className={cn(
+            'flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors',
+            prepareWebsite ? 'border-primary/40 bg-primary/[0.04]' : 'border-border/80 hover:bg-muted/30'
+          )}
+        >
+          <Checkbox
+            id="prepare-website"
+            checked={prepareWebsite}
+            onCheckedChange={(value) => setPrepareWebsite(value === true)}
+            className="mt-0.5"
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
+              Preparar mi página web para {verticalLabels[vertical]}
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+              Al guardar se ajustan la plantilla, los textos de la portada, los beneficios, «Cómo atendés», las reservas (si tenés agenda) y cómo vendés.
+              Reemplaza esos textos; no toca tu nombre, logo, contacto, productos ni cuentas bancarias.
+            </span>
+          </span>
+        </label>
 
         {/* Recomendaciones y Planes Superiores */}
         <div className="grid gap-4 lg:grid-cols-2">
@@ -578,7 +677,7 @@ export function BusinessProfileCard() {
             ) : (
               <Save className="h-4 w-4" />
             )}
-            {saving ? 'Guardando perfil…' : 'Guardar perfil'}
+            {saving ? 'Guardando perfil…' : prepareWebsite ? 'Guardar y preparar la página' : 'Guardar perfil'}
           </Button>
         </div>
       </CardContent>
