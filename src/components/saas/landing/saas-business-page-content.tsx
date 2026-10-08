@@ -2,11 +2,13 @@
 
 import { AppImage } from '@/components/ui/app-image'
 
-import { useMemo, useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   LayoutGrid,
   MapPin,
@@ -16,7 +18,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { MarketplaceOrganization } from '@/lib/public/marketplace'
+import type { BusinessDirectoryPage } from '@/lib/public/business-directory'
 import { describeCatalogState } from '@/lib/public/catalog-state'
 import { rubroLabel } from '@/lib/public/organization-rubro'
 import { organizationAccentColor } from '@/lib/public/organization-brand'
@@ -42,59 +44,73 @@ const ADHERED_PERKS = [
 ]
 
 interface Props {
-  initialOrganizations?: MarketplaceOrganization[]
+  /** La primera página, armada en el servidor; las demás se piden al cambiar de página. */
+  initialPage: BusinessDirectoryPage
 }
 
-function cityKey(city?: string | null) {
-  return (city ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-}
+const SEARCH_DELAY_MS = 300
 
-/** Primero las tiendas con más productos publicados; a igualdad, las que tienen logo. */
-function byShowcase(a: MarketplaceOrganization, b: MarketplaceOrganization) {
-  return (b.products_count ?? 0) - (a.products_count ?? 0) || Number(Boolean(b.logo_url)) - Number(Boolean(a.logo_url))
-}
-
-export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
+export function SaaSBusinessPageContent({ initialPage }: Props) {
+  const [result, setResult] = useState(initialPage)
   const [selectedRubro, setSelectedRubro] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const requestId = useRef(0)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Solo negocios reales: nunca se completa la lista con comercios de ejemplo.
-  const combinedStores = initialOrganizations
+  // Cifras y rubros de todas las tiendas publicadas (no de la página): solo
+  // negocios reales, sin completar la lista con comercios de ejemplo.
+  const summary = initialPage.summary
+  const hasStores = summary.stores > 0
 
-  // Cifras y filtros salen de las tiendas publicadas, no de una lista fija:
-  // antes había filtros (Automotor, Ferreterías) que nunca devolvían nada.
-  const summary = useMemo(() => {
-    // «ENCARNACION» y «Encarnación» son la misma ciudad: se cuentan una vez.
-    const cities = new Set(combinedStores.map((store) => cityKey(store.city)).filter(Boolean))
-    const products = combinedStores.reduce((total, store) => total + (store.products_count ?? 0), 0)
-    const rubros = new Map<string, number>()
-    for (const store of combinedStores) {
-      if (!store.rubro || !rubroLabel(store.rubro)) continue
-      rubros.set(store.rubro, (rubros.get(store.rubro) ?? 0) + 1)
+  // Solo cuenta la última respuesta: si se cambia rápido de página o de
+  // búsqueda, una respuesta vieja no pisa a la nueva.
+  const loadPage = async (next: { page: number; rubro: string; q: string }, scroll = false) => {
+    const id = ++requestId.current
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const params = new URLSearchParams({ page: String(next.page) })
+      if (next.rubro !== 'all') params.set('rubro', next.rubro)
+      if (next.q.trim()) params.set('q', next.q.trim())
+      const response = await fetch(`/api/public/business-directory?${params}`)
+      const body = await response.json()
+      if (id !== requestId.current) return
+      if (!response.ok || !body?.success) throw new Error(body?.error)
+      setResult(body.data as BusinessDirectoryPage)
+      if (scroll) document.getElementById('negocios')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } catch {
+      if (id === requestId.current) setLoadError(true)
+    } finally {
+      if (id === requestId.current) setLoading(false)
     }
-    return {
-      cities: cities.size,
-      products,
-      rubros: [...rubros.entries()].sort((a, b) => b[1] - a[1]),
-    }
-  }, [combinedStores])
+  }
 
-  const query = searchQuery.trim().toLowerCase()
-  const filteredStores = combinedStores
-    .filter((store) => {
-      const matchesRubro = selectedRubro === 'all' || store.rubro === selectedRubro
-      const matchesSearch =
-        !query ||
-        store.name.toLowerCase().includes(query) ||
-        (store.city || '').toLowerCase().includes(query) ||
-        (store.slogan || '').toLowerCase().includes(query) ||
-        (rubroLabel(store.rubro) || '').toLowerCase().includes(query)
-      return matchesRubro && matchesSearch
-    })
-    .sort(byShowcase)
+  const chooseRubro = (rubro: string) => {
+    setSelectedRubro(rubro)
+    void loadPage({ page: 1, rubro, q: searchQuery })
+  }
+
+  const changeSearch = (value: string) => {
+    setSearchQuery(value)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => void loadPage({ page: 1, rubro: selectedRubro, q: value }), SEARCH_DELAY_MS)
+  }
+
+  const goToPage = (page: number) => void loadPage({ page, rubro: selectedRubro, q: searchQuery }, true)
+
+  const resetFilters = () => {
+    setSelectedRubro('all')
+    setSearchQuery('')
+    void loadPage({ page: 1, rubro: 'all', q: '' })
+  }
+
+  const firstShown = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
+  const lastShown = Math.min(result.page * result.pageSize, result.total)
 
   const stats = [
-    { value: combinedStores.length, label: combinedStores.length === 1 ? 'negocio publicado' : 'negocios publicados' },
+    { value: summary.stores, label: summary.stores === 1 ? 'negocio publicado' : 'negocios publicados' },
     { value: summary.cities, label: summary.cities === 1 ? 'ciudad' : 'ciudades' },
     { value: summary.products, label: summary.products === 1 ? 'producto publicado' : 'productos publicados' },
   ].filter((stat) => stat.value > 0)
@@ -178,7 +194,7 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
               </p>
             </div>
 
-            {combinedStores.length > 0 && (
+            {hasStores && (
               <div className="relative w-full md:w-72">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                 <input
@@ -186,7 +202,7 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
                   aria-label="Buscar tienda, ciudad o rubro"
                   placeholder="Buscar tienda o ciudad..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => changeSearch(e.target.value)}
                   className="h-10 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                 />
               </div>
@@ -196,13 +212,13 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
           {/* Rubros con negocios publicados, con cuántos hay de cada uno. */}
           {summary.rubros.length > 1 && (
             <div className="-mx-4 mt-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Filtrar por rubro">
-              {[['all', combinedStores.length] as const, ...summary.rubros].map(([rubro, count]) => {
+              {[['all', summary.stores] as const, ...summary.rubros].map(([rubro, count]) => {
                 const isSelected = selectedRubro === rubro
                 return (
                   <button
                     key={rubro}
                     type="button"
-                    onClick={() => setSelectedRubro(rubro)}
+                    onClick={() => chooseRubro(rubro)}
                     aria-pressed={isSelected}
                     className={cn(
                       'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
@@ -219,8 +235,20 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
             </div>
           )}
 
-          <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredStores.map((store) => {
+          {hasStores && result.total > 0 && (
+            <p className="mt-5 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
+              Mostrando {firstShown}–{lastShown} de {result.total} {result.total === 1 ? 'negocio' : 'negocios'}
+            </p>
+          )}
+
+          {loadError && (
+            <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              No pudimos cargar los negocios. Revisá tu conexión y probá de nuevo.
+            </p>
+          )}
+
+          <ul aria-busy={loading} className={cn('mt-3 grid grid-cols-1 gap-4 transition-opacity sm:grid-cols-2 lg:grid-cols-3', loading && 'opacity-60')}>
+            {result.items.map((store) => {
               const accent = organizationAccentColor(store)
               const catalog = describeCatalogState(store)
               const rubro = rubroLabel(store.rubro)
@@ -318,28 +346,55 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
             })}
           </ul>
 
-          {filteredStores.length === 0 && (
+          {result.pageCount > 1 && (
+            <nav aria-label="Páginas de negocios" className="mt-8 flex items-center justify-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(result.page - 1)}
+                disabled={loading || result.page <= 1}
+                className="gap-1 rounded-xl"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                Anterior
+              </Button>
+              <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                Página {result.page} de {result.pageCount}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(result.page + 1)}
+                disabled={loading || result.page >= result.pageCount}
+                className="gap-1 rounded-xl"
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </nav>
+          )}
+
+          {result.total === 0 && !loading && (
             <div className="mt-8 rounded-2xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-800">
               <Building2 className="mx-auto mb-3 h-10 w-10 text-slate-400" aria-hidden="true" />
               {/* No es lo mismo «el filtro no encontró» que «todavía no hay ninguno». */}
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                {combinedStores.length === 0
+                {!hasStores
                   ? 'Todavía no hay negocios publicados'
                   : 'No se encontraron tiendas con ese filtro'}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {combinedStores.length === 0
+                {!hasStores
                   ? 'Los comercios aparecen acá cuando publican su tienda en el marketplace.'
                   : 'Probá con otro rubro o borrá la búsqueda.'}
               </p>
-              {combinedStores.length > 0 && (
+              {hasStores && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setSelectedRubro('all')
-                    setSearchQuery('')
-                  }}
+                  onClick={resetFilters}
                   className="mt-4 rounded-xl text-xs"
                 >
                   Ver todos los comercios
@@ -348,7 +403,7 @@ export function SaaSBusinessPageContent({ initialOrganizations = [] }: Props) {
             </div>
           )}
 
-          {combinedStores.length > 0 && (
+          {hasStores && (
             <p className="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">
               ¿Buscás productos?{' '}
               <Link href="/marketplace/empresas" className="font-semibold text-cyan-700 underline-offset-2 hover:underline dark:text-cyan-400">

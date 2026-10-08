@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const PAGINA = leer('src/components/saas/landing/saas-business-page-content.tsx')
 const MARKETPLACE = leer('src/lib/public/marketplace.ts')
+const DIRECTORIO = leer('src/lib/public/business-directory.ts')
+const SERVIDOR = leer('src/app/saas/negocios/page.tsx')
 
 /** El archivo sin comentarios: varios explican lo que se quitó y lo nombran. */
 const SOLO_CODIGO = PAGINA
@@ -30,14 +32,15 @@ describe('solo se muestran negocios reales', () => {
   })
 
   it('la lista es la que viene del servidor, sin relleno', () => {
-    expect(PAGINA).toContain('const combinedStores = initialOrganizations')
+    expect(SERVIDOR).toContain('pageDirectory(organizations, { page: 1 })')
+    expect(PAGINA).toContain('const [result, setResult] = useState(initialPage)')
   })
 
   it('las cifras y los filtros salen de las tiendas publicadas', () => {
     // Antes había filtros fijos (Automotor, Ferreterías) que nunca devolvían nada.
     expect(SOLO_CODIGO).not.toContain('CATEGORY_FILTERS')
-    expect(PAGINA).toContain('store.rubro === selectedRubro')
-    expect(PAGINA).toContain('combinedStores.reduce((total, store) => total + (store.products_count ?? 0), 0)')
+    expect(DIRECTORIO).toContain('(!rubro || store.rubro === rubro)')
+    expect(DIRECTORIO).toContain('stores.reduce((total, store) => total + (store.products_count ?? 0), 0)')
   })
 
   it('no inventa textos ni promesas', () => {
