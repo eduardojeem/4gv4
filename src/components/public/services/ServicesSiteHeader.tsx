@@ -7,6 +7,7 @@ import { ArrowRight, CalendarCheck2, Clock, MapPin, Menu, MessageCircle, Moon, P
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
@@ -130,7 +131,18 @@ export function ServicesSiteHeader({
   const status = hydrated ? openStatus(companyInfo?.hours) : { state: 'unknown' as const }
   const statusLabel = openStatusLabel(status)
   const links = servicesSiteLinks(prefix, catalogEnabled, bookingHref)
-  const accountHref = user ? `${prefix}/perfil` : prefix ? `${prefix}/cliente/login` : '/login'
+  // La sesión se conoce en el navegador: hasta hidratar se dibuja «Ingresar», igual que el servidor.
+  const signedIn = hydrated && Boolean(user)
+  const accountHref = signedIn ? `${prefix}/perfil` : prefix ? `${prefix}/cliente/login` : '/login'
+  const fullName = user?.profile?.name?.trim() || user?.email?.split('@')[0] || ''
+  const firstName = fullName.split(/\s+/)[0] || 'Mi perfil'
+  const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'U'
+  const avatar = (size: string) => (
+    <Avatar className={cn(size, 'ring-2 ring-primary/30')}>
+      <AvatarImage src={user?.profile?.avatar_url || ''} alt="" />
+      <AvatarFallback className="bg-primary text-[11px] font-bold text-primary-foreground">{initials}</AvatarFallback>
+    </Avatar>
+  )
 
   const onHome = pathname === `${prefix}/inicio` || pathname === prefix || pathname === '/'
   const activeSection = useActiveSection(['servicios', 'reservar', 'resenas', 'contacto'], onHome)
@@ -251,9 +263,25 @@ export function ServicesSiteHeader({
             <Sun aria-hidden="true" className="h-4.5 w-4.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon aria-hidden="true" className="absolute h-4.5 w-4.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </button>
-          <Link href={accountHref} aria-label={user ? 'Mi perfil' : 'Ingresar'} className={cn('hidden h-10 w-10 items-center justify-center rounded-lg transition-colors sm:flex', tone.link)}>
-            <User aria-hidden="true" className="h-4.5 w-4.5" />
-          </Link>
+          {signedIn ? (
+            <Link
+              href={accountHref}
+              aria-label={`Mi perfil (${fullName || 'cuenta'})`}
+              title="Mi perfil"
+              className={cn('flex h-10 items-center gap-2 rounded-full pl-1 pr-1 transition-colors md:pr-3', tone.link)}
+            >
+              {avatar('h-8 w-8')}
+              <span className="hidden max-w-28 truncate text-sm font-semibold md:inline">{firstName}</span>
+            </Link>
+          ) : (
+            <Link
+              href={accountHref}
+              className={cn('hidden h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors sm:inline-flex', tone.link)}
+            >
+              <User aria-hidden="true" className="h-4 w-4" />
+              Ingresar
+            </Link>
+          )}
           {bookingHref ? (
             <Link
               href={bookingHref}
@@ -311,10 +339,21 @@ export function ServicesSiteHeader({
                 </li>
               ))}
               <li>
-                <Link href={accountHref} onClick={() => setOpen(false)} className={cn('flex items-center gap-2 rounded-xl px-3 py-3 text-base font-semibold', tone.link)}>
-                  <User aria-hidden="true" className="h-4 w-4" />
-                  {user ? 'Mi perfil' : 'Ingresar'}
-                </Link>
+                {signedIn ? (
+                  <Link href={accountHref} onClick={() => setOpen(false)} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5', tone.link)}>
+                    {avatar('h-9 w-9')}
+                    <span className="min-w-0 flex-1 leading-tight">
+                      <span className="block truncate text-base font-semibold">{fullName || 'Mi cuenta'}</span>
+                      <span className={cn('block text-xs', tone.muted)}>Ver mi perfil y mis turnos</span>
+                    </span>
+                    <ArrowRight aria-hidden="true" className="h-4 w-4 opacity-40" />
+                  </Link>
+                ) : (
+                  <Link href={accountHref} onClick={() => setOpen(false)} className={cn('flex items-center gap-2 rounded-xl px-3 py-3 text-base font-semibold', tone.link)}>
+                    <User aria-hidden="true" className="h-4 w-4" />
+                    Ingresar
+                  </Link>
+                )}
               </li>
             </ul>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
