@@ -261,7 +261,8 @@ describe('pantalla de la guía', () => {
 
     expect(screen.queryByText('Analytics')).not.toBeInTheDocument()
     expect(screen.queryByText('Seguridad')).not.toBeInTheDocument()
-    expect(screen.getByText('Usuarios')).toBeInTheDocument()
+    // La guía ofrece Usuarios en más de un acceso; la prueba verifica disponibilidad, no unicidad.
+    expect(screen.getAllByText('Usuarios').length).toBeGreaterThan(0)
   })
 
   it('permite filtrar por categorías y preguntas frecuentes', async () => {

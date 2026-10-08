@@ -27,6 +27,34 @@ type ChartData = {
   color: string
 }
 
+interface CustomRepairsTooltipProps {
+  active?: boolean
+  payload?: Array<{
+    name: string
+    value: number
+    payload: ChartData
+  }>
+}
+
+function CustomRepairsTooltip({ active, payload }: CustomRepairsTooltipProps) {
+  if (active && payload && payload.length) {
+    const item = payload[0]
+    return (
+      <div className="rounded-lg border border-border bg-popover/95 backdrop-blur px-3 py-2 text-popover-foreground shadow-md text-xs">
+        <div className="flex items-center gap-2">
+          <span
+            className="h-2.5 w-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: item.payload.color }}
+          />
+          <span className="font-medium text-foreground">{item.name}:</span>
+          <span className="font-bold tabular-nums text-foreground">{item.value}</span>
+        </div>
+      </div>
+    )
+  }
+  return null
+}
+
 export function RepairsChart() {
   const [data, setData] = useState<ChartData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -126,19 +154,12 @@ export function RepairsChart() {
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Pie>
-          <Tooltip 
-            formatter={(value, name) => [value, name]}
-            contentStyle={{ 
-              backgroundColor: '#fff', 
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px'
-            }}
-          />
+          <Tooltip content={<CustomRepairsTooltip />} />
           <Legend 
             verticalAlign="bottom" 
             height={36}
-            formatter={(value, entry) => (
-              <span style={{ color: entry.color }}>{value}</span>
+            formatter={(value) => (
+              <span className="text-xs text-foreground font-medium ml-1 mr-2">{value}</span>
             )}
           />
         </PieChart>

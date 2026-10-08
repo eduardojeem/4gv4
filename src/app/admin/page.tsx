@@ -22,19 +22,25 @@ import {
   filterCategoriesByPermissions,
   type NavItem,
 } from '@/config/admin-navigation'
+import { Input } from '@/components/ui/input'
+import { normalizeText } from '@/lib/text/normalize'
 import {
   AlertTriangle,
   ArrowRight,
   Building2,
   CheckCircle2,
-  ChevronRight, LayoutDashboard,
+  ChevronRight,
+  LayoutDashboard,
   Monitor,
   Package,
   RefreshCw,
-  Settings, TrendingUp,
+  Search,
+  Settings,
+  TrendingUp,
   Users,
   WalletCards,
   Wrench,
+  X,
   type LucideIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -161,6 +167,25 @@ export default function AdminHome() {
     [hasRepairs, navCategories],
   )
 
+  const [moduleFilter, setModuleFilter] = useState('')
+
+  const filteredSections = useMemo(() => {
+    const query = normalizeText(moduleFilter)
+    if (!query) return sections
+
+    return sections
+      .map(category => ({
+        ...category,
+        items: category.items.filter(item => {
+          const title = normalizeText(item.label)
+          const desc = normalizeText(item.description)
+          const cat = normalizeText(category.label)
+          return title.includes(query) || desc.includes(query) || cat.includes(query)
+        }),
+      }))
+      .filter(category => category.items.length > 0)
+  }, [moduleFilter, sections])
+
   // El resumen financiero se consulta contra la organización activa
   const canSeeFinances = isAdmin || hasPermission('finances.read')
   const branchScope = selectedBranch?.name ?? 'Todas las sucursales'
@@ -222,52 +247,55 @@ export default function AdminHome() {
       </div>
 
       {/* Quick Action Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1 shrink-0">
-          Accesos Rápidos:
-        </span>
-        <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-          <Link href="/admin/cash-monitor">
-            <Monitor className="h-3.5 w-3.5" />
-            Monitor de Cajas
-            {cashAlertsCount > 0 ? (
-              <span className="ml-1 rounded-full bg-destructive px-1.5 py-0.2 text-[10px] text-destructive-foreground font-bold">
-                {cashAlertsCount}
-              </span>
-            ) : null}
-          </Link>
-        </Button>
-        {canSeeFinances ? (
+      <div className="relative">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pr-6 sm:pr-0">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1 shrink-0">
+            Accesos Rápidos:
+          </span>
           <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-            <Link href="/admin/finances">
-              <WalletCards className="h-3.5 w-3.5" />
-              Finanzas & Gastos
+            <Link href="/admin/cash-monitor">
+              <Monitor className="h-3.5 w-3.5" />
+              Monitor de Cajas
+              {cashAlertsCount > 0 ? (
+                <span className="ml-1 rounded-full bg-destructive px-1.5 py-0.2 text-[10px] text-destructive-foreground font-bold">
+                  {cashAlertsCount}
+                </span>
+              ) : null}
             </Link>
           </Button>
-        ) : null}
-        <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-          <Link href="/admin/inventory">
-            <Package className="h-3.5 w-3.5" />
-            Inventario & Stock
-            {overviewMetrics.lowStockCount > 0 ? (
-              <span className="ml-1 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 text-[10px] font-bold">
-                {overviewMetrics.lowStockCount}
-              </span>
-            ) : null}
-          </Link>
-        </Button>
-        <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-          <Link href="/admin/users">
-            <Users className="h-3.5 w-3.5" />
-            Usuarios
-          </Link>
-        </Button>
-        <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
-          <Link href="/admin/settings">
-            <Settings className="h-3.5 w-3.5" />
-            Configuración
-          </Link>
-        </Button>
+          {canSeeFinances ? (
+            <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
+              <Link href="/admin/finances">
+                <WalletCards className="h-3.5 w-3.5" />
+                Finanzas & Gastos
+              </Link>
+            </Button>
+          ) : null}
+          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
+            <Link href="/admin/inventory">
+              <Package className="h-3.5 w-3.5" />
+              Inventario & Stock
+              {overviewMetrics.lowStockCount > 0 ? (
+                <span className="ml-1 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 text-[10px] font-bold">
+                  {overviewMetrics.lowStockCount}
+                </span>
+              ) : null}
+            </Link>
+          </Button>
+          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
+            <Link href="/admin/users">
+              <Users className="h-3.5 w-3.5" />
+              Usuarios
+            </Link>
+          </Button>
+          <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
+            <Link href="/admin/settings">
+              <Settings className="h-3.5 w-3.5" />
+              Configuración
+            </Link>
+          </Button>
+        </div>
+        <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-background to-transparent sm:hidden" />
       </div>
 
       {/* Actionable Attention Banner */}
@@ -437,91 +465,138 @@ export default function AdminHome() {
                 Tendencias Operativas
               </h2>
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className={cn('grid gap-4', hasRepairs ? 'lg:grid-cols-2' : 'grid-cols-1')}>
+              <Card className="min-w-0 border shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Ventas</CardTitle>
+                  <CardDescription>Tendencia semanal</CardDescription>
+                </CardHeader>
+                <CardContent className="min-w-0">
+                  <SalesChart />
+                </CardContent>
+              </Card>
+
               {hasRepairs ? (
                 <Card className="min-w-0 border shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Ventas</CardTitle>
-                    <CardDescription>Tendencia semanal</CardDescription>
+                    <CardTitle className="text-base">Reparaciones</CardTitle>
+                    <CardDescription>Distribución por estado</CardDescription>
                   </CardHeader>
                   <CardContent className="min-w-0">
-                    <SalesChart />
+                    <RepairsChart />
                   </CardContent>
                 </Card>
               ) : null}
-
-              <Card className="min-w-0 border shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Reparaciones</CardTitle>
-                  <CardDescription>Distribución por estado</CardDescription>
-                </CardHeader>
-                <CardContent className="min-w-0">
-                  <RepairsChart />
-                </CardContent>
-              </Card>
             </div>
           </section>
         </TabsContent>
 
         {/* TAB 2: Módulos y Gestión del Sistema */}
         <TabsContent value="modules" className="space-y-6 m-0 focus-visible:outline-none">
-          {sections.map((category) => (
-            <section key={category.id} className="space-y-3" aria-labelledby={`admin-section-${category.id}`}>
-              <div className="flex items-center gap-2">
-                <h2
-                  id={`admin-section-${category.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Catálogo de Módulos</p>
+              <p className="text-xs text-muted-foreground">Accede a las herramientas activas de tu organización</p>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                type="search"
+                placeholder="Filtrar módulos…"
+                value={moduleFilter}
+                onChange={(e) => setModuleFilter(e.target.value)}
+                className="pl-8 pr-8 h-9 text-xs"
+              />
+              {moduleFilter ? (
+                <button
+                  type="button"
+                  onClick={() => setModuleFilter('')}
+                  className="absolute right-2.5 top-2.5 text-xs text-muted-foreground hover:text-foreground"
+                  aria-label="Limpiar filtro"
                 >
-                  {category.label}
-                </h2>
-                <span className="text-xs text-muted-foreground/60 font-normal">
-                  ({category.items.length} {category.items.length === 1 ? 'módulo' : 'módulos'})
-                </span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {category.items.map((item: NavItem) => {
-                  const Icon = item.icon
-                  const hasBadge = item.badge ? (navBadges[item.badge] ?? 0) > 0 : false
-                  const badgeValue = item.badge ? navBadges[item.badge] ?? 0 : 0
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+          </div>
 
-                  return (
-                    <Link
-                      key={item.key}
-                      href={item.href as string}
-                      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <Card className="h-full border transition-all duration-200 hover:border-primary/40 hover:bg-muted/40 hover:shadow-sm">
-                        <CardContent className="flex items-center gap-3.5 p-4">
-                          <div className="rounded-xl bg-primary/10 p-3 text-primary transition-all duration-200 group-hover:scale-105 group-hover:bg-primary group-hover:text-primary-foreground shrink-0">
-                            <Icon className="h-5 w-5" aria-hidden="true" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                                {item.label}
-                              </h3>
-                              {hasBadge ? (
-                                <Badge variant="destructive" className="h-4 px-1 text-[9px] font-bold">
-                                  {badgeValue}
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <p className="truncate text-xs text-muted-foreground mt-0.5">
-                              {item.description}
-                            </p>
-                          </div>
-                          <ChevronRight
-                            className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-1 group-hover:text-foreground"
-                            aria-hidden="true"
-                          />
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  )
-                })}
+          {filteredSections.length === 0 ? (
+            <Card className="border-dashed p-8 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Search className="h-6 w-6 text-muted-foreground" />
               </div>
-            </section>
-          ))}
+              <p className="mt-3 text-sm font-semibold text-foreground">No se encontraron módulos</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                No hay coincidencias para &quot;{moduleFilter}&quot;.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setModuleFilter('')}
+                className="mt-4"
+              >
+                Limpiar filtro
+              </Button>
+            </Card>
+          ) : (
+            filteredSections.map((category) => (
+              <section key={category.id} className="space-y-3" aria-labelledby={`admin-section-${category.id}`}>
+                <div className="flex items-center gap-2">
+                  <h2
+                    id={`admin-section-${category.id}`}
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    {category.label}
+                  </h2>
+                  <span className="text-xs text-muted-foreground/60 font-normal">
+                    ({category.items.length} {category.items.length === 1 ? 'módulo' : 'módulos'})
+                  </span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {category.items.map((item: NavItem) => {
+                    const Icon = item.icon
+                    const hasBadge = item.badge ? (navBadges[item.badge] ?? 0) > 0 : false
+                    const badgeValue = item.badge ? navBadges[item.badge] ?? 0 : 0
+
+                    return (
+                      <Link
+                        key={item.key}
+                        href={item.href as string}
+                        className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <Card className="h-full border transition-all duration-200 hover:border-primary/40 hover:bg-muted/40 hover:shadow-sm">
+                          <CardContent className="flex items-center gap-3.5 p-4">
+                            <div className="rounded-xl bg-primary/10 p-3 text-primary transition-all duration-200 group-hover:scale-105 group-hover:bg-primary group-hover:text-primary-foreground shrink-0">
+                              <Icon className="h-5 w-5" aria-hidden="true" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                                  {item.label}
+                                </h3>
+                                {hasBadge ? (
+                                  <Badge variant="destructive" className="h-4 px-1 text-[9px] font-bold">
+                                    {badgeValue}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <p className="truncate text-xs text-muted-foreground mt-0.5">
+                                {item.description}
+                              </p>
+                            </div>
+                            <ChevronRight
+                              className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-1 group-hover:text-foreground"
+                              aria-hidden="true"
+                            />
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </section>
+            ))
+          )}
         </TabsContent>
       </Tabs>
     </div>
