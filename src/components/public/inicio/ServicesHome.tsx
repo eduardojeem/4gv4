@@ -171,8 +171,9 @@ export function ServicesHero({ companyInfo, heroContent, bookingHref, contactHre
   const preview = menu.slice(0, 4)
 
   return (
-    <section className="relative overflow-hidden bg-slate-950 text-white" data-storefront-hero="services">
-      <div aria-hidden="true" className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary/30 blur-3xl" />
+    <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-muted/60 text-foreground dark:from-slate-950 dark:via-slate-950 dark:to-slate-950 dark:text-white" data-storefront-hero="services">
+      {/* Sigue al tema elegido: clara con el color de la marca, u oscura. */}
+      <div aria-hidden="true" className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary/20 blur-3xl dark:bg-primary/30" />
       <div className="container relative mx-auto grid gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-12 lg:items-center lg:px-8 lg:py-20">
         <div className="lg:col-span-7">
           <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-primary">
@@ -181,14 +182,14 @@ export function ServicesHero({ companyInfo, heroContent, bookingHref, contactHre
           <h1 className="mt-4 text-balance font-serif text-4xl leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
             {heroContent.title || companyInfo.name || 'Tu mejor versión empieza acá'}
           </h1>
-          <p className="mt-5 max-w-lg text-base leading-relaxed text-slate-300 sm:text-lg">
+          <p className="mt-5 max-w-lg text-base leading-relaxed text-muted-foreground sm:text-lg dark:text-slate-300">
             {heroContent.subtitle || 'Elegí el servicio, el día y el horario que te quede cómodo.'}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             {bookingHref ? (
               <Link
                 href={bookingHref}
-                className="group inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                className="group inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-white dark:focus-visible:ring-offset-slate-950"
               >
                 <CalendarCheck2 aria-hidden="true" className="h-4 w-4" />
                 {heroContent.ctaPrimaryText || 'Reservar turno'}
@@ -200,17 +201,17 @@ export function ServicesHero({ companyInfo, heroContent, bookingHref, contactHre
               rel={phoneClean ? 'noopener noreferrer' : undefined}
               className={
                 bookingHref
-                  ? 'inline-flex h-12 items-center gap-2 rounded-full border border-white/30 px-6 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
-                  : 'inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
+                  ? 'inline-flex h-12 items-center gap-2 rounded-full border border-foreground/20 px-6 text-sm font-semibold text-foreground transition hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/30 dark:text-white dark:hover:bg-white/10 dark:focus-visible:ring-white'
+                  : 'inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:focus-visible:ring-white'
               }
             >
               <MessageCircle aria-hidden="true" className="h-4 w-4" />
               {bookingHref ? heroContent.ctaSecondaryText || 'Consultar' : 'Pedir turno por WhatsApp'}
             </a>
           </div>
-          {nextSlot && bookingHref && <NextSlotBadge slot={nextSlot} bookingHref={bookingHref} onBook={onBookNext} />}
+          {nextSlot && bookingHref && <NextSlotBadge slot={nextSlot} bookingHref={bookingHref} onBook={onBookNext} tone="auto" />}
           {(hours || companyInfo.address) && (
-            <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-300">
+            <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground dark:text-slate-300">
               {hours && (
                 <li className="flex items-center gap-2">
                   <Clock aria-hidden="true" className="h-4 w-4 text-primary" />
@@ -229,20 +230,20 @@ export function ServicesHero({ companyInfo, heroContent, bookingHref, contactHre
 
         {preview.length > 0 && (
           <div className="lg:col-span-5">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+            <div className="rounded-3xl border border-border bg-card/80 p-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:shadow-none">
               <p className="font-serif text-xl">Nuestros servicios</p>
-              <ul className="mt-4 divide-y divide-white/10">
+              <ul className="mt-4 divide-y divide-border dark:divide-white/10">
                 {preview.map((item) => (
                   <li key={item.id} className="flex items-baseline gap-3 py-3">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{item.name}</span>
-                      {item.duration && <span className="text-xs text-slate-400">{item.duration}</span>}
+                      {item.duration && <span className="text-xs text-muted-foreground dark:text-slate-400">{item.duration}</span>}
                     </span>
                     {item.price && <span className="shrink-0 font-semibold text-primary">{item.price}</span>}
                   </li>
                 ))}
               </ul>
-              <a href="#servicios" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-white/80 hover:text-white">
+              <a href="#servicios" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-foreground/80 hover:text-foreground dark:text-white/80 dark:hover:text-white">
                 Ver la carta completa <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
               </a>
             </div>
@@ -403,12 +404,17 @@ export function NextSlotBadge({
   slot: NextFreeSlot
   bookingHref: string
   onBook?: (serviceId: string) => void
-  tone?: 'dark' | 'light'
+  /** «auto»: sigue al tema de la página (la portada de Servicios). */
+  tone?: 'dark' | 'light' | 'auto'
 }) {
   const label = `${formatNextSlot(slot)}${slot.professionalName ? ` con ${slot.professionalName}` : ''}`
   const className = cn(
     'mt-6 inline-flex max-w-full items-center gap-3 rounded-2xl border px-4 py-2.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-    tone === 'dark' ? 'border-white/15 bg-white/10 text-white hover:bg-white/15' : 'border-primary/25 bg-primary/5 hover:bg-primary/10'
+    tone === 'dark'
+      ? 'border-white/15 bg-white/10 text-white hover:bg-white/15'
+      : tone === 'auto'
+        ? 'border-primary/25 bg-primary/5 hover:bg-primary/10 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15'
+        : 'border-primary/25 bg-primary/5 hover:bg-primary/10'
   )
   const content = (
     <>
@@ -417,7 +423,7 @@ export function NextSlotBadge({
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
       </span>
       <span className="min-w-0">
-        <span className={cn('block text-xs', tone === 'dark' ? 'text-slate-300' : 'text-muted-foreground')}>Próximo turno libre · {slot.serviceName}</span>
+        <span className={cn('block text-xs', tone === 'dark' ? 'text-slate-300' : tone === 'auto' ? 'text-muted-foreground dark:text-slate-300' : 'text-muted-foreground')}>Próximo turno libre · {slot.serviceName}</span>
         <span className="block truncate font-semibold">{label}</span>
       </span>
       <ArrowRight aria-hidden="true" className="h-4 w-4 shrink-0" />

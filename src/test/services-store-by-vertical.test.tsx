@@ -86,3 +86,23 @@ describe('una barbería no muestra cosas de tienda o de taller', () => {
     expect(screen.queryByText('Reservar turno')).not.toBeInTheDocument()
   })
 })
+
+describe('modo claro u oscuro en la plantilla Servicios', () => {
+  it('el encabezado ofrece cambiar el tema sin depender del servidor', () => {
+    const header = leer('src/components/public/services/ServicesSiteHeader.tsx')
+    expect(header).toContain('aria-label="Cambiar entre modo claro y oscuro"')
+    expect(header).toContain("setTheme(isDark ? 'light' : 'dark')")
+    // El ícono sale de la clase «dark»: el HTML del servidor es el mismo en ambos temas.
+    expect(header).toContain('dark:scale-100')
+  })
+})
+
+describe('la portada de Servicios sigue al tema', () => {
+  it('en modo claro usa los colores del tema y en oscuro conserva el fondo oscuro', () => {
+    const home = leer('src/components/public/inicio/ServicesHome.tsx')
+    const portada = home.slice(home.indexOf('export function ServicesHero'), home.indexOf('const RESERVE_BUTTON_CLASS'))
+    expect(portada).toContain('from-primary/10 via-background to-muted/60 text-foreground dark:from-slate-950')
+    expect(portada).not.toMatch(/className="relative overflow-hidden bg-slate-950/)
+    expect(portada).toContain('tone="auto"')
+  })
+})

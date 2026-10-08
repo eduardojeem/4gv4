@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/hooks/useWebsiteSettings', () => ({ useWebsiteSettings: () => ({ settings: state.settings }) }))
 vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ user: null }) }))
+vi.mock('@/contexts/theme-context', () => ({ useTheme: () => ({ isDark: false, setTheme: () => {} }) }))
 vi.mock('@/components/public/cart/PublicCartButton', () => ({ PublicCartButton: () => <button type="button">Carrito</button> }))
 // La tienda de productos no se prueba acá: alcanza con saber cuál se eligió.
 vi.mock('@/components/public/PublicHeader', () => ({ PublicHeader: () => <header>Encabezado de tienda</header> }))

@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarCheck2, Clock, MapPin, Menu, MessageCircle, User, X } from 'lucide-react'
+import { CalendarCheck2, Clock, MapPin, Menu, MessageCircle, Moon, Sun, User, X } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
 import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { useAuth } from '@/contexts/auth-context'
+import { useTheme } from '@/contexts/theme-context'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { headerOptionFor } from '@/lib/website/storefront-style'
@@ -52,6 +53,8 @@ export function ServicesSiteHeader({
   const effectiveSettings = settings ?? initialSettings
   const companyInfo = useStorefrontCompanyInfo(effectiveSettings?.company_info)
   const [open, setOpen] = useState(false)
+  const { isDark, setTheme } = useTheme()
+  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
 
   const pathSlug = getTenantSlugFromPathname(pathname)
   const prefix = pathSlug ? `/${pathSlug}` : ''
@@ -116,6 +119,17 @@ export function ServicesSiteHeader({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {catalogEnabled && <PublicCartButton />}
+          {/* El ícono lo decide la clase «dark» (CSS): el servidor no sabe el tema elegido. */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Cambiar entre modo claro y oscuro"
+            title="Modo claro u oscuro"
+            className={cn('relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary', tone.link)}
+          >
+            <Sun aria-hidden="true" className="h-4.5 w-4.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon aria-hidden="true" className="absolute h-4.5 w-4.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          </button>
           <Link href={accountHref} aria-label={user ? 'Mi perfil' : 'Ingresar'} className={cn('hidden h-10 w-10 items-center justify-center rounded-lg transition-colors sm:flex', tone.link)}>
             <User aria-hidden="true" className="h-4.5 w-4.5" />
           </Link>
