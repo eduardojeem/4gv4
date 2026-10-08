@@ -341,7 +341,6 @@ function POSPageContent() {
   }
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [sidebarCollapsed, _setSidebarCollapsed] = useState(false)
-  const [showCartDialog, setShowCartDialog] = useState(false)
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
   const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
@@ -1446,8 +1445,11 @@ function POSPageContent() {
     canManageRegisters={canManageRegisters}
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-    onOpenCart={() => setShowCartDialog(true)}
-    cartExpanded={showCartDialog}
+    onOpenCart={() => {
+      if (window.matchMedia('(min-width: 768px)').matches) document.getElementById('pos-cart-panel')?.focus()
+      else setIsMobileCartOpen(true)
+    }}
+    cartExpanded={isMobileCartOpen}
     cartItemCount={cartItemCount}
     mobileCompact
   >
@@ -1462,84 +1464,6 @@ function POSPageContent() {
             </div>
           </POSHeader>
 
-    {/* Cart Overview Dialog */}
-  <Dialog open={showCartDialog} onOpenChange={setShowCartDialog}>
-    <DialogContent className="max-w-2xl p-0 overflow-hidden">
-      <DialogHeader className="px-5 py-4 border-b bg-muted/30">
-        <DialogTitle className="flex items-center gap-2">
-          <ShoppingCart className="h-4 w-4 text-primary" />
-          Productos en el carrito
-        </DialogTitle>
-        <DialogDescription>
-          Revisa cantidades y montos antes de finalizar la venta.
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="px-5 py-3 border-b bg-background/80">
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <p className="text-[11px] text-muted-foreground">Items</p>
-            <p className="font-semibold">{combinedCartItems.length}</p>
-          </div>
-          <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
-            <p className="text-[11px] text-muted-foreground">Total</p>
-            <p className="font-semibold text-primary">{formatCurrency(cartCalculations.total)}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-h-[52vh] overflow-y-auto">
-        {combinedCartItems.length === 0 ? (
-          <div className="py-12 text-center">
-            <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-muted/40 flex items-center justify-center">
-              <ShoppingCart className="h-6 w-6 text-muted-foreground/60" />
-            </div>
-            <p className="text-sm font-medium">Carrito vacío</p>
-            <p className="text-xs text-muted-foreground">Agrega productos para continuar</p>
-          </div>
-        ) : (
-          <div className="divide-y">
-            {combinedCartItems.map((item) => (
-              <div key={item.id} className="px-5 py-3 flex items-start justify-between gap-3 hover:bg-muted/20 transition-colors">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    {item.isService && (
-                      <Badge variant="secondary" className="h-5 text-[10px]">Servicio</Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {item.quantity} x {formatCurrency(item.price)}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold">{formatCurrency((item.price ?? 0) * (item.quantity ?? 1))}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <DialogFooter className="px-5 py-4 border-t bg-background/95">
-        <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="text-sm">
-            <span className="text-muted-foreground">Total a cobrar: </span>
-            <span className="font-bold text-base text-primary">{formatCurrency(cartCalculations.total)}</span>
-          </div>
-          <div className="flex gap-2 sm:justify-end">
-            <Button variant="outline" onClick={() => setShowCartDialog(false)}>Cerrar</Button>
-            <Button className="pos-button-primary pos-button-confirm-sale" disabled={!checkoutEligibility.canConfirm} title={checkoutEligibility.reason} onClick={() => { setShowCartDialog(false); handleOpenCheckout() }}>
-              Cobrar
-            </Button>
-          </div>
-        </div>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-
-
-
           {/* Barra de búsqueda y filtros */}
           <div className="border-b border-border/70 bg-card/90 px-3 py-1.5 backdrop-blur-md lg:px-4">
             <div className="pos-panel flex flex-col gap-1.5 rounded-lg p-1 lg:flex-row lg:items-center bg-muted/20 border border-border/50">
@@ -1549,19 +1473,20 @@ function POSPageContent() {
                   <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-primary/70 h-3.5 w-3.5 pointer-events-none" />
                   <Input
                     id="search-input"
-                    placeholder="Buscar por nombre, código de barras, SKU o marca..."
+                    placeholder="Buscar nombre, código, SKU o marca"
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
-                    className="h-8 pl-8 pr-12 text-xs rounded-md bg-background/80 border-border/70 focus-visible:ring-primary/40 focus-visible:border-primary shadow-xs transition-all placeholder:text-muted-foreground/60"
+                    className="h-10 pl-8 pr-12 text-base sm:h-8 sm:text-xs rounded-md bg-background/80 border-border/70 focus-visible:ring-primary/40 focus-visible:border-primary shadow-xs transition-all placeholder:text-muted-foreground/60"
                   />
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                     {searchTerm && (
                       <button
                         type="button"
                         onClick={() => handleSearchChange('')}
-                        className="p-0.5 text-muted-foreground hover:text-foreground rounded-full"
+                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground rounded-full sm:h-auto sm:w-auto sm:p-0.5"
                         title="Limpiar búsqueda"
+                        aria-label="Limpiar búsqueda"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -1598,7 +1523,7 @@ function POSPageContent() {
                   size="sm"
                   onClick={() => setCreditOnly(!creditOnly)}
                   aria-pressed={creditOnly}
-                  className="h-7.5 px-2.5 text-xs"
+                  className="h-9 px-3 text-xs"
                 >
                   <CreditCard className="mr-1 h-3.5 w-3.5" />
                   Con cuotas
@@ -1608,7 +1533,8 @@ function POSPageContent() {
                   variant={isMobileFiltersOpen ? "default" : "outline"}
                   size="sm"
                   onClick={() => setIsMobileFiltersOpen((v) => !v)}
-                  className="h-7.5 text-xs"
+                  aria-expanded={isMobileFiltersOpen}
+                  className="h-9 px-3 text-xs"
                 >
                   <Filter className="h-3.5 w-3.5 mr-1.5" />
                   Filtros
@@ -1625,7 +1551,7 @@ function POSPageContent() {
               <div className={`flex flex-wrap items-center gap-1.5 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
                 {/* Selector de Categoría */}
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="h-8 w-full sm:w-40 lg:w-36 text-xs">
+                  <SelectTrigger className="h-9 w-full sm:w-40 lg:h-8 lg:w-36 text-xs">
                     <SelectValue placeholder="Categoría" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1642,7 +1568,7 @@ function POSPageContent() {
                   variant={showFeatured ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowFeatured(!showFeatured)}
-                  className={`h-8 text-xs transition-all px-2.5 ${showFeatured ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs' : ''}`}
+                  className={`h-9 lg:h-8 text-xs transition-all px-2.5 ${showFeatured ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs' : ''}`}
                 >
                   <Star className={`h-3 w-3 mr-1 ${showFeatured ? 'fill-white' : 'text-amber-500'}`} />
                   Destacados
@@ -1665,10 +1591,11 @@ function POSPageContent() {
                   variant={showAdvancedFilters || activeFiltersCount > 0 ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className="h-8 text-xs relative px-2.5"
+                  className="h-9 lg:h-8 text-xs relative px-2.5"
                 >
                   <SlidersHorizontal className="h-3 w-3 mr-1" />
-                  Filtros
+                  <span className="lg:hidden">Avanzados</span>
+                  <span className="hidden lg:inline">Filtros</span>
                   {activeFiltersCount > 0 && (
                     <Badge className="ml-1 h-3.5 min-w-[14px] px-1 text-[9px] bg-white text-primary dark:bg-black dark:text-white font-bold rounded-full">
                       {activeFiltersCount}
@@ -1680,7 +1607,7 @@ function POSPageContent() {
                 {/* Menú "Más" Potenciado */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1 hover:bg-muted px-2.5">
+                    <Button variant="outline" size="sm" className="h-9 lg:h-8 text-xs font-medium gap-1 hover:bg-muted px-2.5">
                       <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                       Más
                     </Button>
@@ -2097,7 +2024,7 @@ function POSPageContent() {
             {/* Lista de productos */}
             <div className="flex-1 min-h-0 p-2.5 sm:p-3 md:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
               <div className="mb-2.5 space-y-2.5">
-                <div className="pos-panel flex items-center justify-between px-3 py-1.5 rounded-lg">
+                <div className="pos-panel flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h2 className="pos-heading text-base md:text-lg font-semibold text-foreground flex items-center gap-2" id="products-heading">
                       {catalogView === 'services' ? <Wrench className="h-4 w-4 text-primary" /> : <Package className="h-4 w-4 text-primary" />}
@@ -2117,7 +2044,7 @@ function POSPageContent() {
                             aria-selected={catalogView === value}
                             onClick={() => setCatalogView(value)}
                             className={cn(
-                              'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                              'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors lg:h-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                               catalogView === value
                                 ? 'bg-background text-foreground shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground',
@@ -2134,7 +2061,7 @@ function POSPageContent() {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1 rounded-full border border-border/50">
                       <Tag className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">Mayorista (F9)</span>
+                      <span className="text-xs font-medium text-muted-foreground">Mayorista<span className="hidden lg:inline"> (F9)</span></span>
                       <Switch
                         checked={isWholesale}
                         onCheckedChange={handleWholesaleToggle}
@@ -2299,7 +2226,7 @@ function POSPageContent() {
                         setCurrentPage(1)
                       }}
                     >
-                      <SelectTrigger className="h-7 w-[72px] text-xs">
+                      <SelectTrigger className="h-9 w-[72px] text-xs sm:h-7">
                         <SelectValue placeholder="12" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2322,7 +2249,7 @@ function POSPageContent() {
                         size="sm"
                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
-                        className="h-7 px-2 text-xs shadow-xs"
+                        className="h-9 px-3 text-xs shadow-xs sm:h-7 sm:px-2"
                       >
                         <ChevronLeft className="h-3.5 w-3.5 mr-0.5" />
                         Anterior
@@ -2335,7 +2262,7 @@ function POSPageContent() {
                         size="sm"
                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
-                        className="h-7 px-2 text-xs shadow-xs"
+                        className="h-9 px-3 text-xs shadow-xs sm:h-7 sm:px-2"
                       >
                         Siguiente
                         <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
@@ -2411,10 +2338,10 @@ function POSPageContent() {
                 type="button"
                 aria-label="Abrir carrito"
                 aria-expanded={isMobileCartOpen}
-                className="flex flex-col justify-center text-left cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors border border-border/60 relative"
+                className="relative flex min-w-0 flex-col justify-center rounded-xl border border-border/60 px-3 py-2 text-left transition-colors hover:bg-muted/50 active:bg-muted"
               >
-                 <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount} items en carrito</span>
-                 <span className="font-bold text-base">{formatCurrency(unifiedCalculations.total)}</span>
+                 <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount === 1 ? '1 ítem' : `${unifiedCalculations.totalItemCount} ítems`} · ver carrito</span>
+                 <span className="truncate font-bold text-base tabular-nums">{formatCurrency(unifiedCalculations.total)}</span>
                  {unifiedCalculations.totalItemCount > 0 && (
                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                      {unifiedCalculations.totalItemCount}
@@ -2422,7 +2349,7 @@ function POSPageContent() {
                  )}
               </button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col overflow-hidden">
+            <SheetContent side="bottom" className="h-[85dvh] p-0 flex flex-col overflow-hidden rounded-t-2xl">
               <SheetHeader className="p-4 border-b">
                 <SheetTitle>Carrito de Compras</SheetTitle>
               </SheetHeader>
@@ -2475,7 +2402,6 @@ function POSPageContent() {
           >
             <CreditCard className="mr-2 h-5 w-5" />
             Cobrar
-            <span className="ml-2 font-bold tabular-nums">{formatCurrency(unifiedCalculations.total)}</span>
           </Button>
         </div>
       </div>

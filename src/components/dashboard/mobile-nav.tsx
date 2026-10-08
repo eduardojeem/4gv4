@@ -35,6 +35,10 @@ export const MobileNav = memo(function MobileNav() {
   }, [userRole, effectiveModules, hasPermission, businessVertical])
   const activeItem = useMemo(() => getDashboardNavItemByPath(pathname), [pathname])
 
+  // El POS tiene su propia barra inferior («Cobrar»): las dos iban en el mismo
+  // lugar y esta, por estar después en la página, tapaba el botón de cobro.
+  if (pathname === '/dashboard/pos') return null
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/80 shadow-lg">
       <div className="flex items-center justify-around px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">

@@ -242,20 +242,21 @@ export const ProductCard = memo(({
             e.stopPropagation()
             onViewDetail(product)
           }}
-          className="absolute top-1.5 right-1.5 z-20 h-5.5 w-5.5 rounded-full bg-background/90 hover:bg-background backdrop-blur-md border border-border/70 shadow-xs flex items-center justify-center text-muted-foreground hover:text-primary transition-all hover:scale-110"
+          className="absolute top-1.5 right-1.5 z-20 h-8 w-8 sm:h-5.5 sm:w-5.5 rounded-full bg-background/90 hover:bg-background backdrop-blur-md border border-border/70 shadow-xs flex items-center justify-center text-muted-foreground hover:text-primary transition-all hover:scale-110"
           title="Ver detalle completo del producto"
+          aria-label={`Ver detalle de ${product.name}`}
         >
-          <Eye className="h-2.5 w-2.5" />
+          <Eye className="h-3.5 w-3.5 sm:h-2.5 sm:w-2.5" />
         </button>
       )}
 
       {/* Badge: Stock bajo/critico */}
       {showStock && stockStatus && (stockStatus.status === 'low' || stockStatus.status === 'critical' || stockStatus.status === 'out') && (
-        <div className={`absolute ${onViewDetail ? 'top-1.5 right-8' : 'top-1.5 right-1.5'} z-10`}>
+        <div className={`absolute ${onViewDetail ? 'top-14 right-1.5 sm:top-1.5 sm:right-8' : 'top-1.5 right-1.5'} z-10`}>
           <Badge
             variant="secondary"
             className={cn(
-              "shadow-xs border-0 font-semibold px-1 py-0.2 text-[8px] backdrop-blur-md",
+              "shadow-xs border-0 font-semibold px-1 py-0.2 text-[10px] sm:text-[8px] backdrop-blur-md",
               stockStatus.status === 'out' ? 'bg-rose-500 text-white' :
                 stockStatus.status === 'critical' ? 'bg-orange-500 text-white' :
                 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300'
@@ -285,7 +286,7 @@ export const ProductCard = memo(({
 
       <CardContent className="p-0 h-full flex flex-col justify-between">
         {/* Imagen compacta y nítida */}
-        <div className="h-12 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
+        <div className="h-20 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
           {imageSrc ? (
             <AppImage
               src={imageSrc}
@@ -293,18 +294,18 @@ export const ProductCard = memo(({
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <Package className="h-5 w-5 text-muted-foreground/30 sm:h-8 sm:w-8" />
+            <Package className="h-7 w-7 text-muted-foreground/30 sm:h-8 sm:w-8" />
           )}
         </div>
 
-        <div className="p-1 sm:p-2.5 flex flex-col flex-1 justify-between gap-0 sm:gap-1">
+        <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between gap-0.5 sm:gap-1">
           {/* Titulo y Categoria */}
           <div className="mb-0.5">
             <h3 className="font-semibold text-[13px] leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
               {product.name}
             </h3>
             {product.is_active === false && (
-              <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 py-0.2 text-[7px] sm:text-[8px] font-semibold text-white">
+              <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 py-0.2 text-[10px] sm:text-[8px] font-semibold text-white">
                 <EyeOff className="h-2 w-2" />
                 Oculto
               </span>
@@ -348,7 +349,7 @@ export const ProductCard = memo(({
           <div className="pt-0.5 sm:pt-1.5 border-t border-border/40 flex items-end justify-between gap-1 sm:gap-1.5">
             <div className="flex flex-col min-w-0">
               {isWholesale && (
-                <span className="text-[7.5px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
+                <span className="text-[10px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
                   {formatCurrency(price)}
                 </span>
               )}
@@ -371,7 +372,7 @@ export const ProductCard = memo(({
             >
               {cartQuantity > 0 ? (
                 <div className="flex items-center gap-0.5">
-                  <span className="opacity-70 text-[7px] sm:text-[9px]">EN CARRO</span>
+                  <span className="opacity-80 text-[10px] sm:text-[9px]">EN CARRO</span>
                   <span>({cartQuantity})</span>
                 </div>
               ) : (
