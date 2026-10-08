@@ -66,6 +66,9 @@ import type { QuickFilterCounts } from "@/components/dashboard/products-modern/Q
 import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
 import { useBranch } from "@/contexts/branch-context";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileProductList } from "@/components/dashboard/products-modern/MobileProductList";
+import { ResponsiveProductFilters } from "@/components/dashboard/products-modern/ResponsiveProductFilters";
 import { ActiveProductFilters } from '@/components/dashboard/products-modern/ActiveProductFilters';
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext';
 import {
@@ -88,6 +91,7 @@ export default function ProductsPage() {
   const router = useRouter();
   const { hasPermission } = usePermissions();
   const { selectedBranch } = useBranch();
+  const isMobile = useIsMobile();
   const [showBranchNotice, setShowBranchNotice] = useState(true);
 
   // Group by mode (desglose por secciones) y modo de maximizar espacio
@@ -1059,7 +1063,7 @@ export default function ProductsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
             {/* Acceso directo a los predeterminados de productos a credito */}
             <Button
               asChild
@@ -1081,7 +1085,7 @@ export default function ProductsPage() {
               <Button
                 size="lg"
                 onClick={() => setCreateModalOpen(true)}
-                className="cursor-pointer bg-blue-600 shadow-xs transition-colors hover:bg-blue-700"
+                className="h-11 w-full cursor-pointer bg-blue-600 shadow-xs transition-colors hover:bg-blue-700 sm:w-auto"
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Nuevo Producto
@@ -1199,9 +1203,7 @@ export default function ProductsPage() {
         />
 
         {/* Filter Panel (Collapsible) */}
-        {isFilterPanelOpen && (
-          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="p-4 sm:p-5">
+        <ResponsiveProductFilters open={isFilterPanelOpen} onClose={() => setIsFilterPanelOpen(false)}>
               <FilterPanel
                 isOpen={isFilterPanelOpen}
                 showServices={hasServicesModule || (globalMetrics.services_count ?? 0) > 0}
@@ -1215,9 +1217,7 @@ export default function ProductsPage() {
                 brandOptions={brands.map((b) => b.name).filter(Boolean)}
                 resultCount={totalProducts}
               />
-            </div>
-          </Card>
-        )}
+        </ResponsiveProductFilters>
 
         {/* Products Display */}
         {productsError && products.length === 0 && !loading && (
@@ -1235,7 +1235,7 @@ export default function ProductsPage() {
         )}
 
         <Card className="border-0 shadow-md">
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             {/* Cuantos se ven ahora, cuantos matchean los filtros y cuantos hay
                 en total. Sin esto no habia forma de saber si la pantalla mostraba
                 todo el catalogo o solo una pagina. */}
@@ -1316,6 +1316,11 @@ export default function ProductsPage() {
                 <p className="text-sm text-muted-foreground">Revisá la búsqueda, los filtros y la sucursal seleccionada. Limpiar vuelve al alcance inicial de esta sección.</p>
                 <Button type="button" variant="outline" onClick={clearFilters}>Limpiar búsqueda y filtros</Button>
               </div>
+            ) : isMobile ? (
+              <MobileProductList products={paginatedProducts} selectedProductIds={selectedProductIds}
+                onProductSelect={handleSelectProduct} onProductEdit={handleProductEdit}
+                onProductDelete={handleProductDelete} onProductDuplicate={handleProductDuplicate}
+                onProductViewDetails={handleProductViewDetails} onProductToggleActive={handleToggleActive} loading={isFirstLoad} />
             ) : groupBy !== "none" ? (
               <ProductSectionGroup
                 products={paginatedProducts}

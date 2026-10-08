@@ -116,22 +116,24 @@ export function SearchAndActionsBar({
             />
 
             {onGroupByChange && (
+              <div className="hidden md:block">
               <GroupBySelector
                 groupBy={groupBy}
                 onGroupByChange={onGroupByChange}
                 onSaveDefault={onSaveDefaultGroupBy}
                 showServices={showServices}
               />
+              </div>
             )}
           </div>
 
           {/* Lado Derecho: Modos de Vista, Guardar vista y Más espacio */}
           <div className="flex flex-wrap items-center gap-2 self-start md:self-auto md:ml-auto">
             {/* View Mode Selector */}
-            <ViewModeSelector
+            <div className="hidden md:block"><ViewModeSelector
               viewMode={viewMode}
               onViewModeChange={onViewModeChange}
-            />
+            /></div>
 
             <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block mx-0.5" />
 

@@ -23,6 +23,8 @@ export const FilterToggle = React.memo(function FilterToggle({
 }: FilterToggleProps) {
   return (
     <Button
+      id="products-filters-toggle"
+      type="button"
       variant="outline"
       size="default"
       onClick={onToggle}
@@ -30,7 +32,7 @@ export const FilterToggle = React.memo(function FilterToggle({
       aria-expanded={isOpen}
       aria-controls="filter-panel"
       className={cn(
-        'h-10 px-3.5 text-xs font-semibold rounded-xl gap-2 transition-all shadow-xs',
+        'h-11 sm:h-10 px-3.5 text-xs font-semibold rounded-xl gap-2 transition-all shadow-xs',
         isOpen
           ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 shadow-xs ring-2 ring-blue-500/10'
           : activeCount > 0

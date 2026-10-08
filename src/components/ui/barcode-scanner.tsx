@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Camera, CameraOff, Check, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import type { Html5Qrcode } from 'html5-qrcode'
@@ -40,8 +40,8 @@ export const REPEAT_SCAN_MS = 1500
 
 /** Recuadro de lectura: ancho para códigos de barras y alto suficiente para un QR. */
 export function scanBox(viewfinderWidth: number, viewfinderHeight: number) {
-  const width = Math.max(120, Math.floor(Math.min(viewfinderWidth * 0.85, 320)))
-  const height = Math.max(80, Math.floor(Math.min(viewfinderHeight * 0.7, width)))
+  const width = Math.max(1, Math.floor(Math.min(viewfinderWidth * 0.92, 600)))
+  const height = Math.max(1, Math.floor(Math.min(viewfinderHeight * 0.7, width)))
   return { width, height }
 }
 
@@ -175,7 +175,13 @@ export function BarcodeScanner({
         {
           fps: 10,
           qrbox: scanBox,
-          aspectRatio: 1.5,
+          aspectRatio: 1,
+          // Preferencias, no requisitos exactos: admite cámaras de menor resolución.
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 1280 },
+          },
         },
         (decodedText) => { if (session === cameraSession.current) void handleDecoded(decodedText) },
         () => {
@@ -251,11 +257,12 @@ export function BarcodeScanner({
       </Button>
 
       <Dialog open={open} onOpenChange={changeOpen}>
-        <DialogContent className="max-w-sm overflow-hidden rounded-xl p-0" showCloseButton={false}>
+        <DialogContent className="top-0 left-0 flex h-dvh max-h-dvh max-w-full translate-x-0 translate-y-0 flex-col gap-0 overflow-y-auto rounded-none p-0 sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[90dvh] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl" showCloseButton={false}>
           <DialogTitle className="sr-only">Escanear código de barras</DialogTitle>
+          <DialogDescription className="sr-only">Usá la cámara trasera o ingresá el código con un lector. La cámara se apaga al cerrar.</DialogDescription>
 
           {/* Header */}
-          <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
             <div className="flex items-center gap-2">
               <Camera className="h-4 w-4 text-slate-500" />
               <span className="text-sm font-medium">Escanear código</span>
@@ -268,7 +275,7 @@ export function BarcodeScanner({
             <button
               type="button"
               onClick={() => changeOpen(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
               aria-label="Cerrar"
             >
               <X className="h-4 w-4" />
@@ -276,8 +283,8 @@ export function BarcodeScanner({
           </div>
 
           <div className="flex gap-2 px-4 py-2" role="group" aria-label="Método de lectura">
-            <Button type="button" size="sm" variant={mode === 'camera' ? 'default' : 'outline'} aria-pressed={mode === 'camera'} onClick={() => setMode('camera')}>Cámara</Button>
-            <Button type="button" size="sm" variant={mode === 'reader' ? 'default' : 'outline'} aria-pressed={mode === 'reader'} onClick={() => setMode('reader')}>Lector o manual</Button>
+            <Button type="button" size="sm" className="h-11" variant={mode === 'camera' ? 'default' : 'outline'} aria-pressed={mode === 'camera'} onClick={() => setMode('camera')}>Cámara</Button>
+            <Button type="button" size="sm" className="h-11" variant={mode === 'reader' ? 'default' : 'outline'} aria-pressed={mode === 'reader'} onClick={() => setMode('reader')}>Lector o manual</Button>
           </div>
           {mode === 'reader' && <div className="space-y-3 px-4 py-3">
             <label htmlFor={`${containerId}-input`} className="text-sm font-medium">Código leído</label>
@@ -288,11 +295,12 @@ export function BarcodeScanner({
             <Button type="button" disabled={processing || !manualCode.trim()} onClick={() => { void handleDecoded(manualCode) }}>Usar código</Button>
           </div>}
           {/* Keep the camera container mounted until asynchronous startup stops. */}
-          <div className={cn('relative bg-black', mode !== 'camera' && 'hidden')}>
+          <div className={cn('relative shrink-0 bg-black', mode !== 'camera' && 'hidden')}>
             <div
               id={containerId}
               ref={containerRef}
-              className="mx-auto aspect-[3/2] w-full max-w-[320px]"
+              aria-label="Vista de la cámara"
+              className="mx-auto aspect-square w-full"
             />
 
             {/* Loading state */}
@@ -316,13 +324,14 @@ export function BarcodeScanner({
           </div>
 
           {/* Footer */}
-          <div className="space-y-2 border-t px-4 py-3 text-center">
+          <div className="space-y-3 border-t px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center">
             {processing && <p role="status" className="text-xs text-muted-foreground">Procesando código…</p>}
             <p className="text-xs text-slate-500">
               {mode === 'reader' ? 'Configurá el lector en modo teclado, con Enter al finalizar.' : hint ?? (continuous
                 ? 'Pasá los productos de a uno frente a la cámara'
                 : 'Apuntá la cámara al código de barras o al QR')}
             </p>
+            {mode === 'camera' && <p className="text-sm text-muted-foreground">Dejá todas las barras dentro del recuadro, incluyendo los extremos. Probá a 15–30 cm, con buena luz y sin reflejos; acercá o alejá lentamente hasta que se vea nítido.</p>}
             {feedback && (
               <p
                 role="status"

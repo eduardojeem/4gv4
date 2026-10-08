@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 export interface ActionButtonsProps {
   onRefresh: () => void
@@ -42,6 +43,20 @@ export function ActionButtons({
 }: ActionButtonsProps) {
   const handleExportExcel = onExportExcel || onExport
   const handleExportCsv = onExportCsv || onExport
+  const mobile = useIsMobile()
+
+  if (mobile) return <DropdownMenu>
+    <DropdownMenuTrigger asChild><Button type="button" variant="outline" className="h-11" aria-label="Herramientas de productos">Herramientas <ChevronDown className="h-4 w-4" /></Button></DropdownMenuTrigger>
+    <DropdownMenuContent align="end">
+      <DropdownMenuItem className="min-h-11" disabled={isLoading} onSelect={onRefresh}>Actualizar catálogo</DropdownMenuItem>
+      {onImport && <DropdownMenuItem className="min-h-11" onSelect={onImport}>Importar productos</DropdownMenuItem>}
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{selectedCount > 0 ? `Exportar ${selectedCount} seleccionados` : 'Exportar catálogo'}</DropdownMenuLabel>
+      <DropdownMenuItem className="min-h-11" onSelect={handleExportExcel}>Excel (.xlsx)</DropdownMenuItem>
+      <DropdownMenuItem className="min-h-11" onSelect={handleExportCsv}>CSV (.csv)</DropdownMenuItem>
+      {onExportPdf && <DropdownMenuItem className="min-h-11" onSelect={onExportPdf}>PDF (.pdf)</DropdownMenuItem>}
+    </DropdownMenuContent>
+  </DropdownMenu>
 
   return (
     <div className={cn('flex items-center gap-2', className)} role="group" aria-label="Acciones del dashboard">

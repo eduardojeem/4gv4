@@ -60,7 +60,7 @@ export const SearchBar = React.memo(function SearchBar({
         onKeyDown={(event) => {
           if (event.key === 'Enter') { event.preventDefault(); onChange(event.currentTarget.value.trim()) }
         }}
-        className="pl-10 pr-20 h-10 rounded-xl text-xs sm:text-sm border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 shadow-2xs transition-all"
+        className="pl-10 pr-20 h-11 sm:h-10 rounded-xl text-base sm:text-sm border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 shadow-2xs transition-all"
       />
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
         {value && (
@@ -73,7 +73,7 @@ export const SearchBar = React.memo(function SearchBar({
               inputRef.current?.focus()
             }}
             aria-label="Limpiar búsqueda"
-            className="h-6 w-6 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            className="h-11 w-11 sm:h-6 sm:w-6 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
           >
             <X className="h-3.5 w-3.5" />
           </Button>
@@ -83,7 +83,7 @@ export const SearchBar = React.memo(function SearchBar({
         </kbd>
       </div>
     </div>
-    <BarcodeScanner size="icon" label="Escanear código para buscar" onScan={(code) => onChange(code.trim())} hint="Escaneá el código del producto. Si hay filtros activos, también se aplican a la búsqueda." />
+    <BarcodeScanner size="icon" className="h-11 w-11 shrink-0" label="Escanear código para buscar" onScan={(code) => onChange(code.trim())} hint="Escaneá el código del producto. Si hay filtros activos, también se aplican a la búsqueda." />
     </div>
   )
 })

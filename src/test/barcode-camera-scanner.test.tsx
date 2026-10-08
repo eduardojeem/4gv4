@@ -3,10 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BarcodeScanner, REPEAT_SCAN_MS, isRepeatedScan, scanBox } from '@/components/ui/barcode-scanner'
 
 // La cámara simulada: guarda el callback de lectura para dispararlo a mano.
-const camera = vi.hoisted(() => ({ onDecode: null as null | ((text: string) => void), stop: vi.fn() }))
+const camera = vi.hoisted(() => ({ onDecode: null as null | ((text: string) => void), stop: vi.fn(), config: null as null | Record<string, unknown> }))
 vi.mock('html5-qrcode', () => ({
   Html5Qrcode: class {
     start(_camera: unknown, _config: unknown, onDecode: (text: string) => void) {
+      camera.config = _config as Record<string, unknown>
       camera.onDecode = onDecode
       return Promise.resolve()
     }
@@ -86,8 +87,18 @@ describe('escáner por cámara', () => {
   })
 
   it('el recuadro entra un QR y no se pasa del visor', () => {
-    expect(scanBox(320, 213)).toEqual({ width: 272, height: 149 })
-    expect(scanBox(1000, 600)).toEqual({ width: 320, height: 320 })
+    expect(scanBox(320, 213)).toEqual({ width: 294, height: 149 })
+    expect(scanBox(1000, 600)).toEqual({ width: 600, height: 420 })
+    expect(scanBox(80, 60)).toEqual({ width: 73, height: 42 })
+  })
+
+  it('solicita cámara trasera de mayor resolución y visor móvil amplio', async () => {
+    render(<BarcodeScanner onScan={vi.fn()} />)
+    await openCamera('Escanear')
+    expect(camera.config).toMatchObject({ videoConstraints: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } } })
+    expect(screen.getByRole('dialog')).toHaveClass('h-dvh')
+    expect(screen.getByLabelText('Vista de la cámara')).toHaveClass('w-full')
+    expect(screen.getByLabelText('Vista de la cámara')).not.toHaveClass('max-w-[320px]')
   })
 
   it('el mismo código no se toma dos veces mientras sigue en cuadro', () => {

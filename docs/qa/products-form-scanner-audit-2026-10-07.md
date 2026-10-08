@@ -50,3 +50,19 @@ Con sesión y dispositivos reales: crear/editar producto, duplicado de producto 
 ## Publicación
 
 Cambios sincronizados con main en GitHub. Verificaciones locales: pruebas focalizadas, TypeScript, lint y diff-check aprobados. Se mantiene la política de commits verificados; el estado del despliegue se verifica por separado.
+
+## Adaptación móvil posterior (local, no publicada)
+
+- Menos de 768 px: listado compacto con miniatura, nombre, SKU, precio/rango de variantes, stock y selección; menú de acciones conserva los handlers existentes. No muestra costos.
+- Vista móvil plana; agrupación y modo de escritorio quedan guardados y vuelven al ampliar la pantalla. Sus controles se ocultan en móvil para no ofrecer opciones sin efecto.
+- Filtros en Sheet inferior con scroll, título accesible, cierre y devolución del foco al botón Filtros. Los cambios siguen aplicándose inmediatamente, sin un borrador adicional.
+- Herramientas móviles agrupadas (actualizar, importar según permiso y exportar); búsqueda y escáner con controles táctiles; Nuevo Producto ocupa el ancho disponible sin superponerse a la navegación.
+- Pruebas focalizadas: listado/selección/detalle/stock de variantes, filtros móviles, buscador y filtros existentes. Lint aprobado. La comprobación visual autenticada continúa pendiente: acceso local redirige a /saas sin sesión.
+- No hay cambios SQL, de planes, permisos ni persistencia. El formulario a pantalla completa no forma parte de esta entrega.
+
+## Cámara móvil ampliada (local)
+
+- Escáner compartido: diálogo a pantalla completa bajo 640 px, visor cuadrado sin límite de 320 px y escritorio con diálogo de hasta 512 px. Controles de 44 px y márgenes seguros del celular.
+- Área de lectura al 92% del ancho (hasta 600 px), siempre dentro del visor; cámara trasera y resolución ideal 1280×1280, sin exigir capacidades que el dispositivo no tenga.
+- Conserva decodificador, formatos, lectura continua, protección contra duplicados, confirmación del código y lector/manual. No implica que se haya verificado enfoque o lectura con una cámara física.
+- Pruebas focalizadas de cámara y búsqueda: 13 aprobadas. Para validar en dispositivo: abrir por HTTPS, permitir cámara, probar EAN/Code128 con buena luz, cerrar y comprobar que se apague la cámara; repetir con lector/manual.
