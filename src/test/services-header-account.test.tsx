@@ -47,7 +47,7 @@ describe('acceso a la cuenta en el encabezado de Servicios', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }))
     const menu = screen.getByRole('navigation', { name: 'Menú' })
-    expect(within(menu).getByText('Ver mi perfil y mis turnos')).toBeInTheDocument()
+    expect(within(menu).getByText('Ver mi perfil')).toBeInTheDocument()
     expect(within(menu).queryByText('Ingresar')).not.toBeInTheDocument()
   })
 

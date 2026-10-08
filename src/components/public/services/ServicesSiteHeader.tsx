@@ -344,7 +344,7 @@ export function ServicesSiteHeader({
                     {avatar('h-9 w-9')}
                     <span className="min-w-0 flex-1 leading-tight">
                       <span className="block truncate text-base font-semibold">{fullName || 'Mi cuenta'}</span>
-                      <span className={cn('block text-xs', tone.muted)}>Ver mi perfil y mis turnos</span>
+                      <span className={cn('block text-xs', tone.muted)}>Ver mi perfil</span>
                     </span>
                     <ArrowRight aria-hidden="true" className="h-4 w-4 opacity-40" />
                   </Link>
