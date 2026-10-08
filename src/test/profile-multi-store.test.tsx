@@ -251,8 +251,8 @@ describe('el saldo a favor se muestra por tienda', () => {
 
   it('el widget de una sola tienda ya no aparece en el marketplace', () => {
     const CLIENTE = leer('src/app/(public)/perfil/profile-client.tsx')
-    expect(CLIENTE).toContain('{tenantPrefix && (')
-    const bloque = CLIENTE.slice(CLIENTE.indexOf('{tenantPrefix && ('))
+    expect(CLIENTE).toContain('{tenantPrefix && storeFeatures.credits && (')
+    const bloque = CLIENTE.slice(CLIENTE.indexOf('{tenantPrefix && storeFeatures.credits && ('))
     expect(bloque.slice(0, 300)).toContain('<PublicStoreCredit')
   })
 })

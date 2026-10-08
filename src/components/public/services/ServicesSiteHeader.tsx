@@ -9,6 +9,7 @@ import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-c
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
 import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { useAuth } from '@/contexts/auth-context'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { headerOptionFor } from '@/lib/website/storefront-style'
 import { cn } from '@/lib/utils'
@@ -55,8 +56,11 @@ export function ServicesSiteHeader({
   const pathSlug = getTenantSlugFromPathname(pathname)
   const prefix = pathSlug ? `/${pathSlug}` : ''
   const { agenda } = usePublicAgenda(true, companyInfo?.slug)
+  // La agenda se carga en el navegador: hasta terminar de hidratar, el menú es
+  // el mismo que dibujó el servidor (si no, «Turnos» desfasaba el resto).
+  const hydrated = useHydrated()
   const bookingEnabled = Boolean(effectiveSettings?.booking_section?.enabled)
-  const bookingHref = agenda ? (bookingEnabled ? `${prefix}/inicio#reservar` : `${prefix}/turnos`) : null
+  const bookingHref = hydrated && agenda ? (bookingEnabled ? `${prefix}/inicio#reservar` : `${prefix}/turnos`) : null
 
   const tone = HEADER_TONE[headerOptionFor(companyInfo?.headerStyle)]
   const name = companyInfo?.name?.trim() || 'Inicio'

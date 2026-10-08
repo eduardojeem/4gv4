@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { HeroSection } from '@/components/public/inicio/HeroSection'
 import { StoreTrustBar } from '@/components/public/inicio/StoreTrustBar'
@@ -135,7 +136,13 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
   const bookingSettings = settings.booking_section
   const bookingEnabled = Boolean(bookingSettings?.enabled)
   // En el subdominio propio la ruta no trae el slug: se usa el de la empresa.
-  const { agenda, bookingHref: bookingPageHref, tenantSlug: agendaSlug } = usePublicAgenda(isServices || bookingEnabled, company_info.slug)
+  const agendaState = usePublicAgenda(isServices || bookingEnabled, company_info.slug)
+  // La agenda se carga en el navegador: hasta hidratar se dibuja lo mismo que
+  // en el servidor (si no, el botón de la portada y el menú no coincidían).
+  const hydrated = useHydrated()
+  const agenda = hydrated ? agendaState.agenda : null
+  const bookingPageHref = hydrated ? agendaState.bookingHref : null
+  const agendaSlug = agendaState.tenantSlug
   const nextSlot = useNextFreeSlot(agendaSlug, Boolean(agenda) && (isServices || bookingEnabled))
   const inlineBooking = bookingEnabled && agenda && agendaSlug && bookingSettings ? bookingSettings : null
   const bookingHref = inlineBooking ? '#reservar' : bookingPageHref
@@ -300,6 +307,9 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
           flows={processFlows}
           tenantPrefix={tenantPrefix}
           phoneClean={phoneClean}
+          variant={isServices ? 'services' : 'store'}
+          bookingHref={bookingHref ?? undefined}
+          showCatalog={capabilities.hasCatalog}
         />
       )}
 

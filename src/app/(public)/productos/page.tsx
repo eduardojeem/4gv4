@@ -269,14 +269,25 @@ export default async function ProductsPage(props: {
                 <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center mb-3 text-muted-foreground">
                   <Search className="h-6 w-6" />
                 </div>
+                {/* Sin búsqueda ni filtros, el catálogo vacío es de la tienda, no del filtro. */}
                 <h3 className="text-base font-bold text-foreground">
-                  No se encontraron productos
+                  {query || hasActiveFilters ? 'No se encontraron productos' : 'Esta tienda todavía no publicó productos'}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground max-w-sm leading-relaxed">
                   {query
                     ? `Sin resultados para "${query}". Probá con otros términos o remové filtros.`
-                    : 'No hay productos que coincidan con los filtros seleccionados.'}
+                    : hasActiveFilters
+                      ? 'No hay productos que coincidan con los filtros seleccionados.'
+                      : 'Cuando cargue su catálogo lo vas a ver acá.'}
                 </p>
+                {!query && !hasActiveFilters && settings?.company_info?.servicesPageEnabled && (
+                  <a
+                    href={prefixPublicTenantPath(tenantPrefix, '/servicios')}
+                    className="mt-4 inline-flex h-9 items-center rounded-xl bg-primary px-4 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+                  >
+                    Ver servicios y reservar
+                  </a>
+                )}
                 {(query || hasActiveFilters) && (
                   <div className="mt-4">
                     <Suspense>

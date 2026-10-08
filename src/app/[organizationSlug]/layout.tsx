@@ -28,7 +28,15 @@ export async function generateMetadata({
   params: Promise<{ organizationSlug: string }>
 }): Promise<Metadata> {
   const { organizationSlug } = await params
-  return { manifest: `/${organizationSlug}/manifest.webmanifest` }
+  // Sin esto, la vista previa en redes heredaba la descripción de la plataforma
+  // («…ecommerce, reparaciones, servicios…»), que no describe a esta tienda.
+  const settings = await fetchWebsiteSettings()
+  const name = settings?.company_info?.name?.trim()
+  const description = settings?.hero_content?.subtitle?.trim() || (name ? `Conocé ${name} y lo que ofrece.` : undefined)
+  return {
+    manifest: `/${organizationSlug}/manifest.webmanifest`,
+    ...(name ? { twitter: { card: 'summary_large_image', title: name, ...(description ? { description } : {}) } } : {}),
+  }
 }
 
 export default async function OrganizationPublicLayout({
@@ -87,7 +95,11 @@ export default async function OrganizationPublicLayout({
               servicesModuleEnabled={servicesModuleEnabled}
               catalogEnabled={catalogEnabled}
             />
-            <CustomerLinkBanner storeName={settings?.company_info?.name || storefrontOrganization.name} />
+            <CustomerLinkBanner
+              storeName={settings?.company_info?.name || storefrontOrganization.name}
+              repairsEnabled={repairsModuleEnabled}
+              servicesEnabled={servicesModuleEnabled}
+            />
             <div className="flex-1 pb-16 lg:pb-0">{children}</div>
             <PublicFooter initialSettings={settings} repairsModuleEnabled={repairsModuleEnabled} />
             <StorefrontMobileNav initialSettings={settings} offersEnabled={settings?.offers_section?.enabled !== false} />
