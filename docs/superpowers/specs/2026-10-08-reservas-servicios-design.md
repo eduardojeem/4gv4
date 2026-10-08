@@ -1,6 +1,6 @@
 # Reservas para barberías y negocios de servicios
 
-Fecha: 2026-10-08. Estado: alcance aprobado; diseño técnico pendiente de revisión del usuario. No implementado.
+Fecha: 2026-10-08. Estado: alcance y diseño técnico aprobados por el usuario. Implementación pendiente.
 
 ## Objetivo y alcance
 
