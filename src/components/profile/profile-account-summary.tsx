@@ -44,6 +44,11 @@ interface ProfileAccountSummaryProps {
    * siempre a #tiendas aunque esa seccion no existiera en la pagina.
    */
   stores?: CustomerStoreSummary[]
+  /**
+   * Lo que ofrece la tienda. Una barbería no tiene taller ni cuotas: sus filas
+   * no se muestran, salvo que quede algo pendiente de antes.
+   */
+  features?: { repairs?: boolean; credits?: boolean; orders?: boolean }
 }
 
 export function ProfileAccountSummary({
@@ -52,7 +57,11 @@ export function ProfileAccountSummary({
   storeCredits = [],
   statusCounts,
   stores = [],
+  features = {},
 }: ProfileAccountSummaryProps) {
+  const showRepairs = features.repairs !== false || summary.repairs.pendingAmount > 0
+  const showCredits = features.credits !== false || summary.financing.pendingAmount > 0
+  const showOrders = features.orders !== false || summary.orders.pendingAmount > 0
   const creditStores = storeCredits.filter((row) => row.amount > 0)
   const splitAcrossStores = creditStores.length > 1
   const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
@@ -76,7 +85,7 @@ export function ProfileAccountSummary({
   // Vencido primero, despues lo demas pendiente, al final lo que ya esta al
   // dia: el subtitulo promete mostrar primero lo que requiere atencion.
   const details = [
-    {
+    showCredits && {
       label: 'Cuotas de crédito',
       value: formatCurrency(summary.financing.pendingAmount),
       detail: summary.financing.overdueCount > 0
@@ -89,7 +98,7 @@ export function ProfileAccountSummary({
       emphasis: summary.financing.overdueCount > 0,
       urgency: summary.financing.overdueCount > 0 ? 2 : summary.financing.pendingAmount > 0 ? 1 : 0,
     },
-    {
+    showRepairs && {
       label: 'Reparaciones por pagar',
       value: formatCurrency(summary.repairs.pendingAmount),
       detail: `${summary.repairs.pendingCount} pendientes · ${summary.repairs.paidCount} pagadas`,
@@ -98,7 +107,7 @@ export function ProfileAccountSummary({
       emphasis: summary.repairs.pendingAmount > 0,
       urgency: summary.repairs.pendingAmount > 0 ? 1 : 0,
     },
-    {
+    showOrders && {
       label: 'Pedidos por pagar',
       value: formatCurrency(summary.orders.pendingAmount),
       detail: `${summary.orders.pendingCount} pendientes · ${summary.orders.paidCount} pagados`,
@@ -118,7 +127,9 @@ export function ProfileAccountSummary({
       emphasis: false,
       urgency: 0,
     },
-  ].sort((left, right) => right.urgency - left.urgency)
+  ]
+    .filter((row): row is Exclude<typeof row, false> => Boolean(row))
+    .sort((left, right) => right.urgency - left.urgency)
 
   return (
     <section aria-labelledby="account-summary-title" className="overflow-hidden rounded-xl border border-border bg-card">
@@ -129,7 +140,7 @@ export function ProfileAccountSummary({
             Resumen de pagos y saldos
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">Primero te mostramos lo que requiere atención.</p>
-          {statusCounts && (statusCounts.activeRepairs > 0 || statusCounts.readyRepairs > 0) && (
+          {showRepairs && statusCounts && (statusCounts.activeRepairs > 0 || statusCounts.readyRepairs > 0) && (
             <div className="mt-2 flex flex-wrap gap-2">
               {statusCounts.activeRepairs > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-info/10 px-2.5 py-1 text-[11px] font-semibold text-info">
@@ -160,7 +171,7 @@ export function ProfileAccountSummary({
         </div>
       </div>
 
-      <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+      <div className={cn('grid gap-px bg-border sm:grid-cols-2', details.length >= 4 ? 'lg:grid-cols-4' : details.length === 3 ? 'lg:grid-cols-3' : '')}>
         {details.map(({ label, value, detail, overdue, icon: Icon, emphasis }) => (
           <div key={label} className="min-w-0 bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -212,12 +223,14 @@ export function ProfileAccountSummary({
       )}
 
       <div className="flex flex-col gap-2 border-t border-border bg-muted/20 px-4 py-3 sm:flex-row sm:justify-end">
-        <Button asChild variant="ghost" size="sm" className="justify-between sm:justify-center">
-          <Link href={repairsHref}>
-            Ver reparaciones <ChevronRight className="ml-1 h-4 w-4" />
-          </Link>
-        </Button>
-        {creditsHref && (
+        {showRepairs && (
+          <Button asChild variant="ghost" size="sm" className="justify-between sm:justify-center">
+            <Link href={repairsHref}>
+              Ver reparaciones <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        )}
+        {creditsHref && showCredits && (
           <Button asChild variant="outline" size="sm" className="justify-between sm:justify-center">
             <Link href={creditsHref}>
               {creditsLabel}

@@ -292,6 +292,7 @@ export function ProfileClient({
             summary={accountSummary}
             tenantPrefix={linkPrefix}
             storeCredits={storeCredits}
+            features={{ repairs: repairsAvailable, credits: storeFeatures.credits, orders: storeFeatures.orders }}
           />
         </div>
 

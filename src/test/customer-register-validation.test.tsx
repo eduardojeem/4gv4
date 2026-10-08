@@ -16,9 +16,9 @@ import {
  */
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
-const FORMULARIO = leer('src/app/[organizationSlug]/cliente/registro/page.tsx')
+const FORMULARIO = leer('src/app/[organizationSlug]/cliente/registro/register-client.tsx')
 const API = leer('src/app/api/public/customer-register/route.ts')
-const LOGIN = leer('src/app/[organizationSlug]/cliente/login/page.tsx')
+const LOGIN = leer('src/app/[organizationSlug]/cliente/login/login-client.tsx')
 const CAPTCHA = leer('src/components/security/TurnstileChallenge.tsx')
 
 describe('los errores de Supabase se leen en castellano', () => {

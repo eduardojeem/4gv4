@@ -16,7 +16,7 @@ const MODAL = leer('src/components/public/AuthModal.tsx')
 const ENCABEZADO = leer('src/components/public/PublicHeader.tsx')
 const NAV_MARKETPLACE = leer('src/components/public/marketplace-public-nav.tsx')
 const LOGIN_SISTEMA = leer('src/app/login/page.tsx')
-const LOGIN_TIENDA = leer('src/app/[organizationSlug]/cliente/login/page.tsx')
+const LOGIN_TIENDA = leer('src/app/[organizationSlug]/cliente/login/login-client.tsx')
 
 describe('entrar desde la tienda o el marketplace no te saca de la página', () => {
   it('el modal ya no manda a nadie al panel', () => {

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CalendarCheck2, Home, MapPin, MessageCircle, Scissors } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { usePublicAgenda } from '@/components/public/inicio/ServicesHome'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
@@ -23,7 +24,11 @@ export function ServicesMobileNav({ initialSettings = null }: { initialSettings?
   const companyInfo = useStorefrontCompanyInfo(effectiveSettings?.company_info)
   const pathSlug = getTenantSlugFromPathname(pathname)
   const prefix = pathSlug ? `/${pathSlug}` : ''
-  const { agenda } = usePublicAgenda(true, companyInfo?.slug)
+  const agendaState = usePublicAgenda(true, companyInfo?.slug)
+  // La agenda sale de la caché del navegador: hasta hidratar se dibuja lo mismo
+  // que en el servidor (si no, «Reservar» y «Pedir turno» no coincidían).
+  const hydrated = useHydrated()
+  const agenda = hydrated ? agendaState.agenda : null
 
   const whatsapp = (companyInfo?.whatsapp || companyInfo?.phone || '').replace(/\D/g, '')
   const whatsappHref = whatsapp ? `https://wa.me/${whatsapp}` : null
