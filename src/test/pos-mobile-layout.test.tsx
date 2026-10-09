@@ -42,9 +42,20 @@ describe('POS en el celular', () => {
 describe('tarjeta de producto en el celular', () => {
   const product = { id: 'p1', name: 'Pomada', sku: 'P1', sale_price: 85000, stock_quantity: 4, is_active: true } as unknown as Product
 
-  it('el botón de detalle tiene nombre y tamaño para el dedo', () => {
-    render(<ProductCard product={product} addToCart={vi.fn()} formatCurrency={(n) => `Gs. ${n}`} onViewDetail={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'Ver detalle de Pomada' })).toHaveClass('h-8', 'w-8')
+  it('tarjeta compacta: 👁 de 24px y «+» de 32px con nombre (el texto aparece desde sm)', () => {
+    render(<ProductCard product={product} addToCart={vi.fn()} formatCurrency={(n) => `Gs. ${n}`} onViewDetail={vi.fn()} cartQuantity={2} />)
+    expect(screen.getByRole('button', { name: 'Ver detalle de Pomada' })).toHaveClass('h-6', 'w-6', '!min-h-0')
+    expect(screen.getByRole('button', { name: 'Agregar otro Pomada (hay 2 en el carrito)' })).toHaveClass('h-8', 'w-8')
+  })
+
+  it('3 columnas en el celular desde 360px, también en el CSS del POS', () => {
+    expect(POS).toContain("'product-grid grid-cols-2 min-[360px]:grid-cols-3")
+    expect(CSS).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));')
+  })
+
+  it('el precio nunca se corta: pasa a dos líneas', () => {
+    const card = leer('src/app/dashboard/pos/components/ProductCard.tsx')
+    expect(card).toContain('break-words text-xs font-bold')
   })
 
   it('no quedan textos de 7 u 8 px sin versión legible en el celular', () => {
