@@ -24,6 +24,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       builder.select = () => builder
       builder.eq = () => builder
       builder.in = () => builder
+      builder.is = () => builder
       builder.gt = () => builder
       builder.update = (values: Record<string, unknown>) => { patch = values; state.updates.push(values); return builder }
       builder.insert = async (values: Record<string, unknown>) => { if (table === 'appointment_events') state.events.push(values); return { error: null } }
@@ -50,7 +51,8 @@ const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString()
 beforeEach(() => {
   state.updates = []
   state.events = []
-  state.appointment = { id: 'a1', organization_id: 'org', customer_name: 'Juan', service_name: 'Corte', service_product_id: 'corte', professional_id: 'pepe', starts_at: inAWeek, status: 'confirmed' }
+  state.appointment = { id: 'a1', organization_id: 'org', customer_name: 'Juan', service_name: 'Corte', service_product_id: 'corte', professional_id: 'pepe', starts_at: inAWeek,
+    ends_at: new Date(Date.parse(inAWeek) + 30 * 60_000).toISOString(), price: 30_000, buffer_minutes: 0, sale_id: null, status: 'confirmed' }
   state.agenda = { config: { timeZone: 'America/Asuncion', settings: { require_confirmation: true, max_days_ahead: 30, opening_hours: { 1: [['09:00', '18:00']] } } } }
   state.slots = []
 })
