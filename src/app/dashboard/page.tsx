@@ -134,53 +134,54 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
   const t = toneClasses[stat.tone]
   if (loading) {
     return (
-      <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5', t.wrap)}>
+      <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-3.5 sm:p-5', t.wrap)}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="mt-3 h-8 w-32" />
-            <Skeleton className="mt-1.5 h-3 w-20" />
+            <Skeleton className="h-3 w-16 sm:w-24" />
+            <Skeleton className="mt-3 h-6 w-20 sm:h-8 sm:w-32" />
+            <Skeleton className="mt-1.5 h-3 w-14 sm:w-20" />
           </div>
-          <Skeleton className="h-11 w-11 rounded-xl" />
+          <Skeleton className="hidden h-11 w-11 rounded-xl sm:block" />
         </div>
       </div>
     )
   }
   return (
-    <Link href={stat.href} className="group block">
-      <div className={cn('relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 transition-all hover:shadow-md', t.wrap)}>
-        <div className="flex items-start justify-between gap-3">
+    <Link href={stat.href} className="group block h-full">
+      <div className={cn('relative h-full overflow-hidden rounded-2xl border bg-gradient-to-br p-3.5 transition-all hover:shadow-md sm:p-5', t.wrap)}>
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stat.title}</p>
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-slate-500 dark:text-slate-400 sm:text-xs">{stat.title}</p>
               {stat.badge && (
-                <Badge variant="outline" className="rounded-full text-[10px] px-1.5 h-4">
+                <Badge variant="outline" className="hidden h-4 rounded-full px-1.5 text-[10px] sm:inline-flex">
                   {stat.badge}
                 </Badge>
               )}
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{stat.value}</p>
+            <p className="mt-1.5 break-words text-lg font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-50 sm:mt-2 sm:text-2xl">{stat.value}</p>
             {stat.subtitle && (
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{stat.subtitle}</p>
+              <p className="mt-1 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400 sm:text-xs">{stat.subtitle}</p>
             )}
           </div>
-          <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+          <div className={cn('hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:flex', t.iconBg)}>
             <stat.icon className="h-5 w-5" />
           </div>
         </div>
+        {/* En el celular el gráfico no se lee: se deja para pantallas grandes. */}
         {stat.trend && stat.trend.length > 1 && (
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 hidden justify-end sm:flex">
             <MiniSparkline data={stat.trend} color={t.sparkColor} />
           </div>
         )}
         {stat.breakdown && stat.breakdown.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+          <div className="mt-2.5 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 dark:border-slate-800/80 sm:mt-3 sm:gap-1.5 sm:pt-2.5">
             {stat.breakdown.map((item, idx) => (
               <span
                 key={idx}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-white/70 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/70 shadow-2xs"
+                className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-lg bg-white/70 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/70 shadow-2xs"
               >
-                {item.icon && <item.icon className="h-3 w-3 text-slate-500 dark:text-slate-400" />}
+                {item.icon && <item.icon className="hidden h-3 w-3 text-slate-500 dark:text-slate-400 sm:block" />}
                 <strong className="font-bold text-slate-900 dark:text-slate-100">{item.count}</strong>
                 <span className="text-slate-500 dark:text-slate-400">{item.label}</span>
               </span>
@@ -567,17 +568,17 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-4 sm:gap-6">
 
       {/* Header */}
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+      <header className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1 sm:space-y-2">
+          <div className="hidden items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 sm:flex">
             <Activity className="h-3.5 w-3.5" />
             Centro operativo
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50 sm:text-2xl">
               {greeting}
             </h1>
             <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -585,9 +586,10 @@ export default function DashboardPage() {
               En vivo
             </span>
           </div>
-          <p className="text-sm capitalize text-slate-500 dark:text-slate-400">{today}</p>
+          <p className="text-xs capitalize text-slate-500 dark:text-slate-400 sm:text-sm">{today}</p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
+        {/* En el celular las acciones van en una sola fila que se desliza; Actualizar y Ayuda quedan como íconos. */}
+        <div className="relative -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&>*]:shrink-0">
           {/* La caja ya no es un botón más acá arriba: es el primer bloque de
               la pantalla, con su estado y lo que pasa si está cerrada. */}
           {hasPos ? <Button asChild size="sm" className="gap-2">
@@ -639,9 +641,9 @@ export default function DashboardPage() {
             title={!canRefresh ? 'Esperá 30s entre actualizaciones' : undefined}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', (loadingStats || isPending) && 'animate-spin')} />
-            Actualizar
+            <span className="sr-only sm:not-sr-only">Actualizar</span>
           </Button>
-          <HelpButton guideKey="overview" variant="outline" size="sm" className="gap-2" showLabel />
+          <HelpButton guideKey="overview" variant="outline" size="sm" className="gap-2 [&>span]:sr-only sm:[&>span]:not-sr-only" showLabel />
         </div>
       </header>
 
@@ -670,29 +672,30 @@ export default function DashboardPage() {
       <StoreSetupAlert />
 
       {/* KPI grid */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
         {stats.map((stat) => (
           <KpiCard key={stat.title} stat={stat} loading={loadingStats} />
         ))}
       </section>
 
       {/* Resumen Financiero de Reparaciones del Día */}
-      {hasRepairs ? <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-5 shadow-sm dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
+      {hasRepairs ? <section className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-amber-50/50 p-3.5 shadow-sm sm:p-5 dark:border-amber-900/40 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-amber-950/30">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/60 pb-3.5 dark:border-amber-900/40">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm dark:bg-amber-600">
+            <div className="hidden h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm dark:bg-amber-600 sm:flex">
               <Wrench className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  Resumen Financiero de Reparaciones
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white sm:text-base">
+                  <span className="sm:hidden">Taller</span>
+                  <span className="hidden sm:inline">Resumen Financiero de Reparaciones</span>
                 </h2>
                 <Badge variant="outline" className="border-amber-300 bg-amber-100/80 text-amber-900 dark:border-amber-800 dark:bg-amber-900/50 dark:text-amber-200 text-[10px] font-bold">
                   Hoy
                 </Badge>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">
                 Montos por reparaciones ingresadas, equipos entregados y listos para retiro
               </p>
             </div>
@@ -705,63 +708,63 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-4">
           {/* Card 1: Monto por reparaciones ingresadas hoy */}
-          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-4 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90">
+          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-2.5 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90 sm:p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-amber-700 dark:text-amber-400 sm:text-xs">
                   Monto Ingresado Hoy
                 </p>
-                <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                <div className="mt-1.5 break-words text-sm font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-50 sm:mt-2 sm:text-2xl">
                   {loadingStats ? <Skeleton className="h-7 w-28" /> : formatCurrency(repairStats.todayAmount)}
                 </div>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex bg-amber-500/15 text-amber-600 dark:text-amber-400">
                 <Wrench className="h-5 w-5" />
               </div>
             </div>
-            <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+            <p className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-[10px] font-medium leading-tight text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:mt-3 sm:gap-1.5 sm:pt-2.5 sm:text-xs">
               <span className="font-bold text-slate-800 dark:text-slate-200">{repairStats.todayCount}</span> orden{repairStats.todayCount !== 1 ? 'es' : ''} ingresada{repairStats.todayCount !== 1 ? 's' : ''} hoy
             </p>
           </div>
 
           {/* Card 2: Monto de reparaciones entregadas hoy */}
-          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-4 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90">
+          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-2.5 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90 sm:p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-emerald-700 dark:text-emerald-400 sm:text-xs">
                   Entregadas Hoy
                 </p>
-                <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                <div className="mt-1.5 break-words text-sm font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-50 sm:mt-2 sm:text-2xl">
                   {loadingStats ? <Skeleton className="h-7 w-28" /> : formatCurrency(repairStats.deliveredAmount)}
                 </div>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                 <PackageCheck className="h-5 w-5" />
               </div>
             </div>
-            <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+            <p className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-[10px] font-medium leading-tight text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:mt-3 sm:gap-1.5 sm:pt-2.5 sm:text-xs">
               <span className="font-bold text-slate-800 dark:text-slate-200">{repairStats.deliveredCount}</span> equipo{repairStats.deliveredCount !== 1 ? 's' : ''} retirado{repairStats.deliveredCount !== 1 ? 's' : ''} hoy
             </p>
           </div>
 
           {/* Card 3: Monto listo para retiro */}
-          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-4 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90">
+          <div className="flex flex-col justify-between rounded-xl border border-white/80 bg-white/95 p-2.5 shadow-sm transition-all hover:shadow-md dark:border-white/10 dark:bg-[#0d1117]/90 sm:p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-blue-700 dark:text-blue-400 sm:text-xs">
                   Lista p/ Retiro
                 </p>
-                <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                <div className="mt-1.5 break-words text-sm font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-50 sm:mt-2 sm:text-2xl">
                   {loadingStats ? <Skeleton className="h-7 w-28" /> : formatCurrency(repairStats.readyAmount)}
                 </div>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400">
+              <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex bg-blue-500/15 text-blue-600 dark:text-blue-400">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
             </div>
-            <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+            <p className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-[10px] font-medium leading-tight text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:mt-3 sm:gap-1.5 sm:pt-2.5 sm:text-xs">
               <span className="font-bold text-slate-800 dark:text-slate-200">{repairStats.readyCount}</span> listo{repairStats.readyCount !== 1 ? 's' : ''} esperando retiro
             </p>
           </div>
@@ -772,19 +775,19 @@ export default function DashboardPage() {
       <section className="grid gap-4 lg:grid-cols-[0.4fr_0.6fr]">
 
         {/* Quick actions */}
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="gap-3 py-4 sm:gap-6 sm:py-6">
+          <CardHeader className="px-4 pb-3 sm:px-6">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-900/50 dark:bg-indigo-950/20 dark:text-indigo-400">
                 <Zap className="h-4 w-4" />
               </div>
               <div>
                 <CardTitle className="text-base">Acciones rápidas</CardTitle>
-                <p className="mt-0.5 text-xs text-slate-500">Atajos para tareas comunes</p>
+                <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">Atajos para tareas comunes</p>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-1.5">
+          <CardContent className="grid grid-cols-2 gap-2 px-4 sm:block sm:space-y-1.5 sm:px-6 [&>*:last-child:nth-child(odd)]:col-span-2">
             {quickActions.map((action) => {
               const t = toneClasses[action.tone]
               const Icon = action.icon
@@ -792,15 +795,15 @@ export default function DashboardPage() {
                 <Link
                   key={action.href}
                   href={action.href}
-                  className="group flex items-center gap-3 rounded-lg border bg-card p-3 transition-all hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-800/40"
+                  className="group flex flex-col items-start gap-2 rounded-lg border bg-card p-3 transition-all hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-800/40 sm:flex-row sm:items-center sm:gap-3"
                 >
                   <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', t.iconBg)}>
                     <Icon className="h-4 w-4" />
                   </div>
-                  <span className="flex-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <span className="flex-1 text-[13px] font-semibold leading-tight text-slate-900 dark:text-slate-100 sm:text-sm">
                     {action.title}
                   </span>
-                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-hover:translate-x-0.5" />
+                  <ArrowRight className="hidden h-3.5 w-3.5 text-slate-300 transition-transform group-hover:translate-x-0.5 sm:block" />
                 </Link>
               )
             })}
@@ -808,8 +811,8 @@ export default function DashboardPage() {
         </Card>
 
         {/* Recent activity */}
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="gap-3 py-4 sm:gap-6 sm:py-6">
+          <CardHeader className="px-4 pb-3 sm:px-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-400">
@@ -817,7 +820,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <CardTitle className="text-base">Actividad reciente</CardTitle>
-                  <p className="mt-0.5 text-xs text-slate-500">Últimos movimientos del sistema</p>
+                  <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">Últimos movimientos del sistema</p>
                 </div>
               </div>
               <Button asChild variant="ghost" size="sm" className="h-7 gap-1 text-xs">
@@ -828,7 +831,7 @@ export default function DashboardPage() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             <Suspense fallback={
               <div className="space-y-3">
                 {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
@@ -841,7 +844,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Quick links footer */}
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
         {[
           ...(hasPos ? [{ href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' }] : []),
           ...(hasServices ? [{ href: '/dashboard/agenda', icon: CalendarClock, label: 'Agenda', sub: 'Turnos y reservas online' }] : []),
@@ -855,16 +858,16 @@ export default function DashboardPage() {
           <Link
             key={href}
             href={href}
-            className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-800/50"
+            className="flex items-center gap-2.5 rounded-xl border bg-card p-3 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-800/50 sm:gap-3 sm:p-4"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted">
               <Icon className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</p>
-              <p className="truncate text-xs text-slate-400">{sub}</p>
+              <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-slate-900 dark:text-slate-100 sm:truncate sm:text-sm">{label}</p>
+              <p className="hidden truncate text-xs text-slate-400 sm:block">{sub}</p>
             </div>
-            <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-300" />
+            <ExternalLink className="ml-auto hidden h-3.5 w-3.5 shrink-0 text-slate-300 sm:block" />
           </Link>
         ))}
       </section>

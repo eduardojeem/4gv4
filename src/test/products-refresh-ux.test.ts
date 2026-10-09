@@ -18,11 +18,10 @@ describe('recargar no vacía la pantalla de productos', () => {
     expect(PAGINA).toContain('const isRefreshing = (loading || isPending) && products.length > 0')
   })
 
-  it('las tres vistas solo muestran esqueleto sin datos', () => {
-    // Grilla, tabla y vista compacta: si alguna sigue recibiendo `loading`
-    // crudo, esa vista se sigue vaciando.
-    const usos = [...PAGINA.matchAll(/loading=\{isFirstLoad\}/g)]
-    expect(usos.length).toBe(3)
+  it.each(['MobileProductList', 'ProductSectionGroup', 'ProductGrid', 'ProductTable'])('%s solo muestra esqueleto sin datos', (componente) => {
+    const etiqueta = PAGINA.match(new RegExp(`<${componente}\\b[\\s\\S]*?/>`))?.[0]
+    expect(etiqueta).toBeDefined()
+    expect(etiqueta).toContain('loading={isFirstLoad}')
     expect(PAGINA).not.toContain('loading={loading || isPending}\n              />')
   })
 

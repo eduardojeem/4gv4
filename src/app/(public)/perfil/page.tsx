@@ -62,6 +62,16 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
   // «Rastrear equipo» solo si la tienda tiene taller. En el marketplace no hay
   // una tienda puntual y se mantiene.
   const repairsAvailable = organizationId ? await isOrganizationModuleEnabled(organizationId, 'repairs') : true
+  // Dentro de una tienda, el perfil muestra solo lo que esa tienda ofrece: una
+  // barbería no tiene carritos, créditos ni reparaciones, y sí turnos.
+  const [servicesAvailable, ordersAvailable, creditsAvailable, catalogAvailable] = organizationId
+    ? await Promise.all([
+        isOrganizationModuleEnabled(organizationId, 'services'),
+        isOrganizationModuleEnabled(organizationId, 'orders'),
+        isOrganizationModuleEnabled(organizationId, 'credits'),
+        isOrganizationModuleEnabled(organizationId, 'inventory'),
+      ])
+    : [false, true, true, true]
 
   const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', user.id).single()
 
@@ -135,6 +145,7 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
       recentRepairs={recentRepairs}
       recentOrders={recentOrders}
       repairsAvailable={repairsAvailable}
+      storeFeatures={{ services: servicesAvailable, orders: ordersAvailable, credits: creditsAvailable, catalog: catalogAvailable }}
       organization={userOrganization ? {
         id: userOrganization.id,
         name: userOrganization.name,

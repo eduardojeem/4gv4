@@ -3,6 +3,7 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { config } from '@/lib/config'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { creditBusinessDate } from '@/lib/credits/installments'
 import { getCurrencyFractionDigits } from '@/lib/currency'
 import { firstPaymentError, type FirstInstallmentPayment } from '@/lib/credits/first-payment'
@@ -12,6 +13,7 @@ import type { RepairDeliveryOutcome, RepairQualityCheckResult } from '@/types/re
 type JsonRecord = Record<string, unknown>
 
 type RouteBody = {
+  p_appointment_id?: unknown
   p_sale_data?: JsonRecord
   p_items?: unknown
   p_payments?: unknown
@@ -232,6 +234,14 @@ function errorResponse(error: { message?: string; details?: string; hint?: strin
   }
 
   const mappings: Array<[string, string, number]> = [
+    ['APPOINTMENT_ALREADY_PAID', 'Este turno ya fue cobrado. Actualizá la agenda.', 409],
+    ['APPOINTMENT_NOT_CHANGEABLE', 'El turno está cancelado o no se puede cobrar.', 409],
+    ['APPOINTMENT_NOT_IN_ORGANIZATION', 'El turno no pertenece a esta organización.', 404],
+    ['APPOINTMENT_ITEM_REQUIRED', 'Incluí el servicio del turno con cantidad 1 y sin variantes.', 400],
+    ['APPOINTMENT_REQUIRES_RETAIL', 'Los turnos se cobran con su tarifa acordada, no en modo mayorista.', 400],
+    ['APPOINTMENT_SERVICE_QUANTITY_MISMATCH', 'Incluí el servicio del turno con cantidad 1 y sin variantes.', 400],
+    ['APPOINTMENT_CUSTOMER_MISMATCH', 'Seleccioná el cliente del turno para cobrarlo.', 409],
+    ['IDEMPOTENCY_CONFLICT', 'Este intento de cobro ya se usó con otros datos. Revisá la venta registrada.', 409],
     ['FIRST_INSTALLMENT_CASH_INSUFFICIENT', 'El efectivo recibido no cubre la primera cuota. Revisá el importe antes de confirmar.', 400],
     ['FIRST_INSTALLMENT_TRANSFER_REQUIRED', 'Ingresá banco o cuenta receptora y referencia de la primera cuota.', 400],
     ['FIRST_INSTALLMENT_REQUIRES_START', 'Para cobrar la primera cuota ahora, elegí inicio de cuotas desde hoy.', 400],
@@ -309,10 +319,13 @@ export const POST = withTenantAuth(
       return NextResponse.json({ success: false, error: 'La solicitud no es valida.' }, { status: 400 })
     }
 
+    const appointmentId = typeof body.p_appointment_id === 'string' ? body.p_appointment_id.trim() : null
+    if (body.p_appointment_id != null && (!appointmentId || !UUID_PATTERN.test(appointmentId))) return NextResponse.json({ success:false,error:'Turno inválido' },{status:400})
+    if (appointmentId && !(await isOrganizationModuleEnabled(organization.id,'services'))) return NextResponse.json({ success:false,error:'El plan no incluye servicios y reservas.' },{status:403})
     const saleData = body.p_sale_data ?? {}
     const items = normalizeItems(body.p_items)
     const requestedStoreCreditAmount = finiteNumber(body.p_store_credit_amount ?? 0)
-    const payments = normalizePayments(body.p_payments, requestedStoreCreditAmount !== null && requestedStoreCreditAmount > 0)
+    const payments = normalizePayments(body.p_payments, Boolean(appointmentId) || (requestedStoreCreditAmount !== null && requestedStoreCreditAmount > 0))
     const repairIds = normalizeUuidArray(body.p_repair_ids)
     const sessionId = typeof body.p_session_id === 'string' ? body.p_session_id.trim() : ''
     const customerId = typeof saleData.customer_id === 'string' && saleData.customer_id.trim()
@@ -440,7 +453,13 @@ export const POST = withTenantAuth(
     const taxRate = await getTaxRate(supabase, organization.id)
     const code = `POS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     
-    let rpcResponse = await supabase.rpc('process_pos_sale_atomic_v5', {
+    let rpcResponse = appointmentId ? await supabase.rpc('process_agenda_pos_sale', {
+      p_org:organization.id,p_branch:branchScope.branchId,p_actor:user.id,p_session:sessionId,p_appointment:appointmentId,p_key:idempotencyKey,p_items:items,p_payments:payments,
+      p_options:{code,customer_id:customerId,price_mode:priceMode,order_discount_rate:orderDiscountRate,
+        notes:typeof saleData.notes==='string'?saleData.notes.slice(0,2000):null,tax_rate:taxRate,prices_include_tax:config.pricesIncludeTax,
+        credit,repair_ids:repairIds,mark_repairs_delivered:body.p_mark_repairs_delivered===true,
+        delivery_outcome:typeof body.p_delivery_outcome==='string'?body.p_delivery_outcome.slice(0,120):null,store_credit_amount:storeCreditAmount},
+    }) : await supabase.rpc('process_pos_sale_atomic_v5', {
       p_organization_id: organization.id,
       p_branch_id: branchScope.branchId,
       p_actor_id: user.id,
@@ -464,7 +483,8 @@ export const POST = withTenantAuth(
 
     // Compatibilidad durante el despliegue: nunca degradar una venta con
     // variantes a una función que no descuenta su inventario específico.
-    if (!items.some(item => item.variant_id) && rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v5') || rpcResponse.error.code === '42883')) {
+    if (appointmentId && rpcResponse.error && ['PGRST202','42883'].includes(rpcResponse.error.code ?? '')) return NextResponse.json({success:false,error:'Falta aplicar la migración de cobro de turnos. No se procesó la venta.'},{status:503})
+    if (!appointmentId && !items.some(item => item.variant_id) && rpcResponse.error && (rpcResponse.error.message?.includes('process_pos_sale_atomic_v5') || rpcResponse.error.code === '42883')) {
       rpcResponse = await supabase.rpc('process_pos_sale_atomic_v4', {
         p_organization_id: organization.id,
         p_branch_id: branchScope.branchId,

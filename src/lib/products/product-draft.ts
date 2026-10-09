@@ -16,6 +16,24 @@ const PREFIJO = 'product-draft:'
 
 /** Pasado este tiempo el borrador no se ofrece: es de otro momento. */
 const VIGENCIA_MS = 60 * 60 * 1000
+const pendientes = new Map<string, { valores: Record<string, unknown>; timer: ReturnType<typeof setTimeout> }>()
+
+export function scheduleProductDraft(productId: string | null, valores: Record<string, unknown>) {
+  if (typeof window === 'undefined') return
+  const key = clave(productId)
+  const previous = pendientes.get(key)
+  if (previous) clearTimeout(previous.timer)
+  pendientes.set(key, { valores: { ...valores }, timer: setTimeout(() => flushProductDraft(productId), 300) })
+}
+
+export function flushProductDraft(productId: string | null) {
+  const key = clave(productId)
+  const pending = pendientes.get(key)
+  if (!pending) return
+  clearTimeout(pending.timer)
+  pendientes.delete(key)
+  saveProductDraft(productId, pending.valores)
+}
 
 type BorradorGuardado = {
   guardadoEn: number
@@ -62,6 +80,9 @@ export function readProductDraft(productId: string | null): Record<string, unkno
 }
 
 export function clearProductDraft(productId: string | null) {
+  const pending = pendientes.get(clave(productId))
+  if (pending) clearTimeout(pending.timer)
+  pendientes.delete(clave(productId))
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.removeItem(clave(productId))

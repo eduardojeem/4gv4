@@ -60,7 +60,7 @@ describe('turno → POS', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ appointment: { id: 'a1', number: 7, status: 'confirmed', sale_id: null, customer_id: 'c1', service_product_id: 'svc-1', service_name: 'Corte', price: 50000 } }),
+        json: async () => ({ professionalBookingAvailable:true, appointment: { id: 'a1', number: 7, status: 'confirmed', sale_id: null, customer_id: 'c1', service_product_id: 'svc-1', service_name: 'Corte', price: 70000 } }),
       })
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
     vi.stubGlobal('fetch', fetchMock)
@@ -82,13 +82,13 @@ describe('turno → POS', () => {
 
     await waitFor(() => expect(hook.result.current.activeQuote).toEqual({ kind: 'appointment', id: 'a1', number: 7, code: 'T-00007' }))
     expect(fetchMock).toHaveBeenCalledWith('/api/agenda/a1', expect.anything())
-    expect(calls.addProduct).toHaveBeenCalledWith(product, 1)
+    expect(calls.addProduct).toHaveBeenCalledWith(expect.objectContaining({appointmentId:'a1',sale_price:70000,price:70000}), 1)
     expect(calls.setSelectedCustomer).toHaveBeenCalledWith('c1')
-    // El catálogo dice 60.000 y el turno se dio a 50.000.
-    expect(calls.updateItemDiscount).toHaveBeenCalledWith('svc-1', expect.closeTo(16.6667, 3))
+    // La tarifa profesional puede superar al catálogo: no se simula con descuentos.
+    expect(calls.updateItemDiscount).not.toHaveBeenCalled()
 
     await act(() => hook.result.current.markConverted('sale-1'))
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/agenda/a1', expect.objectContaining({ body: JSON.stringify({ action: 'link_sale', sale_id: 'sale-1' }) }))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('no carga un turno ya cobrado', async () => {

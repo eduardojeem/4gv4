@@ -94,7 +94,7 @@ export function ProfileAccountTypeBanner({ organization, userRole = 'cliente' }:
               Tus compras y servicios, en un solo perfil
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed max-w-xl">
-              Tus pedidos, favoritos, carritos y reparaciones se reúnen acá, aunque pertenezcan a tiendas diferentes.
+              Lo que hacés en cada tienda —pedidos, favoritos, turnos y más— se reúne acá, aunque sean tiendas diferentes.
             </p>
           </div>
         </div>

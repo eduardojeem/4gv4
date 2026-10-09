@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { ChevronRight, Heart, LayoutDashboard, Settings, Shield, ShoppingCart, WalletCards, Wrench } from 'lucide-react'
+import { CalendarClock, ChevronRight, Heart, LayoutDashboard, Settings, Shield, ShoppingCart, WalletCards, Wrench } from 'lucide-react'
 import Link from 'next/link'
 
 interface ProfileQuickActionsProps {
@@ -12,6 +12,12 @@ interface ProfileQuickActionsProps {
   showAuthorizedPersons?: boolean
   /** La tienda tiene taller. Sin el, «Rastrear equipo» llevaba a una seccion vacia. */
   showRepairs?: boolean
+  /** La tienda vende productos: favoritos y carritos. */
+  showShopping?: boolean
+  /** La tienda da créditos o cuotas. */
+  showCredits?: boolean
+  /** La tienda toma turnos: acceso a reservar. */
+  bookingHref?: string
 }
 
 import { ChangePasswordDialog } from './change-password-dialog'
@@ -23,6 +29,9 @@ export function ProfileQuickActions({
   showStaffPanel = true,
   showAuthorizedPersons = true,
   showRepairs = true,
+  showShopping = true,
+  showCredits = true,
+  bookingHref,
 }: ProfileQuickActionsProps) {
   // 'super_admin' es mas privilegiado que 'admin' y quedaba afuera de esta
   // lista, asi que ese rol no veia el acceso al panel desde su propio perfil.
@@ -72,6 +81,24 @@ export function ProfileQuickActions({
     <div className="flex flex-col gap-3">
       {/* Main actions */}
       {variant !== 'account' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {bookingHref && (
+        <Link
+          href={bookingHref}
+          className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <CalendarClock className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Reservar turno</p>
+            <p className="text-xs text-muted-foreground">Elegí servicio, día y horario</p>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </Link>
+        )}
+
+        {showShopping && (
+        <>
         <Link
           href="#favoritos"
           className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-rose-500/30 hover:shadow-md"
@@ -99,6 +126,8 @@ export function ProfileQuickActions({
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
+        </>
+        )}
 
         {showRepairs && (
         <Link
@@ -116,6 +145,7 @@ export function ProfileQuickActions({
         </Link>
         )}
 
+        {showCredits && (
         <Link
           href={creditsHref}
           className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
@@ -129,6 +159,7 @@ export function ProfileQuickActions({
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
+        )}
 
         {showAuthorizedPersons && <Link
           href={authorizedHref}

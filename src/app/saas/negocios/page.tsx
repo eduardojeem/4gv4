@@ -5,6 +5,7 @@ import { SaaSBusinessPageContent } from '@/components/saas/landing/saas-business
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
 import { getPlatformBranding } from '@/lib/platform/branding'
 import { getMarketplaceOrganizations } from '@/lib/public/marketplace'
+import { BUSINESS_DIRECTORY_MAX_STORES, pageDirectory } from '@/lib/public/business-directory'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
@@ -18,15 +19,17 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SaaSBusinessPage() {
   const [branding, organizations] = await Promise.all([
     getPlatformBranding(),
-    getMarketplaceOrganizations(24).catch(() => []),
+    getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES).catch(() => []),
   ])
+  // El navegador recibe la primera página; las demás las pide al cambiar de página.
+  const initialPage = pageDirectory(organizations, { page: 1 })
 
   return (
     <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50">
       <SaaSPublicNav />
 
       <main>
-        <SaaSBusinessPageContent initialOrganizations={organizations} />
+        <SaaSBusinessPageContent initialPage={initialPage} />
         <SaaSCTASection branding={branding} />
       </main>
     </div>

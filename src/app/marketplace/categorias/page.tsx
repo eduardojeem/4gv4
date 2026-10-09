@@ -11,8 +11,9 @@ export const metadata: Metadata = {
   description: 'Explora todos los productos del marketplace por categoría comercial.',
 }
 
-// Configurar ISR (Incremental Static Regeneration) con revalidación de 10 minutos (600 segundos)
-export const revalidate = 600
+// Query the live catalog only at request time; CI builds do not have admin credentials.
+// Catalog helpers retain their own shared data cache.
+export const dynamic = 'force-dynamic'
 
 export default async function MarketplaceCategoriesPage() {
   const [categories, brands] = await Promise.all([

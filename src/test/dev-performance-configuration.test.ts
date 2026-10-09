@@ -23,7 +23,7 @@ describe('configuracion de rendimiento en desarrollo', () => {
     const config = fs.readFileSync(path.join(root, 'next.config.ts'), 'utf8')
 
     expect(config).toContain("import { createRequire } from 'node:module'")
-    expect(config).toContain("process.env.NODE_ENV === 'production'\n  ? loadModule('@ducanh2912/next-pwa')")
+    expect(config).not.toContain("loadModule('@ducanh2912/next-pwa')")
     expect(config).toContain("process.env.ANALYZE === 'true'\n  ? loadModule('@next/bundle-analyzer')")
   })
 })

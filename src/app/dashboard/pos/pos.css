@@ -193,9 +193,16 @@
     padding: 0.5rem;
   }
   
+  /* 2 columnas en pantallas muy chicas y 3 desde 360px, como en el JSX. */
   .product-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.375rem;
+  }
+
+  @media (min-width: 360px) {
+    .product-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
   
   .product-card {
@@ -330,7 +337,7 @@
 
 /* Focus Styles for Accessibility */
 .focus-visible:focus {
-  outline: 2px solid hsl(var(--ring));
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -444,8 +451,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 20px 20px 0 0;
   box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.1);
   transform: translateY(100%);
@@ -463,7 +470,7 @@
   top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
-  background: hsl(var(--card));
+  background: var(--card);
 }
 
 /* Tablet-specific grid layouts */
@@ -543,7 +550,7 @@
   .mobile-product-price {
     font-size: 1rem;
     font-weight: 700;
-    color: hsl(var(--primary));
+    color: var(--primary);
   }
 }
 
@@ -571,9 +578,9 @@
     position: sticky;
     top: 0;
     z-index: 50;
-    background: hsl(var(--card));
+    background: var(--card);
     padding: 1rem;
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: 1px solid var(--border);
   }
 }
 
@@ -587,8 +594,8 @@
 .mobile-cart-summary {
   position: sticky;
   bottom: 0;
-  background: hsl(var(--card));
-  border-top: 1px solid hsl(var(--border));
+  background: var(--card);
+  border-top: 1px solid var(--border);
   padding: 1rem;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
 }
@@ -756,7 +763,7 @@
   background:
     radial-gradient(1200px 500px at 8% -10%, rgba(37, 99, 235, 0.12), transparent 55%),
     radial-gradient(900px 420px at 100% -20%, rgba(6, 182, 212, 0.1), transparent 55%),
-    hsl(var(--background));
+    var(--background);
 }
 
 .pos-header-action {
@@ -771,13 +778,13 @@
 
 /* Visual system for POS sections */
 .pos-panel {
-  background: color-mix(in oklab, hsl(var(--card)) 92%, white 8%);
-  border: 1px solid color-mix(in oklab, hsl(var(--border)) 82%, hsl(var(--primary)) 18%);
+  background: color-mix(in oklab, var(--card) 92%, white 8%);
+  border: 1px solid color-mix(in oklab, var(--border) 82%, var(--primary) 18%);
   box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.45);
 }
 
 .dark .pos-panel {
-  background: color-mix(in oklab, hsl(var(--card)) 92%, black 8%);
+  background: color-mix(in oklab, var(--card) 92%, black 8%);
   box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.55);
 }
 
@@ -787,12 +794,31 @@
 
 .pos-state-card {
   background:
-    linear-gradient(180deg, color-mix(in oklab, hsl(var(--card)) 95%, hsl(var(--primary)) 5%), hsl(var(--card)));
-  border: 1px solid color-mix(in oklab, hsl(var(--border)) 84%, hsl(var(--primary)) 16%);
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 95%, var(--primary) 5%), var(--card));
+  border: 1px solid color-mix(in oklab, var(--border) 84%, var(--primary) 16%);
   box-shadow: 0 12px 30px -20px rgba(15, 23, 42, 0.45);
 }
 
 .pos-state-icon {
-  background: color-mix(in oklab, hsl(var(--muted)) 88%, hsl(var(--primary)) 12%);
-  border: 1px solid color-mix(in oklab, hsl(var(--border)) 84%, hsl(var(--primary)) 16%);
+  background: color-mix(in oklab, var(--muted) 88%, var(--primary) 12%);
+  border: 1px solid color-mix(in oklab, var(--border) 84%, var(--primary) 16%);
+}
+
+/*
+ * El POS ocupa toda el área del panel. Dentro del contenido del panel venía con
+ * su relleno y su scroll, y con «h-dvh» quedaba más alto que la pantalla: en el
+ * celular se scrolleaba todo el POS y el encabezado de la caja se iba de vista.
+ */
+#dashboard-main:has(.pos-shell) {
+  padding: 0;
+  overflow: hidden;
+}
+
+#dashboard-main:has(.pos-shell) > div {
+  height: 100%;
+}
+
+#dashboard-main .pos-shell:not(.fixed) {
+  height: 100%;
+  max-height: 100%;
 }

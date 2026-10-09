@@ -7,6 +7,8 @@ import { roleHasPermission, type OrganizationRole } from '@/lib/saas/permissions
 import { APPOINTMENT_COLUMNS, appointmentErrorMessage, loadAgendaConfig } from '@/lib/agenda/agenda-server'
 import { appointmentInputSchema, appointmentRow, assertAppointmentRefs } from '@/lib/agenda/agenda-api'
 import { addDays, dayRangeUtc, todayIn } from '@/lib/agenda/time'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { bookingWriteError } from '@/lib/agenda/booking-writes'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +29,7 @@ export const GET = withTenantAuth(guard, async (request, { organization }) => {
 
   const { data, error } = await supabase
     .from('appointments')
-    .select(APPOINTMENT_COLUMNS)
+    .select(config.capabilities.professionalBooking ? `${APPOINTMENT_COLUMNS}, buffer_minutes, occupied_until` : APPOINTMENT_COLUMNS)
     .eq('organization_id', organization.id)
     .gte('starts_at', new Date(from).toISOString())
     .lt('starts_at', new Date(to).toISOString())
@@ -63,6 +65,18 @@ export const POST = withTenantAuth(guard, async (request, { organization, user }
   const parsed = appointmentInputSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Revisá los datos del turno' }, { status: 400 })
   const supabase = (await createClient()) as unknown as SupabaseClient
+
+  const config = await loadAgendaConfig(supabase, organization.id)
+  if (config?.capabilities.professionalBooking) {
+    const { data, error } = await createAdminSupabase().rpc('save_agenda_appointment', {
+      p_org: organization.id, p_id: null, p_input: parsed.data, p_actor: user.id,
+    })
+    if (error || !data) {
+      const failure = bookingWriteError(error)
+      return NextResponse.json({ error: failure.error, code: failure.code }, { status: failure.status })
+    }
+    return NextResponse.json({ appointment: data }, { status: 201 })
+  }
 
   const refError = await assertAppointmentRefs(supabase, organization.id, parsed.data)
   if (refError) return NextResponse.json({ error: refError }, { status: 400 })

@@ -15,6 +15,7 @@ import {
   Sparkles,
   Truck,
   Wrench,
+  CalendarCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getWhatsAppLink } from '@/lib/whatsapp'
@@ -27,7 +28,32 @@ interface ProcessStepsProps {
   flows: ProcessFlow[]
   tenantPrefix?: string
   phoneClean?: string
+  /** Un negocio de turnos explica cómo reservar, no cómo comprar. */
+  variant?: 'store' | 'services'
+  /** A dónde lleva «Reservar turno» en la variante de servicios. */
+  bookingHref?: string
+  /** Sin productos publicados no se ofrece «Explorar catálogo». */
+  showCatalog?: boolean
 }
+
+const COPY = {
+  store: {
+    eyebrow: 'Paso a Paso Transparente',
+    title: '¿Cómo comprar en nuestra tienda?',
+    description: 'Un recorrido simple, rápido y seguro desde la elección del producto hasta la entrega en tus manos.',
+    helpTitle: '¿Querés hacer un pedido o consultar sobre un producto?',
+    helpText: 'Estamos online para resolver todas tus consultas y coordinar envíos o retiro inmediato.',
+    whatsapp: '¡Hola! 👋 Estuve viendo cómo comprar en la tienda online y quería consultar sobre un producto.',
+  },
+  services: {
+    eyebrow: 'Así de simple',
+    title: '¿Cómo reservar tu turno?',
+    description: 'Del turno a tu mejor estilo, en pocos pasos.',
+    helpTitle: '¿Tenés dudas antes de reservar?',
+    helpText: 'Escribinos y te ayudamos a elegir el servicio y el horario.',
+    whatsapp: '¡Hola! 👋 Quería consultar por un turno.',
+  },
+} as const
 
 function getFlowIcon(flowId: string) {
   switch (flowId) {
@@ -170,7 +196,8 @@ function StepCard({
   )
 }
 
-export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean }: ProcessStepsProps) {
+export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean, variant = 'store', bookingHref, showCatalog = true }: ProcessStepsProps) {
+  const copy = COPY[variant]
   const [selectedFlowId, setSelectedFlowId] = useState(flows[0]?.id ?? '')
   if (flows.length === 0) return null
 
@@ -181,7 +208,7 @@ export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean }: Pr
   const whatsappHref = phoneClean && phoneClean.length >= 6
     ? getWhatsAppLink({
         phone: phoneClean,
-        message: '¡Hola! 👋 Estuve viendo cómo comprar en la tienda online y quería consultar sobre un producto.',
+        message: copy.whatsapp,
       })
     : null
 
@@ -195,20 +222,20 @@ export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean }: Pr
         <div className="mx-auto max-w-3xl text-center space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 py-1 text-xs font-bold text-primary shadow-xs">
             <Sparkles className="h-3.5 w-3.5 animate-pulse text-primary" />
-            <span>Paso a Paso Transparente</span>
+            <span>{copy.eyebrow}</span>
           </div>
 
           <h2
             id="public-process-title"
             className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-foreground"
           >
-            ¿Cómo comprar en nuestra tienda?
+            {copy.title}
           </h2>
 
           <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
             {flows.length > 1
               ? 'Elegí el tipo de atención para conocer cada etapa de forma transparente.'
-              : selectedFlow.description || 'Un recorrido simple, rápido y seguro desde la elección del producto hasta la entrega en tus manos.'}
+              : selectedFlow.description || copy.description}
           </p>
         </div>
 
@@ -276,25 +303,38 @@ export function ProcessSteps({ brand, flows, tenantPrefix = '', phoneClean }: Pr
               </div>
               <div>
                 <h4 className="text-base sm:text-lg font-bold text-foreground">
-                  ¿Querés hacer un pedido o consultar sobre un producto?
+                  {copy.helpTitle}
                 </h4>
                 <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                  Estamos online para resolver todas tus consultas y coordinar envíos o retiro inmediato.
+                  {copy.helpText}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 shrink-0 w-full md:w-auto justify-center">
-              <Button
-                asChild
-                variant="outline"
-                className="rounded-xl border-border/80 bg-background font-bold text-foreground hover:bg-muted shadow-2xs gap-2"
-              >
-                <Link href={`${tenantPrefix}/productos`}>
-                  <ShoppingBag className="h-4 w-4 text-primary" />
-                  <span>Explorar Catálogo</span>
-                </Link>
-              </Button>
+              {variant === 'services' && bookingHref ? (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="rounded-xl border-border/80 bg-background font-bold text-foreground hover:bg-muted shadow-2xs gap-2"
+                >
+                  <Link href={bookingHref}>
+                    <CalendarCheck className="h-4 w-4 text-primary" />
+                    <span>Reservar turno</span>
+                  </Link>
+                </Button>
+              ) : showCatalog && variant === 'store' ? (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="rounded-xl border-border/80 bg-background font-bold text-foreground hover:bg-muted shadow-2xs gap-2"
+                >
+                  <Link href={`${tenantPrefix}/productos`}>
+                    <ShoppingBag className="h-4 w-4 text-primary" />
+                    <span>Explorar Catálogo</span>
+                  </Link>
+                </Button>
+              ) : null}
 
               {whatsappHref && (
                 <Button

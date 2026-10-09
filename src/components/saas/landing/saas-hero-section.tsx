@@ -7,7 +7,7 @@ const modules = [
   { icon: ShoppingCart, title: 'Ventas y caja', detail: 'Cobrá y registrá cada operación.' },
   { icon: Boxes, title: 'Productos e inventario', detail: 'Precios y existencias en un solo lugar.' },
   { icon: Store, title: 'Tu tienda online', detail: 'Publicá tu catálogo cuando estés listo.' },
-  { icon: Wrench, title: 'Servicios y reparaciones', detail: 'Activá el taller si tu negocio lo necesita.' },
+  { icon: Wrench, title: 'Servicios, turnos y reparaciones', detail: 'Organizá tu agenda o el trabajo de tu taller.' },
 ]
 
 export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
@@ -20,14 +20,14 @@ export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
             Tu negocio, <span className="text-cyan-700 dark:text-cyan-400">más simple.</span><br />Todo conectado.
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-600 sm:text-lg dark:text-slate-400">
-            Organizá tus ventas, productos y clientes desde un mismo lugar. Elegí las herramientas que necesitás y crecé a tu ritmo.
+            Gestioná ventas, productos, clientes y turnos desde un mismo lugar. Para comercios, mercados, tiendas de ropa y negocios de servicios: elegí las herramientas disponibles en tu plan.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg" className="h-12 gap-2 bg-cyan-700 px-6 text-white hover:bg-cyan-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300">
               <Link href={branding.primaryCtaHref}>{branding.primaryCtaLabel || 'Crear mi negocio'}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-12 bg-transparent px-6">
-              <Link href="#planes">Conocer los planes</Link>
+              <Link href="/saas/soluciones">Explorar soluciones</Link>
             </Button>
           </div>
           <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600 dark:text-slate-400">

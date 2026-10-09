@@ -80,7 +80,7 @@ export function SearchAndActionsBar({
   className
 }: SearchAndActionsBarProps) {
   return (
-    <Card className={cn('rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-900/60 shadow-sm backdrop-blur-md overflow-hidden', className)}>
+    <Card className={cn('rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 md:bg-white/85 md:dark:bg-slate-900/60 shadow-sm md:backdrop-blur-md overflow-hidden', className)}>
       <CardContent className="p-3 sm:p-4 space-y-3">
         {/* Fila 1: Buscador amplio y herramientas de datos (Actualizar, Importar, Exportar) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { clearProductDraft, readProductDraft, saveProductDraft } from '@/lib/products/product-draft'
+import { clearProductDraft, readProductDraft, scheduleProductDraft, flushProductDraft } from '@/lib/products/product-draft'
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
 import { Upload, Package, Tag, Warehouse, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye, Layers3, ChevronLeft, ChevronRight, Check, TrendingUp, Percent, RotateCcw } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatPrice, cn } from '@/lib/utils'
@@ -285,6 +286,7 @@ export function ProductModal({
   onCatalogChange,
   initialTab = 'basic',
 }: ProductModalProps) {
+  const mobileViewportStyle = useMobileDialogViewport(isOpen)
   const [activeTab, setActiveTab] = useState<string>(initialTab)
   const initialTabRef = useRef(initialTab)
   initialTabRef.current = initialTab
@@ -728,11 +730,21 @@ export function ProductModal({
   // recupero nada.
   useEffect(() => {
     if (!isDirty) return
+    scheduleProductDraft(productId, form.getValues() as Record<string, unknown>)
     // React Hook Form exposes a subscription API that React Compiler cannot memoize.
-    const subscription = form.watch((values) => {
-      saveProductDraft(productId, values as Record<string, unknown>)
+    const subscription = form.watch((values, event) => {
+      if (event.name) scheduleProductDraft(productId, values as Record<string, unknown>)
     })
-    return () => subscription.unsubscribe()
+    const flush = () => flushProductDraft(productId)
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+      flush()
+    }
   }, [form, isDirty, productId])
 
   const handleSaveCategory = async (categoryData: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => {
@@ -1178,10 +1190,11 @@ export function ProductModal({
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
         showCloseButton={!isSubmitting && !isUploadingImages}
-        className="w-full max-w-full sm:max-w-[95vw] lg:max-w-6xl h-[100dvh] sm:h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none flex flex-col rounded-none sm:rounded-2xl"
+        style={mobileViewportStyle}
+        className="product-editor-dialog top-0 left-0 translate-x-0 translate-y-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full max-w-full sm:max-w-[95vw] lg:max-w-6xl h-[100dvh] sm:h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none flex flex-col rounded-none sm:rounded-2xl"
       >
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} className="flex flex-col flex-1 overflow-hidden h-full">
+          <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} className="flex min-h-0 flex-col flex-1 overflow-hidden h-full">
             {/* Header */}
             <div className={`shrink-0 relative overflow-hidden ${product
               ? 'border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/20'

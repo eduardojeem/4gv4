@@ -242,20 +242,21 @@ export const ProductCard = memo(({
             e.stopPropagation()
             onViewDetail(product)
           }}
-          className="absolute top-1.5 right-1.5 z-20 h-5.5 w-5.5 rounded-full bg-background/90 hover:bg-background backdrop-blur-md border border-border/70 shadow-xs flex items-center justify-center text-muted-foreground hover:text-primary transition-all hover:scale-110"
+          className="absolute top-1 right-1 z-20 h-6 w-6 !min-h-0 !min-w-0 sm:top-1.5 sm:right-1.5 sm:h-5.5 sm:w-5.5 rounded-full bg-background/90 hover:bg-background backdrop-blur-md border border-border/70 shadow-xs flex items-center justify-center text-muted-foreground hover:text-primary transition-all hover:scale-110"
           title="Ver detalle completo del producto"
+          aria-label={`Ver detalle de ${product.name}`}
         >
-          <Eye className="h-2.5 w-2.5" />
+          <Eye className="h-3 w-3 sm:h-2.5 sm:w-2.5" />
         </button>
       )}
 
       {/* Badge: Stock bajo/critico */}
       {showStock && stockStatus && (stockStatus.status === 'low' || stockStatus.status === 'critical' || stockStatus.status === 'out') && (
-        <div className={`absolute ${onViewDetail ? 'top-1.5 right-8' : 'top-1.5 right-1.5'} z-10`}>
+        <div className={`absolute ${onViewDetail ? 'top-11 left-1 sm:left-auto sm:top-1.5 sm:right-8' : 'top-11 left-1 sm:left-auto sm:top-1.5 sm:right-1.5'} z-10`}>
           <Badge
             variant="secondary"
             className={cn(
-              "shadow-xs border-0 font-semibold px-1 py-0.2 text-[8px] backdrop-blur-md",
+              "shadow-xs border-0 font-semibold px-1 py-0.2 text-[10px] sm:text-[8px] backdrop-blur-md",
               stockStatus.status === 'out' ? 'bg-rose-500 text-white' :
                 stockStatus.status === 'critical' ? 'bg-orange-500 text-white' :
                 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300'
@@ -285,7 +286,7 @@ export const ProductCard = memo(({
 
       <CardContent className="p-0 h-full flex flex-col justify-between">
         {/* Imagen compacta y nítida */}
-        <div className="h-12 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
+        <div className="h-16 sm:h-24 bg-gradient-to-b from-muted/40 to-muted/10 flex items-center justify-center border-b border-border/40 overflow-hidden relative group-hover:bg-muted/30 transition-colors">
           {imageSrc ? (
             <AppImage
               src={imageSrc}
@@ -293,30 +294,30 @@ export const ProductCard = memo(({
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <Package className="h-5 w-5 text-muted-foreground/30 sm:h-8 sm:w-8" />
+            <Package className="h-6 w-6 text-muted-foreground/30 sm:h-8 sm:w-8" />
           )}
         </div>
 
-        <div className="p-1 sm:p-2.5 flex flex-col flex-1 justify-between gap-0 sm:gap-1">
+        <div className="p-1.5 sm:p-2.5 flex flex-col flex-1 justify-between gap-0.5 sm:gap-1">
           {/* Titulo y Categoria */}
           <div className="mb-0.5">
-            <h3 className="font-semibold text-[13px] leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
+            <h3 className="font-semibold text-xs sm:text-[13px] leading-tight sm:leading-snug line-clamp-2 text-foreground group-hover:text-primary transition-colors">
               {product.name}
             </h3>
             {product.is_active === false && (
-              <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 py-0.2 text-[7px] sm:text-[8px] font-semibold text-white">
+              <span className="mt-0.5 inline-flex items-center gap-0.5 rounded-full bg-slate-900/80 px-1 py-0.2 text-[10px] sm:text-[8px] font-semibold text-white">
                 <EyeOff className="h-2 w-2" />
                 Oculto
               </span>
             )}
-            <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
+            <p className="mt-0.5 hidden truncate text-[11px] leading-tight text-muted-foreground sm:block">
               {product.category?.name || product.category_id}
             </p>
           </div>
 
           {/* Stock indicator */}
           {showStock && stockStatus && !isOutOfStock && (
-            <div className="mb-0.5 flex items-center gap-1 text-[11px] text-muted-foreground sm:mb-0">
+            <div className="mb-0.5 flex items-center gap-1 text-[10px] text-muted-foreground sm:mb-0 sm:text-[11px]">
               <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", stockBarColor)} />
               <span className="truncate tabular-nums font-medium">
                 {stock} disp.
@@ -325,7 +326,7 @@ export const ProductCard = memo(({
           )}
               {featuredCreditPlan && (
             <div
-              className="mb-0.5 rounded border border-sky-500/20 bg-sky-500/10 px-1.5 py-1 text-[11px] leading-tight text-sky-800 transition-colors hover:border-sky-500/30 hover:bg-sky-500/20 dark:text-sky-200"
+              className="mb-0.5 rounded border border-sky-500/20 bg-sky-500/10 px-1 py-0.5 text-[10px] leading-tight sm:px-1.5 sm:py-1 sm:text-[11px] text-sky-800 transition-colors hover:border-sky-500/30 hover:bg-sky-500/20 dark:text-sky-200"
               onClick={(e) => {
                 if (onViewDetail) {
                   e.stopPropagation()
@@ -338,7 +339,7 @@ export const ProductCard = memo(({
                 <CreditCard className="h-2 w-2 sm:h-2.5 sm:w-2.5" aria-hidden="true" />
                 Hasta {featuredCreditPlan.count} cuotas
               </div>
-              <div className="flex flex-wrap gap-x-1 opacity-90">
+              <div className="hidden flex-wrap gap-x-1 opacity-90 sm:flex">
                 <span>Desde {formatCurrency(featuredCreditPlan.installmentAmount)}/mes</span>
               </div>
             </div>
@@ -348,11 +349,11 @@ export const ProductCard = memo(({
           <div className="pt-0.5 sm:pt-1.5 border-t border-border/40 flex items-end justify-between gap-1 sm:gap-1.5">
             <div className="flex flex-col min-w-0">
               {isWholesale && (
-                <span className="text-[7.5px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
+                <span className="text-[10px] sm:text-[9px] text-muted-foreground line-through leading-none mb-0.5">
                   {formatCurrency(price)}
                 </span>
               )}
-              <span className="text-[13px] font-bold leading-none tracking-tight text-primary sm:text-sm">
+              <span className="break-words text-xs font-bold leading-tight tracking-tight text-primary sm:text-sm sm:leading-none">
                 {formatCurrency(appliedPrice)}
               </span>
             </div>
@@ -362,8 +363,9 @@ export const ProductCard = memo(({
               onClick={(e) => { e.stopPropagation(); addToCart(product); }}
               disabled={isOutOfStock}
               size="sm"
+              aria-label={cartQuantity > 0 ? `Agregar otro ${product.name} (hay ${cartQuantity} en el carrito)` : `Agregar ${product.name}`}
               className={cn(
-                "min-h-10 min-w-10 px-2 text-[11px] font-semibold rounded-md shadow-xs transition-all",
+                "h-8 w-8 shrink-0 !min-h-0 !min-w-0 p-0 text-[11px] font-semibold rounded-md shadow-xs transition-all sm:h-auto sm:w-auto sm:min-h-10! sm:min-w-10! sm:px-2",
                 cartQuantity > 0
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
@@ -371,13 +373,14 @@ export const ProductCard = memo(({
             >
               {cartQuantity > 0 ? (
                 <div className="flex items-center gap-0.5">
-                  <span className="opacity-70 text-[7px] sm:text-[9px]">EN CARRO</span>
-                  <span>({cartQuantity})</span>
+                  <span className="hidden opacity-80 sm:inline sm:text-[9px]">EN CARRO</span>
+                  <span className="sm:hidden">{cartQuantity}</span>
+                  <span className="hidden sm:inline">({cartQuantity})</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-0.5">
-                  <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                  <span>{product.has_variants ? 'OPCIONES' : 'AGREGAR'}</span>
+                  <Plus className="h-4 w-4 sm:h-3 sm:w-3" />
+                  <span className="hidden sm:inline">{product.has_variants ? 'OPCIONES' : 'AGREGAR'}</span>
                 </div>
               )}
             </Button>

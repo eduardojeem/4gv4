@@ -67,8 +67,9 @@ describe('«Rastrear equipo» en el perfil', () => {
   })
 
   it('la página de perfil de la tienda le pasa la decisión', () => {
-    expect(leer('src/app/(public)/perfil/profile-client.tsx')).toContain(
-      "<ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} showRepairs={repairsAvailable} />"
-    )
+    const cliente = leer('src/app/(public)/perfil/profile-client.tsx')
+    expect(cliente).toContain('showRepairs={repairsAvailable}')
+    // Sin taller tampoco se muestran las cifras ni la actividad de reparaciones.
+    expect(cliente).toContain('{repairsAvailable && (\n          <div className="mb-8">\n            <ProfileStats {...stats} />')
   })
 })

@@ -2,6 +2,10 @@ import { SaaSMobileBottomNav } from '@/components/public/SaaSMobileBottomNav'
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks'
 import { getPlatformBranding } from '@/lib/platform/branding'
 
+// Branding and child-page metadata need server credentials at request time, not in CI builds.
+// Their data helpers retain the shared cache independently of page rendering.
+export const dynamic = 'force-dynamic'
+
 export default async function SaaSLayout({
   children,
 }: {

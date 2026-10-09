@@ -5,7 +5,9 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { siteUrl } from '@/lib/site-url'
-import { APPOINTMENT_COLUMNS, appointmentErrorMessage } from '@/lib/agenda/agenda-server'
+import { APPOINTMENT_COLUMNS, appointmentErrorMessage, loadAgendaConfig } from '@/lib/agenda/agenda-server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { bookingWriteError } from '@/lib/agenda/booking-writes'
 import { appointmentInputSchema, appointmentRow, assertAppointmentRefs, type AppointmentStatus } from '@/lib/agenda/agenda-api'
 
 export const dynamic = 'force-dynamic'
@@ -20,10 +22,13 @@ async function appointmentId(routeContext: unknown) {
 export const GET = withTenantAuth(guard, async (_request, { organization }, routeContext) => {
   const id = await appointmentId(routeContext)
   if (!id) return NextResponse.json({ error: 'Turno inválido' }, { status: 400 })
-  const supabase = await createClient()
-  const { data } = await supabase.from('appointments').select(APPOINTMENT_COLUMNS).eq('id', id).eq('organization_id', organization.id).maybeSingle()
+  const supabase = (await createClient()) as unknown as SupabaseClient
+  const config = await loadAgendaConfig(supabase, organization.id)
+  const ready = Boolean(config?.capabilities.professionalBooking)
+  const { data, error } = await supabase.from('appointments').select(ready ? `${APPOINTMENT_COLUMNS},buffer_minutes,occupied_until` : APPOINTMENT_COLUMNS).eq('id', id).eq('organization_id', organization.id).maybeSingle()
+  if (error) return NextResponse.json({ error: 'No se pudo consultar el turno' }, { status: 503 })
   if (!data) return NextResponse.json({ error: 'Turno no encontrado' }, { status: 404 })
-  return NextResponse.json({ appointment: data, publicUrl: siteUrl(`/turno/${(data as { public_token: string }).public_token}`) })
+  return NextResponse.json({ appointment: data, professionalBookingAvailable: ready, publicUrl: siteUrl(`/turno/${(data as unknown as { public_token: string }).public_token}`) })
 })
 
 const actionSchema = z.discriminatedUnion('action', [
@@ -50,7 +55,7 @@ const TRANSITIONS: Record<string, { to?: AppointmentStatus; from: AppointmentSta
   update: { from: ACTIVE },
 }
 
-export const PATCH = withTenantAuth(guard, async (request, { organization }, routeContext) => {
+export const PATCH = withTenantAuth(guard, async (request, { organization, user }, routeContext) => {
   const id = await appointmentId(routeContext)
   if (!id) return NextResponse.json({ error: 'Turno inválido' }, { status: 400 })
   const parsed = actionSchema.safeParse(await request.json().catch(() => null))
@@ -59,9 +64,23 @@ export const PATCH = withTenantAuth(guard, async (request, { organization }, rou
 
   const { data: current } = await supabase.from('appointments').select('id, status, sale_id').eq('id', id).eq('organization_id', organization.id).maybeSingle()
   if (!current) return NextResponse.json({ error: 'Turno no encontrado' }, { status: 404 })
+  if ((current as {sale_id:string|null}).sale_id) return NextResponse.json({error:'El turno ya está cobrado; no se puede reabrir ni editar.'},{status:409})
   const status = (current as { status: AppointmentStatus }).status
   const transition = TRANSITIONS[parsed.data.action]
   if (!transition.from.includes(status)) return NextResponse.json({ error: 'El turno ya cambió de estado. Actualizá la agenda.' }, { status: 409 })
+  if (parsed.data.action === 'update') {
+    const config = await loadAgendaConfig(supabase, organization.id)
+    if (config?.capabilities.professionalBooking) {
+      const { data, error } = await createAdminSupabase().rpc('save_agenda_appointment', {
+        p_org: organization.id, p_id: id, p_input: parsed.data.appointment, p_actor: user.id,
+      })
+      if (error || !data) {
+        const failure = bookingWriteError(error)
+        return NextResponse.json({ error: failure.error, code: failure.code }, { status: failure.status })
+      }
+      return NextResponse.json({ appointment: data })
+    }
+  }
 
   const now = new Date().toISOString()
   let update: Record<string, unknown> = transition.to ? { status: transition.to } : {}
@@ -79,6 +98,8 @@ export const PATCH = withTenantAuth(guard, async (request, { organization }, rou
       update.reminder_sent_at = now
       break
     case 'link_sale': {
+      const config = await loadAgendaConfig(supabase, organization.id)
+      if (config?.capabilities.professionalBooking) return NextResponse.json({ error: 'Cobrá el turno desde el POS: la venta y su vínculo se guardan juntos.' }, { status: 409 })
       const { data: sale } = await supabase.from('sales').select('id').eq('id', parsed.data.sale_id).eq('organization_id', organization.id).maybeSingle()
       if (!sale) return NextResponse.json({ error: 'Venta no encontrada' }, { status: 400 })
       update.sale_id = parsed.data.sale_id

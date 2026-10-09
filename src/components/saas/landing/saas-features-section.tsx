@@ -3,13 +3,13 @@ import { Boxes, ShoppingCart, Store, Wrench } from 'lucide-react'
 export const saasHighlights = [
   { title: 'Vendé y cerrá tu caja', description: 'Registrá ventas, emití comprobantes y revisá los movimientos del día.', icon: ShoppingCart },
   { title: 'Mantené tu catálogo al día', description: 'Organizá productos, variantes, precios y existencias para encontrar lo que necesitás.', icon: Boxes },
-  { title: 'Atendé tus reparaciones', description: 'Seguí cada equipo desde la recepción hasta la entrega, con costos registrados y seguimiento público para tu cliente.', icon: Wrench },
+  { title: 'Organizá servicios y turnos', description: 'Configurá servicios, profesionales y horarios para gestionar tu agenda. Si tenés taller, registrá también tus reparaciones y su seguimiento público.', icon: Wrench },
   { title: 'Mostrá tu negocio online', description: 'Personalizá tu tienda y elegí cómo recibir consultas o pedidos de tus clientes.', icon: Store },
 ]
 const steps = [
   { title: 'Creá tu organización', description: 'Ingresá los datos de tu negocio y elegí tu rubro.' },
   { title: 'Prepará tu catálogo', description: 'Cargá productos o servicios y configurá tu equipo.' },
-  { title: 'Empezá a operar', description: 'Registrá tus primeras ventas y consultá su resultado.' },
+  { title: 'Empezá a operar', description: 'Registrá ventas, gestioná turnos o recibí equipos según tu actividad.' },
 ]
 
 export function SaaSFeaturesSection() {
@@ -19,7 +19,7 @@ export function SaaSFeaturesSection() {
         <div className="max-w-2xl">
           <p className="text-sm font-semibold text-cyan-700 dark:text-cyan-400">Menos tareas repetidas</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Más claridad para el día a día</h2>
-          <p className="mt-4 leading-7 text-slate-600 dark:text-slate-400">Conectá las áreas de tu negocio y encontrá cada cosa en su lugar.</p>
+          <p className="mt-4 leading-7 text-slate-600 dark:text-slate-400">Conectá las áreas de tu negocio. Las funciones disponibles dependen del plan, los módulos activos y tus permisos.</p>
         </div>
         <div className="mt-9 grid gap-x-10 gap-y-7 sm:grid-cols-2">
           {saasHighlights.map(({ title, description, icon: Icon }) => (

@@ -127,13 +127,14 @@ describe('el prefijo de los enlaces se separa del de la tienda', () => {
   it('los enlaces usan linkPrefix', () => {
     expect(CLIENTE).toContain('linkPrefix = tenantPrefix')
     // Dentro de una tienda, «Rastrear equipo» depende de que tenga taller.
-    expect(CLIENTE).toContain('<ProfileQuickActions role={profile.role || \'cliente\'} tenantPrefix={linkPrefix} showRepairs={repairsAvailable} />')
+    expect(CLIENTE).toContain('tenantPrefix={linkPrefix}\n              showRepairs={repairsAvailable}')
     expect(CLIENTE).toContain('<ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />')
   })
 
   it('el saldo de tienda sigue atado a la tienda, no al prefijo', () => {
     // Con linkPrefix seria `?org=marketplace`: una tienda que no existe.
-    expect(CLIENTE).toContain('{tenantPrefix && (')
+    // Solo si la tienda da créditos: una barbería no tiene saldo de cuotas.
+    expect(CLIENTE).toContain('{tenantPrefix && storeFeatures.credits && (')
     expect(CLIENTE).toContain("organizationSlug={tenantPrefix.replace(/^\\//, '') || null}")
   })
 

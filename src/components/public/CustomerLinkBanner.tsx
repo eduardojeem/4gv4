@@ -10,6 +10,18 @@ import { toast } from 'sonner'
 
 interface CustomerLinkBannerProps {
   storeName?: string
+  /** La tienda tiene taller: solo entonces el beneficio menciona reparaciones. */
+  repairsEnabled?: boolean
+  /** La tienda toma turnos. */
+  servicesEnabled?: boolean
+}
+
+/** Lo que gana el cliente, según lo que ofrece esta tienda. */
+export function customerLinkBenefits({ repairsEnabled = false, servicesEnabled = false }: Pick<CustomerLinkBannerProps, 'repairsEnabled' | 'servicesEnabled'> = {}) {
+  const parts = ['promociones exclusivas', 'seguimiento de tus compras']
+  if (servicesEnabled) parts.push('tus turnos')
+  if (repairsEnabled) parts.push('tus reparaciones')
+  return `Accedé a ${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}.`
 }
 
 /**
@@ -17,7 +29,7 @@ interface CustomerLinkBannerProps {
  * registrado como cliente de la empresa actual. Ofrece hacerse cliente con un click.
  * Se oculta si ya es cliente, si no está logueado, o si lo cerró manualmente.
  */
-export function CustomerLinkBanner({ storeName }: CustomerLinkBannerProps = {}) {
+export function CustomerLinkBanner({ storeName, repairsEnabled = false, servicesEnabled = false }: CustomerLinkBannerProps = {}) {
   const { user } = useAuth()
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -98,7 +110,7 @@ export function CustomerLinkBanner({ storeName }: CustomerLinkBannerProps = {}) 
               <span className="sm:hidden">Sumate a {displayName}</span>
             </p>
             <p className="hidden text-[11px] text-muted-foreground sm:block leading-tight mt-0.5">
-              Accedé a promociones exclusivas, seguimiento de tus compras y reparaciones.
+              {customerLinkBenefits({ repairsEnabled, servicesEnabled })}
             </p>
           </div>
         </div>

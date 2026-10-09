@@ -7,6 +7,8 @@ import { notifyAppointmentEvent } from '@/lib/agenda/appointment-events'
 import { pickSlotResource } from '@/lib/agenda/slots'
 import { addDays, todayIn, utcToZoned } from '@/lib/agenda/time'
 import { publicSlotsFor, resolvePublicAgenda, type PublicAgenda } from '@/lib/agenda/public-agenda-server'
+import { bookingWriteError, quoteReservationSchema, reserveQuote } from '@/lib/agenda/booking-writes'
+import { resolveServiceTerms } from '@/lib/agenda/service-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +73,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       return NextResponse.json({ error: 'Pedido inválido' }, { status: 400 })
     }
     const professional = searchParams.get('professional')
+    if (professional && !z.string().uuid().safeParse(professional).success) return NextResponse.json({ error: 'Profesional inválido' }, { status: 400 })
     const result = await slotsFor(agenda, date, serviceId, professional && z.string().uuid().safeParse(professional).success ? professional : null)
     if (!result) return NextResponse.json({ error: 'Servicio o profesional no disponible' }, { status: 404 })
     return NextResponse.json({
@@ -85,6 +88,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     today: todayIn(config.timeZone),
     maxDaysAhead: config.settings.max_days_ahead,
     requireConfirmation: config.settings.require_confirmation,
+    professionalBookingAvailable: config.capabilities?.professionalBooking === true,
+    professionalSelection: config.capabilities?.professionalBooking ? config.settings.professional_selection : 'optional',
     message: config.settings.booking_message,
     openDays: Object.keys(config.settings.opening_hours).map(Number),
     services: config.services
@@ -94,10 +99,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         name: service.name,
         duration: service.duration_minutes,
         price: service.hide_price ? null : service.price,
+        ...(config.capabilities?.professionalBooking ? {professionalTerms:professionalsForService(config.professionals.filter(p=>p.online_visible!==false),service.product_id).map(professional=>{
+          const rate=config.professionalRates.find(row=>row.professional_id===professional.id&&row.product_id===service.product_id)
+          const terms=resolveServiceTerms({price:service.price,durationMinutes:service.duration_minutes,bufferMinutes:service.buffer_minutes??0},rate?{price:rate.price,durationMinutes:rate.duration_minutes,bufferMinutes:rate.buffer_minutes}:null)
+          return {professionalId:professional.id,price:service.hide_price?null:terms.price,duration:terms.durationMinutes}
+        })}:{}),
         // Quién lo hace: la reserva solo ofrece a esos profesionales.
-        professionalIds: professionalsForService(config.professionals, service.product_id).map((professional) => professional.id),
+        professionalIds: professionalsForService(config.professionals.filter(p => p.online_visible !== false), service.product_id).map((professional) => professional.id),
       })),
-    professionals: config.professionals.map((professional) => ({
+    professionals: config.professionals.filter(p => p.online_visible !== false).map((professional) => ({
       id: professional.id,
       name: professional.name,
       color: professional.color,
@@ -123,11 +133,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const allowed = await rateLimiter.check(`agenda-booking:${slug}:${getClientIp(request)}`, 5, 10 * 60_000)
   if (!allowed) return NextResponse.json({ error: 'Hiciste muchas reservas seguidas. Probá en unos minutos.' }, { status: 429 })
 
-  const parsed = bookingSchema.safeParse(await request.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Revisá los datos' }, { status: 400 })
+  const raw = await request.json().catch(() => null)
   const agenda = await resolveAgenda(slug)
   if (!agenda) return NextResponse.json({ error: 'Esta tienda no toma turnos online' }, { status: 404 })
   const { admin, organization, config } = agenda
+  if (config.capabilities?.professionalBooking) {
+    const verified = quoteReservationSchema.safeParse(raw)
+    if (!verified.success) return NextResponse.json({ error: 'Revisá los datos y solicitá una cotización vigente.' }, { status: 400 })
+    const { data, error } = await reserveQuote(admin, organization.id, verified.data)
+    if (error || !data) {
+      const failure = bookingWriteError(error)
+      return NextResponse.json({ error: failure.error, code: failure.code }, { status: failure.status })
+    }
+    if (!data.idempotent) {
+      // A notification failure must not turn a committed booking into a failure.
+      const quote = await admin.from('agenda_booking_quotes').select('service_name').eq('id', verified.data.quote_id).eq('organization_id', organization.id).maybeSingle()
+      try {
+        await notifyAppointmentEvent(admin, { organizationId: organization.id, appointmentId: data.id,
+          kind: 'booked', customerName: verified.data.name, serviceName: quote.data?.service_name ?? 'Servicio', startsAt: data.starts_at,
+        }, { timeZone: config.timeZone, notifyEmail: config.settings.notify_email !== false })
+      } catch { logger.error('No se pudo emitir el aviso de una reserva confirmada') }
+    }
+    return NextResponse.json({ token: data.public_token, status: data.status }, { status: data.idempotent ? 200 : 201, headers: { 'Cache-Control': 'no-store' } })
+  }
+  const parsed = bookingSchema.safeParse(raw)
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Revisá los datos' }, { status: 400 })
 
   const startsAt = new Date(parsed.data.starts_at).toISOString()
   const date = utcToZoned(startsAt, config.timeZone).date

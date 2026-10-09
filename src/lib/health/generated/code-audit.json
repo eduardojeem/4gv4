@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T13:55:59.584Z",
+  "generatedAt": "2026-10-09T00:57:54.829Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
@@ -1471,14 +1471,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/agenda/[id]",
@@ -1501,14 +1501,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/agenda/events",
@@ -1562,6 +1562,27 @@
       "serviceRole": false
     },
     {
+      "route": "/api/agenda/professional-rates",
+      "methods": [
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
       "route": "/api/agenda/professionals",
       "methods": [
         "POST",
@@ -1591,14 +1612,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/agenda/settings",
@@ -1621,14 +1642,53 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
+    },
+    {
+      "route": "/api/agenda/time-off",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
     },
     {
       "route": "/api/attributes",
@@ -1947,7 +2007,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "PUT",
@@ -1955,7 +2015,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         },
         {
           "method": "DELETE",
@@ -1963,14 +2023,14 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
       "turnstile": false,
       "superAdminGuard": false,
       "authGuard": true,
-      "serviceRole": false
+      "serviceRole": true
     },
     {
       "route": "/api/categories/starter",
@@ -4034,6 +4094,27 @@
       "serviceRole": false
     },
     {
+      "route": "/api/public/agenda/[slug]/quote",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": true,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": true,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
+    },
+    {
       "route": "/api/public/analytics/track",
       "methods": [
         "POST"
@@ -4083,6 +4164,27 @@
       "superAdminGuard": false,
       "authGuard": false,
       "serviceRole": true
+    },
+    {
+      "route": "/api/public/business-directory",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": false,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": false,
+      "serviceRole": false
     },
     {
       "route": "/api/public/categories",
@@ -6652,7 +6754,11 @@
     "20261011120000",
     "20261012120000",
     "20261013120000",
-    "20261014120000"
+    "20261014120000",
+    "20261014120001",
+    "20261014120002",
+    "20261014120003",
+    "20261014120004"
   ],
   "paymentProviders": [
     {

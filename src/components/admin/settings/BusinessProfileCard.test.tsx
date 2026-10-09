@@ -77,7 +77,7 @@ describe('BusinessProfileCard', () => {
     expect(screen.getByText('No incluido en Pro. Disponible en Enterprise, pero ese plan no está activo')).toBeInTheDocument()
   })
 
-  it('does not disable entitled modules when the business profile changes', async () => {
+  it('al cambiar la forma de trabajo marca lo recomendado, avisa qué cambió y se puede deshacer', async () => {
     const user = userEvent.setup()
     render(
       <SubscriptionStatusProvider value={{
@@ -95,14 +95,40 @@ describe('BusinessProfileCard', () => {
     await user.click(screen.getByLabelText('Forma de trabajo'))
     await user.click(screen.getByRole('option', { name: 'Negocio mixto' }))
 
+    // Lo que no recomienda el rubro se desmarca, y se avisa.
+    expect(screen.getByLabelText('Analytics avanzado')).not.toBeChecked()
+    expect(screen.getByLabelText('Seguridad y auditoría')).not.toBeChecked()
+    expect(screen.getByText(/Marcamos las herramientas recomendadas para Ropa y moda/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Deshacer' }))
     expect(screen.getByLabelText('Analytics avanzado')).toBeChecked()
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    await user.click(screen.getByRole('button', { name: 'Aplicar recomendación' }))
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('desactivará 2 herramientas'))
-    expect(screen.getByLabelText('Analytics avanzado')).toBeChecked()
-    expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
-    confirm.mockRestore()
+  })
+
+  it('una cosmética no lleva Reparaciones y propone preparar la página web', async () => {
+    const user = userEvent.setup()
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        businessVertical: 'electronics',
+        planCode: 'PRO',
+        planName: 'Pro',
+        entitledModules: ['inventory', 'pos', 'crm', 'repairs', 'orders', 'ecommerce'],
+        enabledModules: ['inventory', 'pos', 'crm', 'repairs', 'orders', 'ecommerce'],
+        effectiveModules: ['inventory', 'pos', 'crm', 'repairs', 'orders', 'ecommerce'],
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    expect(screen.getByLabelText(/Preparar mi página web/)).not.toBeChecked()
+    await user.click(screen.getByLabelText('Rubro'))
+    await user.click(screen.getByRole('option', { name: 'Cosmética y belleza' }))
+
+    expect(screen.getByLabelText('Módulo de Reparaciones')).not.toBeChecked()
+    expect(screen.getByLabelText('Pedidos')).toBeChecked()
+    expect(screen.getByLabelText(/Preparar mi página web para Cosmética y belleza/)).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Guardar y preparar la página' })).toBeEnabled()
   })
 
   it('shows business recommendations, higher-plan modules, and safe activation actions', () => {

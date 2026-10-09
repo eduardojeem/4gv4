@@ -190,6 +190,12 @@ describe('ProductModal — elección de datos de cuotas', () => {
     fireEvent.click(await screen.findByText(START_BLANK))
     await waitFor(() => expect(screen.queryByText(CHOICE_HEADING)).not.toBeInTheDocument())
 
+    // Terminar el primer intento exige descartar: sin hacerlo, volver a "nuevo"
+    // debe recuperar el borrador, no borrar silenciosamente su financiación.
+    await userEvent.click(screen.getByRole('button', { name: /^Cancelar$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Descartar cambios$/ }))
+    await waitFor(() => expect(screen.queryByText('¿Descartar cambios del producto?')).not.toBeInTheDocument())
+
     // Se abre el modal para otro producto sin desmontarlo.
     rerender(
       <ProductModal
@@ -218,6 +224,19 @@ describe('ProductModal — elección de datos de cuotas', () => {
     await enableInstallments()
 
     // La eleccion tiene que estar disponible otra vez.
+    expect(await screen.findByText(CHOICE_HEADING)).toBeInTheDocument()
+  })
+
+  it('conserva las cuotas del borrador no descartado al volver a nuevo', async () => {
+    const { rerender } = renderModal()
+    await openPricingTab()
+    await enableInstallments()
+    fireEvent.click(await screen.findByText(START_BLANK))
+    const props = { isOpen: true, onClose: vi.fn(), onSave: vi.fn(), categories: [], brands: [], suppliers: [] }
+    rerender(<ProductModal {...props} product={productWithPlans} />)
+    rerender(<ProductModal {...props} product={null} />)
+    await openPricingTab()
+    expect(screen.getByLabelText('Activar cuotas / financiación')).toHaveAttribute('aria-checked', 'true')
     expect(await screen.findByText(CHOICE_HEADING)).toBeInTheDocument()
   })
 

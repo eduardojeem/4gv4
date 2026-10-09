@@ -43,6 +43,8 @@ type ProfileData = z.infer<typeof profileSchema> & {
 interface ProfileClientProps {
   /** La tienda tiene el modulo de taller: sin el no se ofrece «Rastrear equipo». */
   repairsAvailable?: boolean
+  /** Lo que ofrece la tienda (dentro de una tienda); en el marketplace, todo. */
+  storeFeatures?: { services: boolean; orders: boolean; credits: boolean; catalog: boolean }
   initialData: ProfileData
   userId: string
   /** Tienda de la ruta. Vacio fuera de una: decide el alcance de los datos. */
@@ -94,6 +96,7 @@ export function ProfileClient({
   recentOrders,
   organization,
   repairsAvailable = true,
+  storeFeatures = { services: false, orders: true, credits: true, catalog: true },
 }: ProfileClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -277,15 +280,19 @@ export function ProfileClient({
           userRole={profile.role}
         />
 
-        <div className="mb-8">
-          <ProfileStats {...stats} />
-        </div>
+        {/* Las cifras son de reparaciones: sin taller no dicen nada. */}
+        {repairsAvailable && (
+          <div className="mb-8">
+            <ProfileStats {...stats} />
+          </div>
+        )}
 
         <div className="mb-8">
           <ProfileAccountSummary
             summary={accountSummary}
             tenantPrefix={linkPrefix}
             storeCredits={storeCredits}
+            features={{ repairs: repairsAvailable, credits: storeFeatures.credits, orders: storeFeatures.orders }}
           />
         </div>
 
@@ -300,7 +307,7 @@ export function ProfileClient({
             saldo de un comercio cualquiera al lado del total real del resumen,
             dos numeros distintos para lo mismo. En el marketplace el desglose
             por tienda vive en el resumen de cuenta. */}
-        {tenantPrefix && (
+        {tenantPrefix && storeFeatures.credits && (
           <div className="mb-8">
             <PublicStoreCredit
               authenticated
@@ -311,10 +318,20 @@ export function ProfileClient({
 
         <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-6">
-            <ProfileQuickActions role={profile.role || 'cliente'} tenantPrefix={linkPrefix} showRepairs={repairsAvailable} />
-            <ProfileFavoritesWidget linkPrefix={linkPrefix} />
-            <ProfileStoreCarts />
-            <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+            <ProfileQuickActions
+              role={profile.role || 'cliente'}
+              tenantPrefix={linkPrefix}
+              showRepairs={repairsAvailable}
+              showShopping={storeFeatures.catalog}
+              showCredits={storeFeatures.credits}
+              bookingHref={storeFeatures.services ? `${linkPrefix}/turnos` : undefined}
+            />
+            {storeFeatures.catalog && <ProfileFavoritesWidget linkPrefix={linkPrefix} />}
+            {storeFeatures.catalog && <ProfileStoreCarts />}
+            {/* Los pedidos que ya hizo se siguen mostrando aunque la tienda ya no venda online. */}
+            {(storeFeatures.orders || stats.totalOrders > 0) && (
+              <ProfileOrders orders={recentOrders} totalCount={stats.totalOrders} tenantPrefix={linkPrefix} />
+            )}
 
             <ProfileForm
               name={profile.name}
@@ -331,9 +348,11 @@ export function ProfileClient({
             />
           </div>
 
-          <div className="lg:sticky lg:top-24 lg:self-start">
-            <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />
-          </div>
+          {repairsAvailable && (
+            <div className="lg:sticky lg:top-24 lg:self-start">
+              <ProfileActivity repairs={recentRepairs} tenantPrefix={linkPrefix} />
+            </div>
+          )}
         </div>
           </>
         )}

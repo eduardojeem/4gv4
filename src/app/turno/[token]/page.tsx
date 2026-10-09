@@ -11,6 +11,7 @@ import { whatsappNumber } from '@/lib/quotes/quote-math'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { siteUrl } from '@/lib/site-url'
 import { ManageAppointment } from './ManageAppointment'
+import { publicAppointmentPrice } from '@/lib/agenda/public-appointment-price'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,8 @@ const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 
 type Professional = { name: string; photo_url?: string | null; specialty?: string | null }
 
 type Row = {
+  service_product_id: string | null
+  sale_id: string | null
   id: string
   organization_id: string
   customer_name: string
@@ -56,7 +59,7 @@ async function loadAppointment(token: string) {
   const query = (professional: string) =>
     admin
       .from('appointments')
-      .select(`id, organization_id, customer_name, service_name, price, starts_at, ends_at, status, agenda_professionals(${professional})`)
+      .select(`id, organization_id, customer_name, service_name, service_product_id, sale_id, price, starts_at, ends_at, status, agenda_professionals(${professional})`)
       .eq('public_token', token)
       .maybeSingle()
   const full = await query('name, photo_url, specialty')
@@ -71,6 +74,7 @@ export default async function AppointmentPage({ params }: { params: Promise<{ to
   if (!appointment) notFound()
 
   const admin = createAdminSupabase()
+  const visiblePrice = await publicAppointmentPrice(admin,appointment)
   const [{ data: org }, { data: settings }, { data: info }] = await Promise.all([
     admin.from('organizations').select('name, slug').eq('id', appointment.organization_id).maybeSingle(),
     admin.from('organization_settings').select('timezone, currency, company_address').eq('organization_id', appointment.organization_id).maybeSingle(),
@@ -95,7 +99,7 @@ export default async function AppointmentPage({ params }: { params: Promise<{ to
   const end = utcToZoned(appointment.ends_at, timeZone)
   const [, month, day] = start.date.split('-').map(Number)
   const active = appointment.status === 'pending' || appointment.status === 'confirmed'
-  const changeable = active && hasNotStarted(appointment.starts_at)
+  const changeable = !appointment.sale_id && active && hasNotStarted(appointment.starts_at)
   const status = STATUS_COPY[appointment.status]
   const storeHref = organization.slug ? `/${organization.slug}/inicio` : null
 
@@ -146,7 +150,7 @@ export default async function AppointmentPage({ params }: { params: Promise<{ to
               <dt className="text-muted-foreground">Servicio</dt>
               <dd className="text-right font-semibold">
                 {appointment.service_name}
-                {Number(appointment.price) > 0 && <span className="block font-normal text-muted-foreground">{formatCurrency(Number(appointment.price), { currency })}</span>}
+                <span className="block font-normal text-muted-foreground">{visiblePrice===null?'Precio a consultar':visiblePrice===0?'Sin costo':formatCurrency(visiblePrice,{currency})}</span>
               </dd>
             </div>
             {professional?.name && (

@@ -1,6 +1,6 @@
 import { PLAN_FEATURES, PLAN_FEATURE_GROUP_LABEL, type PlanFeatureGroup } from '@/lib/saas/plan-feature-catalog'
 import { PLAN_LIMIT_FIELDS, formatPlanLimit as formatPanelLimit, parsePlanLimit, type PlanLimitKey } from '@/lib/saas/plan-limits'
-import { effectivePlanFeatures } from '@/lib/saas/plan-modules'
+import { effectivePlanFeatures, includedPlanFeatures } from '@/lib/saas/plan-modules'
 
 export type PlanFeature = {
   label: string
@@ -28,6 +28,7 @@ export type SubscriptionPlan = {
   highlights?: string[]
   features?: PlanFeature[]
   color_config?: unknown
+  modules?: string[]
 }
 
 export type PlanComparisonRow<T> = {
@@ -89,7 +90,7 @@ export function buildPlanLimitRows(plans: SubscriptionPlan[]): PlanComparisonRow
  * sin orden, con nombres viejos, y lo que faltaba en la lista no aparecía.
  */
 export function buildPlanFeatureGroups(plans: SubscriptionPlan[]): PlanFeatureComparisonGroup[] {
-  const included = new Map(plans.map((plan) => [plan.id, effectivePlanFeatures(plan.tier, plan.features)]))
+  const included = new Map(plans.map((plan) => [plan.id, Array.isArray(plan.modules) ? includedPlanFeatures(plan.modules, plan.features) : effectivePlanFeatures(plan.tier, plan.features)]))
   const groups: PlanFeatureGroup[] = ['venta', 'operacion', 'gestion', 'servicio']
 
   return groups.map((group) => ({

@@ -187,7 +187,10 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
                 </div>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+              <div className={cn('mt-3 grid grid-cols-2 gap-x-4 gap-y-3', hasRepairs && 'sm:grid-cols-4')}>
+                {/* Sin equipos en esa tienda (una barbería, por ejemplo) no se habla de taller. */}
+                {hasRepairs && (
+                <>
                 <Metric
                   icon={Wrench}
                   label="Equipos"
@@ -203,6 +206,8 @@ export function ProfileStores({ stores }: ProfileStoresProps) {
                   value={String(summary.equipment.ready)}
                   tone={summary.equipment.ready > 0 ? 'warning' : 'neutral'}
                 />
+                </>
+                )}
                 <Metric
                   icon={summary.totalDue > 0 ? CircleDollarSign : ShoppingBag}
                   label="Por pagar"

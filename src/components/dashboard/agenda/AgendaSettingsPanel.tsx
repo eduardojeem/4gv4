@@ -12,13 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { formatCurrency } from '@/lib/currency'
-import type { AgendaProfessional, AgendaService, AgendaSettings } from '@/lib/agenda/agenda-server'
+import type { AgendaProfessional, AgendaProfessionalRate, AgendaService, AgendaSettings } from '@/lib/agenda/agenda-server'
 import { WEEKDAY_LABELS } from '@/lib/agenda/time'
 import { missingSuggestedServices } from '@/lib/agenda/suggested-services'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { SuggestedServicesCard } from '@/components/dashboard/agenda/SuggestedServicesCard'
 import { ProfessionalServicesPicker } from '@/components/dashboard/agenda/ProfessionalServicesPicker'
 import { ProfessionalPhotoButton } from '@/components/dashboard/agenda/ProfessionalPhotoButton'
+import { ProfessionalScheduleEditor } from '@/components/dashboard/agenda/ProfessionalScheduleEditor'
+import { ProfessionalRatesEditor } from '@/components/dashboard/agenda/ProfessionalRatesEditor'
+import { TimeOffEditor } from '@/components/dashboard/agenda/TimeOffEditor'
 
 const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería' }
 
@@ -31,6 +34,9 @@ type Config = {
   services: AgendaService[]
   currency: string
   bookingUrl: string
+  timeZone: string
+  capabilities?: { professionalBooking: boolean }
+  professionalRates?: AgendaProfessionalRate[]
 }
 
 export function AgendaSettingsPanel() {
@@ -38,27 +44,33 @@ export function AgendaSettingsPanel() {
   const [available, setAvailable] = useState(true)
   const [saving, setSaving] = useState(false)
   const [newName, setNewName] = useState('')
+  const [loadError,setLoadError]=useState<string|null>(null)
   const { businessVertical } = useSubscriptionStatus()
   // Lo guardado, para crear servicios sugeridos sin guardar de rebote lo que se está editando.
   const savedSettingsRef = useRef<AgendaSettings | null>(null)
 
   const load = useCallback(async () => {
+    try {
     const response = await fetch('/api/agenda/settings', { cache: 'no-store' })
     const body = await response.json().catch(() => ({}))
+    if(!response.ok)throw new Error(body.error||'No se pudo cargar la configuración.')
+    setLoadError(null)
     setAvailable(body.available !== false)
     if (body.available) {
       savedSettingsRef.current = body.settings
       setConfig(body)
     }
+    } catch(cause) {setLoadError(cause instanceof Error?cause.message:'No se pudo cargar la configuración.')}
   }, [])
   useEffect(() => { void load() }, [load])
 
   if (!available) {
     return <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">La agenda todavía no está activada en la base de datos.</p>
   }
-  if (!config) return <p className="flex items-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</p>
+  if (!config) return loadError?<div role="alert" className="space-y-2"><p>{loadError}</p><Button onClick={()=>void load()}>Reintentar</Button></div>:<p className="flex items-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</p>
 
   const settings = config.settings
+  const advanced=config.capabilities?.professionalBooking===true
   const setSettings = (patch: Partial<AgendaSettings>) => setConfig({ ...config, settings: { ...settings, ...patch } })
   const setRanges = (day: number, ranges: Array<[string, string]>) => {
     const opening = { ...settings.opening_hours }
@@ -76,8 +88,9 @@ export function AgendaSettingsPanel() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...settings,
-          services: config.services.map((service) => ({ product_id: service.product_id, duration_minutes: service.duration_minutes, online: service.online })),
+          ...Object.fromEntries(Object.entries(settings).filter(([key])=>advanced||key!=='professional_selection')),
+          services: config.services.map((service) => ({ product_id: service.product_id, duration_minutes: service.duration_minutes, online: service.online,
+            ...(advanced?{buffer_minutes:service.buffer_minutes??0}:{}), })),
         }),
       })
       const body = await response.json().catch(() => ({}))
@@ -87,7 +100,7 @@ export function AgendaSettingsPanel() {
       }
       toast.success('Agenda configurada')
       await load()
-    } finally {
+    } catch { toast.error('No se pudo guardar. Revisá tu conexión.') } finally {
       setSaving(false)
     }
   }
@@ -102,23 +115,28 @@ export function AgendaSettingsPanel() {
     const body = await response.json().catch(() => ({}))
     if (!response.ok) return toast.error(body.error || 'No se pudo agregar')
     setNewName('')
-    setConfig({ ...config, professionals: [...config.professionals, body.professional] })
+    setConfig(current=>current?{...current,professionals:[...current.professionals,body.professional]}:current)
   }
 
   const updateProfessional = async (professional: AgendaProfessional, patch: Partial<AgendaProfessional>) => {
+    try {
     const response = await fetch('/api/agenda/professionals', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: professional.id, ...patch }),
     })
     const body = await response.json().catch(() => ({}))
-    if (!response.ok) return toast.error(body.error || 'No se pudo guardar')
+    if (!response.ok) {toast.error(body.error || 'No se pudo guardar');return false}
     // La respuesta no trae sus servicios: se conservan los que ya tenía.
-    setConfig({ ...config, professionals: config.professionals.map((item) => (item.id === professional.id ? { ...item, ...body.professional } : item)) })
+    setConfig(current=>current?{...current,professionals:current.professionals.map(item=>item.id===professional.id?{...item,...body.professional}:item)}:current)
+    return true
+    } catch { toast.error('No se pudo guardar el profesional. Revisá tu conexión.'); return false }
   }
 
   return (
     <div className="space-y-5">
+      {loadError&&<p role="alert" className="text-sm text-destructive">{loadError}</p>}
+      {!advanced&&<p className="rounded-lg border p-3 text-sm text-muted-foreground">La agenda básica sigue disponible. Para activar tarifas, horarios individuales y ausencias, falta aplicar la migración transaccional de reservas.</p>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <Link href="/dashboard/agenda" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Agenda</Link>
@@ -129,7 +147,7 @@ export function AgendaSettingsPanel() {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="rounded-xl">
-          <CardHeader><CardTitle className="text-base">Horario de atención</CardTitle><CardDescription>Fuera de este horario no se ofrecen turnos online. En el panel igual podés agendar cuando quieras.</CardDescription></CardHeader>
+          <CardHeader><CardTitle className="text-base">Horario de atención</CardTitle><CardDescription>Fuera de este horario no se ofrecen turnos online. Un administrador puede agendar fuera de horario con una advertencia explícita; nunca sobre otro turno o ausencia.</CardDescription></CardHeader>
           <CardContent className="space-y-2">
             {DAY_ORDER.map((day) => {
               const ranges = settings.opening_hours[day] ?? []
@@ -182,6 +200,12 @@ export function AgendaSettingsPanel() {
                     services={config.services}
                     onSaved={(serviceIds) => setConfig({ ...config, professionals: config.professionals.map((item) => (item.id === professional.id ? { ...item, service_ids: serviceIds } : item)) })}
                   />
+                  {advanced&&<div className="basis-full space-y-3">
+                    <label className="flex min-h-11 items-center gap-3 text-sm"><Switch checked={professional.online_visible!==false} onCheckedChange={on=>void updateProfessional(professional,{online_visible:on})} aria-label={`Visible online: ${professional.name}`}/>Mostrar para reservas online (independiente de Activo)</label>
+                    <details className="rounded-lg border p-3"><summary className="min-h-11 cursor-pointer text-sm font-medium">Horario individual</summary><ProfessionalScheduleEditor key={`${professional.id}:${JSON.stringify(professional.opening_hours)}`} name={professional.name} value={professional.opening_hours??null} onSave={hours=>updateProfessional(professional,{opening_hours:hours})}/></details>
+                    <details className="rounded-lg border p-3"><summary className="min-h-11 cursor-pointer text-sm font-medium">Tarifas, duración y margen</summary><ProfessionalRatesEditor professional={professional} services={config.services} rates={config.professionalRates??[]} currency={config.currency}
+                      onSaved={rates=>{setConfig(current=>current?{...current,professionalRates:[...(current.professionalRates??[]).filter(row=>row.professional_id!==professional.id),...rates]}:current);toast.success('Tarifas guardadas') }}/></details>
+                  </div>}
                   {/* Se muestra en la tienda debajo del nombre. */}
                   <Input
                     defaultValue={professional.specialty ?? ''}
@@ -209,6 +233,11 @@ export function AgendaSettingsPanel() {
               <CardDescription>Tus clientes eligen servicio, día y horario desde tu tienda, y el turno aparece en la agenda.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
+              {advanced&&<label className="block space-y-1">Elección del profesional
+                <select className="min-h-11 w-full rounded-md border bg-background px-3 text-base" value={settings.professional_selection??'optional'} onChange={event=>setSettings({professional_selection:event.target.value as NonNullable<AgendaSettings['professional_selection']>})}>
+                  <option value="disabled">Asignación automática (sin selector)</option><option value="optional">El cliente puede elegir o pedir cualquiera</option><option value="required">El cliente debe elegir con quién atenderse</option>
+                </select><span className="block text-xs text-muted-foreground">La asignación automática confirma un profesional concreto y su tarifa antes de reservar. Si exigís elegir, necesitás al menos uno activo y visible online.</span>
+              </label>}
               <label className="flex items-center justify-between gap-3">Aceptar reservas desde la tienda <Switch checked={settings.online_booking} onCheckedChange={(on) => setSettings({ online_booking: on })} /></label>
               <label className="flex items-center justify-between gap-3">Confirmarlas yo antes (si no, quedan confirmadas solas) <Switch checked={settings.require_confirmation} onCheckedChange={(on) => setSettings({ require_confirmation: on })} /></label>
               <label className="flex items-center justify-between gap-3">
@@ -282,12 +311,14 @@ export function AgendaSettingsPanel() {
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Switch checked={service.online} onCheckedChange={(on) => setService(service.product_id, { online: on })} aria-label={`Reservable online: ${service.name}`} /> Online
                   </label>
+                  {advanced&&<label className="flex items-center gap-2 text-sm">Entre turnos<Input type="number" min={0} max={120} step={1} className="min-h-11 w-24 text-base" value={service.buffer_minutes??0} aria-label={`Margen de ${service.name}`} onChange={event=>setService(service.product_id,{buffer_minutes:Number(event.target.value)})}/><span>min</span></label>}
                 </li>
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
+      {advanced&&<Card><CardContent className="pt-6"><TimeOffEditor professionals={config.professionals} timeZone={config.timeZone}/></CardContent></Card>}
     </div>
   )
 }

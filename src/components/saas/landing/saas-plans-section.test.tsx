@@ -52,4 +52,10 @@ describe('SaaSPlansSection', () => {
     expect(screen.getByRole('status')).toHaveTextContent('No hay planes disponibles')
     expect(screen.queryByRole('heading', { name: 'FREE' })).not.toBeInTheDocument()
   })
+  it('no publica un destacado que contradice los módulos técnicos', () => {
+    render(<SaaSPlansSection initialPlans={[{ ...plans[0], modules: ['inventory'], highlights: ['Créditos ilimitados'], price_note: 'Siempre gratis' }]} />)
+    expect(screen.queryByText('Créditos ilimitados')).not.toBeInTheDocument()
+    expect(screen.getByText('Siempre gratis')).toBeInTheDocument()
+    expect(screen.queryByText(/100% Sin Tarjeta/)).not.toBeInTheDocument()
+  })
 })

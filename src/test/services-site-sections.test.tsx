@@ -108,7 +108,7 @@ describe('el pie de página de la plantilla Servicios', () => {
 describe('la agenda sin la migración de fotos', () => {
   it('lee a los profesionales sin foto en vez de desaparecer', async () => {
     const calls: string[] = []
-    const result = (data: unknown, error: { message: string } | null = null) => ({ data, error })
+    const result = (data: unknown, error: { message: string; code: string } | null = null) => ({ data, error })
     const chain = (table: string) => {
       let columns = ''
       const builder: Record<string, unknown> = {}
@@ -118,7 +118,7 @@ describe('la agenda sin la migración de fotos', () => {
       builder.limit = () => builder
       builder.maybeSingle = () => Promise.resolve(result(null))
       builder.then = (resolve: (value: unknown) => void) => {
-        if (table === 'agenda_professionals' && columns.includes('photo_url')) return resolve(result(null, { message: 'column agenda_professionals.photo_url does not exist' }))
+        if (table === 'agenda_professionals' && columns.includes('photo_url')) return resolve(result(null, { code: '42703', message: 'column agenda_professionals.photo_url does not exist' }))
         if (table === 'agenda_professionals') return resolve(result([{ id: 'p1', name: 'Pepe', color: '#000000', phone: null, is_active: true, sort_order: 0 }]))
         return resolve(result([]))
       }

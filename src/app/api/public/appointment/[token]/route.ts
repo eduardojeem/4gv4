@@ -8,6 +8,7 @@ import { pickSlotResource } from '@/lib/agenda/slots'
 import { todayIn, utcToZoned } from '@/lib/agenda/time'
 import { publicSlotsFor, resolvePublicAgenda } from '@/lib/agenda/public-agenda-server'
 import { notifyAppointmentEvent, notifyOptionsFor } from '@/lib/agenda/appointment-events'
+import { bookingWriteError } from '@/lib/agenda/booking-writes'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,10 @@ type AppointmentRow = {
   service_product_id: string | null
   professional_id: string | null
   starts_at: string
+  ends_at: string
+  price: number
+  buffer_minutes?: number
+  sale_id?: string | null
   status: string
 }
 
@@ -32,14 +37,19 @@ async function loadAppointment(token: string) {
   const admin = createAdminSupabase()
   const { data } = await admin
     .from('appointments')
-    .select('id, organization_id, customer_name, service_name, service_product_id, professional_id, starts_at, status')
+    .select('*')
     .eq('public_token', token)
     .maybeSingle()
   return data as AppointmentRow | null
 }
 
 function isChangeable(appointment: AppointmentRow) {
-  return (appointment.status === 'pending' || appointment.status === 'confirmed') && Date.parse(appointment.starts_at) > Date.now()
+  return !appointment.sale_id && (appointment.status === 'pending' || appointment.status === 'confirmed') && Date.parse(appointment.starts_at) > Date.now()
+}
+
+function snapshotTerms(appointment: AppointmentRow) {
+  return { price: Number(appointment.price), durationMinutes: (Date.parse(appointment.ends_at)-Date.parse(appointment.starts_at))/60000,
+    bufferMinutes: appointment.buffer_minutes ?? 0 }
 }
 
 /** La agenda pública de la tienda del turno; null si ya no toma turnos online. */
@@ -72,7 +82,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     })
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Fecha inválida' }, { status: 400 })
-  const result = await publicSlotsFor(agenda, date, appointment.service_product_id, appointment.professional_id, appointment.id)
+  const result = await publicSlotsFor(agenda, date, appointment.service_product_id, appointment.professional_id, appointment.id, snapshotTerms(appointment))
   if (!result) return NextResponse.json({ error: 'El servicio ya no se reserva online.' }, { status: 409 })
   return NextResponse.json({
     slots: result.slots
@@ -106,6 +116,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       .update({ status: 'cancelled', cancel_reason: 'Cancelado por el cliente' })
       .eq('public_token', token)
       .in('status', ['pending', 'confirmed'])
+      .is('sale_id', null)
       .gt('starts_at', new Date().toISOString())
       .select('id, organization_id, customer_name, service_name, starts_at')
     if (error) return NextResponse.json({ error: 'No se pudo cancelar' }, { status: 500 })
@@ -131,8 +142,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   // Se recalcula: lo que vio hace un rato puede haberse ocupado.
   const startsAt = new Date(parsed.data.starts_at).toISOString()
+  if (agenda.config.capabilities?.professionalBooking) {
+    const { data, error } = await admin.rpc('reschedule_agenda_appointment', {
+      p_org: appointment.organization_id, p_id: appointment.id, p_start: startsAt, p_public_token: token,
+    })
+    if (error || !data) {
+      const failure = bookingWriteError(error)
+      return NextResponse.json({ error: failure.error, code: failure.code }, { status: failure.status })
+    }
+    try {
+      await notifyAppointmentEvent(admin, { organizationId: appointment.organization_id, appointmentId: appointment.id,
+        kind: 'rescheduled', customerName: appointment.customer_name, serviceName: appointment.service_name,
+        startsAt, previousStartsAt: appointment.starts_at,
+      }, { timeZone: agenda.config.timeZone, notifyEmail: agenda.config.settings.notify_email !== false })
+    } catch { logger.error('No se pudo emitir el aviso de reprogramación') }
+    return NextResponse.json({ ok: true, startsAt: data.starts_at, status: data.status }, { headers: { 'Cache-Control': 'no-store' } })
+  }
   const date = utcToZoned(startsAt, agenda.config.timeZone).date
-  const result = await publicSlotsFor(agenda, date, appointment.service_product_id, appointment.professional_id, appointment.id)
+  const result = await publicSlotsFor(agenda, date, appointment.service_product_id, appointment.professional_id, appointment.id, snapshotTerms(appointment))
   const pick = result ? pickSlotResource(startsAt, result.slots, appointment.professional_id) : { ok: false as const }
   if (!result || !pick.ok) return NextResponse.json({ error: 'Ese horario ya no está disponible. Elegí otro.' }, { status: 409 })
 
@@ -142,7 +169,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     .from('appointments')
     .update({
       starts_at: startsAt,
-      ends_at: new Date(Date.parse(startsAt) + result.service.duration_minutes * 60_000).toISOString(),
+      ends_at: new Date(Date.parse(startsAt) + snapshotTerms(appointment).durationMinutes * 60_000).toISOString(),
       professional_id: pick.professionalId,
       status,
       confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,

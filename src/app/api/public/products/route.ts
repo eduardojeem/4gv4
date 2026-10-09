@@ -1,3 +1,4 @@
+import { NOT_A_SERVICE_FILTER } from '@/lib/public/public-products'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -76,6 +77,8 @@ export async function GET(request: NextRequest) {
       .select(selectFields as '*', { count: 'exact' })
       .eq('organization_id', organization.id)
       .eq('is_active', true)
+      // Los servicios de la agenda viven en «products» pero no se venden como producto.
+      .or(NOT_A_SERVICE_FILTER)
 
     // Apply visibility by customer type.
     // Retail users only see public products; wholesale users can also see wholesale-only products.

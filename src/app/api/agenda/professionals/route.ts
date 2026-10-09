@@ -4,6 +4,10 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { PROFESSIONAL_COLUMNS } from '@/lib/agenda/agenda-server'
+import { loadAgendaConfig } from '@/lib/agenda/agenda-server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { bookingWriteError } from '@/lib/agenda/booking-writes'
+import { openingHoursSchema } from '@/lib/agenda/booking-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +18,8 @@ const professionalSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
   phone: z.string().trim().max(40).nullable().optional(),
   is_active: z.boolean().optional(),
+  online_visible: z.boolean().optional(),
+  opening_hours: openingHoursSchema.nullable().optional(),
   sort_order: z.number().int().min(0).max(1000).optional(),
   // Se muestran en la tienda: foto (URL https o ruta propia) y especialidad.
   photo_url: z.string().trim().max(500).refine((value) => value === '' || value.startsWith('https://') || value.startsWith('/'), 'La foto no es válida').nullable().optional(),
@@ -26,10 +32,12 @@ export const POST = withTenantAuth(guard, async (request, { organization }) => {
   const parsed = professionalSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Revisá los datos' }, { status: 400 })
   const supabase = await createClient()
+  const advanced = parsed.data.online_visible !== undefined || parsed.data.opening_hours !== undefined
+  if (advanced && !(await loadAgendaConfig(supabase, organization.id))?.capabilities.professionalBooking) return NextResponse.json({ error: 'Falta aplicar la migración transaccional de reservas.' }, { status: 503 })
   const { data, error } = await supabase
     .from('agenda_professionals')
     .insert({ ...parsed.data, phone: parsed.data.phone || null, organization_id: organization.id })
-    .select(COLUMNS)
+    .select(advanced ? `${COLUMNS}, online_visible, opening_hours` : COLUMNS)
     .single()
   if (error) {
     logger.error('No se pudo crear el profesional', { error: error.message })
@@ -45,6 +53,8 @@ export const PATCH = withTenantAuth(guard, async (request, { organization }) => 
   const parsed = professionalSchema.partial().safeParse(body)
   if (!id.success || !parsed.success) return NextResponse.json({ error: 'Revisá los datos' }, { status: 400 })
   const supabase = await createClient()
+  const advanced = parsed.data.online_visible !== undefined || parsed.data.opening_hours !== undefined
+  if (advanced && !(await loadAgendaConfig(supabase, organization.id))?.capabilities.professionalBooking) return NextResponse.json({ error: 'Falta aplicar la migración transaccional de reservas.' }, { status: 503 })
   const { data, error } = await supabase
     .from('agenda_professionals')
     .update({
@@ -55,7 +65,7 @@ export const PATCH = withTenantAuth(guard, async (request, { organization }) => 
     })
     .eq('id', id.data)
     .eq('organization_id', organization.id)
-    .select(COLUMNS)
+    .select(advanced ? `${COLUMNS}, online_visible, opening_hours` : COLUMNS)
     .maybeSingle()
   if (error || !data) return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })
   return NextResponse.json({ professional: data })
@@ -68,11 +78,22 @@ const servicesSchema = z.object({
 })
 
 /** Qué servicios hace un profesional: se reemplaza la lista entera. */
-export const PUT = withTenantAuth(guard, async (request, { organization }) => {
+export const PUT = withTenantAuth(guard, async (request, { organization, user }) => {
   const parsed = servicesSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos' }, { status: 400 })
   const supabase = await createClient()
   const { id, service_ids } = parsed.data
+  const config = await loadAgendaConfig(supabase, organization.id)
+  if (config?.capabilities.professionalBooking) {
+    const { data, error } = await createAdminSupabase().rpc('replace_agenda_professional_services', {
+      p_org: organization.id, p_prof: id, p_services: [...new Set(service_ids)], p_actor: user.id,
+    })
+    if (error) {
+      const failure = bookingWriteError(error)
+      return NextResponse.json({ error: failure.error, code: failure.code }, { status: failure.status })
+    }
+    return NextResponse.json({ professional: data })
+  }
 
   const { data: professional } = await supabase
     .from('agenda_professionals')

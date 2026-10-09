@@ -15,6 +15,7 @@ import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 import { sanitizeFilterTerm } from '@/lib/api/sanitize-search'
 import { productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
+import { NOT_A_SERVICE_FILTER } from '@/lib/public/public-products'
 import { buildDeviceOptions, type DeviceOptions } from '@/lib/products/device-options'
 import { normalizeDeviceBrand, normalizeDeviceModel } from '@/lib/products/device-compatibility'
 
@@ -143,6 +144,7 @@ async function getProductFacetsUncached(
     .eq('organization_id', organizationId)
     .eq('is_active', true)
     .or(visibilityFilter)
+    .or(NOT_A_SERVICE_FILTER)
 
   const uniqueBrands = new Set<string>()
   const prices: number[] = []
@@ -450,6 +452,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
     // Visibilidad: mayorista ve 'public' y 'wholesale'; retail solo 'public'.
     q = isWholesale ? q.in('visibility', ['public', 'wholesale']) : q.eq('visibility', 'public')
+    // Los servicios de la agenda viven en «products», pero no se venden como producto.
+    q = q.or(NOT_A_SERVICE_FILTER)
 
     if (query) {
       q = q.or(
@@ -713,6 +717,7 @@ export async function getPublicCategories(isWholesale = false): Promise<Category
     .eq('organization_id', organization.id)
     .eq('is_active', true)
     .not('category_id', 'is', null)
+    .or(NOT_A_SERVICE_FILTER)
 
   productCategoriesQuery = isWholesale
     ? productCategoriesQuery.in('visibility', ['public', 'wholesale'])

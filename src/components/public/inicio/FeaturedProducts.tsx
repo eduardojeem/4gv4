@@ -49,7 +49,15 @@ export function FeaturedProducts() {
   )
 
   const isMounted = useSyncExternalStore(subscribeToMount, () => true, () => false)
-  const products = useMemo(() => (isMounted ? (data ?? []) : []), [data, isMounted])
+  const rawProducts = useMemo(() => (isMounted ? (data ?? []) : []), [data, isMounted])
+  // En servicios/barberías, los servicios ya se muestran en la carta arriba.
+  // La vitrina de productos destacados es solo para mercadería física que el cliente se lleva a casa.
+  const products = useMemo(() => {
+    if (storefrontStyle === 'services') {
+      return rawProducts.filter((p) => p.unit_measure !== 'servicio')
+    }
+    return rawProducts
+  }, [rawProducts, storefrontStyle])
   const effectiveIsLoading = !isMounted || isLoading
 
   // Categorías presentes en los productos cargados

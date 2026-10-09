@@ -25,6 +25,9 @@ export const appointmentInputSchema = z.object({
   duration_minutes: z.number().int().min(5).max(720),
   notes: z.string().trim().max(1000).nullable().optional(),
   status: z.enum(['pending', 'confirmed']).optional(),
+  accept_new_terms: z.boolean().optional(),
+  accepted_terms: z.object({price:z.number().finite().min(0),duration_minutes:z.number().int().min(5).max(720),buffer_minutes:z.number().int().min(0).max(120)}).optional(),
+  allow_outside_hours: z.boolean().optional(),
 })
 
 export type AppointmentInput = z.infer<typeof appointmentInputSchema>
