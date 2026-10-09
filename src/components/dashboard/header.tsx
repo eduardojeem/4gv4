@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { getDashboardNavItemByPath } from '@/config/dashboard-navigation'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -133,11 +134,12 @@ export const Header = memo(function Header() {
       if (!session) return
       const { data } = await supabase
         .from('products')
-        .select('id, name, stock_quantity, min_stock')
+        .select('id, name, sku, unit_measure, stock_quantity, min_stock')
         .eq('is_active', true)
-      if (data && data.length > 0) {
-        generateStockNotifications(data as Parameters<typeof generateStockNotifications>[0])
-      }
+      // Los servicios (corte, lavado…) no tienen stock: con stock 0 aparecían
+      // como «productos sin stock».
+      const physical = (data ?? []).filter((product) => !isServiceLikeProduct(product))
+      generateStockNotifications(physical as Parameters<typeof generateStockNotifications>[0])
     } catch { /* ignore */ }
   }, [shouldTrackStock, generateStockNotifications])
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bell,
   AlertTriangle,
@@ -429,6 +430,7 @@ export function NotificationSystem({
 
 // Hook for managing notifications
 export function useNotifications() {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const lastStockSignatureRef = useRef<string | null>(null)
 
@@ -501,7 +503,7 @@ export function useNotifications() {
         actionable: true,
         action: {
           label: 'Ver productos',
-          onClick: () => console.log('Navigate to low stock products')
+          onClick: () => router.push('/dashboard/products?filter=low_stock')
         },
         data: { products: lowStockProducts }
       })
@@ -516,13 +518,13 @@ export function useNotifications() {
         message: `${outOfStockProducts.length} producto${outOfStockProducts.length > 1 ? 's' : ''} sin stock`,
         actionable: true,
         action: {
-          label: 'Reabastecer',
-          onClick: () => console.log('Navigate to restock products')
+          label: 'Ver agotados',
+          onClick: () => router.push('/dashboard/products?filter=out_of_stock')
         },
         data: { products: outOfStockProducts }
       })
     }
-  }, [addNotification])
+  }, [addNotification, router])
 
   return {
     notifications,
