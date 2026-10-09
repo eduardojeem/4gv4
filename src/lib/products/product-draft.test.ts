@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearProductDraft, readProductDraft, saveProductDraft } from './product-draft'
+import { clearProductDraft, flushProductDraft, readProductDraft, saveProductDraft, scheduleProductDraft } from './product-draft'
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
@@ -18,6 +18,36 @@ describe('borrador del producto', () => {
   it('guarda y devuelve lo escrito', () => {
     saveProductDraft('p-1', { name: 'Teclado', sale_price: 90000 })
     expect(readProductDraft('p-1')).toEqual({ name: 'Teclado', sale_price: 90000 })
+  })
+
+  it('agrupa cambios rápidos y guarda el último borrador', () => {
+    vi.useFakeTimers()
+    scheduleProductDraft('p-1', { name: 'Uno' })
+    vi.advanceTimersByTime(200)
+    scheduleProductDraft('p-1', { name: 'Dos' })
+    vi.advanceTimersByTime(299)
+    expect(readProductDraft('p-1')).toBeNull()
+    vi.advanceTimersByTime(1)
+    expect(readProductDraft('p-1')).toEqual({ name: 'Dos' })
+  })
+
+  it('conserva lo pendiente al salir antes de la demora', () => {
+    vi.useFakeTimers()
+    scheduleProductDraft('p-1', { name: 'Pendiente' })
+    flushProductDraft('p-1')
+    expect(readProductDraft('p-1')).toEqual({ name: 'Pendiente' })
+    clearProductDraft('p-1')
+    vi.advanceTimersByTime(300)
+    expect(readProductDraft('p-1')).toBeNull()
+  })
+
+  it('descartar cancela el guardado pendiente y no revive el borrador', () => {
+    vi.useFakeTimers()
+    scheduleProductDraft('p-1', { name: 'Descartado' })
+    clearProductDraft('p-1')
+    vi.advanceTimersByTime(300)
+    flushProductDraft('p-1')
+    expect(readProductDraft('p-1')).toBeNull()
   })
 
   it('separa el borrador de cada producto y el de uno nuevo', () => {
@@ -92,7 +122,7 @@ describe('el modal ya no borra lo que se está escribiendo', () => {
     // Guardar siempre dejaría un borrador idéntico a lo guardado y la próxima
     // apertura avisaría de una recuperación que no recuperó nada.
     const efecto = modal.slice(modal.indexOf('if (!isDirty) return'))
-    expect(efecto.slice(0, 300)).toContain('saveProductDraft(productId')
+    expect(efecto.slice(0, 300)).toContain('scheduleProductDraft(productId')
   })
 
   it('lo borra al guardar y al descartar', () => {
