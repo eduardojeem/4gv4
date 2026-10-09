@@ -1,38 +1,38 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PublicBooking } from '@/components/public/agenda/PublicBooking'
-
-const info = {
-  storeName: 'Don Pepe',
-  currency: 'PYG',
-  today: '2026-10-02',
-  maxDaysAhead: 30,
-  requireConfirmation: true,
-  message: null,
-  openDays: [1, 2, 3, 4, 5, 6],
-  services: [
-    { id: 'corte', name: 'Corte', duration: 30, price: 50000, professionalIds: ['pepe', 'ana'] },
-    { id: 'color', name: 'Color', duration: 90, price: 150000, professionalIds: ['ana'] },
-  ],
-  professionals: [
-    { id: 'pepe', name: 'Pepe', color: '#0f766e' },
-    { id: 'ana', name: 'Ana', color: '#7c3aed' },
-  ],
-}
-
-afterEach(() => vi.unstubAllGlobals())
-
-describe('la reserva online ofrece solo a quien hace el servicio', () => {
-  it('Corte lo hacen los dos; Color solo Ana, así que no se pregunta con quién', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => info }))
-    render(<PublicBooking slug="don-pepe" />)
-
-    fireEvent.click(await screen.findByRole('button', { name: /Corte/ }))
-    expect(screen.getByRole('button', { name: /Pepe/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Ana/ })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /Color/ }))
-    expect(screen.queryByText('¿Con quién?')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Pepe/ })).not.toBeInTheDocument()
+afterEach(()=>{ cleanup(); vi.unstubAllGlobals() })
+const info = { storeName:'Barbería',currency:'PYG',today:'2026-10-10',maxDaysAhead:1,requireConfirmation:true,openDays:[6],message:null,
+  professionalBookingAvailable:true,professionalSelection:'required',services:[{id:'service',name:'Corte',duration:30,price:30000,professionalIds:['prof']}],professionals:[{id:'prof',name:'Ana',color:'#000000'}] }
+describe('public professional booking',()=>{
+  it('requires choosing a professional even when there is only one',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(info))))
+    render(<PublicBooking slug="store" initialServiceId="service" />)
+    expect(await screen.findByRole('button',{name:'Ana'})).toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'Cualquiera'})).not.toBeInTheDocument()
+  })
+  it('requires accepting the server quote and submits its opaque id, not a price',async()=>{
+    const fetchMock=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const url=String(input)
+      if(init?.method==='POST' && url.endsWith('/quote')) return new Response(JSON.stringify({quoteId:'quote',expiresAt:'2099-10-10T09:10:00Z',startsAt:'2026-10-10T09:00:00Z',endsAt:'2026-10-10T09:45:00Z',professionalName:'Ana',professionalId:'prof',duration:45,price:40000}))
+      if(init?.method==='POST') return new Response(JSON.stringify({token:'token',status:'pending'}),{status:201})
+      if(url.includes('?')) return new Response(JSON.stringify({slots:[{startsAt:'2026-10-10T09:00:00Z',time:'09:00'}]}))
+      return new Response(JSON.stringify({...info,professionalSelection:'optional'}))
+    })
+    vi.stubGlobal('fetch',fetchMock)
+    render(<PublicBooking slug="store" initialServiceId="service" />)
+    fireEvent.click(await screen.findByRole('button',{name:/Hoy/}))
+    fireEvent.click(await screen.findByRole('button',{name:'09:00'}))
+    expect(await screen.findByText(/45 min/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Nombre'),{target:{value:'Cliente'}})
+    fireEvent.change(screen.getByLabelText('WhatsApp'),{target:{value:'0981000000'}})
+    const book=screen.getByRole('button',{name:'Pedir el turno'})
+    expect(book).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox',{name:/Acepto/}))
+    fireEvent.click(book)
+    await waitFor(()=>expect(fetchMock.mock.calls.some(([,init])=>init?.body && JSON.parse(String(init.body)).quote_id==='quote')).toBe(true))
+    const posted=fetchMock.mock.calls.find(([,init])=>init?.body && JSON.parse(String(init.body)).quote_id==='quote')!
+    expect(JSON.parse(String(posted[1]?.body))).not.toHaveProperty('price')
+    expect(JSON.parse(String(posted[1]?.body)).idempotency_key).toBeTruthy()
   })
 })

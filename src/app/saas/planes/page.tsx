@@ -28,7 +28,7 @@ export default async function SaaSPlansPage() {
       <SaaSPublicNav />
 
       <main>
-        <SaaSPlansSection initialPlans={plans} />
+        <SaaSPlansSection initialPlans={plans} headingLevel="h1" />
         <SaaSCTASection branding={branding} />
       </main>
     </div>

@@ -1,7 +1,9 @@
 import type { AppointmentStatus } from '@/lib/agenda/agenda-api'
-import type { AgendaProfessional, AgendaService, AgendaSettings } from '@/lib/agenda/agenda-server'
+import type { AgendaProfessional, AgendaProfessionalRate, AgendaService, AgendaSettings } from '@/lib/agenda/agenda-server'
 
 export type Appointment = {
+  buffer_minutes?: number
+  occupied_until?: string
   id: string
   number: number
   professional_id: string | null
@@ -25,6 +27,8 @@ export type Appointment = {
 }
 
 export type AgendaData = {
+  capabilities?: {professionalBooking:boolean}
+  professionalRates?: AgendaProfessionalRate[]
   available: boolean
   date: string
   days: number

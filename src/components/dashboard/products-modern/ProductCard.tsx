@@ -119,7 +119,6 @@ export const ProductCard = React.memo(function ProductCard({
   onToggleActive,
   className
 }: ProductCardProps) {
-  const [isHovered, setIsHovered] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [showVariantsDrawer, setShowVariantsDrawer] = useState(false)
   const isPubliclyVisible = product.is_active && product.visibility !== 'hidden'
@@ -223,16 +222,12 @@ export const ProductCard = React.memo(function ProductCard({
       role="article"
       aria-label={`Producto: ${product.name}, Precio: Gs. ${product.sale_price}, Stock: ${product.stock_quantity}`}
       className={cn(
-        'group relative flex flex-col justify-between rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden',
+        'group relative flex h-full min-w-0 flex-col justify-between rounded-xl border transition-colors duration-150 overflow-hidden',
         'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-2xs',
-        'hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-slate-950/60 hover:border-slate-300 dark:hover:border-slate-700',
+        'hover:border-slate-300 dark:hover:border-slate-700',
         isSelected && 'ring-2 ring-blue-500 border-blue-400 dark:border-blue-600 shadow-md shadow-blue-500/10',
-        isHovered && '-translate-y-1',
         className
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onViewDetails(product)}
     >
       <CardContent className="p-0 flex flex-col flex-1">
         {/* ── Media Header (Image + Floating Badges) ── */}
@@ -243,18 +238,9 @@ export const ProductCard = React.memo(function ProductCard({
                 src={imageUrl!}
                 alt={product.name}
                 fill
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                className={cn(
-                  'object-cover transition-transform duration-500',
-                  isHovered ? 'scale-105' : 'scale-100'
-                )}
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                className="object-contain p-6"
                 onError={() => setImageError(true)}
-              />
-              <div
-                className={cn(
-                  'absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent transition-opacity duration-200',
-                  isHovered ? 'opacity-100' : 'opacity-0'
-                )}
               />
             </>
           ) : (
@@ -270,15 +256,14 @@ export const ProductCard = React.memo(function ProductCard({
             </div>
           )}
 
+          <button type="button" aria-label={`Abrir imagen de ${product.name}`} className="absolute inset-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary" onClick={() => onViewDetails(product)} />
+
           {/* Checkbox de selección (Top-Left) */}
           <div
-            className={cn(
-              'absolute top-2.5 left-2.5 z-10 transition-all duration-200',
-              isSelected || isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90 sm:group-hover:opacity-100 sm:group-hover:scale-100'
-            )}
+            className="absolute top-2.5 left-2.5 z-10"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-lg p-1 shadow-xs border border-slate-200/80 dark:border-slate-700/80">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg border bg-card">
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onSelect(product.id)}
@@ -320,54 +305,6 @@ export const ProductCard = React.memo(function ProductCard({
             </div>
           )}
 
-          {/* Barra Flotante de Acciones en Hover (Centro/Bottom de la imagen) */}
-          <div className={cn(
-            'absolute inset-x-0 bottom-2 flex justify-center z-20 transition-all duration-200 px-2',
-            isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
-          )}>
-            <div className="flex items-center gap-1 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-lg border border-white/10">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-slate-200 hover:text-white hover:bg-white/20 rounded-lg transition-colors"
-                onClick={(e) => { e.stopPropagation(); onViewDetails(product) }}
-                title="Ver detalles rápidos"
-                aria-label={`Ver detalles: ${product.name}`}
-              >
-                <Eye className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-slate-200 hover:text-white hover:bg-blue-600/70 rounded-lg transition-colors"
-                onClick={(e) => { e.stopPropagation(); onEdit(product) }}
-                title="Editar producto"
-                aria-label={`Editar: ${product.name}`}
-              >
-                <Edit className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-slate-200 hover:text-white hover:bg-purple-600/70 rounded-lg transition-colors"
-                onClick={(e) => { e.stopPropagation(); onDuplicate(product) }}
-                title="Duplicar producto"
-                aria-label={`Duplicar: ${product.name}`}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-slate-200 hover:text-rose-200 hover:bg-rose-600/80 rounded-lg transition-colors"
-                onClick={(e) => { e.stopPropagation(); onDelete(product) }}
-                title="Eliminar producto"
-                aria-label={`Eliminar: ${product.name}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
         </div>
 
         {/* ── Content Body ── */}
@@ -401,7 +338,7 @@ export const ProductCard = React.memo(function ProductCard({
               </div>
 
               {product.sku && (
-                <code className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 bg-slate-100/90 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                <code title={product.sku} className="max-w-[40%] truncate text-xs font-mono font-medium text-slate-500 dark:text-slate-400 bg-slate-100/90 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60">
                   {product.sku}
                 </code>
               )}
@@ -414,8 +351,8 @@ export const ProductCard = React.memo(function ProductCard({
                   {product.brand}
                 </p>
               )}
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors min-h-[2.5rem]">
-                {product.name}
+              <h3 className="text-base font-semibold leading-snug text-foreground">
+                <button type="button" className="min-h-11 w-full text-left break-words hover:text-primary focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onViewDetails(product)}>{product.name}</button>
               </h3>
             </div>
           </div>
@@ -424,6 +361,7 @@ export const ProductCard = React.memo(function ProductCard({
             {/* Fila 3: Precios (Venta + Mayorista + Costo) */}
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <div>
+                <p className="mb-1 text-xs text-muted-foreground">Precio de venta</p>
                 <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
                   {hasPriceRange
                     ? `${formatCurrency(minVariantPrice)} – ${formatCurrency(maxVariantPrice)}`
@@ -598,6 +536,50 @@ export const ProductCard = React.memo(function ProductCard({
             </div>
           </div>
         </div>
+        <div role="group" aria-label={`Acciones de ${product.name}`} className="border-t p-3" onClick={(event) => event.stopPropagation()}>
+            <div className="grid grid-cols-4 gap-2">
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-11 w-full rounded-lg"
+                onClick={(e) => { e.stopPropagation(); onViewDetails(product) }}
+                title="Ver detalles rápidos"
+                aria-label={`Ver detalles: ${product.name}`}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-11 w-full rounded-lg"
+                onClick={(e) => { e.stopPropagation(); onEdit(product) }}
+                title="Editar producto"
+                aria-label={`Editar: ${product.name}`}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-11 w-full rounded-lg"
+                onClick={(e) => { e.stopPropagation(); onDuplicate(product) }}
+                title="Duplicar producto"
+                aria-label={`Duplicar: ${product.name}`}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-11 w-full rounded-lg"
+                onClick={(e) => { e.stopPropagation(); onDelete(product) }}
+                title="Eliminar producto"
+                aria-label={`Eliminar: ${product.name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
       </CardContent>
     </Card>
   )

@@ -1165,3 +1165,11 @@ html .text-primary {
   background: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
   background-clip: content-box;
 }
+/* iOS: campos legibles sin impedir el zoom manual de accesibilidad. */
+@media (max-width: 639px) {
+  .product-editor-dialog input:not([type="checkbox"]):not([type="radio"]),
+  .product-editor-dialog textarea,
+  .product-editor-dialog select {
+    font-size: 16px;
+  }
+}

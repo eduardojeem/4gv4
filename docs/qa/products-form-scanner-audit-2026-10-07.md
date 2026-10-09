@@ -66,3 +66,18 @@ Cambios sincronizados con main en GitHub. Verificaciones locales: pruebas focali
 - Área de lectura al 92% del ancho (hasta 600 px), siempre dentro del visor; cámara trasera y resolución ideal 1280×1280, sin exigir capacidades que el dispositivo no tenga.
 - Conserva decodificador, formatos, lectura continua, protección contra duplicados, confirmación del código y lector/manual. No implica que se haya verificado enfoque o lectura con una cámara física.
 - Pruebas focalizadas de cámara y búsqueda: 13 aprobadas. Para validar en dispositivo: abrir por HTTPS, permitir cámara, probar EAN/Code128 con buena luz, cerrar y comprobar que se apague la cámara; repetir con lector/manual.
+
+## Ajustes por reporte de iPhone (local, no publicados)
+
+- El usuario reportó cuelgues al bajar por Productos. No se confirmó la causa en Safari físico: el navegador local sin sesión redirige a `/saas`. Se eliminó el desenfoque de búsqueda/filtros en móvil como mitigación gráfica conservadora, conservándolo en escritorio.
+- Campos del editor con fuente mínima de 16 px bajo 640 px; modal anclado arriba y ajustado al VisualViewport cuando aparece el teclado. El zoom manual permanece permitido y escritorio no cambia.
+- Borrador agrupado cada 300 ms, con vaciado al ocultar/salir de la pestaña o limpiar la suscripción. Descartar cancela escrituras pendientes; resetear el formulario no programa otro borrador.
+- Escáner a 5 decodificaciones por segundo; zoom real opcional según capacidades de la cámara. No se ofrece un botón ficticio si Safari no expone esa capacidad. El zoom no garantiza enfoque ni lectura de etiquetas pequeñas.
+- Pruebas nuevas de cámara, borrador y viewport: 17 aprobadas; regresión de formulario/listado/búsqueda/filtros: 41 aprobadas. Lint focalizado y diff-check sin errores. Pendiente prueba operativa de scroll prolongado, teclado, guardar/descartar, lectura pequeña y cierre de cámara en iPhone por HTTPS.
+- Sin migraciones, cambios de permisos, planes ni activación de optimización facturada de imágenes. Se preservaron cambios ajenos en `src/app/dashboard/page.tsx` y `src/app/dash-mobile-tmp/`.
+## Diseño de tarjetas del dashboard (local)
+
+- Móvil: miniatura de 64 px con fondo y reserva de espacio; nombre y SKU separados, precio de venta y stock identificados, selección resaltada y edición directa. Se conserva menú, rango de precios y suma de stock de variantes; no se muestran costos.
+- Escritorio: imagen completa con `object-contain`, nombre como botón accesible, selección siempre visible y acciones en una fila fija de controles de 44 px. Se conserva el acceso al detalle desde la imagen y la ficha, variantes y control de costos según permiso.
+- Grilla con separación de 16 px; sin elevación ni escalado de imagen por hover. No cambia consultas, permisos, inventario, planes ni política de optimización de imágenes.
+- Cinco pruebas focalizadas aprobadas: acciones sin hover, edición, selección, stock de variantes y costo oculto sin permiso. Validación visual autenticada pendiente: el navegador local redirige a `/saas`.

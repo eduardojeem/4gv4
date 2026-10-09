@@ -48,6 +48,7 @@ async function fetchDocument(kind: ActiveQuote['kind'], id: string): Promise<{ d
     return { document: { ...quote, code: quoteCode(quote.number), convertible: CONVERTIBLE_STATUSES.includes(quote.status) } }
   }
   const appointment = body.appointment as AppointmentRow
+  if (!body.professionalBookingAvailable) return { error: 'Falta actualizar la base de datos para cobrar el turno con su tarifa acordada.' }
   return {
     document: {
       id: appointment.id,
@@ -135,6 +136,10 @@ export function useQuoteToCart({
       }
 
       const mode = quote.price_mode
+      if (kind === 'appointment' && !quote.items.every(item => item.product_id && inventoryProducts.some(product => product.id === item.product_id && product.is_active !== false))) {
+        toast.error('El servicio del turno no está disponible en el catálogo. No se cargó el carrito.')
+        return
+      }
       clearCart(true)
       setIsWholesale(mode === 'wholesale')
       if (quote.customer_id) setSelectedCustomer(quote.customer_id)
@@ -167,12 +172,12 @@ export function useQuoteToCart({
             missing += 1
             continue
           }
-          addProduct(product, quantity)
+          addProduct(kind === 'appointment' ? Object.assign({},product,{price:net,sale_price:net,wholesale_price:null,appointmentId:quote.id}) : product, quantity)
           cartItemId = product.id
           current = posUnitPrice({ sale_price: Number(product.sale_price), wholesale_price: product.wholesale_price }, mode)
         }
 
-        const discount = discountToHonorQuote(current, net)
+        const discount = kind === 'appointment' ? 0 : discountToHonorQuote(current, net)
         if (discount > 0) updateItemDiscount(cartItemId, discount)
         loaded += 1
       }
@@ -189,7 +194,7 @@ export function useQuoteToCart({
       })
     }
 
-    void run()
+    void run().catch(() => { loadedFor.current = null; toast.error('No se pudo cargar el documento. Revisá la conexión e intentá de nuevo.') })
   }, [documentKey, kind, documentId, ready])
 
   /** Llamar con el id de la venta recién hecha. */
@@ -197,6 +202,10 @@ export function useQuoteToCart({
     const quote = activeQuote
     if (!quote || !saleId) return
     setActiveQuote(null)
+    if (quote.kind === 'appointment') {
+      toast.success(`El turno ${quote.code} quedó atendido y cobrado`)
+      return
+    }
     const isQuote = quote.kind === 'quote'
     const response = await fetch(isQuote ? `/api/quotes/${quote.id}` : `/api/agenda/${quote.id}`, {
       method: 'PATCH',

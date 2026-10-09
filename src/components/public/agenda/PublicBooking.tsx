@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { addDays, weekdayOf, WEEKDAY_LABELS } from '@/lib/agenda/time'
+import { useBookingQuote } from './use-booking-quote'
+import { BookingQuoteSummary } from './BookingQuoteSummary'
 
 type Info = {
   storeName: string
@@ -17,10 +19,12 @@ type Info = {
   today: string
   maxDaysAhead: number
   requireConfirmation: boolean
+  professionalBookingAvailable?: boolean
+  professionalSelection?: 'disabled' | 'optional' | 'required'
   message: string | null
   openDays: number[]
   /** professionalIds: quién hace el servicio (vacío si no hay profesionales). */
-  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[] }>
+  services: Array<{ id: string; name: string; duration: number; price: number | null; professionalIds?: string[]; professionalTerms?:Array<{professionalId:string;price:number|null;duration:number}> }>
   professionals: Array<{ id: string; name: string; color: string }>
 }
 
@@ -54,10 +58,15 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
   const [website, setWebsite] = useState('')
   const [sending, setSending] = useState(false)
   const [booked, setBooked] = useState<{ token: string; status: string } | null>(null)
+  const [refresh,setRefresh]=useState(0)
   // Solo quienes hacen el servicio elegido; si el elegido antes no lo hace, vuelve a «Cualquiera».
   const serviceProfessionalIds = info?.services.find((item) => item.id === serviceId)?.professionalIds
   const serviceProfessionals = (info?.professionals ?? []).filter((professional) => !serviceProfessionalIds || serviceProfessionalIds.includes(professional.id))
-  const professionalId = serviceProfessionals.some((professional) => professional.id === chosenProfessionalId) ? chosenProfessionalId : ANY
+  const mode=info?.professionalBookingAvailable ? info.professionalSelection??'optional':'optional'
+  const professionalId = mode!=='disabled' && serviceProfessionals.some((professional) => professional.id === chosenProfessionalId) ? chosenProfessionalId : ANY
+  const needsProfessional=mode==='required' && professionalId===ANY
+  const showProfessionals=mode!=='disabled' && (serviceProfessionals.length>1 || mode==='required')
+  const quoted=useBookingQuote(slug,serviceId,professionalId===ANY?null:professionalId,startsAt,info?.professionalBookingAvailable===true,refresh)
 
   useEffect(() => {
     fetch(`/api/public/agenda/${encodeURIComponent(slug)}`)
@@ -71,7 +80,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
 
   const slotKey = serviceId && date ? `${serviceId}|${professionalId}|${date}` : null
   useEffect(() => {
-    if (!slotKey || !serviceId || !date) return
+    if (!slotKey || !serviceId || !date || needsProfessional) return
     const params = new URLSearchParams({ date, service: serviceId })
     if (professionalId !== ANY) params.set('professional', professionalId)
     let cancelled = false
@@ -80,7 +89,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
       .then((body) => { if (!cancelled) setSlots({ key: slotKey, list: Array.isArray(body.slots) ? body.slots : [] }) })
       .catch(() => { if (!cancelled) setSlots({ key: slotKey, list: [] }) })
     return () => { cancelled = true }
-  }, [slotKey, serviceId, date, professionalId, slug])
+  }, [slotKey, serviceId, date, professionalId, slug,refresh,needsProfessional])
 
   const days = useMemo(() => {
     if (!info) return []
@@ -92,17 +101,20 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
   const visibleSlots = slots && slots.key === slotKey ? slots.list : null
 
   const book = async () => {
-    if (!serviceId || !startsAt) return
+    if (!serviceId || !startsAt || (info?.professionalBookingAvailable && (!quoted.quote || !quoted.accepted))) return
     setSending(true)
     setError(null)
     try {
       const response = await fetch(`/api/public/agenda/${encodeURIComponent(slug)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ ...(info?.professionalBookingAvailable ? {
+          quote_id:quoted.quote!.quoteId,idempotency_key:quoted.attemptId,
+        } : {
           service_id: serviceId,
           professional_id: professionalId === ANY ? null : professionalId,
           starts_at: startsAt,
+        }),
           name,
           phone,
           notes: notes || null,
@@ -116,10 +128,13 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
         if (response.status === 409) {
           setStartsAt(null)
           setSlots(null)
+          setRefresh(value=>value+1)
         }
         return
       }
       setBooked(body)
+    } catch {
+      setError('No pudimos confirmar la respuesta. Revisá tu conexión y reintentá sin cambiar los datos; no se duplicará el turno.')
     } finally {
       setSending(false)
     }
@@ -161,7 +176,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
                 <p className="font-medium">{item.name}</p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" /> {item.duration} min
-                  {item.price !== null && item.price > 0 && <> · {formatCurrency(item.price, { currency: info.currency })}</>}
+                  {item.price === null ? ' · Precio a consultar' : <> · {formatCurrency(item.price, { currency: info.currency })}{info.professionalBookingAvailable && ' (tarifa base)'}</>}
                 </p>
               </button>
             ))}
@@ -169,26 +184,28 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
         )}
       </Step>
 
-      {serviceId && serviceProfessionals.length > 1 && (
-        <Step number={2} title="¿Con quién?" done>
+      {serviceId && showProfessionals && (
+        <Step number={2} title="¿Con quién?" done={!needsProfessional}>
+            {serviceProfessionals.length===0&&<p role="alert">No hay profesionales disponibles para este servicio. Consultá con la tienda.</p>}
           <div className="flex flex-wrap gap-2">
-            {[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }, ...serviceProfessionals].map((professional) => (
+            {[...(mode==='required'?[]:[{ id: ANY, name: 'Cualquiera', color: '#94a3b8' }]), ...serviceProfessionals].map((professional) => (
               <button
                 key={professional.id}
                 type="button"
                 aria-pressed={professionalId === professional.id}
                 onClick={() => { setProfessionalId(professional.id); setStartsAt(null) }}
-                className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm', professionalId === professional.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
+                className={cn('flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-base', professionalId === professional.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50')}
               >
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: professional.color }} /> {professional.name}
+                  {service?.professionalTerms?.filter(row=>row.professionalId===professional.id).map(row=><span key={row.professionalId} className="text-sm">· {row.duration} min · {row.price===null?'Precio a consultar':row.price===0?'Sin costo':formatCurrency(row.price,{currency:info.currency})}</span>)}
               </button>
             ))}
           </div>
         </Step>
       )}
 
-      {serviceId && (
-        <Step number={serviceProfessionals.length > 1 ? 3 : 2} title="¿Qué día?" done={Boolean(date)}>
+      {serviceId && !needsProfessional && (
+        <Step number={showProfessionals ? 3 : 2} title="¿Qué día?" done={Boolean(date)}>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {days.map((day) => (
               <button
@@ -215,7 +232,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
                         type="button"
                         aria-pressed={startsAt === slot.startsAt}
                         onClick={() => setStartsAt(slot.startsAt)}
-                        className={cn('rounded-lg border py-2 text-sm font-medium tabular-nums', startsAt === slot.startsAt ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted/50')}
+                        className={cn('min-h-11 rounded-lg border py-2 text-base font-medium tabular-nums', startsAt === slot.startsAt ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted/50')}
                       >
                         {slot.time}
                       </button>
@@ -227,7 +244,10 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
       )}
 
       {startsAt && service && (
-        <Step number={serviceProfessionals.length > 1 ? 4 : 3} title="Tus datos">
+        <Step number={showProfessionals ? 4 : 3} title="Tus datos">
+          {info.professionalBookingAvailable && (quoted.loading ? <p role="status">Confirmando tarifa y disponibilidad…</p> : quoted.quote ?
+            <BookingQuoteSummary quote={quoted.quote} currency={info.currency} accepted={quoted.accepted} onAccept={quoted.accept} expired={quoted.expired} /> : <p role="alert">{quoted.error}</p>)}
+          {info.professionalBookingAvailable && (quoted.error || quoted.expired) && <Button variant="outline" onClick={()=>setRefresh(value=>value+1)}>Actualizar cotización</Button>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="booking-name">Nombre</Label>
@@ -245,7 +265,7 @@ export function PublicBooking({ slug, initialServiceId }: { slug: string; initia
           {/* Trampa para bots: invisible para las personas. */}
           <input type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" value={website} onChange={(event) => setWebsite(event.target.value)} />
           {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-          <Button className="w-full" size="lg" onClick={() => void book()} disabled={sending || name.trim().length < 2 || phone.replace(/\D/g, '').length < 6}>
+          <Button className="min-h-11 w-full" size="lg" onClick={() => void book()} disabled={sending || name.trim().length < 2 || phone.replace(/\D/g, '').length < 6 || (info.professionalBookingAvailable && !quoted.accepted)}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck2 className="h-4 w-4" />}
             {info.requireConfirmation ? 'Pedir el turno' : 'Reservar el turno'}
           </Button>

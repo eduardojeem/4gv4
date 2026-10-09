@@ -4,6 +4,14 @@ import { MobileProductList } from '@/components/dashboard/products-modern/Mobile
 import type { Product } from '@/types/products'
 
 describe('listado móvil', () => {
+  it('ofrece edición directa sin abrir el detalle', () => {
+    const product = { id: 'p1', name: 'Cable USB', sale_price: 25000, stock_quantity: 7 } as Product
+    const edit = vi.fn(), detail = vi.fn()
+    render(<MobileProductList products={[product]} selectedProductIds={[]} onProductSelect={vi.fn()} onProductViewDetails={detail} onProductEdit={edit} onProductDelete={vi.fn()} onProductDuplicate={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Cable USB' }))
+    expect(edit).toHaveBeenCalledWith(product)
+    expect(detail).not.toHaveBeenCalled()
+  })
   it('suma el stock de variantes de ambos contratos', () => {
     const product = { id: 'p2', name: 'Remera', sale_price: 100, stock_quantity: 99, variants: [{ stock_quantity: 2, sale_price: 100 }, { stockQuantity: 3, salePrice: 200 }] } as Product
     render(<MobileProductList products={[product]} selectedProductIds={[]} onProductSelect={vi.fn()} onProductViewDetails={vi.fn()} onProductEdit={vi.fn()} onProductDelete={vi.fn()} onProductDuplicate={vi.fn()} />)

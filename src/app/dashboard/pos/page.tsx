@@ -368,7 +368,7 @@ function POSPageContent() {
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<ProductWithVariants | null>(null)
 
   // Hooks para variantes y promociones
-  const { getProductWithVariants, convertVariantToCartItem, products: variantCatalog, loading: variantsLoading } = useProductVariants()
+  const { getProductWithVariants, convertVariantToCartItem, loading: variantsLoading } = useProductVariants()
   const { applyPromotionByCode, calculateCartSummary: _calculateCartSummary } = usePromotionEngine()
   const { allPromotions } = usePromotions()
 
@@ -537,11 +537,12 @@ function POSPageContent() {
   })
 
   const handleWholesaleToggle = useCallback((value: boolean) => {
+    if (value && cart.some(item => item.appointmentId)) return toast.error('El turno se cobra con su tarifa acordada, sin modo mayorista')
     if (isWholesale === value) return
     React.startTransition(() => {
       setIsWholesale(value)
     })
-  }, [isWholesale, setIsWholesale])
+  }, [isWholesale, setIsWholesale, cart])
   
   const WHOLESALE_DISCOUNT_RATE = 10
 
@@ -664,7 +665,7 @@ function POSPageContent() {
   const { activeQuote, clearActiveQuote, markConverted: markQuoteConverted } = useQuoteToCart({
     quoteId: searchParams.get('quoteId'),
     appointmentId: searchParams.get('appointmentId'),
-    ready: !productsLoading && inventoryProducts.length > 0 && !variantsLoading && variantCatalog.length > 0,
+    ready: !productsLoading && inventoryProducts.length > 0 && !variantsLoading,
     inventoryProducts,
     getVariant: getQuoteVariant,
     addProduct: addToCartHook,
@@ -1092,7 +1093,7 @@ function POSPageContent() {
     cashierName,
     setPaymentStatus,
     setPaymentError,
-    processInventorySale,
+    processInventorySale: (sale: Parameters<typeof processInventorySale>[0]) => processInventorySale({ ...sale, appointment_id: cart.find(item => item.appointmentId)?.appointmentId ?? null }),
     onSuccess: (receipt: ReceiptData, meta?: { saleId?: string }) => {
       void markQuoteConverted(meta?.saleId)
       setLastSaleData(receipt)
@@ -1124,7 +1125,7 @@ function POSPageContent() {
     electronicProvider, electronicInstitution, electronicChannel, terminalId, notes,
     creditTerms, paymentSplit, storeCreditApplied, selectedRepairIds, markRepairDelivered,
     deliveryOutcome, selectedCustomer, customers, cashierName,
-    setPaymentStatus, setPaymentError, processInventorySale,
+    setPaymentStatus, setPaymentError, processInventorySale, cart,
     clearCart, setSelectedCustomer, clearRepairs, setGeneralDiscount, resetCheckoutState,
     setIsCheckoutOpen, formatCurrency, measureSaleProcessing, markQuoteConverted,
     setCustomerRepairs,
@@ -1377,7 +1378,7 @@ function POSPageContent() {
           {activeQuote && (
             <div role="status" className="flex items-center justify-between gap-3 border-b border-violet-200 bg-violet-50 px-4 py-1.5 text-sm text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
               <span>Cobrando {activeQuote.kind === 'quote' ? 'el presupuesto' : 'el turno'} <b>{activeQuote.code}</b>: al completar la venta queda {activeQuote.kind === 'quote' ? 'marcado como vendido' : 'como atendido y cobrado'}.</span>
-              <button type="button" className="text-xs underline" onClick={clearActiveQuote}>No vincular</button>
+              <button type="button" className="min-h-11 text-xs underline" onClick={() => { if (activeQuote.kind === 'appointment') clearCart(true); clearActiveQuote() }}>{activeQuote.kind === 'appointment' ? 'Quitar turno y vaciar carrito' : 'No vincular'}</button>
             </div>
           )}
           {/* Header desktop optimizado */}

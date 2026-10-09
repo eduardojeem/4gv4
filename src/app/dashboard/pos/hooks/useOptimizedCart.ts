@@ -130,7 +130,7 @@ export const useOptimizedCart = (
     if (typeof itemOrId === 'object' && itemOrId !== null) {
       const obj = itemOrId as Record<string, unknown>
       return Boolean(
-        obj.isService ||
+          obj.appointmentId || obj.isService ||
         obj.is_service ||
         obj.type === 'service' ||
         (typeof obj.id === 'string' && (obj.id.startsWith('repair_') || obj.id.startsWith('service_'))) ||
@@ -160,6 +160,7 @@ export const useOptimizedCart = (
    * Agregar producto al carrito
    */
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
+    const appointmentId = (product as Product & { appointmentId?: string }).appointmentId
     const isService = isServiceItem(product)
     const currentProduct = inventoryProducts.find(p => p.id === product.id) || product
     if (!currentProduct) {
@@ -171,6 +172,10 @@ export const useOptimizedCart = (
       const existingItem = prev.find(item => item.id === product.id)
       const currentQty = existingItem ? existingItem.quantity : 0
       const requestedQuantity = currentQty + quantity
+        if (appointmentId && requestedQuantity !== 1) {
+          toast.error('Cada turno se cobra una sola vez y con cantidad 1')
+          return prev
+        }
 
       if (!isService) {
         const hasInventoryEntry = inventoryProducts.some(p => p.id === product.id)
@@ -200,6 +205,7 @@ export const useOptimizedCart = (
         const inferredWholesale = product.wholesale_price
 
         const newItem: CartItem = {
+          appointmentId,
           id: product.id,
           name: product.name,
           sku: product.sku,
@@ -213,7 +219,7 @@ export const useOptimizedCart = (
           category: typeof product.category === 'object' ? product.category?.id : product.category,
           categoryName: product.category?.name,
           brand: product.brand || undefined,
-          isService: isService || Boolean((product as { isService?: boolean }).isService)
+          isService: !appointmentId && (isService || Boolean((product as { isService?: boolean }).isService))
         }
 
         return [...prev, newItem]
@@ -291,8 +297,9 @@ export const useOptimizedCart = (
       return
     }
 
-    const isService = isServiceItem(id)
     const currentCartItem = cart.find(item => item.id === id)
+    if (currentCartItem?.appointmentId && quantity !== 1) return toast.error('El turno debe tener cantidad 1')
+    const isService = isServiceItem(id) || Boolean(currentCartItem?.appointmentId)
     const availableStock = Number(currentCartItem?.stock ?? 0)
     if (!isService && currentCartItem?.variantId && quantity > availableStock) {
       toast.error(`Stock insuficiente para esta variante. Disponible: ${availableStock}`)

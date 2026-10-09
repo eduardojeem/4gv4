@@ -2,568 +2,118 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Check,
-  Minus,
-  Sparkles,
-  ChevronDown,
-  ShieldCheck, ArrowRight,
-  Building2,
-  Wrench,
-  Store, Compass,
-  CreditCard,
-  Gift,
-  CheckCircle2
-} from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { planNotes } from './saas-landing-data'
 import { cn } from '@/lib/utils'
-import {
-  buildPlanFeatureGroups,
-  buildPlanLimitRows,
-  publicLimitText,
-  selectActivePlans,
-  type PlanLimitValue,
-  type SubscriptionPlan,
-} from './saas-plan-presentation'
-import { parsePlanLimit } from '@/lib/saas/plan-limits'
+import { buildPlanFeatureGroups, buildPlanLimitRows, publicLimitText, selectActivePlans, type SubscriptionPlan } from './saas-plan-presentation'
 
 export type { SubscriptionPlan } from './saas-plan-presentation'
 
-// Interactive Business Profiles
-const BUSINESS_PROFILES = [
-  {
-    id: 'store_workshop',
-    label: 'Tienda o Taller Técnico',
-    icon: Wrench,
-    recommendedTier: 'basic',
-    reason: 'Caja, inventario y reparaciones, con carrito online, créditos, finanzas y visitas web.',
-  },
-  {
-    id: 'multibranch_online',
-    label: 'Multi-sucursal o Ecommerce',
-    icon: Store,
-    recommendedTier: 'pro',
-    reason: 'Varias sucursales, analítica de ventas, visitas web, auditoría y soporte prioritario.',
-  },
-  {
-    id: 'enterprise_chain',
-    label: 'Cadena Comercial / Distribuidora',
-    icon: Building2,
-    recommendedTier: 'enterprise',
-    reason: 'Acuerdo a medida: límites, sucursales y soporte según tu operación.',
-  },
-]
+function getPrice(price: number, isCustom?: boolean) {
+  if (isCustom) return 'A medida'
+  if (!price || price === 0) return 'Gratis'
+  return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(price)
+}
 
-// FAQ Items
-const FAQ_ITEMS = [
-  {
-    q: '¿Cómo funcionan los días de prueba gratis? ¿Piden tarjeta?',
-    a: 'No pedimos tarjeta de crédito ni ningún medio de pago para comenzar. Cada plan indica en su tarjeta cuántos días de prueba incluye. Podés registrarte y probar el 100% de las funciones al instante.',
-  },
-  {
-    q: '¿Qué ocurre al terminar los días de prueba gratis?',
-    a: 'Al finalizar el período de prueba podés activar tu suscripción para continuar operando sin perder ningún dato, producto ni configuración cargada.',
-  },
-  {
-    q: '¿Puedo cambiar de plan o cancelar en cualquier momento?',
-    a: 'Sí, podés subir o bajar de plan en cualquier momento desde tu panel de administración, sin contratos forzosos ni penalidades.',
-  },
-  {
-    q: '¿Qué ocurre si supero el límite de productos o usuarios de mi plan?',
-    a: 'El sistema te notificará cuando te acerques al límite. Podrás continuar operando normalmente con tus datos existentes y actualizar tu plan cuando desees agregar más usuarios o productos.',
-  },
-]
+function getPlanTrialDays(plan: SubscriptionPlan) {
+  return typeof plan.trial_days === 'number' && plan.trial_days > 0 ? plan.trial_days : 0
+}
 
-export function SaaSPlansSection({ initialPlans }: { initialPlans?: SubscriptionPlan[] }) {
+export function SaaSPlansSection({ initialPlans, headingLevel = 'h2' }: { initialPlans?: SubscriptionPlan[]; headingLevel?: 'h1' | 'h2' }) {
   const [showTable, setShowTable] = useState(false)
-  const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
-  const [openFaq, setOpenFaq] = useState<number | null>(null)
-
+  const [selectedPlan, setSelectedPlan] = useState('')
   const activePlans = selectActivePlans(initialPlans)
   const limitRows = buildPlanLimitRows(activePlans)
   const featureGroups = buildPlanFeatureGroups(activePlans)
+  const mobilePlan = activePlans.some(plan => plan.id === selectedPlan) ? selectedPlan : activePlans[0]?.id
+  const Heading = headingLevel
+  const CardHeading = headingLevel === 'h1' ? 'h2' : 'h3'
+  const allFeatures = featureGroups.flatMap(group => group.rows)
+  const columnClass = (id: string) => cn('p-3 text-center sm:table-cell sm:p-4', id !== mobilePlan && 'hidden')
 
-  /** "1 sucursal", "5 sucursales", "Sucursales ilimitadas". */
-  const branchesLabel = (raw: PlanLimitValue) => {
-    const value = parsePlanLimit(raw)
-    if (value === null) return 'Sucursales ilimitadas'
-    if (value === undefined || value === 0) return null
-    return value === 1 ? '1 sucursal' : `${value} sucursales`
-  }
+  return <section id="planes" className="scroll-mt-24 bg-background py-10 text-foreground sm:py-14">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <header className="mx-auto max-w-2xl text-center">
+        <p className="text-sm font-medium text-primary">Planes para tu negocio</p>
+        <Heading className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Elegí el plan que necesitás</Heading>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">Compará precios, capacidad y herramientas incluidas. Cada plan muestra sus límites y los días de prueba disponibles.</p>
+      </header>
 
-  /** Nombre del plan recomendado según el catálogo, no el código interno. */
-  const planNameForTier = (tier: string) =>
-    activePlans.find((plan) => getTierKey(plan.tier || plan.name) === tier)?.name ?? tier
-
-  // Solo el plan a medida se cotiza. Un precio 0 es el plan gratuito y se
-  // anuncia como tal: antes caia en el mismo caso que enterprise y el plan de
-  // entrada aparecia como "A Medida", escondido detras de un supuesto contacto
-  // comercial, aunque su boton llevaba igual al registro.
-  const getPrice = (price: number, isCustom?: boolean) => {
-    if (isCustom) return 'A Medida'
-    if (!price || price === 0) return 'Gratis'
-    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(price)
-  }
-
-  // Los tiers reales del sistema son free, basic, pro y enterprise: son los
-  // unicos que acepta la API al crear un plan. Antes se mapeaba a nombres
-  // inventados ('lite', 'pro_plus') y 'free' no coincidia con ninguno, asi que
-  // terminaba tratado como el plan pago mas bajo.
-  const getTierKey = (tierName: string) => {
-    const t = (tierName || '').toLowerCase()
-    if (t.includes('free') || t.includes('gratis')) return 'free'
-    if (t.includes('basic') || t.includes('lite')) return 'basic'
-    if (t.includes('enterp')) return 'enterprise'
-    if (t.includes('pro')) return 'pro'
-    return 'basic'
-  }
-
-  // La base manda. Si el superadmin configuro 0 dias, la web no debe prometer
-  // una prueba: antes el 0 no pasaba el `> 0` y se caia a un valor inventado,
-  // asi que "sin prueba" se publicaba como "20 dias gratis".
-  const getPlanTrialDays = (plan: SubscriptionPlan) => {
-    return typeof plan.trial_days === 'number' && plan.trial_days > 0 ? plan.trial_days : 0
-  }
-
-  const availableProfiles = BUSINESS_PROFILES.filter((profile) =>
-    activePlans.some((plan) => getTierKey(plan.tier || plan.name) === profile.recommendedTier),
-  )
-
-  return (
-    <section id="planes" className="relative scroll-mt-24 py-14 sm:py-20 overflow-hidden bg-slate-50/50 dark:bg-slate-950/60">
-      {/* Background aesthetics */}
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-50/60 via-white to-white dark:from-slate-900/60 dark:via-slate-950 dark:to-slate-950" />
-
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        
-        {/* Header Section */}
-        <div className="mx-auto max-w-3xl text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="inline-flex items-center gap-2 rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 shadow-xs"
-          >
-            <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Prueba Gratis · 100% Sin Tarjeta de Crédito</span>
-          </motion.div>
-
-          <motion.h2 
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl dark:text-white"
-          >
-            Elegí cómo empezar
-          </motion.h2>
-
-          <motion.p 
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
-            className="mx-auto mt-4 max-w-2xl text-sm sm:text-base text-slate-600 dark:text-slate-400 leading-relaxed"
-          >
-            Probá el sistema con los días de prueba que incluye cada plan. Sin costos ocultos y sin necesidad de tarjeta.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.25 }}
-            className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs font-semibold text-slate-600 dark:text-slate-300"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              Prueba gratis según el plan
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Gift className="h-4 w-4 text-emerald-500" />
-              Cancelás cuando quieras
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <CreditCard className="h-4 w-4 text-cyan-500" />
-              Sin tarjeta de crédito
-            </span>
-          </motion.div>
-        </div>
-
-        {/* Recomendador Interactivo de Plan */}
-        {availableProfiles.length > 0 && (
-        <details className="mt-8 mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <summary className="cursor-pointer text-sm font-semibold">¿Necesitás ayuda para elegir un plan?</summary>
-          <div className="pt-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Compass className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              ¿Qué plan se adapta mejor a tu tamaño?
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {availableProfiles.map((profile) => {
-              const Icon = profile.icon
-              const isSelected = selectedProfile === profile.id
-
-              return (
-                <button
-                  key={profile.id}
-                  type="button"
-                  onClick={() => setSelectedProfile(isSelected ? null : profile.id)}
-                  aria-pressed={isSelected}
-                  className={cn(
-                    "flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer text-xs font-semibold gap-1.5",
-                    isSelected
-                      ? "border-cyan-500 bg-cyan-50/80 text-cyan-950 dark:border-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-200 shadow-xs ring-2 ring-cyan-500/20"
-                      : "border-slate-200 hover:border-slate-300 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300"
-                  )}
-                >
-                  <Icon className={cn("h-4 w-4", isSelected ? "text-cyan-600" : "text-slate-400")} />
-                  <span>{profile.label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {selectedProfile && (
-            <motion.div
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-3.5 p-3 rounded-xl bg-cyan-50/90 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/60 text-xs text-cyan-950 dark:text-cyan-200 flex items-center justify-between gap-3"
-            >
-              <div>
-                <span className="font-bold">Recomendación para tu negocio: </span>
-                <span>{availableProfiles.find((p) => p.id === selectedProfile)?.reason}</span>
-              </div>
-              <Badge className="bg-cyan-600 text-white shrink-0 font-bold">
-                Plan {planNameForTier(availableProfiles.find((p) => p.id === selectedProfile)?.recommendedTier ?? '')}
-              </Badge>
-            </motion.div>
-          )}
-          </div>
-        </details>
-        )}
-
-
-        {/* Pricing Cards Grid */}
-        {activePlans.length > 0 ? (
-        <div className="isolate mx-auto mt-12 grid max-w-md grid-cols-1 gap-6 sm:max-w-none sm:grid-cols-2 lg:grid-cols-4">
-          {activePlans.map((plan, i) => {
-            const isPopular = Boolean(plan.is_popular)
-            const isEnterprise = plan.custom || plan.tier === 'enterprise'
-            const tierKey = getTierKey(plan.tier || plan.name)
+      {activePlans.length ? <>
+        <div className={cn('mt-8 grid gap-4 sm:grid-cols-2', activePlans.length === 3 ? 'lg:grid-cols-3' : activePlans.length > 3 ? 'lg:grid-cols-4' : 'lg:grid-cols-2')}>
+          {activePlans.map((plan, index) => {
             const trialDays = getPlanTrialDays(plan)
-
-            // Resaltar si el usuario seleccionó un perfil en el recomendador
-            const isHighlightedByQuiz = selectedProfile && availableProfiles.find(p => p.id === selectedProfile)?.recommendedTier === tierKey
-
-            return (
-              <motion.div
-                key={plan.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 * i }}
-                className={cn(
-                  "group relative flex flex-col justify-between rounded-xl p-5 sm:p-6 transition-colors",
-                  isHighlightedByQuiz
-                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-600"
-                    : isPopular
-                    ? "bg-white dark:bg-slate-900 ring-2 ring-cyan-600"
-                    : "bg-white/80 dark:bg-slate-900/70 border border-slate-200/90 dark:border-slate-800/80 shadow-sm"
-                )}
-              >
-                {isPopular && (
-                  <div className="absolute -top-3.5 left-0 right-0 mx-auto w-fit">
-                    <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-1 text-[11px] font-bold tracking-wide text-white shadow-md">
-                      <Sparkles className="h-3 w-3" />
-                      MÁS ELEGIDO
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex items-center justify-between gap-x-2">
-                    <h3 className={cn("text-lg font-bold", isPopular ? "text-violet-600 dark:text-violet-400" : "text-slate-900 dark:text-white")}>
-                      {plan.name}
-                    </h3>
-                    {plan.limits && branchesLabel(plan.limits.branches) && (
-                      <Badge variant="outline" className="text-[10px] font-semibold border-slate-200 dark:border-slate-700">
-                        {branchesLabel(plan.limits.branches)}
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <p className="mt-2.5 text-xs text-slate-600 dark:text-slate-400 min-h-[36px] leading-relaxed">
-                    {plan.description}
-                  </p>
-
-                  <div className="mt-5 flex items-baseline gap-x-1.5">
-                    <span className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                      {getPrice(plan.price, isEnterprise)}
-                    </span>
-                    {!isEnterprise && plan.price > 0 && (
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        /mes
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Badge de Prueba Gratis y Sin Tarjeta */}
-                  <div className="mt-3">
-                    {!isEnterprise ? (
-                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 w-full justify-center">
-                        <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>{trialDays > 0 ? `${trialDays} días gratis · Sin tarjeta` : 'Sin tarjeta requerida'}</span>
-                      </div>
-                    ) : (
-                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/60 px-2.5 py-1 text-[11px] font-bold text-violet-800 dark:text-violet-300 w-full justify-center">
-                        <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
-                        <span>Demo y prueba a medida</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Resumen de Límites Claves */}
-                  {plan.limits && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
-                        <span className="block font-bold text-slate-900 dark:text-slate-200">{publicLimitText('users', plan.limits.users)}</span>
-                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Usuarios</span>
-                      </div>
-                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-center">
-                        <span className="block font-bold text-slate-900 dark:text-slate-200">{publicLimitText('products', plan.limits.products)}</span>
-                        <span className="text-[10px] text-slate-600 dark:text-slate-300">Productos</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lista de Características Destacadas */}
-                  <ul role="list" className="mt-5 space-y-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                    {(plan.highlights || []).map((highlight) => (
-                      <li key={highlight} className="flex items-start gap-2.5">
-                        <Check className={cn("h-4 w-4 shrink-0 mt-0.5", isPopular ? "text-violet-600 dark:text-violet-400" : "text-cyan-600 dark:text-cyan-400")} />
-                        <span>{highlight}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="mt-7 space-y-1.5">
-                  <Link
-                    href={isEnterprise ? '/saas#contacto' : `/register?plan=${plan.public_slug || plan.tier}`}
-                    className={cn(
-                      "flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-center text-xs font-bold transition-all shadow-xs cursor-pointer",
-                      isPopular
-                        ? "bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-500/20"
-                        : "bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
-                    )}
-                  >
-                    <span>
-                      {isEnterprise
-                        ? 'Contactar a Ventas'
-                        : trialDays > 0
-                        ? `Probar ${trialDays} Días Gratis`
-                        : 'Comenzar Ahora'}
-                    </span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                  <p className="text-center text-[10px] text-muted-foreground font-medium">
-                    {isEnterprise
-                      ? 'Sin compromiso · Respuesta en 24hs'
-                      : 'Sin tarjeta de crédito · Activación instantánea'}
-                  </p>
-                </div>
-              </motion.div>
-            )
+            const previous = activePlans[index - 1]
+            const included = allFeatures.filter(row => row.values[plan.id] && row.group !== 'servicio')
+            const added = previous ? included.filter(row => !row.values[previous.id]) : []
+            const highlights = [...added, ...included.filter(row => !added.includes(row))].slice(0, 5)
+            return <article key={plan.id} aria-label={`Plan ${plan.name}`} className={cn('flex min-w-0 flex-col rounded-xl border bg-card p-5 sm:p-6', plan.is_popular && 'border-primary ring-1 ring-primary')}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardHeading className="text-xl font-semibold">{plan.name}</CardHeading>
+                {plan.is_popular && <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">Destacado</span>}
+              </div>
+              {plan.description && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{plan.description}</p>}
+              <div className="mt-5">
+                <p className="text-3xl font-bold tracking-tight tabular-nums">{getPrice(plan.price, plan.custom)}{plan.price > 0 && !plan.custom && <span className="ml-1 text-sm font-normal text-muted-foreground">/mes</span>}</p>
+                {plan.price_note && <p className="mt-1 text-xs text-muted-foreground">{plan.price_note}</p>}
+                {trialDays > 0 && <p className="mt-2 text-sm font-medium text-primary">{trialDays} días de prueba</p>}
+              </div>
+              <dl className="mt-5 grid grid-cols-3 gap-2 border-y py-4">
+                {(['users', 'products', 'branches'] as const).map((key, index) => <div key={key} className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">{['Usuarios', 'Productos', 'Sucursales'][index]}</dt>
+                  <dd className="mt-1 break-words text-sm font-semibold tabular-nums">{publicLimitText(key, plan.limits?.[key])}</dd>
+                </div>)}
+              </dl>
+              <ul className="my-5 space-y-2 text-sm" aria-label={`Herramientas de ${plan.name}`}>
+                {highlights.map(feature => <li key={feature.key} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><span>{feature.label}</span></li>)}
+              </ul>
+              <Link href={plan.custom ? '/saas' : `/register?plan=${encodeURIComponent(plan.public_slug || plan.tier)}`} className={cn('mt-auto flex min-h-11 items-center justify-center rounded-lg px-3 py-3 text-center text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary', plan.is_popular ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground')}>
+                {plan.custom ? 'Consultar opciones' : trialDays > 0 ? `Probar ${trialDays} días gratis` : 'Comenzar ahora'}
+              </Link>
+            </article>
           })}
         </div>
-        ) : (
-          <div role="status" className="mx-auto mt-12 max-w-2xl rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">No hay planes disponibles en este momento</h3>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Volvé a consultar más adelante o contactanos para recibir orientación.
-            </p>
-          </div>
-        )}
 
-        {/* Feature Comparison Table Toggle */}
-        {activePlans.length > 0 && (
-        <div className="mt-14 text-center">
-          <Button 
-            variant="outline"
-            size="sm"
-            onClick={() => setShowTable(!showTable)}
-            className="rounded-xl px-5 py-2.5 text-xs font-bold border-slate-300 dark:border-slate-700 gap-2 text-slate-700 dark:text-slate-200 shadow-xs cursor-pointer"
-          >
-            <span>{showTable ? 'Ocultar comparativa detallada' : 'Ver todas las características y módulos comparados'}</span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", showTable && "rotate-180")} />
+        <details className="mt-6 rounded-lg border p-4 text-sm">
+          <summary className="min-h-11 cursor-pointer content-center font-medium">¿Necesitás ayuda para elegir un plan?</summary>
+          <p className="mt-2 leading-relaxed text-muted-foreground">Empezá por la cantidad de usuarios, productos y sucursales de tu negocio. Después compará las herramientas que necesitás; la tabla indica qué incluye cada plan. Los límites corresponden a toda la organización.</p>
+        </details>
+        <div className="mt-6 text-center">
+          <Button type="button" variant="outline" className="min-h-11 max-w-full whitespace-normal" aria-expanded={showTable} aria-controls="saas-plan-comparison" onClick={() => setShowTable(value => !value)}>
+            {showTable ? 'Ocultar comparativa detallada' : 'Ver todas las características y módulos comparados'}<ChevronDown className={cn('h-4 w-4 shrink-0', showTable && 'rotate-180')} />
           </Button>
         </div>
-        )}
-
-        {/* Detailed Feature Comparison Table */}
-        <AnimatePresence>
-          {showTable && activePlans.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-              className="mt-6 overflow-hidden"
-            >
-              <div className="rounded-3xl border border-slate-200 bg-white/95 backdrop-blur-xl shadow-lg dark:border-slate-800 dark:bg-slate-900/95 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[720px]">
-                    <caption className="sr-only">Comparación detallada de características por plan</caption>
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
-                        <th className="p-4 sm:p-5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 w-1/3">
-                          Capacidad y Funcionalidades
-                        </th>
-                        {activePlans.map((plan) => (
-                          <th key={plan.id} className="p-4 sm:p-5 text-center">
-                            <span className="text-sm font-bold text-slate-900 dark:text-white block">{plan.name}</span>
-                            <span className="text-[11px] font-medium text-muted-foreground">{getPrice(plan.price, plan.custom)}</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                      
-                      {/* Límites de Plan */}
-                      <tr className="bg-slate-100/70 dark:bg-slate-800/50 font-bold">
-                        <th colSpan={activePlans.length + 1} className="px-4 py-2 text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                          1. Límites Operativos
-                        </th>
-                      </tr>
-                      {limitRows.map((limit) => (
-                        <tr key={limit.key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                          <th scope="row" className="p-3.5 sm:p-4 text-xs font-medium text-slate-700 dark:text-slate-300">
-                            {limit.label}
-                          </th>
-                          {activePlans.map((plan) => {
-                            const val = limit.values[plan.id] ?? 'No especificado'
-                            const isUnlimited = val.toLowerCase().includes('ilimitad')
-
-                            return (
-                              <td key={plan.id} className="p-3.5 sm:p-4 text-center">
-                                {isUnlimited ? (
-                                  <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">{val}</span>
-                                ) : (
-                                  <span className="text-slate-700 dark:text-slate-300 font-semibold">{val}</span>
-                                )}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
-
-                      {/* Módulos Funcionales */}
-                      <tr className="bg-slate-100/70 dark:bg-slate-800/50 font-bold border-t border-slate-200 dark:border-slate-800">
-                        <th colSpan={activePlans.length + 1} className="px-4 py-2 text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                          2. Módulos y Funciones Incluidas
-                        </th>
-                      </tr>
-                      {featureGroups.map((group) => [
-                        <tr key={`group-${group.group}`} className="bg-slate-50/80 dark:bg-slate-900/60">
-                          <th colSpan={activePlans.length + 1} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            {group.label}
-                          </th>
-                        </tr>,
-                        ...group.rows.map((feat) => (
-                          <tr key={feat.key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                            <th scope="row" className="p-3.5 sm:p-4 text-xs font-medium text-slate-700 dark:text-slate-300">
-                              {feat.label}
-                              <span className="mt-0.5 block text-[10px] font-normal text-slate-500 dark:text-slate-400">{feat.hint}</span>
-                            </th>
-                            {activePlans.map((plan) => (
-                              <td key={plan.id} className="p-3.5 sm:p-4 text-center">
-                                {feat.values[plan.id] ? (
-                                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 mx-auto">
-                                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                                    <span className="sr-only">{feat.label} incluido en {plan.name}</span>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <Minus className="mx-auto h-4 w-4 text-slate-300 dark:text-slate-600" aria-hidden="true" />
-                                    <span className="sr-only">{feat.label} no incluido en {plan.name}</span>
-                                  </>
-                                )}
-                              </td>
-                            ))}
-                          </tr>
-                        )),
-                      ])}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Sección de Preguntas Frecuentes (FAQ) */}
-        <div className="mt-20 max-w-3xl mx-auto space-y-4">
-          <div className="text-center space-y-1 mb-8">
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Preguntas Frecuentes sobre los Planes
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              Respuestas rápidas a las consultas más comunes.
-            </p>
+        {showTable && <div id="saas-plan-comparison" className="mt-5">
+          <div className="mb-3 sm:hidden">
+            <label htmlFor="saas-comparison-plan" className="mb-2 block text-sm font-medium">Plan para comparar</label>
+            <select id="saas-comparison-plan" value={mobilePlan} onChange={event => setSelectedPlan(event.target.value)} className="min-h-11 w-full rounded-lg border bg-background px-3 text-base">
+              {activePlans.map(plan => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+            </select>
           </div>
-
-          <div className="space-y-3">
-            {FAQ_ITEMS.map((faq, index) => {
-              const isOpen = openFaq === index
-              return (
-                <div
-                  key={index}
-                  className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900/60"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(isOpen ? null : index)}
-                    aria-expanded={isOpen}
-                    aria-controls={`saas-faq-${index}`}
-                    className="flex w-full items-center justify-between text-left text-sm font-bold text-slate-900 dark:text-slate-50 cursor-pointer"
-                  >
-                    <span>{faq.q}</span>
-                    <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform text-slate-400", isOpen && "rotate-180")} />
-                  </button>
-                  {isOpen && (
-                    <p id={`saas-faq-${index}`} className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      {faq.a}
-                    </p>
-                  )}
-                </div>
-              )
-            })}
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full border-collapse text-left text-sm sm:min-w-[720px]">
+              <caption className="sr-only">Comparación detallada de características por plan</caption>
+              <thead className="bg-muted/50"><tr>
+                <th scope="col" className="p-3 font-medium sm:p-4">Capacidad y herramientas</th>
+                {activePlans.map(plan => <th key={plan.id} scope="col" className={columnClass(plan.id)}>{plan.name}<span className="mt-1 block text-xs font-normal text-muted-foreground">{getPrice(plan.price, plan.custom)}{plan.price > 0 && !plan.custom ? '/mes' : ''}</span></th>)}
+              </tr></thead>
+              <tbody>
+                {limitRows.map(row => <tr key={row.key} className="border-t"><th scope="row" className="p-3 font-normal sm:p-4">{row.label}</th>{activePlans.map(plan => <td key={plan.id} className={columnClass(plan.id)}>{row.values[plan.id]}</td>)}</tr>)}
+                {featureGroups.map(group => [
+                  <tr key={group.group} className="border-t bg-muted/50"><th colSpan={activePlans.length + 1} className="p-3 text-xs font-semibold sm:p-4">{group.label}</th></tr>,
+                  ...group.rows.map(feature => <tr key={feature.key} className="border-t"><th scope="row" className="p-3 font-normal sm:p-4">{feature.label}<span className="mt-1 block text-xs text-muted-foreground">{feature.hint}</span></th>{activePlans.map(plan => <td key={plan.id} className={columnClass(plan.id)}><span aria-hidden="true">{feature.values[plan.id] ? '✓' : '—'}</span><span className="sr-only">{feature.label} {feature.values[plan.id] ? 'incluido' : 'no incluido'} en {plan.name}</span></td>)}</tr>),
+                ])}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </div>}
+      </> : <div role="status" className="mt-8 rounded-xl border p-6 text-center"><h3 className="font-semibold">No hay planes disponibles en este momento</h3><p className="mt-2 text-sm text-muted-foreground">No pudimos mostrar un catálogo vigente. Volvé a consultar más adelante.</p></div>}
 
-        {/* Plan Notes & Trust Badges */}
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
-          {planNotes.map((note) => (
-            <div key={note.title} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
-                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>{note.title}</span>
-              </div>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                {note.description}
-              </p>
-            </div>
-          ))}
-        </div>
-
+      <div className="mx-auto mt-10 max-w-3xl space-y-3 border-t pt-6">
+        <CardHeading className="text-lg font-semibold">Antes de elegir</CardHeading>
+        <details className="rounded-lg border p-4"><summary className="min-h-11 cursor-pointer content-center text-sm font-medium">¿Cómo funciona la prueba?</summary><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Si un plan incluye prueba, sus días aparecen en la tarjeta. Podés probar las herramientas incluidas en ese plan, no las de otros planes.</p></details>
+        <details className="rounded-lg border p-4"><summary className="min-h-11 cursor-pointer content-center text-sm font-medium">¿Qué pasa al alcanzar un límite?</summary><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Revisá el uso de tu organización antes de elegir. Para agregar recursos por encima del cupo necesitás un plan con mayor capacidad.</p></details>
       </div>
-    </section>
-  )
+    </div>
+  </section>
 }

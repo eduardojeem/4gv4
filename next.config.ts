@@ -5,39 +5,8 @@ import { REMOTE_IMAGE_HOSTS } from './image-hosts.ts'
 const identityConfig = <T,>(config: T) => config
 const loadModule = createRequire(import.meta.url)
 
-// Evita resolver Workbox y sus dependencias desde disco durante `next dev`.
-// El plugin solo produce artefactos para builds de produccion.
-const withPWAInit = process.env.NODE_ENV === 'production'
-  ? loadModule('@ducanh2912/next-pwa').default({
-      dest: "public",
-      cacheOnFrontEndNav: true,
-      aggressiveFrontEndNavCaching: true,
-      reloadOnOnline: true,
-      swcMinify: true,
-      // El service worker guardaba en la cache `apis` la respuesta de
-      // CUALQUIER GET a /api/ durante 24 horas (NetworkFirst con 10 s de
-      // espera). Con la red lenta o caida servia esa copia como si fuera
-      // actual: se guardaba una promocion, la lista volvia a pintar lo de
-      // antes y solo recargar lo arreglaba. Ademas son respuestas de una
-      // sesion y una organizacion concretas guardadas en el navegador, que en
-      // un equipo compartido las ve el siguiente.
-      //
-      // `extendDefaultRuntimeCaching` mantiene el resto de las reglas (fuentes,
-      // imagenes, estaticos) y solo reemplaza la entrada con este `cacheName`.
-      extendDefaultRuntimeCaching: true,
-      workboxOptions: {
-        disableDevLogs: true,
-        runtimeCaching: [
-          {
-            urlPattern: ({ sameOrigin, url }: { sameOrigin: boolean; url: URL }) =>
-              sameOrigin && url.pathname.startsWith('/api/'),
-            handler: 'NetworkOnly' as const,
-            options: { cacheName: 'apis' },
-          },
-        ],
-      },
-    })
-  : identityConfig
+// Serwist se compila en scripts/build-service-worker.mjs despues de Next.
+// next dev no carga plugins PWA ni escribe un service worker.
 
 // Configurar bundle analyzer
 const withBundleAnalyzer = process.env.ANALYZE === 'true'
@@ -277,4 +246,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withBundleAnalyzer(withPWAInit(nextConfig));
+export default withBundleAnalyzer(nextConfig);

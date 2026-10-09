@@ -48,6 +48,7 @@ interface StockMovement {
 }
 
 export interface SaleData {
+  appointment_id?: string | null
   items: CartItem[]
   total: number
   payment_method: 'cash' | 'card' | 'transfer' | 'credit'
@@ -395,6 +396,7 @@ export function usePOSProducts() {
       }))
 
       const signature = JSON.stringify({
+        appointmentId: saleData.appointment_id || null,
         items: saleItems,
         payments: saleData.payments,
         customerId: saleData.customer_id || null,
@@ -414,6 +416,7 @@ export function usePOSProducts() {
       const idempotencyKey = pendingSaleAttempt.current.idempotencyKey
 
       const payload = {
+        p_appointment_id: saleData.appointment_id || null,
         p_sale_data: {
           customer_id: saleData.customer_id || null,
           notes: saleData.notes || '',

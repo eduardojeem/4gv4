@@ -19,11 +19,13 @@ export type SyncOutcome = {
 
 /** Lo que no se puede vender sin internet: necesita validar datos del servidor. */
 export function offlineBlockReason(sale: {
+  appointment_id?: string | null
   payments?: Array<{ payment_method?: string; method?: string }>
   repair_ids?: string[]
   store_credit_amount?: number
   credit?: unknown
 }): string | null {
+  if (sale.appointment_id) return 'Cobrar turnos necesita conexión para verificar el precio y evitar cobros duplicados.'
   const methods = (sale.payments ?? []).map((payment) => payment.payment_method ?? payment.method)
   if (sale.credit || methods.includes('credit')) return 'Las ventas a crédito necesitan conexión para armar las cuotas.'
   if ((sale.store_credit_amount ?? 0) > 0) return 'Usar saldo a favor necesita conexión para verificarlo.'

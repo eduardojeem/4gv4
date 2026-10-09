@@ -1,74 +1,46 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { SaaSSolutionsPageContent } from './saas-solutions-page-content'
+import { SaaSBusinessSection } from './saas-business-section'
 
-describe('SaaSSolutionsPageContent', () => {
-  it('muestra el hero con la propuesta de valor central y llamadas a la acción', () => {
+describe('Soluciones públicas por tarea y rubro', () => {
+  it('orienta al registro y a los planes sin prometer una prueba universal', () => {
     render(<SaaSSolutionsPageContent />)
-
-    expect(
-      screen.getByRole('heading', {
-        name: /Eliminamos el desorden en tu taller, tienda y mostrador/i,
-      })
-    ).toBeInTheDocument()
-
-    expect(screen.getByRole('link', { name: /Empezar Prueba Gratis/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Ver Planes y Precios/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Encontrá la solución para tu día a día')
+    expect(screen.getByRole('link', { name: 'Crear mi negocio' })).toHaveAttribute('href', '/register')
+    expect(screen.getByRole('link', { name: 'Comparar planes y precios' })).toHaveAttribute('href', '/saas/planes')
+    expect(screen.queryByText(/Empezar Prueba Gratis/)).not.toBeInTheDocument()
   })
 
-  it('muestra la sección de rubros y tipos de negocios admitidos', () => {
+  it('ofrece accesos a seis soluciones con destinos existentes', () => {
     render(<SaaSSolutionsPageContent />)
-
-    expect(screen.getByText(/Versatilidad Multirubro/i)).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /^Talleres de Reparación$/i })
-    ).toBeInTheDocument()
-    expect(screen.getByText(/Tecnología y Electrónica/i)).toBeInTheDocument()
-    expect(screen.getByText(/Ferreterías y Repuesteras/i)).toBeInTheDocument()
-    expect(screen.getByText(/Tiendas Minoristas y Bazares/i)).toBeInTheDocument()
-    expect(screen.getByText(/Negocios con Venta Online/i)).toBeInTheDocument()
-    expect(screen.getByText(/Cadenas y Multirubro/i)).toBeInTheDocument()
+    const navigation = screen.getByRole('navigation', { name: 'Buscar soluciones por tarea' })
+    const links = within(navigation).getAllByRole('link')
+    expect(links).toHaveLength(6)
+    for (const link of links) {
+      const target = document.querySelector(link.getAttribute('href')!)
+      expect(target).not.toBeNull()
+      expect(target).toHaveTextContent('Qué necesitás:')
+      expect(target).toHaveTextContent('Cómo se usa')
+    }
   })
 
-  it('presenta la matriz de transformación operativa (problemas habituales vs soluciones del sistema)', () => {
-    render(<SaaSSolutionsPageContent />)
-
-    expect(
-      screen.getByText(/¿Qué cambia al implementar nuestro sistema\?/i)
-    ).toBeInTheDocument()
-
-    // Categorías y soluciones clave
-    expect(screen.getByText(/Taller Técnico y Órdenes de Servicio/i)).toBeInTheDocument()
-    expect(screen.getByText(/Punto de Venta y Fugas de Caja/i)).toBeInTheDocument()
-    expect(screen.getByText(/Inventario y Repuestos Fantasma/i)).toBeInTheDocument()
-    expect(screen.getByText(/Clientes Duplicados y Desconectados/i)).toBeInTheDocument()
-    expect(screen.getByText(/Márgenes de Ganancia Inciertos/i)).toBeInTheDocument()
-    expect(screen.getByText(/Tienda Online Desincronizada/i)).toBeInTheDocument()
+  it('incluye mercados, ropa, barberías y reservas con enlaces por tarea', () => {
+    render(<SaaSBusinessSection />)
+    for (const name of ['Mercados y despensas', 'Tiendas de ropa', 'Barberías y peluquerías', 'Negocios con reservas']) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: `Ver herramientas para ${name}` })).toHaveAttribute('href', expect.stringContaining('/saas/soluciones#'))
+    }
+    expect(screen.queryByText(/Sucursales Ilimitadas|Cero discrepancias/)).not.toBeInTheDocument()
   })
 
-  it('detalla los 5 pilares modulares del SaaS', () => {
+  it('aclara la configuración necesaria para reservas y la dependencia del plan', () => {
     render(<SaaSSolutionsPageContent />)
-
-    expect(screen.getAllByText(/1\. Sistema Integral para Taller Técnico/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText(/2\. Punto de Venta \(POS\) y Caja Blindada/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText(/3\. Inventario Inteligente y Multirubro/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText(/4\. Fidelización de Clientes, Puntos y Sorteos/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText(/5\. Finanzas Claras y Márgenes en Tiempo Real/i).length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('permite abrir y consultar las preguntas frecuentes de soluciones', () => {
-    render(<SaaSSolutionsPageContent />)
-
-    const faqButton = screen.getByRole('button', {
-      name: /¿Qué soluciona principalmente este sistema frente a un Excel o cuadernos\?/i,
-    })
-    expect(faqButton).toBeInTheDocument()
-
-    // Click para expandir la respuesta
-    fireEvent.click(faqButton)
-
-    expect(
-      screen.getByText(/Elimina las órdenes extraviadas, el stock que no coincide/i)
-    ).toBeInTheDocument()
+    const reservations = document.getElementById('reservas')!
+    expect(reservations).toHaveTextContent('Requiere el módulo Servicios')
+    expect(reservations).toHaveTextContent('reservas online habilitadas')
+    expect(screen.getByText(/La disponibilidad depende del plan/)).toBeInTheDocument()
+    const faq = screen.getByText('¿Las reservas online se activan automáticamente?').closest('details')!
+    expect(faq).toHaveTextContent('No. Primero configurá servicios')
   })
 })

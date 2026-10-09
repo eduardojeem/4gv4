@@ -221,22 +221,21 @@ describe('mutate y el proveedor de caché propio de la app', () => {
  * /api/ durante 24 horas, y con la red lenta la servía como si fuera actual.
  */
 describe('el service worker y las respuestas de la API', () => {
-  const config = leer('next.config.ts')
+  const worker = leer('src/lib/pwa/worker.ts')
+  const policy = leer('src/lib/pwa/cache-policy.ts')
 
   it('las llamadas a la API no se guardan en la caché del service worker', () => {
-    expect(config).toContain("handler: 'NetworkOnly' as const")
-    expect(config).toContain("cacheName: 'apis'")
-    expect(config).toContain('extendDefaultRuntimeCaching: true')
+    expect(worker).toContain('handler: new NetworkOnly()')
+    expect(policy).toContain("url.pathname.startsWith('/_next/static/')")
+    expect(worker).toContain('names.filter(obsoletePrivateCache)')
   })
 
   /**
-   * `resolveRuntimeCaching` en @ducanh2912/next-pwa conserva las reglas por
-   * defecto y descarta sólo la que comparte `cacheName` con una propia, así que
-   * fuentes, imágenes y estáticos se siguen guardando.
+   * Solo los bundles y fuentes inmutables del build pueden usar CacheFirst.
    */
-  it('reemplaza sólo la regla de la API, no todas', () => {
-    const reglas = config.slice(config.indexOf('runtimeCaching'), config.indexOf('extendDefault') + 400)
-    expect((config.match(/handler: /g) ?? []).length).toBe(1)
-    expect(reglas).not.toContain('CacheFirst')
+  it('conserva cache de estaticos sin guardar navegaciones privadas', () => {
+    expect(worker).toContain('handler: new CacheFirst(')
+    expect(worker).toContain('precacheEntries: []')
+    expect(worker).not.toContain('defaultCache')
   })
 })

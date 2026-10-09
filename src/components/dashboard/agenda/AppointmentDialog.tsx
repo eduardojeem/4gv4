@@ -17,6 +17,7 @@ import { APPOINTMENT_STATUS_LABELS, appointmentCode } from '@/lib/agenda/agenda-
 import { appointmentWhen, buildAppointmentWhatsApp } from '@/lib/agenda/messages'
 import { utcToZoned, zonedToUtc } from '@/lib/agenda/time'
 import { whatsappNumber } from '@/lib/quotes/quote-math'
+import { editorServiceTerms } from '@/lib/agenda/editor-terms'
 import type { AgendaData, Appointment } from '@/components/dashboard/agenda/types'
 
 const FREE = '__free__'
@@ -48,6 +49,9 @@ type Form = {
   price: number
   notes: string
   pending: boolean
+  buffer: number
+  acceptNewTerms: boolean
+  allowOutsideHours: boolean
 }
 
 function formFrom(state: DialogState, data: AgendaData): Form {
@@ -55,7 +59,7 @@ function formFrom(state: DialogState, data: AgendaData): Form {
     return {
       customer_id: null, customer_name: '', customer_phone: '', service: FREE, service_name: '',
       professional: state.professionalId ?? (data.professionals.filter((p) => p.is_active).length ? '' : NONE),
-      date: state.date, time: state.time, duration: data.settings.slot_minutes, price: 0, notes: '', pending: false,
+      date: state.date, time: state.time, duration: data.settings.slot_minutes, price: 0, notes: '', pending: false, buffer:0,acceptNewTerms:false,allowOutsideHours:false,
     }
   }
   const a = state.appointment
@@ -65,7 +69,7 @@ function formFrom(state: DialogState, data: AgendaData): Form {
     service: a.service_product_id ?? FREE, service_name: a.service_name,
     professional: a.professional_id ?? NONE, date: local.date, time: local.time,
     duration: Math.round((Date.parse(a.ends_at) - Date.parse(a.starts_at)) / 60_000),
-    price: Number(a.price), notes: a.notes ?? '', pending: a.status === 'pending',
+    price: Number(a.price), notes: a.notes ?? '', pending: a.status === 'pending',buffer:a.buffer_minutes??0,acceptNewTerms:false,allowOutsideHours:false,
   }
 }
 
@@ -145,6 +149,15 @@ export function AppointmentDialog({
   const activeProfessionals = data.professionals.filter((professional) => professional.is_active)
   const professionalName = (id: string | null) => data.professionals.find((professional) => professional.id === id)?.name ?? null
   const money = (amount: number) => formatCurrency(amount, { currency: data.currency })
+  const advanced=Boolean(data.capabilities?.professionalBooking)
+  const changedTerms=advanced&&state?.mode==='edit'&&form&&(form.service!==(state.appointment.service_product_id??FREE)||form.professional!==(state.appointment.professional_id??NONE))
+  const applyTerms=(serviceId:string,professional:string)=>{
+    if (!form) return
+    const service=data.services.find(row=>row.product_id===serviceId)
+    if (!service) {setForm({...form,service:serviceId,professional,acceptNewTerms:false});return}
+    const terms=advanced?editorServiceTerms(service,professional===NONE?null:professional,data.professionalRates??[],state?.mode==='edit'?state.appointment:null):{price:service.price,durationMinutes:service.duration_minutes,bufferMinutes:0}
+    setForm({...form,service:serviceId,professional,service_name:service.name,price:terms.price,duration:terms.durationMinutes,buffer:terms.bufferMinutes,acceptNewTerms:false})
+  }
 
   const chooseService = (value: string) => {
     if (!form) return
@@ -152,8 +165,7 @@ export function AppointmentDialog({
       setForm({ ...form, service: FREE })
       return
     }
-    const service = data.services.find((item) => item.product_id === value)
-    if (service) setForm({ ...form, service: value, service_name: service.name, duration: service.duration_minutes, price: service.price })
+    applyTerms(value,form.professional)
   }
 
   const save = async () => {
@@ -161,6 +173,7 @@ export function AppointmentDialog({
     if (!form.customer_name.trim()) return toast.error('Poné el nombre del cliente')
     if (!form.service_name.trim()) return toast.error('Elegí o escribí el servicio')
     if (activeProfessionals.length > 0 && !form.professional) return toast.error('Elegí quién atiende')
+    if (changedTerms&&!form.acceptNewTerms) return toast.error('Aceptá las nuevas condiciones del servicio y profesional')
     const payload = {
       customer_id: form.customer_id,
       customer_name: form.customer_name.trim(),
@@ -172,6 +185,7 @@ export function AppointmentDialog({
       starts_at: new Date(zonedToUtc(form.date, form.time, data.timeZone)).toISOString(),
       duration_minutes: Math.max(5, Math.trunc(Number(form.duration) || data.settings.slot_minutes)),
       notes: form.notes.trim() || null,
+      ...(advanced?{accept_new_terms:form.acceptNewTerms,accepted_terms:{price:Number(form.price),duration_minutes:Number(form.duration),buffer_minutes:form.buffer},allow_outside_hours:data.canConfigure&&form.allowOutsideHours}:{}),
       ...(state.mode === 'create' ? { status: form.pending ? 'pending' : 'confirmed' } : {}),
     }
     setSaving(true)
@@ -186,6 +200,8 @@ export function AppointmentDialog({
       }
       toast.success(state.mode === 'create' ? 'Turno agendado' : 'Turno actualizado')
       onSaved(body.appointment)
+    } catch {
+      toast.error('No se pudo guardar. Revisá la conexión y la agenda antes de reintentar.')
     } finally {
       setSaving(false)
     }
@@ -236,7 +252,7 @@ export function AppointmentDialog({
 
   return (
     <Dialog open={Boolean(state)} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg [&_input]:min-h-11 [&_input]:text-base [&_textarea]:text-base [&_[role=combobox]]:min-h-11">
         {view ? (
           <>
             <DialogHeader>
@@ -250,7 +266,8 @@ export function AppointmentDialog({
             </DialogHeader>
             <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt className="text-muted-foreground">Cuándo</dt><dd className="font-medium">{appointmentWhen(view.starts_at, data.timeZone)} — {utcToZoned(view.ends_at, data.timeZone).time}</dd>
-              <dt className="text-muted-foreground">Servicio</dt><dd>{view.service_name}{Number(view.price) > 0 && ` · ${money(Number(view.price))}`}</dd>
+              <dt className="text-muted-foreground">Servicio</dt><dd>{view.service_name} · {Number(view.price)===0?'Sin costo':money(Number(view.price))}</dd>
+              {Boolean(view.buffer_minutes)&&<><dt className="text-muted-foreground">Margen</dt><dd>{view.buffer_minutes} min adicionales sin otro turno</dd></>}
               {professionalName(view.professional_id) && (<><dt className="text-muted-foreground">Atiende</dt><dd>{professionalName(view.professional_id)}</dd></>)}
               <dt className="text-muted-foreground">Teléfono</dt><dd>{view.customer_phone || '—'}</dd>
               {view.notes && (<><dt className="text-muted-foreground">Notas</dt><dd className="whitespace-pre-line">{view.notes}</dd></>)}
@@ -324,7 +341,7 @@ export function AppointmentDialog({
                 {(activeProfessionals.length > 0 || form.professional !== NONE) && (
                   <div className="space-y-1">
                     <Label className="text-xs">Atiende</Label>
-                    <Select value={form.professional || undefined} onValueChange={(value) => setForm({ ...form, professional: value })}>
+                    <Select value={form.professional || undefined} onValueChange={(value) => applyTerms(form.service,value)}>
                       <SelectTrigger><SelectValue placeholder="Elegí quién atiende" /></SelectTrigger>
                       <SelectContent>
                         {activeProfessionals.map((professional) => <SelectItem key={professional.id} value={professional.id}>{professional.name}</SelectItem>)}
@@ -334,7 +351,7 @@ export function AppointmentDialog({
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="space-y-1">
                   <Label htmlFor="appt-date" className="text-xs">Día</Label>
                   <Input id="appt-date" type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
@@ -345,14 +362,15 @@ export function AppointmentDialog({
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="appt-duration" className="text-xs">Minutos</Label>
-                  <Input id="appt-duration" type="number" min={5} step={5} value={form.duration} onChange={(event) => setForm({ ...form, duration: Number(event.target.value) })} />
+                  <Input id="appt-duration" disabled={advanced&&(form.service!==FREE||state.mode==='edit')} type="number" min={5} step={5} value={form.duration} onChange={(event) => setForm({ ...form, duration: Number(event.target.value) })} />
                 </div>
               </div>
               {durationPreview && <p className="-mt-1 text-xs text-muted-foreground">Termina a las {durationPreview}</p>}
+              {advanced&&<p className="text-sm text-muted-foreground">Atención: {form.duration} min · Margen sin otro turno: {form.buffer} min. Al mover el mismo servicio y profesional se conserva la tarifa acordada.</p>}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="appt-price" className="text-xs">Precio</Label>
-                  <Input id="appt-price" type="number" min={0} value={form.price} onChange={(event) => setForm({ ...form, price: Number(event.target.value) })} />
+                  <Input id="appt-price" disabled={advanced&&(form.service!==FREE||state.mode==='edit')} type="number" min={0} value={form.price} onChange={(event) => setForm({ ...form, price: Number(event.target.value) })} />
                 </div>
                 {state.mode === 'create' && (
                   <label className="flex items-end gap-2 pb-2 text-sm">
@@ -363,6 +381,8 @@ export function AppointmentDialog({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="appt-notes" className="text-xs">Notas</Label>
+                {changedTerms&&<label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={form.acceptNewTerms} onChange={event=>setForm({...form,acceptNewTerms:event.target.checked})}/>Acepto el nuevo profesional, precio {money(form.price)} y duración {form.duration} min.</label>}
+                {advanced&&data.canConfigure&&<label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={form.allowOutsideHours} onChange={event=>setForm({...form,allowOutsideHours:event.target.checked})}/>Autorizar fuera del horario como administrador. No permite superponer turnos ni ausencias.</label>}
                 <Textarea id="appt-notes" rows={2} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
               </div>
             </div>

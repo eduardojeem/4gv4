@@ -20,7 +20,7 @@ describe('SaaS landing implemented capabilities', () => {
   })
 
   it('describes the implemented public repair tracking without claiming QR access', () => {
-    const repair = saasHighlights.find((item) => item.title.includes('reparaciones'))
+    const repair = saasHighlights.find((item) => item.description.includes('reparaciones'))
 
     expect(repair?.description).toMatch(/seguimiento público/i)
     expect(repair?.description).not.toMatch(/QR/i)

@@ -194,7 +194,12 @@ describe('marketplace y saas', () => {
 
   it('en /saas, las etiquetas del panel no dependen del gris apagado', () => {
     const planes = readFileSync(resolve(process.cwd(), 'src/components/saas/landing/saas-plans-section.tsx'), 'utf8')
-    expect(planes).toContain('text-[10px] text-slate-600 dark:text-slate-300')
+    expect(planes).toContain('<dt className="text-xs text-muted-foreground">')
+    expect(planes).not.toContain('text-[10px]')
+    for (const selector of [':root', '.dark']) {
+      const colors = bloque(selector)
+      expect(contraste(token(colors, 'muted-foreground')!, token(colors, 'card')!)).toBeGreaterThanOrEqual(AA)
+    }
     const hero = readFileSync(resolve(process.cwd(), 'src/components/saas/landing/saas-hero-section.tsx'), 'utf8')
     expect(hero).toContain('px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300')
   })

@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
   return publicPageMetadata({
     title: `Soluciones del Sistema SaaS | ${branding.platformName}`,
-    description: 'Descubrí cómo nuestro software resuelve los problemas reales de tu taller técnico, punto de venta, control de inventario y caja sin diferencias.',
+    description: 'Conocé herramientas de ventas, inventario, servicios, reservas y reparaciones para mercados, tiendas de ropa, barberías y otros negocios.',
     path: '/saas/soluciones',
   })
 }
@@ -21,7 +21,7 @@ export default async function SaaSSolutionsPage() {
     <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50">
       <SaaSPublicNav />
 
-      <main>
+      <main id="contenido-principal">
         <SaaSSolutionsPageContent />
         <SaaSCTASection branding={branding} />
       </main>

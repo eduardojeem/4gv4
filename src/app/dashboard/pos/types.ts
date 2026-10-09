@@ -14,6 +14,7 @@ export interface Customer {
 }
 
 export interface CartItem {
+  appointmentId?: string
   id: string
   productId?: string
   variantId?: string

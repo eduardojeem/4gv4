@@ -76,6 +76,10 @@ export function BarcodeScanner({
   const cameraSession = useRef(0)
   const dialogSession = useRef(0)
   const [scanning, setScanning] = useState(false)
+  const [zoom, setZoom] = useState<{ min: number; max: number; step: number; value: number } | null>(null)
+  const [zoomBusy, setZoomBusy] = useState(false)
+  const [zoomError, setZoomError] = useState<string | null>(null)
+  const zoomFeatureRef = useRef<ReturnType<ReturnType<Html5Qrcode['getRunningTrackCameraCapabilities']>['zoomFeature']> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastCode, setLastCode] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ text: string; ok: boolean } | null>(null)
@@ -96,6 +100,10 @@ export function BarcodeScanner({
     cameraSession.current += 1
     const scanner = scannerRef.current
     scannerRef.current = null
+    zoomFeatureRef.current = null
+    setZoom(null)
+    setZoomBusy(false)
+    setZoomError(null)
     if (scanner) {
       try {
         await scanner.stop()
@@ -173,7 +181,7 @@ export function BarcodeScanner({
       await scanner.start(
         { facingMode: 'environment' },
         {
-          fps: 10,
+          fps: 5,
           qrbox: scanBox,
           aspectRatio: 1,
           // Preferencias, no requisitos exactos: admite cámaras de menor resolución.
@@ -193,6 +201,16 @@ export function BarcodeScanner({
         return
       }
       setScanning(true)
+      try {
+        const feature = scanner.getRunningTrackCameraCapabilities().zoomFeature()
+        if (feature.isSupported()) {
+          const min = feature.min(), max = feature.max(), value = feature.value()
+          if ([min, max, value].every(Number.isFinite) && max > min) {
+            zoomFeatureRef.current = feature
+            setZoom({ min, max, value: Math.min(max, Math.max(min, value)), step: feature.step() || 0.5 })
+          }
+        }
+      } catch { /* Controles opcionales: nunca impiden leer con la cámara. */ }
     } catch (err) {
       if (session !== cameraSession.current) return
       setScanning(false)
@@ -217,6 +235,23 @@ export function BarcodeScanner({
     setManualCode('')
     lastReadRef.current = null
     setOpen(true)
+  }
+
+  const changeZoom = async (direction: number) => {
+    const feature = zoomFeatureRef.current
+    if (!feature || !zoom || zoomBusy) return
+    const session = cameraSession.current
+    const value = Math.min(zoom.max, Math.max(zoom.min, zoom.value + direction * zoom.step))
+    setZoomBusy(true)
+    setZoomError(null)
+    try {
+      await feature.apply(value)
+      if (session === cameraSession.current) setZoom(previous => previous ? { ...previous, value } : null)
+    } catch {
+      if (session === cameraSession.current) setZoomError('No se pudo ajustar el zoom. Podés seguir leyendo sin él.')
+    } finally {
+      if (session === cameraSession.current) setZoomBusy(false)
+    }
   }
 
   const changeOpen = (value: boolean) => {
@@ -325,6 +360,12 @@ export function BarcodeScanner({
 
           {/* Footer */}
           <div className="space-y-3 border-t px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center">
+            {mode === 'camera' && zoom && <div className="flex items-center justify-center gap-3">
+              <Button type="button" variant="outline" className="h-11" aria-label="Alejar código" disabled={zoomBusy || zoom.value <= zoom.min} onClick={() => void changeZoom(-1)}>−</Button>
+              <span>Zoom {zoom.value.toFixed(1)}×</span>
+              <Button type="button" variant="outline" className="h-11" aria-label="Acercar código" disabled={zoomBusy || zoom.value >= zoom.max} onClick={() => void changeZoom(1)}>+</Button>
+            </div>}
+            {zoomError && <p role="status" className="text-sm text-amber-600">{zoomError}</p>}
             {processing && <p role="status" className="text-xs text-muted-foreground">Procesando código…</p>}
             <p className="text-xs text-slate-500">
               {mode === 'reader' ? 'Configurá el lector en modo teclado, con Enter al finalizar.' : hint ?? (continuous

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BarcodeScanner, REPEAT_SCAN_MS, isRepeatedScan, scanBox } from '@/components/ui/barcode-scanner'
 
 // La cámara simulada: guarda el callback de lectura para dispararlo a mano.
-const camera = vi.hoisted(() => ({ onDecode: null as null | ((text: string) => void), stop: vi.fn(), config: null as null | Record<string, unknown> }))
+const camera = vi.hoisted(() => ({ onDecode: null as null | ((text: string) => void), stop: vi.fn(), config: null as null | Record<string, unknown>, zoomSupported: false, applyZoom: vi.fn(async () => {}) }))
 vi.mock('html5-qrcode', () => ({
   Html5Qrcode: class {
     start(_camera: unknown, _config: unknown, onDecode: (text: string) => void) {
@@ -16,6 +16,9 @@ vi.mock('html5-qrcode', () => ({
       return Promise.resolve()
     }
     clear() {}
+    getRunningTrackCameraCapabilities() {
+      return { zoomFeature: () => ({ isSupported: () => camera.zoomSupported, min: () => 1, max: () => 3, step: () => 0.5, value: () => 1, apply: camera.applyZoom }) }
+    }
   },
 }))
 
@@ -81,6 +84,8 @@ describe('escáner por cámara', () => {
     vi.useFakeTimers()
     camera.onDecode = null
     camera.stop.mockClear()
+    camera.zoomSupported = false
+    camera.applyZoom.mockClear()
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -99,6 +104,22 @@ describe('escáner por cámara', () => {
     expect(screen.getByRole('dialog')).toHaveClass('h-dvh')
     expect(screen.getByLabelText('Vista de la cámara')).toHaveClass('w-full')
     expect(screen.getByLabelText('Vista de la cámara')).not.toHaveClass('max-w-[320px]')
+  })
+
+  it('aplica zoom real cuando la cámara lo admite', async () => {
+    camera.zoomSupported = true
+    render(<BarcodeScanner onScan={vi.fn()} />)
+    await openCamera('Escanear')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Acercar código' })) })
+    expect(camera.applyZoom).toHaveBeenCalledWith(1.5)
+    expect(screen.getByText('Zoom 1.5×')).toBeInTheDocument()
+    expect(camera.config).toMatchObject({ fps: 5 })
+  })
+
+  it('no ofrece zoom si el dispositivo no lo admite', async () => {
+    render(<BarcodeScanner onScan={vi.fn()} />)
+    await openCamera('Escanear')
+    expect(screen.queryByRole('button', { name: 'Acercar código' })).not.toBeInTheDocument()
   })
 
   it('el mismo código no se toma dos veces mientras sigue en cuadro', () => {

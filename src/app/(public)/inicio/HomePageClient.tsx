@@ -271,7 +271,7 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
       )}
       {/* Lo que convence a un cliente nuevo: los trabajos y lo que dicen otros clientes. */}
       {isServices && <ServiceGallery settings={settings.gallery_section} />}
-      {isServices && <OrganizationReviews hasRepairs={capabilities.hasRepairs} />}
+      {isServices && <OrganizationReviews hasRepairs={hasRepairs} />}
 
       {(!isServices || capabilities.hasCatalog) && <FeaturedProducts />}
 
@@ -319,7 +319,7 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
         <StoreTrustBar settings={settings.trust_bar} />
       )}
 
-      {!isServices && <OrganizationReviews hasRepairs={capabilities.hasRepairs} />}
+      {!isServices && <OrganizationReviews hasRepairs={hasRepairs} />}
 
       {isServices ? (
         <ServicesLocation companyInfo={company_info} bookingHref={bookingHref} />

@@ -157,7 +157,7 @@ export function QuickFiltersBar({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-xs backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50',
+        'flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-xs md:backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 md:bg-white/70 md:dark:bg-slate-900/50',
         className,
       )}
     >

@@ -323,11 +323,13 @@ export function ServiceMenu({
 /** El equipo que atiende: solo nombres e iniciales, los datos que publica la agenda. */
 export function ServiceTeam({ agenda }: { agenda: PublicAgendaInfo | null }) {
   const team = agenda?.professionals ?? []
-  if (team.length < 2) return null
+  if (team.length < 1) return null
   return (
     <section id="equipo" aria-labelledby="service-team" className="scroll-mt-20 border-y bg-muted/30 py-12 sm:py-16">
       <div className="container mx-auto px-4 text-center sm:px-6 lg:px-8">
-        <h2 id="service-team" className="font-serif text-2xl tracking-tight sm:text-3xl">Nuestro equipo</h2>
+        <h2 id="service-team" className="font-serif text-2xl tracking-tight sm:text-3xl">
+          {team.length === 1 ? 'Nuestro profesional' : 'Nuestro equipo'}
+        </h2>
         <ul className="mt-8 flex flex-wrap justify-center gap-6 sm:gap-10">
           {team.map((person) => (
             <li key={person.id} className="flex w-32 flex-col items-center gap-2 text-center">
