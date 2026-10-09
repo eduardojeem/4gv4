@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { utcToZoned,zonedToUtc } from '@/lib/agenda/time'
 import { appointmentWhen } from '@/lib/agenda/messages'
-export type TimeOffEditorProps={professionals:AgendaProfessional[];timeZone:string}
+export type TimeOffEditorProps={professionals:AgendaProfessional[];timeZone:string;hideHeading?:boolean}
 type Block={id:string;professional_id:string|null;starts_at:string;ends_at:string;reason:string|null}
 type Conflict={id:string;customer_name:string;service_name:string;starts_at:string}
-export function TimeOffEditor({professionals,timeZone}:TimeOffEditorProps){
+export function TimeOffEditor({professionals,timeZone,hideHeading=false}:TimeOffEditorProps){
   const [prof,setProf]=useState('all')
   const [start,setStart]=useState('')
   const [end,setEnd]=useState('')
@@ -53,7 +53,7 @@ export function TimeOffEditor({professionals,timeZone}:TimeOffEditorProps){
     try{const response=await fetch('/api/agenda/time-off',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'No se pudo quitar la ausencia.');await load();setPreview(null)}catch(cause){setError(cause instanceof Error?cause.message:'No se pudo quitar la ausencia.')}finally{setBusy(false)}
   }
   return <section className="space-y-3">
-    <h2 className="text-base font-semibold">Pausas y ausencias</h2>
+    {!hideHeading&&<h2 className="text-base font-semibold">Pausas y ausencias</h2>}
     <p className="text-sm text-muted-foreground">Vacaciones, almuerzo o cierre excepcional. Primero revisá los turnos afectados. No se cancelan ni se mueven automáticamente. Zona: {timeZone}.</p>
     <fieldset disabled={busy} className="space-y-3">
       <label className="block space-y-1 text-sm">A quién afecta<select value={prof} onChange={event=>setProf(event.target.value)} className="min-h-11 w-full rounded-md border bg-background px-3 text-base"><option value="all">Toda la tienda</option>{professionals.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>

@@ -302,11 +302,16 @@ html.font-extra-large h6 { font-size: 1.25rem; }
   pointer-events: none;
 }
 
-/* Mejoras para Dispositivos Táctiles */
+/*
+ * Mejoras para Dispositivos Táctiles.
+ * Interruptores, casillas y opciones quedan afuera: también son <button> y con
+ * 44×44 se deformaban (el interruptor se veía como un círculo). Van dentro de una
+ * fila o etiqueta que se puede tocar entera.
+ */
 @media (pointer: coarse) {
-  button,
+  button:not([role="switch"]):not([role="checkbox"]):not([role="radio"]),
   [role="button"],
-  input,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
   select,
   textarea {
     min-height: 44px;
