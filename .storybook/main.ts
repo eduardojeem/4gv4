@@ -18,6 +18,12 @@ const config: StorybookConfig = {
   },
   "staticDirs": [
     "../public"
-  ]
+  ],
+  // Storybook owns staticDirs. Avoid Vite copying public concurrently into the same output.
+  viteFinal: async (viteConfig) => ({
+    ...viteConfig,
+    publicDir: false,
+    build: { ...viteConfig.build, copyPublicDir: false },
+  }),
 };
 export default config;

@@ -13,6 +13,11 @@ const PACKAGE_JSON = JSON.parse(readFileSync(resolve(process.cwd(), 'package.jso
 }
 
 describe('Configuración portable de Storybook', () => {
+  it('deja la copia de recursos públicos únicamente a Storybook', () => {
+    expect(CONFIG).toContain('publicDir: false')
+    expect(CONFIG).toContain('copyPublicDir: false')
+    expect(CONFIG).toContain('viteFinal:')
+  })
   it('usa una ruta de recursos estáticos válida en Windows y Linux', () => {
     expect(CONFIG).toContain('"../public"')
     expect(CONFIG).not.toContain('"..\\\\public"')
