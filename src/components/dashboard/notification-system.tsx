@@ -10,6 +10,7 @@ import {
   Package,
   Settings,
   Trash2,
+  CalendarCheck2,
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Button } from '@/components/ui/button'
@@ -32,7 +33,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export type NotificationType = 'success' | 'warning' | 'error' | 'info'
-export type NotificationCategory = 'stock' | 'sales' | 'system' | 'product' | 'general'
+export type NotificationCategory = 'stock' | 'sales' | 'system' | 'product' | 'general' | 'agenda'
 
 export interface Notification {
   id: string
@@ -100,6 +101,7 @@ const categoryIcons = {
   system: Settings,
   product: Package,
   general: Info,
+  agenda: CalendarCheck2,
 }
 
 function NotificationItem({ 
@@ -384,7 +386,8 @@ export function NotificationSystem({
                     sales: 'Ventas',
                     system: 'Sistema',
                     product: 'Productos',
-                    general: 'General'
+                    general: 'General',
+                    agenda: 'Turnos',
                   }
 
                   return (

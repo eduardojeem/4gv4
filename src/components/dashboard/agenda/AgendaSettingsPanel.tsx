@@ -19,6 +19,7 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { SuggestedServicesCard } from '@/components/dashboard/agenda/SuggestedServicesCard'
 import { ProfessionalsManager } from '@/components/dashboard/agenda/ProfessionalsManager'
 import { TimeOffEditor } from '@/components/dashboard/agenda/TimeOffEditor'
+import { NewServiceDialog } from '@/components/dashboard/agenda/NewServiceDialog'
 
 const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería' }
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
@@ -64,6 +65,7 @@ export function AgendaSettingsPanel() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [section, setSection] = useState<AgendaSection>('horario')
   const [savedSnapshot, setSavedSnapshot] = useState('')
+  const [newServiceOpen, setNewServiceOpen] = useState(false)
   const { businessVertical } = useSubscriptionStatus()
   // Lo guardado, para crear servicios sugeridos sin guardar de rebote lo que se está editando.
   const savedSettingsRef = useRef<AgendaSettings | null>(null)
@@ -87,6 +89,33 @@ export function AgendaSettingsPanel() {
     }
   }, [])
   useEffect(() => { void load() }, [load])
+
+  /**
+   * Trae lo nuevo (un servicio recién creado) sin perder lo que se está editando:
+   * el horario y los servicios ya listados conservan sus cambios sin guardar.
+   */
+  const refreshKeepingDrafts = useCallback(async () => {
+    const draft = config
+    try {
+      const response = await fetch('/api/agenda/settings', { cache: 'no-store' })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok || !body.available) return
+      const isAdvanced = body.capabilities?.professionalBooking === true
+      savedSettingsRef.current = body.settings
+      savedConfigRef.current = body
+      setSavedSnapshot(agendaDraftSnapshot(body, isAdvanced))
+      setConfig(draft ? {
+        ...body,
+        settings: draft.settings,
+        services: (body.services as AgendaService[]).map((service) => {
+          const edited = draft.services.find((item) => item.product_id === service.product_id)
+          return edited ? { ...service, duration_minutes: edited.duration_minutes, online: edited.online, buffer_minutes: edited.buffer_minutes } : service
+        }),
+      } : body)
+    } catch {
+      await load()
+    }
+  }, [config, load])
 
   // La sección se recuerda en la dirección (#equipo), para volver o compartirla.
   useEffect(() => {
@@ -299,7 +328,11 @@ export function AgendaSettingsPanel() {
           )}
 
           {section === 'servicios' && (
-            <SectionCard title="Servicios" description="Son los productos con unidad «servicio». Decí cuánto dura cada uno y si se puede reservar online.">
+            <SectionCard
+              title="Servicios"
+              description="Lo que se reserva y se cobra. Decí cuánto dura cada uno y si se puede reservar online."
+              action={<Button onClick={() => setNewServiceOpen(true)} className="min-h-10"><Plus className="h-4 w-4" /> Nuevo servicio</Button>}
+            >
               <div className="space-y-4">
                 {(() => {
                   const missing = missingSuggestedServices(businessVertical, config.services.map((service) => service.name))
@@ -310,12 +343,16 @@ export function AgendaSettingsPanel() {
                       currency={config.currency}
                       savedSettings={savedSettingsRef.current}
                       rubroLabel={RUBRO_LABELS[businessVertical] ?? 'tu rubro'}
-                      onAdded={load}
+                      onAdded={refreshKeepingDrafts}
                     />
                   ) : null
                 })()}
                 {config.services.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Todavía no tenés servicios. Cargalos en <Link href="/dashboard/products" className="underline">Productos</Link> con la unidad «servicio» (ej.: «Corte de cabello», «Lavado completo»).</p>
+                  <div className="rounded-xl border border-dashed p-6 text-center">
+                    <p className="font-semibold">Todavía no tenés servicios</p>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Agregá el primero (ej.: «Corte de cabello») con su precio y duración.</p>
+                    <Button variant="outline" className="mt-4 min-h-10" onClick={() => setNewServiceOpen(true)}><Plus className="h-4 w-4" /> Nuevo servicio</Button>
+                  </div>
                 ) : (
                   <ul className="divide-y">
                     {config.services.map((service) => (
@@ -342,6 +379,20 @@ export function AgendaSettingsPanel() {
                       </li>
                     ))}
                   </ul>
+                )}
+                {config.services.length > 0 && (
+                  <p className="text-xs text-muted-foreground">Para cambiar el nombre, el precio o la foto de un servicio, editalo en <Link href="/dashboard/products" className="underline">Productos</Link>.</p>
+                )}
+                {savedSettingsRef.current && (
+                  <NewServiceDialog
+                    open={newServiceOpen}
+                    onOpenChange={setNewServiceOpen}
+                    existingNames={config.services.map((service) => service.name)}
+                    savedSettings={savedSettingsRef.current}
+                    defaultDuration={settings.slot_minutes}
+                    currency={config.currency}
+                    onCreated={refreshKeepingDrafts}
+                  />
                 )}
               </div>
             </SectionCard>
@@ -421,12 +472,15 @@ export function AgendaSettingsPanel() {
   )
 }
 
-function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function SectionCard({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section aria-labelledby={`section-${title}`} className="rounded-xl border bg-card p-4 sm:p-6">
-      <header className="mb-4 space-y-1">
-        <h2 id={`section-${title}`} className="text-lg font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h2 id={`section-${title}`} className="text-lg font-semibold tracking-tight">{title}</h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        {action}
       </header>
       {children}
     </section>

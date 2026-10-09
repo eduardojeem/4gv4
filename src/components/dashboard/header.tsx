@@ -19,6 +19,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { GlobalHelpButton } from '@/components/help/HelpButton'
 import { NotificationSystem, useNotifications, type Notification } from '@/components/dashboard/notification-system'
 import { useGlobalNotifications } from '@/hooks/use-global-notifications'
+import { isAppointmentNotification, useAppointmentNotifications } from '@/hooks/use-appointment-notifications'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import { useAuth } from '@/contexts/auth-context'
@@ -85,30 +86,39 @@ export const Header = memo(function Header() {
 
   const globalIds = useMemo(() => new Set(globalItems.map(g => g.id)), [globalItems])
 
+  // Reservas, cambios y cancelaciones de clientes: solo con el módulo de servicios.
+  const appointments = useAppointmentNotifications(Boolean(user) && effectiveModules.includes('services'))
+
   const allNotifications = useMemo(
-    () => [...globalAsNotifications, ...notifications],
-    [globalAsNotifications, notifications],
+    () => [...appointments.items, ...globalAsNotifications, ...notifications],
+    [appointments.items, globalAsNotifications, notifications],
   )
 
+  const { markAsRead: markAppointmentAsRead, markAllAsRead: markAllAppointmentsAsRead, dismiss: dismissAppointment, clearAll: clearAppointments } = appointments
+
   const handleMarkAsRead = useCallback((id: string) => {
-    if (globalIds.has(id)) markGlobalAsRead(id)
+    if (isAppointmentNotification(id)) markAppointmentAsRead(id)
+    else if (globalIds.has(id)) markGlobalAsRead(id)
     else markAsRead(id)
-  }, [globalIds, markGlobalAsRead, markAsRead])
+  }, [globalIds, markGlobalAsRead, markAsRead, markAppointmentAsRead])
 
   const handleMarkAllAsRead = useCallback(() => {
+    markAllAppointmentsAsRead()
     markAllGlobalAsRead()
     markAllAsRead()
-  }, [markAllGlobalAsRead, markAllAsRead])
+  }, [markAllGlobalAsRead, markAllAsRead, markAllAppointmentsAsRead])
 
   const handleDeleteNotification = useCallback((id: string) => {
-    if (globalIds.has(id)) dismissGlobal(id)
+    if (isAppointmentNotification(id)) dismissAppointment(id)
+    else if (globalIds.has(id)) dismissGlobal(id)
     else deleteNotification(id)
-  }, [globalIds, dismissGlobal, deleteNotification])
+  }, [globalIds, dismissGlobal, deleteNotification, dismissAppointment])
 
   const handleClearAll = useCallback(() => {
+    clearAppointments()
     globalItems.forEach(g => dismissGlobal(g.id))
     clearAll()
-  }, [globalItems, dismissGlobal, clearAll])
+  }, [globalItems, dismissGlobal, clearAll, clearAppointments])
 
   // Low-stock check: trae solo las columnas de stock de productos activos y
   // deja el filtrado a generateStockNotifications (compara contra min_stock,
