@@ -51,6 +51,7 @@ const verticalLabels: Record<BusinessVertical, string> = {
   general: 'Comercio general',
   clothing: 'Ropa y moda',
   barbershop: 'Barbería y peluquería',
+  beauty_services: 'Belleza y cuidado personal',
   cosmetics: 'Cosmética y belleza',
   electronics: 'Electrónica y tecnología',
   food: 'Alimentos',

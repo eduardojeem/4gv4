@@ -48,6 +48,11 @@ interface VerticalCopy {
 }
 
 const COPY: Record<BusinessVertical | 'repairs', VerticalCopy> = {
+  beauty_services: {
+    noun: 'un negocio de belleza y cuidado personal', badges: ['Servicios de belleza'],
+    titles: ['Un momento para cuidarte'], offer: 'servicios de belleza y cuidado personal',
+    slogans: ['Elegí el servicio que buscás'], benefits: [['message', 'Consultá los servicios', 'Conocé nuestras opciones de atención']],
+  },
   barbershop: {
     noun: 'una barbería',
     badges: ['Reservá tu turno online', 'Cortes y barba', 'Turnos sin esperas'],

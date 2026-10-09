@@ -16,6 +16,7 @@ export const VERTICAL_LABELS: Record<BusinessVertical, string> = {
   general: 'Comercio general',
   clothing: 'Ropa y moda',
   barbershop: 'Barbería y peluquería',
+  beauty_services: 'Belleza y cuidado personal',
   cosmetics: 'Cosmética y belleza',
   electronics: 'Electrónica y tecnología',
   food: 'Alimentos',
@@ -52,6 +53,7 @@ const UNITS_BY_VERTICAL: Record<BusinessVertical, string[]> = {
   food: ['unidad', 'kg', 'g', 'l', 'ml', 'docena', 'caja', 'paquete', 'bolsa'],
   hardware: ['unidad', 'm', 'cm', 'm2', 'kg', 'g', 'l', 'caja', 'paquete', 'bolsa', 'rollo'],
   barbershop: ['servicio', 'unidad', 'ml', 'g'],
+  beauty_services: ['servicio', 'unidad', 'ml', 'g'],
   other: UNIT_OPTIONS.map((unit) => unit.value),
 }
 
@@ -115,6 +117,7 @@ const BASE: ProfileOverrides = {
 }
 
 const PROFILES: Record<BusinessVertical, Partial<ProfileOverrides>> = {
+  beauty_services: { namePlaceholder: 'Ej: Manicura', descriptionPlaceholder: 'Qué incluye el servicio y para quién es.', skuPrefix: 'SRV' },
   general: {},
   other: {},
   electronics: {

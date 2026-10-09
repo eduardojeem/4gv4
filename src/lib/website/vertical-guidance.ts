@@ -19,6 +19,7 @@ type BenefitIdea = Pick<TrustBarItem, 'icon' | 'title' | 'description'>
 
 /** Beneficios típicos de cada rubro: reales y fáciles de cumplir. */
 export const TRUST_BAR_IDEAS: Record<GuidanceFamily, BenefitIdea[]> = {
+  beauty_services: [{ icon: 'message', title: 'Consultá los servicios', description: 'Encontrá la atención que buscás' }],
   general: [
     { icon: 'truck', title: 'Envíos a domicilio', description: 'Coordinamos la entrega en tu zona' },
     { icon: 'map-pin', title: 'Retiro en el local', description: 'Pasá a buscar tu pedido sin costo' },
@@ -81,6 +82,7 @@ export interface AnnouncementIdea {
 
 /** Avisos que suelen hacer falta en cada rubro. */
 export const ANNOUNCEMENT_IDEAS: Record<GuidanceFamily, AnnouncementIdea[]> = {
+  beauty_services: [{ title: 'Nuestros servicios', message: 'Consultá los servicios y horarios disponibles.' }],
   general: [
     { title: 'Horario especial', message: 'Este feriado atendemos de 8 a 12. ¡Te esperamos!' },
     { title: 'Ofertas de la semana', message: 'Aprovechá los precios especiales hasta el domingo.' },
@@ -121,6 +123,7 @@ export const ANNOUNCEMENT_IDEAS: Record<GuidanceFamily, AnnouncementIdea[]> = {
 
 /** Los recorridos de «Cómo atendés a tus clientes» que mejor le van a cada rubro, en orden. */
 export const PROCESS_TEMPLATES_BY_FAMILY: Record<GuidanceFamily, ProcessStepTemplateId[]> = {
+  beauty_services: ['appointment', 'personalized'],
   general: ['purchase', 'personalized', 'payments'],
   clothing: ['fashion', 'purchase'],
   barbershop: ['appointment', 'personalized'],
@@ -134,6 +137,7 @@ export const PROCESS_TEMPLATES_BY_FAMILY: Record<GuidanceFamily, ProcessStepTemp
 
 /** Categoría de servicios de ejemplo que corresponde al rubro (ver ServicesManager). */
 export const SERVICE_PRESET_CATEGORY: Record<GuidanceFamily, string | null> = {
+  beauty_services: 'Belleza',
   general: null,
   clothing: 'Moda',
   barbershop: 'Barbería',
@@ -161,6 +165,7 @@ const GENERIC_SERVICES_COPY: ServicesSectionIdea = {
 
 /** Encabezado de la sección de servicios: primero el del rubro, después uno general. */
 export const SERVICES_SECTION_IDEAS: Record<GuidanceFamily, ServicesSectionIdea[]> = {
+  beauty_services: [GENERIC_SERVICES_COPY],
   general: [GENERIC_SERVICES_COPY],
   other: [GENERIC_SERVICES_COPY],
   clothing: [
@@ -237,6 +242,7 @@ export interface CheckoutRecommendation {
  * solas: necesitan las cuentas o el alias de la tienda.
  */
 export const CHECKOUT_RECOMMENDATIONS: Record<GuidanceFamily, CheckoutRecommendation> = {
+  beauty_services: { mode: 'catalog', summary: 'Mostrá tus servicios y coordiná la atención.', pickup: true, delivery: false, cash: true, card: false, tips: ['Configurá tus servicios y disponibilidad antes de habilitar reservas.'] },
   general: {
     mode: 'cart', summary: 'Carrito con retiro en el local y efectivo; sumá envíos cuando puedas cumplirlos.',
     pickup: true, delivery: false, cash: true, card: false,

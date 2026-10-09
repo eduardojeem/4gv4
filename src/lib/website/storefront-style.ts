@@ -33,7 +33,7 @@ export type StorefrontStyle = Exclude<StorefrontStylePreference, 'auto'>
 export const DEFAULT_STOREFRONT_STYLE: StorefrontStyle = 'classic'
 
 /** Rubros que en «Automático» toman un aspecto propio; el resto queda clásico. */
-const STYLE_BY_VERTICAL = new Map<BusinessVertical, StorefrontStyle>([['clothing', 'fashion'], ['barbershop', 'services']])
+const STYLE_BY_VERTICAL = new Map<BusinessVertical, StorefrontStyle>([['clothing', 'fashion'], ['barbershop', 'services'], ['beauty_services', 'services']])
 
 export interface StorefrontStyleContext {
   /**
@@ -293,6 +293,7 @@ const VERTICAL_NAMES: Record<BusinessVertical, string> = {
   general: 'comercio general',
   clothing: 'indumentaria',
   barbershop: 'barbería y peluquería',
+  beauty_services: 'belleza y cuidado personal',
   cosmetics: 'cosmética',
   electronics: 'tecnología',
   food: 'alimentos',
@@ -305,6 +306,7 @@ const STYLE_BY_VERTICAL_SUGGESTION: Record<BusinessVertical, StorefrontStyle | n
   other: null,
   clothing: 'fashion',
   barbershop: 'services',
+  beauty_services: 'services',
   cosmetics: 'beauty',
   electronics: 'tech',
   food: 'market',
