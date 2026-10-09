@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { pathToFileURL } from 'node:url';
 
 // Configuración
 const CONFIG = {
@@ -496,11 +497,11 @@ function checkThresholds(analysis) {
 }
 
 // Ejecutar análisis si se llama directamente
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   analyzeBundleSize().catch(console.error);
 }
 
-module.exports = {
+export {
   analyzeBundleSize,
   CONFIG
 };
