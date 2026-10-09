@@ -19,4 +19,8 @@ Rollback: volver al commit anterior del código requiere también comprobar las 
 - 16 pruebas de PWA/configuración/promociones aprobadas; service worker generado con esbuild. TypeScript y lint focalizado aprobados.
 - `idb` se declara como dependencia directa de producción porque el POS lo importa; no depende de una dependencia transitiva del generador PWA.
 - El viejo `public/sw.js` se retira del índice de Git, pero sigue en disco y se regenera durante el build; la versión anterior es recuperable desde el historial.
-- Suite completa y build aún pendientes de resultado final. No hay aprobación de producción ni prueba de instalación física.
+- `npm run build` terminó con código 0: compilación, TypeScript, 284 páginas generadas, service worker y 14/14 controles post-build aprobados, sin advertencias post-build. Esto no acredita un despliegue remoto ni instalación física.
+- La suite completa sigue pendiente. Una ejecución concurrente con el build se detuvo por tiempos de espera en dos inspecciones de archivos; su repetición focalizada aprobó 13/13 pruebas. La comprobación de servicios con código PostgreSQL 42703 aprobó 8/8.
+- Otra ejecución sin el build también tuvo tiempos de espera. Con `--pool=forks --maxWorkers=2`, el intento completo llegó a 72 archivos y 783 pruebas aprobadas, pero se detuvo por un mock desactualizado de «Mi turno» y dos workers que no arrancaron. El mock se corrigió sin modificar la protección contra cancelar turnos cobrados ni la duración acordada: 9/9 pruebas focalizadas aprobadas. Los dos archivos de los workers aprobaron 58/58 al ejecutarse aparte con un solo proceso. Estos resultados parciales NO equivalen a suite completa aprobada.
+- La comprobación de Vercel sigue bloqueada por HTTP 403 para el equipo del proyecto; no se confirmó un despliegue remoto.
+- No hay aprobación de producción ni prueba de instalación física.

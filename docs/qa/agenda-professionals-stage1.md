@@ -2,16 +2,16 @@
 
 ## Estado
 
-La base `20261014120001_agenda_professional_booking.sql` ya fue ejecutada por el usuario. No repetirla. La interfaz avanzada requiere versión 2 para activar la cadena completa de reservas y cobro.
+Las migraciones `20261014120001` a `20261014120004` fueron aplicadas por el usuario. No repetirlas. La interfaz avanzada requiere versión 3 para activar la cadena completa de reservas y cobro, incluida la aceptación vinculada a precio, duración y margen.
 
-Probar primero en staging: la aceptación de producción y el dictamen independiente completo siguen pendientes. Ejecutar completos y en orden, deteniéndose si alguno falla:
+La revisión independiente está completada y sus dos hallazgos fueron corregidos. La aceptación de staging y producción sigue pendiente. Orden histórico de aplicación (ya completado; no repetir):
 
 1. `supabase/migrations/20261014120002_agenda_booking_atomic.sql`: cotizaciones, reservas idempotentes, horarios, ausencias y edición transaccional.
 2. `supabase/migrations/20261014120003_agenda_pos_snapshot.sql`: cobro con tarifa acordada y vínculo turno/venta atómico, incluso precio cero.
 
-Después ejecutar `select public.agenda_booking_version();`: debe devolver **2**.
+Después de 02/03 la función informaba versión 2; con la corrección 04 aplicada, `select public.agenda_booking_version();` debe devolver **3**.
 
-Si se aplicaron manualmente desde SQL Editor, registrar SOLO tras ejecución correcta:
+Referencia histórica: cuando se aplican manualmente desde SQL Editor, el historial se registra SOLO tras ejecución correcta. Estas entradas ya fueron verificadas; no repetir su reparación:
 
 ```powershell
 npx supabase migration repair 20261014120001 20261014120002 20261014120003 --status applied --linked
@@ -56,10 +56,10 @@ npx tsc --noEmit --pretty false --incremental
 
 ## Corrección adicional antes de publicar
 
-Aplicar después de los SQL anteriores `20261014120004_agenda_accepted_terms.sql`. Las migraciones 01/02/03 ya aplicadas no se editan. La capacidad profesional requiere ahora `agenda_booking_version() >= 3`.
+`20261014120004_agenda_accepted_terms.sql` se aplicó después de los SQL anteriores. Las migraciones aplicadas no se editan ni se repiten. La capacidad profesional requiere ahora `agenda_booking_version() >= 3`.
 
 El wrapper compara precio, duración y margen realmente guardados con el snapshot que aceptó el operador. Si cambian, devuelve `ACCEPTED_TERMS_CHANGED` y revierte la cita y eventos en la misma transacción; la RPC base no es ejecutable directamente ni por `service_role`.
 
-Verificación adicional local: 19/19 pruebas PostgreSQL y 56/56 pruebas de servidor. Falta confirmar aplicación remota de esta nueva migración; no se publicó este bloque.
+Verificación adicional local: 19/19 pruebas PostgreSQL y 56/56 pruebas de servidor. La aplicación remota fue confirmada posteriormente; el despliegue de este bloque sigue pendiente.
 
-El usuario confirmó aplicación de 04; consulta remota de solo lectura verificó versión 3, wrapper solo service-role y base sin ejecución directa. El historial remoto aún no contiene 20261014120004: registrar con migration repair después de esta aplicación comprobada. No se ejecutaron escrituras remotas desde esta tarea.
+El usuario confirmó aplicación de 04; consulta remota de solo lectura verificó versión 3, wrapper solo service-role y base sin ejecución directa. La comprobación remota posterior confirmó también `20261014120004` en el historial de migraciones. No repetir SQL ni reparar nuevamente esa entrada. No se ejecutaron escrituras remotas desde esta tarea.
