@@ -305,7 +305,7 @@ export default function WebsiteAdminPage() {
           )
         )}
         {show('company') && <section aria-label="Editor de sección">{intro('company')}<CompanyInfoForm /></section>}
-        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
+        {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}
         {show('trust_bar') && <section aria-label="Editor de sección">{intro('trust_bar')}<TrustBarEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
         {show('brands') && <section aria-label="Editor de sección">{intro('brands')}<BrandsSectionEditor /></section>}
         {show('carousel') && <section aria-label="Editor de sección">{intro('carousel')}<PromotionalCarouselEditor /></section>}
