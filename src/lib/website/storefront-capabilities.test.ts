@@ -100,3 +100,11 @@ describe('resolveStorefrontCapabilities', () => {
     })
   })
 })
+
+describe('vender productos es tener inventario', () => {
+  it('con solo pedidos o tienda online no hay catálogo que mostrar', () => {
+    const base = { businessVertical: 'general' as const, operatingModel: 'retail' as const }
+    expect(resolveStorefrontCapabilities({ ...base, effectiveModules: ['orders', 'ecommerce'] }).hasCatalog).toBe(false)
+    expect(resolveStorefrontCapabilities({ ...base, effectiveModules: ['inventory'] }).hasCatalog).toBe(true)
+  })
+})

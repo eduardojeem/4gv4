@@ -16,6 +16,8 @@ describe('avisos de stock en la campanita del panel', () => {
     const header = leer('src/components/dashboard/header.tsx')
     expect(header).toContain("const physical = (data ?? []).filter((product) => !isServiceLikeProduct(product))")
     expect(header).toContain("select('id, name, sku, unit_measure, stock_quantity, min_stock')")
+    // Solo la tienda activa: con varias tiendas se sumaba el stock de todas.
+    expect(header).toContain(".eq('organization_id', activeOrganizationId)")
   })
 
   it('«Ver agotados» y «Ver productos» llevan a la lista filtrada', () => {

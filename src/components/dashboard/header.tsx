@@ -34,6 +34,7 @@ import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { getDashboardNavItemByPath } from '@/config/dashboard-navigation'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -63,6 +64,8 @@ export const Header = memo(function Header() {
     generateStockNotifications
   } = useNotifications()
   const shouldTrackStock = user?.role === 'admin' || user?.role === 'vendedor'
+  // El stock es de la tienda que se está administrando: con varias tiendas se mezclaban.
+  const activeOrganizationId = useOptionalActiveOrganization()?.organization?.id ?? null
 
   // Notificaciones globales (enviadas por el superadmin)
   const {
@@ -125,7 +128,7 @@ export const Header = memo(function Header() {
   // deja el filtrado a generateStockNotifications (compara contra min_stock,
   // sin umbral hardcodeado que ignore productos con min_stock alto).
   const fetchLowStockNotifications = useCallback(async () => {
-    if (!shouldTrackStock || !config.supabase.isConfigured) return
+    if (!shouldTrackStock || !activeOrganizationId || !config.supabase.isConfigured) return
     try {
       const supabase = createClient()
       // Sin sesión la consulta sale como anon y falla por RLS
@@ -135,13 +138,14 @@ export const Header = memo(function Header() {
       const { data } = await supabase
         .from('products')
         .select('id, name, sku, unit_measure, stock_quantity, min_stock')
+        .eq('organization_id', activeOrganizationId)
         .eq('is_active', true)
       // Los servicios (corte, lavado…) no tienen stock: con stock 0 aparecían
       // como «productos sin stock».
       const physical = (data ?? []).filter((product) => !isServiceLikeProduct(product))
       generateStockNotifications(physical as Parameters<typeof generateStockNotifications>[0])
     } catch { /* ignore */ }
-  }, [shouldTrackStock, generateStockNotifications])
+  }, [shouldTrackStock, activeOrganizationId, generateStockNotifications])
 
   // Check low stock periodically
   useEffect(() => {

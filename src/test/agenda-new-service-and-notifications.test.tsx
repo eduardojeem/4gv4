@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }))
@@ -13,26 +13,7 @@ const settings = { slot_minutes: 30, opening_hours: {}, online_booking: true, re
 afterEach(() => vi.unstubAllGlobals())
 
 describe('nuevo servicio desde la agenda', () => {
-  it('crea el producto «servicio» y le guarda la duración sin reenviar cambios sin guardar', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { id: 'prod-1' } }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) })
-    vi.stubGlobal('fetch', fetchMock)
-    const onCreated = vi.fn()
-    render(<NewServiceDialog open onOpenChange={vi.fn()} existingNames={['Corte clásico']} savedSettings={settings} defaultDuration={45} currency="PYG" onCreated={onCreated} />)
-
-    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Corte + lavado' } })
-    fireEvent.change(screen.getByLabelText('Precio'), { target: { value: '60.000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Agregar servicio' }))
-
-    await waitFor(() => expect(onCreated).toHaveBeenCalled())
-    const product = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(product).toMatchObject({ name: 'Corte + lavado', sale_price: 60000, unit_measure: 'servicio', visibility: 'public' })
-    const agenda = JSON.parse(fetchMock.mock.calls[1][1].body)
-    expect(agenda.slot_minutes).toBe(30)
-    expect(agenda.services).toEqual([{ product_id: 'prod-1', duration_minutes: 45, online: true }])
-  })
-
+  // La creación en sí (un solo paso, /api/agenda/services) la prueban service-creation-ui y service-entry.
   it('no deja repetir un servicio que ya existe', () => {
     render(<NewServiceDialog open onOpenChange={vi.fn()} existingNames={['Corte clásico']} savedSettings={settings} defaultDuration={30} currency="PYG" onCreated={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'corte clásico ' } })

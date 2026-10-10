@@ -53,7 +53,10 @@ export function resolveStorefrontCapabilities(input: {
   effectiveModules: readonly OrganizationModule[]
 }): StorefrontCapabilities {
   const modules = new Set(input.effectiveModules)
-  const hasCatalog = ['inventory', 'ecommerce', 'orders'].some((module) => modules.has(module as OrganizationModule))
+  // Vende productos si tiene inventario: es de donde salen. Con solo «pedidos» o
+  // «tienda online» no hay catálogo que mostrar, y el header (que ya miraba solo
+  // el inventario) y la portada no coincidían.
+  const hasCatalog = modules.has('inventory')
   const hasServices = modules.has('services')
   const hasRepairs = modules.has('repairs')
   const hasOrderTracking = modules.has('orders') || modules.has('delivery')

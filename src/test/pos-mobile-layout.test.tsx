@@ -48,9 +48,10 @@ describe('tarjeta de producto en el celular', () => {
     expect(screen.getByRole('button', { name: 'Agregar otro Pomada (hay 2 en el carrito)' })).toHaveClass('h-8', 'w-8')
   })
 
-  it('3 columnas en el celular desde 360px, también en el CSS del POS', () => {
-    expect(POS).toContain("'product-grid grid-cols-2 min-[360px]:grid-cols-3")
-    expect(CSS).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));')
+  it('la grilla se define en un solo lugar: 2 columnas, 3 desde 360px, 4 en compu y 5 en pantallas grandes', () => {
+    expect(POS).toContain("'product-grid gap-1.5 sm:gap-4 lg:gap-6 grid-cols-2 min-[360px]:grid-cols-3 lg:grid-cols-4 min-[1440px]:grid-cols-5'")
+    // Las reglas sin capa de pos.css le ganaban al JSX.
+    expect(CSS).not.toMatch(/.product-grids*{/)
   })
 
   it('el precio nunca se corta: pasa a dos líneas', () => {
