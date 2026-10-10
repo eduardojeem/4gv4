@@ -158,7 +158,10 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
 
   // Si el dueño cargó banners, mandan ellos; si no, cada plantilla tiene su propia portada
   // armada con sus datos reales (nunca fotos genéricas de otro rubro).
-  const configuredSlidesLead = promotionalCarouselVisible || Boolean(settings.promotional_carousel?.slides?.some((slide) => slide.active))
+  // Solo con el carrusel encendido: apagado con diapositivas activas, se dibujaba
+  // el carrusel (que no se muestra) en vez de la portada y el inicio quedaba sin portada.
+  // (Sin el dato, como en cuentas viejas, se considera encendido, igual que antes.)
+  const configuredSlidesLead = settings.promotional_carousel?.enabled !== false && Boolean(settings.promotional_carousel?.slides?.some((slide) => slide.active))
   const renderLead = () => {
     if (isClassic) {
       return heroVisible && (

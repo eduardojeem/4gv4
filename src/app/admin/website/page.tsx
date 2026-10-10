@@ -308,7 +308,7 @@ export default function WebsiteAdminPage() {
         {show('hero') && <section aria-label="Editor de sección">{intro('hero')}<HeroEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}
         {show('trust_bar') && <section aria-label="Editor de sección">{intro('trust_bar')}<TrustBarEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} /></section>}
         {show('brands') && <section aria-label="Editor de sección">{intro('brands')}<BrandsSectionEditor /></section>}
-        {show('carousel') && <section aria-label="Editor de sección">{intro('carousel')}<PromotionalCarouselEditor /></section>}
+        {show('carousel') && <section aria-label="Editor de sección">{intro('carousel')}<PromotionalCarouselEditor capabilities={storefrontCapabilities} storefrontStyle={storefrontStyle} onNavigate={(target) => navigateTo(target)} /></section>}
         {show('offers') && <section aria-label="Editor de sección">{intro('offers')}<OffersSectionEditor /></section>}
         {show('announcement') && <section aria-label="Editor de sección">{intro('announcement')}<AnnouncementEditor capabilities={storefrontCapabilities} /></section>}
         {show('services') && (

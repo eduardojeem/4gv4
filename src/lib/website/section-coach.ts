@@ -68,7 +68,7 @@ function hero(settings: WebsiteSettings, ctx: CoachContext): CoachItem[] {
   if (!ctx.capabilities.hasRepairs && REPAIR_WORDS.test(copy)) {
     items.push(warn('Los textos hablan de reparaciones y tu cuenta no tiene ese módulo.', ASSISTANT))
   }
-  if (ctx.storefrontStyle !== 'classic' && settings.promotional_carousel?.slides?.some((slide) => slide.active)) {
+  if (ctx.storefrontStyle !== 'classic' && settings.promotional_carousel?.enabled !== false && settings.promotional_carousel?.slides?.some((slide) => slide.active)) {
     items.push(tip('Tenés banners activos: en tu plantilla se muestran en lugar de la portada.', go('carousel', 'Ver banners')))
   }
   if (items.length === 0) items.push(ok('Portada clara y acorde a tu negocio.'))
@@ -203,6 +203,7 @@ function simple(section: CoachSection, settings: WebsiteSettings, ctx: CoachCont
       const slides = settings.promotional_carousel?.slides ?? []
       const active = slides.filter((slide) => slide.active)
       if (active.length === 0) return [tip('Sin banners activos. Uno con tu mejor promo le da vida al inicio.')]
+      if (settings.promotional_carousel?.enabled === false) return [tip(`Tenés ${active.length} banners listos pero el carrusel está apagado.`)]
       if (ctx.storefrontStyle !== 'classic') return [tip('En tu plantilla los banners activos reemplazan a la portada.', go('hero', 'Ver portada')), ok(`${active.length} banners activos.`)]
       return [ok(`${active.length} banners activos.`)]
     }

@@ -158,6 +158,7 @@ export function HeroEditor({ capabilities = DEFAULT_CAPABILITIES, storefrontStyl
 
   // En las plantillas que no son Clásica, los banners activos ocupan el lugar de la portada.
   const bannersReplaceHero = storefrontStyle !== 'classic' &&
+    settings?.promotional_carousel?.enabled !== false &&
     Boolean(settings?.promotional_carousel?.slides?.some((slide) => slide.active))
 
   const currentHeroCopy = [
