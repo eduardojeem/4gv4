@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Clock,
   ShoppingBag,
+  Package,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -116,9 +117,8 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
 
   // Fallback si todavía no cargaron productos
   const productImage = currentProduct?.image || currentProduct?.images?.[0] || null
-  const resolvedImageUrl = productImage
-    ? resolveProductImageUrl(productImage)
-    : 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1200&q=85'
+  // Sin foto propia, un fondo neutro: la foto genérica de una remera aparecía detrás de cualquier producto.
+  const resolvedImageUrl = productImage ? resolveProductImageUrl(productImage) : null
 
   const displayPrice = currentProduct?.has_offer && currentProduct?.offer_price
     ? currentProduct.offer_price
@@ -171,6 +171,10 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
     : null
 
 
+  // Sin productos no se inventa una campaña: antes se veía «Prendas básicas…»
+  // con una foto de ropa en tiendas de tecnología, cosmética o servicios.
+  if (!currentProduct) return null
+
   return (
     <section
       className="py-8 sm:py-12 bg-background"
@@ -183,7 +187,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
           <div
             key={`bg-${currentProduct?.id || 'static'}`}
             className="absolute inset-0 bg-cover bg-center opacity-25 filter blur-2xl scale-125 transition-all duration-1000"
-            style={{ backgroundImage: `url('${resolvedImageUrl}')` }}
+            style={resolvedImageUrl ? { backgroundImage: `url('${resolvedImageUrl}')` } : undefined}
           />
 
           {/* Gradientes de contraste para legibilidad superior */}
@@ -223,13 +227,15 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
                 )}
               >
                 <h2 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
-                  {currentProduct?.name || 'Prendas básicas con calce y confort perfecto'}
+                  {currentProduct.name}
                 </h2>
 
-                <p className="mt-3 sm:mt-4 text-sm sm:text-base text-slate-300 leading-relaxed line-clamp-2 sm:line-clamp-3">
-                  {currentProduct?.description ||
-                    'Confeccionadas con materiales premium de alta durabilidad. Diseñadas para acompañarte todos los días con estilo y versatilidad.'}
-                </p>
+                {/* Sin descripción no se muestra una ajena: la de ropa aparecía en cualquier producto. */}
+                {currentProduct.description?.trim() && (
+                  <p className="mt-3 sm:mt-4 text-sm sm:text-base text-slate-300 leading-relaxed line-clamp-2 sm:line-clamp-3">
+                    {currentProduct.description}
+                  </p>
+                )}
 
                 {/* Precios y beneficios directos del producto */}
                 <div className="mt-6 flex flex-wrap items-baseline gap-3">
@@ -323,6 +329,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
             <div className="lg:col-span-5 flex flex-col items-center justify-center">
               <div className="relative w-full max-w-sm sm:max-w-md aspect-[4/5] rounded-2xl overflow-hidden border border-white/15 bg-white/5 shadow-2xl group">
                 <Link href={productHref} className="block relative w-full h-full">
+                  {resolvedImageUrl ? (
                   <Image
                     key={`img-${currentProduct?.id || 'static'}`}
                     src={resolvedImageUrl}
@@ -335,6 +342,11 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
                     )}
                     priority
                   />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/10 to-white/0">
+                      <Package aria-hidden="true" className="h-16 w-16 text-white/40" />
+                    </span>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
 
                   {/* Badge AGOTADO sobre imagen */}

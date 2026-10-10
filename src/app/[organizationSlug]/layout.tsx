@@ -68,6 +68,7 @@ export default async function OrganizationPublicLayout({
   // El aspecto que eligio el dueño o, en «Automático», el de su rubro.
   const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, storefrontOrganization.business_vertical, {
     servicesAvailable: servicesModuleEnabled,
+    catalogAvailable: catalogEnabled,
   })
 
   return (

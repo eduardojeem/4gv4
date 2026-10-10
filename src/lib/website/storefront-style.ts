@@ -41,21 +41,54 @@ export interface StorefrontStyleContext {
    * no cambiar nada donde no se sabe.
    */
   servicesAvailable?: boolean
+  /** La tienda vende productos (módulo de inventario). Sin dato se asume que sí. */
+  catalogAvailable?: boolean
+  /** El rubro de la cuenta; si no viene, se usa el que recibe resolveStorefrontStyle. */
+  businessVertical?: unknown
+}
+
+/** Negocios de turnos: su sitio gira alrededor de la agenda, no de un catálogo. */
+const SERVICE_VERTICALS = new Set<string>(['barbershop', 'beauty_services'])
+/**
+ * Negocios de productos: sus servicios van en una sección de su plantilla, no
+ * como un sitio de turnos. Cosmética queda afuera: suele sumar estética o spa.
+ */
+const PRODUCT_VERTICALS = new Set<string>(['clothing', 'electronics', 'food', 'hardware'])
+/**
+ * Plantillas de tienda que encajan en un negocio de servicios que además vende
+ * productos. Supermercado, Tecnología, Moda y Deportivo se arman alrededor de
+ * góndolas, fichas técnicas y talles: en una barbería mostraban un catálogo ajeno.
+ */
+const STORE_STYLES_FOR_SERVICE_VERTICAL: Record<string, readonly StorefrontStyle[]> = {
+  barbershop: ['classic', 'modern'],
+  beauty_services: ['classic', 'modern', 'beauty'],
 }
 
 /** Lo que muestra una barbería sin agenda: limpio y con fotos, sin reserva al frente. */
 const SERVICES_FALLBACK_STYLE: StorefrontStyle = 'modern'
 
 /**
- * La plantilla «Servicios» gira alrededor de la agenda: la portada es la carta
- * de servicios, el equipo y la reserva de turnos. Sin el módulo Servicios esa
- * portada queda vacía, así que solo se ofrece a quien lo tiene.
+ * Qué plantillas tienen sentido para la cuenta, para no mezclar un sitio de
+ * turnos con una tienda:
+ * - «Servicios» gira alrededor de la agenda (carta, equipo y reserva): necesita
+ *   el módulo Servicios y no se ofrece a rubros de productos.
+ * - En rubros de servicios, las plantillas de tienda solo si vende productos, y
+ *   solo las que encajan con el rubro.
  */
 export function isStorefrontStyleAvailable(style: StorefrontStylePreference, context: StorefrontStyleContext = {}): boolean {
-  return style !== 'services' || context.servicesAvailable !== false
+  if (style === 'auto') return true
+  const vertical = typeof context.businessVertical === 'string' ? context.businessVertical : ''
+  if (style === 'services') {
+    return context.servicesAvailable !== false && !PRODUCT_VERTICALS.has(vertical)
+  }
+  if (SERVICE_VERTICALS.has(vertical)) {
+    return context.catalogAvailable !== false && (STORE_STYLES_FOR_SERVICE_VERTICAL[vertical] ?? []).includes(style)
+  }
+  return true
 }
 
 export function resolveStorefrontStyle(preference: unknown, businessVertical: unknown, context: StorefrontStyleContext = {}): StorefrontStyle {
+  context = { businessVertical, ...context }
   const byVertical = STYLE_BY_VERTICAL.get(businessVertical as BusinessVertical)
   const chosen: StorefrontStyle = (
     preference === 'classic' ||
@@ -70,10 +103,14 @@ export function resolveStorefrontStyle(preference: unknown, businessVertical: un
     ? preference
     : byVertical ?? DEFAULT_STOREFRONT_STYLE
 
-  // Una tienda que eligió «Servicios» y después quitó la agenda vuelve a la
-  // plantilla de su rubro en lugar de mostrar una portada sin servicios.
+  // Una plantilla que ya no corresponde (quitó la agenda, cambió de rubro) vuelve
+  // a la de su rubro en lugar de mostrar una portada vacía o datos de otro negocio.
   if (!isStorefrontStyleAvailable(chosen, context)) {
-    return byVertical && byVertical !== 'services' ? byVertical : SERVICES_FALLBACK_STYLE
+    // Un negocio de servicios cae en Moderno (fotos y contacto); una tienda, en Clásico (catálogo).
+    const order = SERVICE_VERTICALS.has(String(businessVertical)) ? [SERVICES_FALLBACK_STYLE, DEFAULT_STOREFRONT_STYLE] : [DEFAULT_STOREFRONT_STYLE, SERVICES_FALLBACK_STYLE]
+    const fallback = [byVertical, ...order]
+      .find((style): style is StorefrontStyle => Boolean(style) && style !== chosen && isStorefrontStyleAvailable(style!, context))
+    return fallback ?? SERVICES_FALLBACK_STYLE
   }
   return chosen
 }
@@ -350,6 +387,8 @@ export function suggestStorefrontAppearance(input: {
   description?: string
   /** Sin el módulo Servicios no se sugiere esa plantilla. */
   servicesAvailable?: boolean
+  /** Sin productos no se sugiere una plantilla de tienda a un negocio de servicios. */
+  catalogAvailable?: boolean
 }): StorefrontAppearanceSuggestion {
   const vertical: BusinessVertical = typeof input.businessVertical === 'string' && input.businessVertical in VERTICAL_NAMES
     ? (input.businessVertical as BusinessVertical)
@@ -372,9 +411,15 @@ export function suggestStorefrontAppearance(input: {
     reason = 'Es la plantilla más versátil para catálogos variados.'
   }
 
-  if (!isStorefrontStyleAvailable(style, { servicesAvailable: input.servicesAvailable })) {
-    style = SERVICES_FALLBACK_STYLE
-    reason = 'La plantilla Servicios necesita la agenda de turnos; esta muestra tu negocio con fotos y contacto.'
+  const context = { servicesAvailable: input.servicesAvailable, catalogAvailable: input.catalogAvailable, businessVertical: vertical }
+  if (!isStorefrontStyleAvailable(style, context)) {
+    const wanted = style
+    style = resolveStorefrontStyle(style, vertical, context)
+    reason = wanted === 'services'
+      ? PRODUCT_VERTICALS.has(vertical)
+        ? `Tu rubro es ${VERTICAL_NAMES[vertical]}: tus servicios se muestran en una sección de la tienda.`
+        : 'La plantilla Servicios necesita la agenda de turnos; esta muestra tu negocio con fotos y contacto.'
+      : `Es la que mejor encaja con ${VERTICAL_NAMES[vertical]}.`
   }
 
   return {

@@ -77,6 +77,7 @@ export default function WebsiteAdminPage() {
   // La plantilla que ve el cliente: los editores piden solo lo que ella muestra.
   const storefrontStyle = resolveStorefrontStyle(settings?.company_info?.storefrontStyle, businessVertical, {
     servicesAvailable: storefrontCapabilities.hasServices,
+    catalogAvailable: effectiveModules.includes('inventory'),
   })
 
   const [orgSlug, setOrgSlug] = useState<string | null>(null)

@@ -18,7 +18,8 @@ describe('la plantilla Servicios necesita la agenda', () => {
 
   it('una tienda de ropa que la eligió vuelve a la plantilla de su rubro', () => {
     expect(resolveStorefrontStyle('services', 'clothing', { servicesAvailable: false })).toBe('fashion')
-    expect(resolveStorefrontStyle('services', 'electronics', { servicesAvailable: false })).toBe('modern')
+    // Una tienda sin plantilla propia vuelve a la de catálogo.
+    expect(resolveStorefrontStyle('services', 'electronics', { servicesAvailable: false })).toBe('classic')
   })
 
   it('una barbería sin agenda no queda con una portada vacía', () => {
@@ -26,8 +27,10 @@ describe('la plantilla Servicios necesita la agenda', () => {
     expect(resolveStorefrontStyle('auto', 'barbershop', { servicesAvailable: true })).toBe('services')
   })
 
-  it('con agenda cualquier rubro puede usarla: estética, spa o lavadero', () => {
+  it('con agenda la usan servicios, cosmética (estética, spa) y rubros generales (lavadero); no una tienda de productos', () => {
     expect(resolveStorefrontStyle('services', 'cosmetics', { servicesAvailable: true })).toBe('services')
+    expect(resolveStorefrontStyle('services', 'general', { servicesAvailable: true })).toBe('services')
+    expect(resolveStorefrontStyle('services', 'hardware', { servicesAvailable: true })).toBe('classic')
   })
 
   it('el asistente no la sugiere sin agenda', () => {
