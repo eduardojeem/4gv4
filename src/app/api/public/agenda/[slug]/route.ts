@@ -9,6 +9,7 @@ import { addDays, todayIn, utcToZoned } from '@/lib/agenda/time'
 import { publicSlotsFor, resolvePublicAgenda, type PublicAgenda } from '@/lib/agenda/public-agenda-server'
 import { bookingWriteError, quoteReservationSchema, reserveQuote } from '@/lib/agenda/booking-writes'
 import { resolveServiceTerms } from '@/lib/agenda/service-terms'
+import { CLOSURE_NOTICE_DAYS, type PublicClosure } from '@/lib/agenda/closures'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +58,27 @@ async function nextFreeSlot(agenda: PublicAgenda) {
   return null
 }
 
+/**
+ * Los cierres de toda la tienda que el dueño quiso avisar (con aviso público), en
+ * curso o de las próximas semanas. Nunca el motivo interno. Sin la migración del
+ * aviso, ninguno.
+ */
+async function publicClosures(agenda: PublicAgenda): Promise<PublicClosure[]> {
+  const now = new Date()
+  const { data, error } = await agenda.admin
+    .from('agenda_time_off')
+    .select('starts_at, ends_at, public_message')
+    .eq('organization_id', agenda.organization.id)
+    .is('professional_id', null)
+    .not('public_message', 'is', null)
+    .gt('ends_at', now.toISOString())
+    .lt('starts_at', new Date(now.getTime() + CLOSURE_NOTICE_DAYS * 86_400_000).toISOString())
+    .order('starts_at')
+    .limit(5)
+  if (error || !data) return []
+  return (data as Array<{ starts_at: string; ends_at: string; public_message: string }>).map((row) => ({ startsAt: row.starts_at, endsAt: row.ends_at, message: row.public_message }))
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const agenda = await resolveAgenda(slug)
@@ -91,6 +113,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     professionalBookingAvailable: config.capabilities?.professionalBooking === true,
     professionalSelection: config.capabilities?.professionalBooking ? config.settings.professional_selection : 'optional',
     message: config.settings.booking_message,
+    closures: await publicClosures(agenda),
     openDays: Object.keys(config.settings.opening_hours).map(Number),
     services: config.services
       .filter((service) => service.online)
