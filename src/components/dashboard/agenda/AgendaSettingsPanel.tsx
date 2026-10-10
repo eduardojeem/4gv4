@@ -21,7 +21,7 @@ import { ProfessionalsManager } from '@/components/dashboard/agenda/Professional
 import { TimeOffEditor } from '@/components/dashboard/agenda/TimeOffEditor'
 import { NewServiceDialog } from '@/components/dashboard/agenda/NewServiceDialog'
 
-const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería' }
+const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería', beauty_services: 'belleza y cuidado personal' }
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
 type Config = {
@@ -66,8 +66,8 @@ export function AgendaSettingsPanel() {
   const [section, setSection] = useState<AgendaSection>('horario')
   const [savedSnapshot, setSavedSnapshot] = useState('')
   const [newServiceOpen, setNewServiceOpen] = useState(false)
-  const { businessVertical } = useSubscriptionStatus()
-  // Lo guardado, para crear servicios sugeridos sin guardar de rebote lo que se está editando.
+  const { businessVertical, serviceSpecialties } = useSubscriptionStatus()
+  // Snapshot del servidor; las altas no reenvían configuración global.
   const savedSettingsRef = useRef<AgendaSettings | null>(null)
   const savedConfigRef = useRef<Config | null>(null)
 
@@ -95,27 +95,22 @@ export function AgendaSettingsPanel() {
    * el horario y los servicios ya listados conservan sus cambios sin guardar.
    */
   const refreshKeepingDrafts = useCallback(async () => {
-    const draft = config
-    try {
-      const response = await fetch('/api/agenda/settings', { cache: 'no-store' })
-      const body = await response.json().catch(() => ({}))
-      if (!response.ok || !body.available) return
-      const isAdvanced = body.capabilities?.professionalBooking === true
-      savedSettingsRef.current = body.settings
-      savedConfigRef.current = body
-      setSavedSnapshot(agendaDraftSnapshot(body, isAdvanced))
-      setConfig(draft ? {
-        ...body,
-        settings: draft.settings,
-        services: (body.services as AgendaService[]).map((service) => {
-          const edited = draft.services.find((item) => item.product_id === service.product_id)
-          return edited ? { ...service, duration_minutes: edited.duration_minutes, online: edited.online, buffer_minutes: edited.buffer_minutes } : service
-        }),
-      } : body)
-    } catch {
-      await load()
-    }
-  }, [config, load])
+    const response = await fetch('/api/agenda/settings', { cache: 'no-store' })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok || !body.available) throw new Error('No se pudo refrescar la lista de servicios.')
+    const isAdvanced = body.capabilities?.professionalBooking === true
+    savedSettingsRef.current = body.settings
+    savedConfigRef.current = body
+    setSavedSnapshot(agendaDraftSnapshot(body, isAdvanced))
+    setConfig(draft => draft ? {
+      ...body,
+      settings: draft.settings,
+      services: (body.services as AgendaService[]).map((service) => {
+        const edited = draft.services.find((item) => item.product_id === service.product_id)
+        return edited ? { ...service, duration_minutes: edited.duration_minutes, online: edited.online, buffer_minutes: edited.buffer_minutes } : service
+      }),
+    } : body)
+  }, [])
 
   // La sección se recuerda en la dirección (#equipo), para volver o compartirla.
   useEffect(() => {
@@ -327,7 +322,7 @@ export function AgendaSettingsPanel() {
             </SectionCard>
           )}
 
-          {section === 'servicios' && (
+          <div hidden={section !== 'servicios'}>
             <SectionCard
               title="Servicios"
               description="Lo que se reserva y se cobra. Decí cuánto dura cada uno y si se puede reservar online."
@@ -335,13 +330,11 @@ export function AgendaSettingsPanel() {
             >
               <div className="space-y-4">
                 {(() => {
-                  const missing = missingSuggestedServices(businessVertical, config.services.map((service) => service.name))
-                  return missing.length > 0 && savedSettingsRef.current ? (
+                  const missing = missingSuggestedServices(businessVertical, config.services.map((service) => service.name), serviceSpecialties)
+                  return savedSettingsRef.current ? (
                     <SuggestedServicesCard
-                      key={missing.map((service) => service.name).join('|')}
                       suggestions={missing}
                       currency={config.currency}
-                      savedSettings={savedSettingsRef.current}
                       rubroLabel={RUBRO_LABELS[businessVertical] ?? 'tu rubro'}
                       onAdded={refreshKeepingDrafts}
                     />
@@ -388,15 +381,13 @@ export function AgendaSettingsPanel() {
                     open={newServiceOpen}
                     onOpenChange={setNewServiceOpen}
                     existingNames={config.services.map((service) => service.name)}
-                    savedSettings={savedSettingsRef.current}
-                    defaultDuration={settings.slot_minutes}
                     currency={config.currency}
                     onCreated={refreshKeepingDrafts}
                   />
                 )}
               </div>
             </SectionCard>
-          )}
+          </div>
 
           {section === 'reservas' && (
             <SectionCard title="Reservas online" description="Tus clientes eligen servicio, día y horario desde tu tienda, y el turno aparece en la agenda.">

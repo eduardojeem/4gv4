@@ -38,6 +38,19 @@ describe('authorized atomic service endpoint', () => {
     expect(writes).toHaveLength(1)
     expect(writes[0][1]).toMatchObject({ p_org: 'tenant', p_actor: 'actor', p_limit: 50, p_input: { price: 0, durationMinutes: 55 } })
   })
+  it('rechecks both modules inside the policy bracket', async () => {
+    mocks.plan.mockResolvedValueOnce({ modules: ['services','inventory'] }).mockResolvedValueOnce({ modules: ['inventory'] })
+    expect((await POST(req())).status).toBe(403)
+    expect(mocks.rpc.mock.calls.some(([name]) => name === 'create_agenda_service')).toBe(false)
+  })
+  it('uses the server fallback quota on an expired subscription and maps busy writes', async () => {
+    mocks.capacity.mockResolvedValue({ allowed: true, expired: true, limit: 3, blocked: false })
+    mocks.rpc.mockImplementation(async (name: string) => name === 'create_agenda_service' ? { error: { code: '55P03' }, data: null } : { data: 'revision', error: null })
+    const response = await POST(req())
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('SERVICE_BUSY')
+    expect(mocks.rpc.mock.calls.find(([name]) => name === 'create_agenda_service')?.[1].p_limit).toBe(3)
+  })
   it('permits a quota-full replay while denying a blocked subscription', async () => {
     mocks.capacity.mockResolvedValue({ allowed: false, limit: 1, blocked: false })
     mocks.rpc.mockImplementation(async (name: string) => ({ error: null, data: name === 'agenda_service_policy_revision' ? 'revision' : { id: 'existing', replayed: true } }))

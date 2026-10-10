@@ -8,12 +8,8 @@ import { serviceCreationFailure } from '@/lib/agenda/service-creation-server'
 
 export const dynamic = 'force-dynamic'
 export const POST = withTenantAuth({ permission: 'settings.manage', module: 'services' }, async (request, { organization, user }) => {
-  if (!roleHasPermission(organization.role, 'products.create')) {
+  if ((organization.role !== 'owner' && organization.role !== 'admin') || !roleHasPermission(organization.role, 'products.create')) {
     return NextResponse.json({ error: 'Necesitás permiso para crear productos y administrar la agenda.' }, { status: 403 })
-  }
-  const plan = await getOrganizationPlanInfo(organization.id)
-  if (!plan.modules.includes('inventory')) {
-    return NextResponse.json({ error: 'Activá el módulo de productos para crear servicios.', code: 'INVENTORY_REQUIRED' }, { status: 403 })
   }
   const parsed = AgendaServiceCreateSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos del servicio.', code: 'INVALID_SERVICE' }, { status: 422 })
@@ -24,6 +20,10 @@ export const POST = withTenantAuth({ permission: 'settings.manage', module: 'ser
   }
   const before = await admin.rpc('agenda_service_policy_revision', { p_org: organization.id })
   if (before.error) return failure(before.error)
+  const plan = await getOrganizationPlanInfo(organization.id)
+  if (!plan.modules.includes('services') || !plan.modules.includes('inventory')) {
+    return NextResponse.json({ error: 'Activá los módulos de servicios y productos para crear servicios.', code: 'INVENTORY_REQUIRED' }, { status: 403 })
+  }
   const capacity = await canCreateResource(organization.id, 'services')
   if (capacity.blocked) return NextResponse.json({ error: 'La suscripción está bloqueada.', code: 'SUBSCRIPTION_BLOCKED' }, { status: 403 })
   const after = await admin.rpc('agenda_service_policy_revision', { p_org: organization.id })

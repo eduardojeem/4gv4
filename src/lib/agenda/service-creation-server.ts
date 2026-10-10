@@ -1,10 +1,12 @@
 import 'server-only'
 
 export function serviceCreationFailure(error: { code?: string; message?: string }) {
+  if (error.code === '55P03') return { status: 409, code: 'SERVICE_BUSY', error: 'Hay otra operación en curso. Reintentá en unos segundos.' }
   if (error.code === 'PGRST202' || error.code === '42883') {
     return { status: 503, code: 'SERVICE_MIGRATION_REQUIRED', error: 'Falta aplicar la migración de alta segura de servicios.' }
   }
   const messages: Record<string, string> = {
+    SERVICE_BUSY: 'Hay otra operación en curso. Reintentá en unos segundos.',
     IDEMPOTENCY_CONFLICT: 'Este intento ya se usó con otros datos. Revisá el servicio antes de iniciar otra alta.',
     SERVICE_LIMIT_REACHED: 'Alcanzaste el límite de servicios de tu plan.',
     SERVICE_POLICY_CHANGED: 'Tu plan cambió durante el alta. Reintentá con los mismos datos.',

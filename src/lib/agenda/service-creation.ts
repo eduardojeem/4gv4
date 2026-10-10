@@ -13,6 +13,11 @@ export type AgendaServiceCreateResult = { success: true; service: { id: string }
 export class AgendaServiceCreateError extends Error {
   constructor(message: string, public code: string) { super(message); this.name = 'AgendaServiceCreateError' }
 }
+// These responses prove that no write committed. Network/unknown failures do
+// not, so those keep the exact input and key for a safe retry.
+export function serviceCreationDefinitelyRejected(error: unknown): boolean {
+  return error instanceof AgendaServiceCreateError && ['SERVICE_BUSY', 'INVALID_SERVICE', 'SERVICE_LIMIT_REACHED', 'SERVICE_POLICY_CHANGED', 'ACTOR_NOT_AUTHORIZED', 'INVENTORY_REQUIRED', 'SUBSCRIPTION_BLOCKED', 'SERVICE_MIGRATION_REQUIRED', 'MODULE_DISABLED', 'MODULE_NOT_ENTITLED'].includes(error.code)
+}
 export async function createAgendaService(input: AgendaServiceCreateInput): Promise<AgendaServiceCreateResult> {
   const response = await fetch('/api/agenda/services', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),

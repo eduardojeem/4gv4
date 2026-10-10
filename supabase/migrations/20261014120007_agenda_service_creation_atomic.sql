@@ -54,7 +54,12 @@ begin
 
   -- Product writers obtain their relation lock before agenda revision triggers.
   -- Keep that order here to avoid an advisory/relation lock inversion.
-  lock table public.products in share row exclusive mode;
+  -- Never wait on a lock held by a checkout that already owns agenda_lock.
+  -- NOWAIT + try-advisory prevents relation/advisory order cycles with POS.
+  lock table public.products in share row exclusive mode nowait;
+  if not pg_try_advisory_xact_lock(hashtextextended(p_org::text || ':agenda-v2',0)) then
+    raise exception 'SERVICE_BUSY';
+  end if;
   perform public.agenda_lock(p_org);
   select * into v_previous from public.agenda_service_create_requests
     where organization_id=p_org and request_key=p_key;
@@ -65,7 +70,7 @@ begin
 
   -- No network work occurs while these short-lived policy locks are held.
   lock table public.organizations, public.plans, public.subscription_plans,
-    public.subscriptions, public.organization_module_trials in share row exclusive mode;
+    public.subscriptions, public.organization_module_trials in share row exclusive mode nowait;
   if p_policy_revision is null or public.agenda_service_policy_revision(p_org) <> p_policy_revision then
     raise exception 'SERVICE_POLICY_CHANGED';
   end if;
