@@ -130,8 +130,9 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
 
   // Etiqueta distintiva dinámica
   const productBadge = useMemo(() => {
+    // Sin producto el banner no se muestra (ver más abajo); solo hace falta un valor.
     if (!currentProduct) {
-      return { label: 'COLECCIÓN ESENCIALES 2026', icon: Sparkles, color: 'text-amber-300' }
+      return { label: 'DESTACADO', icon: Sparkles, color: 'text-amber-300' }
     }
     if (currentProduct.has_offer && currentProduct.offer_price) {
       return { label: 'OFERTA ESPECIAL', icon: Tag, color: 'text-rose-400' }
@@ -161,7 +162,7 @@ export function FashionCampaignBanner({ phoneClean: propPhoneClean }: FashionCam
       })
     : buildProductWhatsAppMessage({
         storeName: settings?.company_info?.name || null,
-        productName: 'Colección de productos y novedades',
+        productName: 'sus productos',
         price: 0,
         intent: 'inquiry',
       })

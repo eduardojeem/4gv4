@@ -61,5 +61,6 @@ describe('el banner de vitrina no inventa productos', () => {
     expect(banner).not.toContain('Prendas básicas con calce y confort perfecto')
     expect(banner).not.toContain('Confeccionadas con materiales premium')
     expect(banner).not.toContain('images.unsplash.com')
+    expect(banner).not.toContain('COLECCIÓN ESENCIALES')
   })
 })
