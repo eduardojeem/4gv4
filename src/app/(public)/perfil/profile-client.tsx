@@ -25,6 +25,8 @@ import type { CustomerStoreSummary } from '@/lib/profile/customer-stores'
 import type { StoreCreditByOrganization } from '@/components/profile/profile-account-summary'
 import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreCredit'
 import { ProfileSettingsPanel } from '@/components/profile/profile-settings-panel'
+import { ProfileAppointments } from '@/components/profile/profile-appointments'
+import type { CustomerAppointments } from '@/lib/agenda/customer-appointments'
 
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -45,6 +47,8 @@ interface ProfileClientProps {
   repairsAvailable?: boolean
   /** Lo que ofrece la tienda (dentro de una tienda); en el marketplace, todo. */
   storeFeatures?: { services: boolean; orders: boolean; credits: boolean; catalog: boolean }
+  /** Turnos del cliente en esta tienda (solo si toma turnos). */
+  appointments?: CustomerAppointments
   initialData: ProfileData
   userId: string
   /** Tienda de la ruta. Vacio fuera de una: decide el alcance de los datos. */
@@ -97,6 +101,7 @@ export function ProfileClient({
   organization,
   repairsAvailable = true,
   storeFeatures = { services: false, orders: true, credits: true, catalog: true },
+  appointments,
 }: ProfileClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -326,6 +331,9 @@ export function ProfileClient({
               showCredits={storeFeatures.credits}
               bookingHref={storeFeatures.services ? `${linkPrefix}/turnos` : undefined}
             />
+            {storeFeatures.services && appointments && (
+              <ProfileAppointments appointments={appointments} bookingHref={`${linkPrefix}/turnos`} />
+            )}
             {storeFeatures.catalog && <ProfileFavoritesWidget linkPrefix={linkPrefix} />}
             {storeFeatures.catalog && <ProfileStoreCarts />}
             {/* Los pedidos que ya hizo se siguen mostrando aunque la tienda ya no venda online. */}
