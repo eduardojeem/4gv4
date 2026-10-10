@@ -2,16 +2,14 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowDown, ArrowUp, CalendarClock, ChevronDown, Globe, Loader2, Pencil, Scissors, UserPlus, Users } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarClock, ChevronDown, Globe, Pencil, Scissors, UserPlus, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { AgendaProfessional, AgendaProfessionalRate, AgendaService } from '@/lib/agenda/agenda-server'
 import { ProfessionalPhotoButton } from '@/components/dashboard/agenda/ProfessionalPhotoButton'
-import { PROFESSIONAL_COLORS, ProfessionalEditorSheet, type EditorTab } from '@/components/dashboard/agenda/ProfessionalEditorSheet'
+import { ProfessionalEditorSheet, type EditorTab } from '@/components/dashboard/agenda/ProfessionalEditorSheet'
+import { AddProfessionalDialog } from '@/components/dashboard/agenda/AddProfessionalDialog'
 
 type Props = {
   professionals: AgendaProfessional[]
@@ -181,14 +179,13 @@ export function ProfessionalsManager({ professionals, services, rates, currency,
       <AddProfessionalDialog
         open={adding}
         onOpenChange={setAdding}
+        services={services}
+        advanced={advanced}
         existingNames={professionals.map((professional) => professional.name)}
-        nextColor={PROFESSIONAL_COLORS[professionals.length % PROFESSIONAL_COLORS.length]}
+        usedColors={active.map((professional) => professional.color)}
         nextOrder={professionals.length}
-        onCreated={(professional) => {
-          onProfessionalsChange((list) => [...list, professional])
-          // Recién creado: directo a elegir qué servicios hace.
-          setEditing({ id: professional.id, tab: services.length > 0 ? 'servicios' : 'perfil' })
-        }}
+        onCreated={(professional) => onProfessionalsChange((list) => [...list, professional])}
+        onCompleteProfile={(professional) => setEditing({ id: professional.id, tab: 'perfil' })}
       />
 
       <ProfessionalEditorSheet
@@ -210,76 +207,3 @@ export function ProfessionalsManager({ professionals, services, rates, currency,
   )
 }
 
-function AddProfessionalDialog({
-  open,
-  onOpenChange,
-  existingNames,
-  nextColor,
-  nextOrder,
-  onCreated,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  existingNames: string[]
-  nextColor: string
-  nextOrder: number
-  onCreated: (professional: AgendaProfessional) => void
-}) {
-  const [name, setName] = useState('')
-  const [specialty, setSpecialty] = useState('')
-  const [saving, setSaving] = useState(false)
-  const trimmed = name.trim()
-  const duplicate = existingNames.some((other) => other.trim().toLowerCase() === trimmed.toLowerCase())
-
-  const create = async () => {
-    if (!trimmed) return
-    setSaving(true)
-    try {
-      const response = await fetch('/api/agenda/professionals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: trimmed, color: nextColor, sort_order: nextOrder, ...(specialty.trim() ? { specialty: specialty.trim() } : {}) }),
-      })
-      const body = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        toast.error(body.error || 'No se pudo agregar')
-        return
-      }
-      toast.success(`${trimmed} agregado`)
-      setName('')
-      setSpecialty('')
-      onOpenChange(false)
-      onCreated({ service_ids: [], ...body.professional })
-    } catch {
-      toast.error('No se pudo agregar. Revisá tu conexión.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <form onSubmit={(event) => { event.preventDefault(); void create() }} className="space-y-4">
-          <DialogHeader>
-            <DialogTitle>Agregar profesional</DialogTitle>
-            <DialogDescription>Después elegís qué servicios hace, su horario y su foto.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="new-professional-name">Nombre</Label>
-            <Input id="new-professional-name" autoFocus value={name} maxLength={80} placeholder="Ej.: Juan" onChange={(event) => setName(event.target.value)} />
-            {trimmed && duplicate && <p className="text-xs text-amber-700 dark:text-amber-300">Ya hay alguien con este nombre: agregá un apellido o inicial.</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="new-professional-specialty">Especialidad <span className="font-normal text-muted-foreground">(opcional)</span></Label>
-            <Input id="new-professional-specialty" value={specialty} maxLength={80} placeholder="Ej.: Barbero · fades" onChange={(event) => setSpecialty(event.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={!trimmed || saving}>{saving && <Loader2 className="h-4 w-4 animate-spin" />}Agregar</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
