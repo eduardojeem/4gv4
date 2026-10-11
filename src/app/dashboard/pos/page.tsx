@@ -2162,9 +2162,9 @@ function POSPageContent() {
                 </div>
               ) : !productsLoading && !productsError && inventoryProducts.length > 0 ? (
                 <div
-                  className={`grid gap-1.5 sm:gap-2.5 ${viewMode === 'grid'
-                      ? 'product-grid grid-cols-2 min-[360px]:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
-                      : 'grid-cols-1 max-w-4xl mx-auto'
+                  className={`grid ${viewMode === 'grid'
+                      ? 'product-grid gap-1.5 sm:gap-4 lg:gap-6 grid-cols-2 min-[360px]:grid-cols-3 lg:grid-cols-4 min-[1440px]:grid-cols-5'
+                      : 'gap-2 sm:gap-2.5 grid-cols-1 max-w-4xl mx-auto'
                     }`}
                   role="grid"
                   aria-labelledby="products-heading"

@@ -1,149 +1,88 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { serviceSku, type SuggestedService } from '@/lib/agenda/suggested-services'
-import type { AgendaSettings } from '@/lib/agenda/agenda-server'
+import { type SuggestedService } from '@/lib/agenda/suggested-services'
+import { createAgendaService, serviceCreationDefinitelyRejected, type AgendaServiceCreateInput } from '@/lib/agenda/service-creation'
 
-interface Row {
-  name: string
-  checked: boolean
-  price: string
-  duration: number
-}
+interface Row { name: string; checked: boolean; price: string; duration: string; completed: boolean }
+const newRow = (name: string): Row => ({ name, checked: true, price: '', duration: '', completed: false })
 
-/**
- * Servicios típicos del rubro para cargar de una vez. Se crean como productos
- * con unidad «servicio» por la API normal (respeta límites del plan y SKU
- * únicos) y después se les guarda la duración en la agenda.
- */
-export function SuggestedServicesCard({
-  suggestions,
-  currency,
-  savedSettings,
-  rubroLabel,
-  onAdded,
-}: {
-  suggestions: SuggestedService[]
-  currency: string
-  /** La configuración tal como está guardada: se reenvía sin los cambios sin guardar del panel. */
-  savedSettings: AgendaSettings
-  rubroLabel: string
-  onAdded: () => Promise<void> | void
+export function SuggestedServicesCard({ suggestions, currency, rubroLabel, onAdded }: {
+  suggestions: SuggestedService[]; currency: string; rubroLabel: string; onAdded: () => Promise<void> | void
 }) {
-  const [rows, setRows] = useState<Row[]>(() =>
-    suggestions.map((service) => ({
-      name: service.name,
-      checked: true,
-      price: currency === 'PYG' ? String(service.pricePyg) : '',
-      duration: service.durationMinutes,
-    }))
-  )
+  const [rows, setRows] = useState<Row[]>(() => suggestions.map(service => newRow(service.name)))
   const [adding, setAdding] = useState(false)
-  const update = (index: number, patch: Partial<Row>) => setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)))
-
-  const selected = rows.filter((row) => row.checked)
-  const missingPrice = selected.some((row) => !(Number(row.price) > 0))
+  const [notice, setNotice] = useState('')
+  const pending = useRef(false)
+  const attempts = useRef(new Map<string, AgendaServiceCreateInput>())
+  const uncertain = useRef(new Set<string>())
+  // Preserve pending drafts and completed markers on catalog refresh.
+  useEffect(() => {
+    setRows(current => [...current, ...suggestions.filter(service => !current.some(row => row.name === service.name)).map(service => newRow(service.name))])
+  }, [suggestions])
+  const update = (index: number, patch: Partial<Row>) => setRows(current => current.map((row, i) => i === index ? { ...row, ...patch } : row))
+  const priceOf = (row: Row) => Number(currency === 'PYG' ? row.price.replace(/[.\s]/g, '') : row.price.replace(',', '.'))
+  const selected = rows.filter(row => row.checked && !row.completed)
+  const missingPrice = selected.some(row => row.price.trim() === '' || !Number.isFinite(priceOf(row)) || priceOf(row) < 0 || priceOf(row) > 99999999.99 || Math.abs(priceOf(row) * 100 - Math.round(priceOf(row) * 100)) >= 0.000001)
+  const missingDuration = selected.some(row => !Number.isInteger(Number(row.duration)) || Number(row.duration) < 5 || Number(row.duration) > 600)
 
   const add = async () => {
+    if (pending.current || !selected.length || missingPrice || missingDuration) return
+    pending.current = true
     setAdding(true)
-    const created: Array<{ id: string; duration: number }> = []
+    let completed = 0
     try {
       for (const row of selected) {
-        const response = await fetch('/api/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: row.name,
-            sku: serviceSku(row.name),
-            sale_price: Number(row.price),
-            purchase_price: 0,
-            unit_measure: 'servicio',
-            stock_quantity: 0,
-            min_stock: 0,
-            is_active: true,
-            visibility: 'public',
-          }),
-        })
-        const body = await response.json().catch(() => ({}))
-        if (!response.ok || !body?.data?.id) {
-          toast.error(body?.error || `No se pudo crear «${row.name}»`)
-          break
+        let input = attempts.current.get(row.name)
+        if (!input) {
+          input = { requestKey: crypto.randomUUID(), name: row.name, price: priceOf(row), durationMinutes: Number(row.duration), catalogVisible: true, online: true }
+          attempts.current.set(row.name, input)
         }
-        created.push({ id: body.data.id, duration: row.duration })
+        await createAgendaService(input)
+        completed++
+        setRows(current => current.map(item => item.name === row.name ? { ...item, completed: true, checked: false } : item))
       }
-
-      if (created.length > 0) {
-        const response = await fetch('/api/agenda/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...savedSettings,
-            services: created.map((service) => ({ product_id: service.id, duration_minutes: service.duration, online: true })),
-          }),
-        })
-        if (!response.ok) toast.warning('Los servicios se crearon, pero revisá sus duraciones abajo y guardá.')
-        else toast.success(created.length === 1 ? 'Servicio agregado' : `${created.length} servicios agregados`)
-        await onAdded()
-      }
+      setNotice(`${completed} servicio(s) agregado(s).`)
+      toast.success(`${completed} servicio(s) agregado(s).`)
+    } catch (error) {
+      const failedName = selected[completed].name
+      if (serviceCreationDefinitelyRejected(error) && !uncertain.current.has(failedName)) attempts.current.delete(failedName)
+      else uncertain.current.add(failedName)
+      setNotice(`${completed} creado(s) en este intento; ${selected.length - completed} pendiente(s). Reintentá sin duplicar los completados.`)
+      toast.error(error instanceof Error ? error.message : 'No se pudo confirmar el alta. Conservamos los pendientes.')
     } finally {
+      if (completed > 0) await Promise.resolve().then(onAdded).catch(() => toast.warning('Los servicios están creados. Recargá la lista para verlos.'))
+      pending.current = false
       setAdding(false)
     }
   }
-
+  if (rows.length === 0) return null
   return (
     <div className="space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-4">
       <div className="flex items-start gap-2">
         <Sparkles aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <div>
-          <p className="text-sm font-semibold">Servicios típicos de {rubroLabel}</p>
-          <p className="text-xs text-muted-foreground">Marcá los que ofrecés, ajustá precio y minutos, y agregalos en un clic. Después podés editarlos en Productos.</p>
-        </div>
+        <div><p className="text-sm font-semibold">Servicios típicos de {rubroLabel}</p><p className="text-xs text-muted-foreground">Elegí los que ofrecés y completá tus precios ({currency}) y minutos reales. Se publican en catálogo y reservas online; después podés ajustar cada servicio.</p></div>
       </div>
       <ul className="space-y-2">
-        {rows.map((row, index) => (
-          <li key={row.name} className="flex flex-wrap items-center gap-2 text-sm">
-            <label className="flex min-w-0 flex-1 items-center gap-2">
-              <Checkbox checked={row.checked} onCheckedChange={(checked) => update(index, { checked: checked === true })} aria-label={`Agregar ${row.name}`} />
-              <span className="truncate">{row.name}</span>
-            </label>
-            <Input
-              type="number"
-              min={0}
-              inputMode="numeric"
-              className="h-8 w-28"
-              value={row.price}
-              placeholder="Precio"
-              aria-label={`Precio de ${row.name}`}
-              disabled={!row.checked}
-              onChange={(event) => update(index, { price: event.target.value })}
-            />
-            <span className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={5}
-                step={5}
-                className="h-8 w-16"
-                value={row.duration}
-                aria-label={`Duración de ${row.name}`}
-                disabled={!row.checked}
-                onChange={(event) => update(index, { duration: Math.min(600, Math.max(5, Number(event.target.value) || 5)) })}
-              />
-              <span className="text-xs text-muted-foreground">min</span>
-            </span>
+        {rows.map((row, index) => {
+          const locked = adding || row.completed || attempts.current.has(row.name)
+          return <li key={row.name} className="flex flex-wrap items-center gap-2 text-sm">
+            <label className="flex min-w-0 flex-1 items-center gap-2"><Checkbox disabled={adding || row.completed} checked={row.checked} onCheckedChange={checked => update(index, { checked: checked === true })} aria-label={`Agregar ${row.name}`} /><span>{row.name}{row.completed ? ' · Creado' : ''}</span></label>
+            <Input type="number" min={0} inputMode="decimal" className="min-h-10 w-28" value={row.price} placeholder="Precio" aria-label={`Precio de ${row.name}`} disabled={!row.checked || locked} onChange={event => update(index, { price: event.target.value })} />
+            <span className="flex items-center gap-1"><Input type="number" min={5} max={600} step={1} inputMode="numeric" className="min-h-10 w-20" value={row.duration} aria-label={`Duración de ${row.name}`} disabled={!row.checked || locked} onChange={event => update(index, { duration: event.target.value })} /><span className="text-xs text-muted-foreground">min</span></span>
           </li>
-        ))}
+        })}
       </ul>
+      {notice && <p role="status" className="text-sm">{notice}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{missingPrice ? `Completá el precio (${currency}) de los marcados.` : `${selected.length} seleccionados`}</p>
-        <Button size="sm" onClick={() => void add()} disabled={adding || selected.length === 0 || missingPrice}>
-          {adding && <Loader2 className="h-4 w-4 animate-spin" />}
-          Agregar servicios
-        </Button>
+        {missingDuration && <p className="text-xs text-muted-foreground">Completá la duración de cada servicio (5–600 minutos).</p>}
+        <Button size="sm" onClick={() => void add()} disabled={adding || selected.length === 0 || missingPrice || missingDuration}>{adding && <Loader2 className="h-4 w-4 animate-spin" />}Agregar servicios</Button>
       </div>
     </div>
   )

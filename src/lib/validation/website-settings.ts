@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ServiceBusinessDetailsSchema } from '@/lib/organization/service-specialties'
 import { STOREFRONT_STYLE_PREFERENCES } from '@/lib/website/storefront-style'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
 import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
@@ -95,6 +96,8 @@ export const CompanyInfoSchema = z.object({
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
   storefrontStyle: z.enum(STOREFRONT_STYLE_PREFERENCES).optional(),
   storefrontVariant: z.string().max(50).optional().or(z.literal('')),
+  serviceWebsiteVariant: z.enum(['barber', 'salon', 'studio', 'professional']).optional(),
+  serviceSpecialties: ServiceBusinessDetailsSchema.shape.serviceSpecialties,
   headerColor: z.string().max(50).optional().or(z.literal('')),
   showTopBar: z.boolean().optional(),
   whatsapp: z.string().max(50).optional().or(z.literal('')),

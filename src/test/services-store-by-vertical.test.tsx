@@ -101,7 +101,8 @@ describe('la portada de Servicios sigue al tema', () => {
   it('en modo claro usa los colores del tema y en oscuro conserva el fondo oscuro', () => {
     const home = leer('src/components/public/inicio/ServicesHome.tsx')
     const portada = home.slice(home.indexOf('export function ServicesHero'), home.indexOf('const RESERVE_BUTTON_CLASS'))
-    expect(portada).toContain('from-primary/10 via-background to-muted/60 text-foreground dark:from-slate-950')
+    // En claro, texto del tema; en oscuro, fondo y texto oscuros (con o sin variantes por rubro).
+    expect(portada).toMatch(/text-foreground dark:(from|bg)-slate-950/)
     expect(portada).not.toMatch(/className="relative overflow-hidden bg-slate-950/)
     expect(portada).toContain('tone="auto"')
   })

@@ -149,6 +149,7 @@ export function FeaturedProducts() {
         <div className="flex flex-wrap items-center gap-2 pb-2 mb-6">
           <button
             type="button"
+            suppressHydrationWarning
             onClick={() => {
               setActiveSpecialTab('all')
               setSelectedCategory('all')
@@ -167,6 +168,7 @@ export function FeaturedProducts() {
           {offersCount > 0 && (
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => {
                 setActiveSpecialTab('offers')
                 setSelectedCategory('all')
@@ -186,6 +188,7 @@ export function FeaturedProducts() {
           {featuredCount > 0 && (
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => {
                 setActiveSpecialTab('featured')
                 setSelectedCategory('all')
@@ -207,6 +210,7 @@ export function FeaturedProducts() {
             <button
               key={cat.id}
               type="button"
+              suppressHydrationWarning
               onClick={() => {
                 setActiveSpecialTab('all')
                 setSelectedCategory(selectedCategory === cat.id ? 'all' : cat.id)
@@ -244,6 +248,7 @@ export function FeaturedProducts() {
             <p className="text-sm font-semibold text-foreground">No hay productos en esta selección</p>
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => {
                 setActiveSpecialTab('all')
                 setSelectedCategory('all')

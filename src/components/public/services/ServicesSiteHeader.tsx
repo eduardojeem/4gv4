@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, CalendarCheck2, Clock, MapPin, Menu, MessageCircle, Moon, Phone, Sun, User, X } from 'lucide-react'
+import { ArrowRight, CalendarCheck2, CalendarOff, Clock, MapPin, Menu, MessageCircle, Moon, Phone, Sun, User, X } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
@@ -15,6 +15,7 @@ import { useHydrated } from '@/hooks/use-hydrated'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { headerOptionFor } from '@/lib/website/storefront-style'
 import { openStatus, openStatusLabel } from '@/lib/website/opening-hours'
+import { closuresToAnnounce, describeClosure, type PublicClosure } from '@/lib/agenda/closures'
 import { cn } from '@/lib/utils'
 import type { WebsiteSettings } from '@/types/website-settings'
 
@@ -128,8 +129,14 @@ export function ServicesSiteHeader({
   const hours = companyInfo?.hours?.weekdays?.trim()
   const address = companyInfo?.address?.trim()
   const mapsHref = companyInfo?.mapsUrl?.trim() || (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : null)
-  const status = hydrated ? openStatus(companyInfo?.hours) : { state: 'unknown' as const }
-  const statusLabel = openStatusLabel(status)
+  // Cierres que el dueño avisa en la web (vacaciones, feriado): vienen con la agenda.
+  const agendaExtras = (hydrated ? agenda : null) as unknown as { closures?: PublicClosure[]; timeZone?: string } | null
+  const closure = closuresToAnnounce(agendaExtras?.closures ?? [])[0] ?? null
+  const closureText = closure ? describeClosure(closure, agendaExtras?.timeZone || 'America/Asuncion') : null
+  const status = !hydrated
+    ? { state: 'unknown' as const }
+    : closureText?.active ? { state: 'closed' as const, opensAt: null } : openStatus(companyInfo?.hours)
+  const statusLabel = closureText?.active ? `Cerrado · ${closureText.detail}` : openStatusLabel(status)
   const links = servicesSiteLinks(prefix, catalogEnabled, bookingHref)
   // La sesión se conoce en el navegador: hasta hidratar se dibuja «Ingresar», igual que el servidor.
   const signedIn = hydrated && Boolean(user)
@@ -180,6 +187,16 @@ export function ServicesSiteHeader({
       className={cn('sticky top-0 z-50 w-full border-b transition-shadow duration-200', tone.bar, scrolled && 'shadow-md shadow-black/5')}
       data-services-header
     >
+      {closureText && (
+        <div role="status" className="bg-amber-100 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100">
+          <p className="container mx-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-4 py-1.5 text-center text-xs sm:px-6 lg:px-8">
+            <CalendarOff aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <strong className="font-semibold">{closureText.title}</strong>
+            <span>· {closureText.detail}</span>
+            {closureText.reopens && <span className="opacity-80">{closureText.reopens}</span>}
+          </p>
+        </div>
+      )}
       {companyInfo?.showTopBar !== false && (hours || address || phone) && (
         <div className={cn('hidden overflow-hidden text-xs transition-[max-height] duration-200 md:block', tone.topBar, scrolled ? 'max-h-0' : 'max-h-10')}>
           <div className="container mx-auto flex items-center justify-between gap-4 px-4 py-1.5 sm:px-6 lg:px-8">

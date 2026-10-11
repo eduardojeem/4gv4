@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { readServiceBusinessDetails } from '@/lib/organization/service-specialties'
 import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import { buildPlanPriceMap } from '@/lib/superadmin/metrics-calculations'
 import { repairPhotoLimitFromLimits, type ModuleTrial } from './plan-features'
@@ -671,6 +672,9 @@ export async function getOrganizationPlanInfo(
   entitledModules: string[]
   enabledModules: OrganizationModule[] | null
   effectiveModules: OrganizationModule[]
+  serviceSpecialties: import('@/lib/organization/service-specialties').ServiceSpecialty[]
+  attentionMode: 'local' | 'home' | 'both'
+  appointmentMode: 'booking' | 'walk_in' | 'both'
   businessVertical: BusinessVertical
   operatingModel: OperatingModel
   downgradedFromExpiry: boolean
@@ -681,7 +685,7 @@ export async function getOrganizationPlanInfo(
   const supabase = createAdminSupabase()
   const [{ data: sub }, { data: org }, { data: trials }] = await Promise.all([
     supabase.from('subscriptions').select('plan, payment_status, cancel_at_period_end, current_period_ends_at').eq('organization_id', organizationId).maybeSingle(),
-    supabase.from('organizations').select('plan, business_vertical, operating_model, enabled_modules').eq('id', organizationId).maybeSingle(),
+    supabase.from('organizations').select('*').eq('id', organizationId).maybeSingle(),
     supabase
       .from('organization_module_trials')
       .select('module, expires_at')
@@ -764,6 +768,9 @@ export async function getOrganizationPlanInfo(
     enabledModules: profile.enabledModules,
     effectiveModules: profile.effectiveModules,
     businessVertical: profile.businessVertical,
+    serviceSpecialties: readServiceBusinessDetails({ serviceSpecialties: org?.service_specialties }).serviceSpecialties,
+    attentionMode: readServiceBusinessDetails({ attentionMode: org?.attention_mode }).attentionMode,
+    appointmentMode: readServiceBusinessDetails({ appointmentMode: org?.appointment_mode }).appointmentMode,
     operatingModel: profile.operatingModel,
     downgradedFromExpiry,
     moduleTrials,

@@ -192,8 +192,10 @@ export default function ProductsPage() {
     if (params.get("new") === "true") {
       setCreateModalOpen(true);
     }
-    if (params.get("filter") === "low_stock") {
-      handleQuickFilter("low_stock");
+    // Desde la campanita del panel: «Ver productos» (bajo stock) o «Ver agotados».
+    const filter = params.get("filter");
+    if (filter === "low_stock" || filter === "out_of_stock") {
+      handleQuickFilter(filter);
     }
   }, [handleQuickFilter]);
 

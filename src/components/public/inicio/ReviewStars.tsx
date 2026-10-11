@@ -25,6 +25,7 @@ export function ReviewStarsInput({ value, onChange }: { value: number; onChange:
         <button
           key={star}
           type="button"
+          suppressHydrationWarning
           role="radio"
           aria-checked={value === star}
           aria-label={`${star} estrella${star === 1 ? '' : 's'}`}

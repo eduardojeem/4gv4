@@ -51,6 +51,12 @@ export type QuoteVerticalMeta = {
 }
 
 export const QUOTE_VERTICALS_CONFIG: Record<BusinessVertical, QuoteVerticalMeta> = {
+  beauty_services: {
+    vertical: 'beauty_services', name: 'Belleza y cuidado personal', badgeText: 'Servicios',
+    tagline: 'Servicios personalizados', accentColor: 'slate',
+    badgeColorClass: 'bg-muted text-foreground', defaultValidityDays: 7,
+    quickLines: [], notePresets: [], starterPackages: [], whatsappIntro: 'Te compartimos tu presupuesto de servicios.',
+  },
   electronics: {
     vertical: 'electronics',
     name: 'Tecnología & Reparaciones',

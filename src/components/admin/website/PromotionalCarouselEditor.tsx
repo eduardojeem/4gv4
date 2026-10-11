@@ -29,6 +29,22 @@ import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { cn } from '@/lib/utils'
 import { PromotionalCarouselSlideSchema } from '@/lib/validation/website-settings'
 import { getPromotionStoragePathFromUrl } from '@/lib/website/promotional-carousel-storage'
+import {
+  carouselExamplesFor,
+  carouselLinkShortcuts,
+  carouselPlacement,
+  carouselSuggestions,
+  defaultSlideCta,
+  slideLinkProblem,
+  type CarouselContext,
+  type CarouselExample,
+} from '@/lib/website/carousel-guidance'
+import type { StorefrontCapabilities } from '@/lib/website/storefront-capabilities'
+import type { StorefrontStyle } from '@/lib/website/storefront-style'
+import type { WebsiteSectionId } from '@/lib/website/setup-checklist'
+
+/** Sin datos de la cuenta (pruebas, otros usos) se ofrece todo, como antes. */
+const DEFAULT_CAROUSEL_CONTEXT: CarouselContext = { businessVertical: 'general', hasCatalog: true, hasServices: true, hasRepairs: true }
 
 const MAX_SLIDES = 6
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -42,43 +58,6 @@ const EDITOR_SECTIONS: Array<{ value: EditorSection; label: string; icon: React.
   { value: 'cta', label: 'Botón', icon: Link2 },
   { value: 'appearance', label: 'Diseño', icon: Monitor },
   { value: 'template', label: 'Plantillas', icon: ImagePlus },
-]
-
-const TITLE_SUGGESTIONS = [
-  '🔥 30% OFF en Seleccionados',
-  '🚚 Envíos Gratis a Todo el País',
-  '✨ Nueva Colección de Temporada',
-  '⚡ Liquidación de Temporada',
-  '💳 Hasta 6 Cuotas Sin Interés',
-  '⭐ Los Productos Más Vendidos',
-  '🎉 Ofertas Exclusivas de la Semana',
-  '📱 Renovación de Equipos al Mejor Precio',
-]
-
-const MESSAGE_SUGGESTIONS = [
-  'Aprovechá precios especiales y descuentos por tiempo limitado.',
-  'Stock inmediato con despacho en 24 horas a todo el país.',
-  'Descubrí las últimas tendencias con la mejor calidad garantizada.',
-  'Consultá nuestro catálogo y hacé tu pedido directo por WhatsApp.',
-  'Diagnóstico claro, repuestos originales y atención técnica especializada.',
-  'Comprá con seguridad y recibí en la puerta de tu casa o trabajo.',
-]
-
-const CTA_TEXT_SUGGESTIONS = [
-  'Ver ofertas',
-  'Comprar ahora',
-  'Ver catálogo',
-  'Pedir por WhatsApp',
-  'Ver colección',
-  'Consultar stock',
-  'Pedir cotización',
-  'Ver productos',
-]
-
-const CTA_HREF_SHORTCUTS = [
-  { label: '📦 Catálogo (/productos)', href: '/productos' },
-  { label: '🔥 Ofertas (/productos?ofertas=true)', href: '/productos?ofertas=true' },
-  { label: '💼 Servicios (/servicios)', href: '/servicios' },
 ]
 
 async function readImageDimensions(file: File) {
@@ -131,158 +110,16 @@ function CharCount({ value, max }: { value: string; max: number }) {
   )
 }
 
-const CAROUSEL_EXAMPLES: Array<{
-  name: string
-  category: string
-  badgeIcon?: string
-  slide: Omit<PromotionalCarouselSlide, 'id' | 'active'>
-}> = [
-  {
-    name: 'Accesorios Tech',
-    category: 'Tecnología',
-    badgeIcon: '📱',
-    slide: {
-      title: 'Todo para acompañar tu celular',
-      message: 'Descubrí cargadores, cables, auriculares y fundas seleccionadas con garantía.',
-      imageUrl: '/images/promotional-carousel/accesorios.webp',
-      imageAlt: 'Cargadores, cables, auriculares y fundas para celulares',
-      ctaText: 'Ver accesorios',
-      ctaHref: '/productos',
-      textTone: 'dark',
-      contentAlign: 'left',
-    },
-  },
-  {
-    name: 'Renovación de Celulares',
-    category: 'Tecnología',
-    badgeIcon: '📱',
-    slide: {
-      title: 'Encontrá tu próximo celular',
-      message: 'Conocé los equipos disponibles y elegí el que mejor se adapta a vos con financiación.',
-      imageUrl: '/images/promotional-carousel/renovacion.webp',
-      imageAlt: 'Tres celulares modernos exhibidos en una tienda',
-      ctaText: 'Ver celulares',
-      ctaHref: '/productos',
-      textTone: 'dark',
-      contentAlign: 'right',
-    },
-  },
-  {
-    name: 'Servicio Técnico Especializado',
-    category: 'Tecnología',
-    badgeIcon: '🔧',
-    slide: {
-      title: 'Tu equipo en manos expertas',
-      message: 'Diagnóstico claro, repuestos originales y reparación profesional con seguimiento online.',
-      imageUrl: '/images/promotional-carousel/reparacion.webp',
-      imageAlt: 'Técnico revisando un celular en una mesa de reparación',
-      ctaText: 'Ver servicios',
-      ctaHref: '/servicios',
-      textTone: 'dark',
-      contentAlign: 'left',
-    },
-  },
-  {
-    name: 'Nueva Colección de Ropa',
-    category: 'Moda & Ropa',
-    badgeIcon: '👗',
-    slide: {
-      title: 'Nueva Colección de Temporada',
-      message: 'Renová tu estilo con las últimas tendencias en prendas y calzados exclusivos.',
-      imageUrl: '/images/promotional-carousel/hero-moda-esenciales.jpg',
-      imageAlt: 'Prendas de vestir y ropa de moda',
-      ctaText: 'Ver colección',
-      ctaHref: '/productos',
-      textTone: 'dark',
-      contentAlign: 'right',
-    },
-  },
-  {
-    name: 'Moda Urbana & Streetwear',
-    category: 'Moda & Ropa',
-    badgeIcon: '🔥',
-    slide: {
-      title: 'Estilo Urbano & Calce Relajado',
-      message: 'Prendas básicas y oversize confeccionadas en algodón peinado premium para todo el día.',
-      imageUrl: '/images/promotional-carousel/hero-moda-urbana.jpg',
-      imageAlt: 'Modelos vistiendo prendas urbanas oversize y hoodies de moda',
-      ctaText: 'Ver catálogo',
-      ctaHref: '/productos',
-      textTone: 'light',
-      contentAlign: 'left',
-    },
-  },
-  {
-    name: 'Uniformes & Línea Corporativa',
-    category: 'Moda & Ropa',
-    badgeIcon: '💼',
-    slide: {
-      title: 'Prendas Corporativas para Empresas',
-      message: 'Camperas softshell, chombas polo y remeras con bordado de tu marca y precio mayorista.',
-      imageUrl: '/images/promotional-carousel/hero-linea-corporativa.jpg',
-      imageAlt: 'Equipo corporativo profesional con uniformes institucionales y camperas softshell',
-      ctaText: 'Ver Línea Empresas',
-      ctaHref: '/productos',
-      textTone: 'dark',
-      contentAlign: 'right',
-    },
-  },
-  {
-    name: 'Cuidado Facial & Belleza',
-    category: 'Cosmética',
-    badgeIcon: '💄',
-    slide: {
-      title: 'Cuidado Personal & Skincare',
-      message: 'Productos 100% originales para realzar tu belleza y cuidar tu piel día a día.',
-      imageUrl: '/images/promotional-carousel/accesorios.webp',
-      imageAlt: 'Productos de cosmética y cuidado personal',
-      ctaText: 'Explorar catálogo',
-      ctaHref: '/productos',
-      textTone: 'light',
-      contentAlign: 'left',
-    },
-  },
-  {
-    name: 'Herramientas Profesionales',
-    category: 'Ferretería',
-    badgeIcon: '🔨',
-    slide: {
-      title: 'Herramientas & Materiales',
-      message: 'Equipate con las mejores marcas, asesoramiento técnico y garantía de fábrica.',
-      imageUrl: '/images/promotional-carousel/reparacion.webp',
-      imageAlt: 'Herramientas profesionales de trabajo y construcción',
-      ctaText: 'Ver herramientas',
-      ctaHref: '/productos',
-      textTone: 'dark',
-      contentAlign: 'left',
-    },
-  },
-  {
-    name: 'Envíos Gratis a Todo el País',
-    category: 'Promociones',
-    badgeIcon: '🚚',
-    slide: {
-      title: 'Envíos Gratis a Todo el País',
-      message: 'Hacé tu pedido hoy y recibilo en la comodidad de tu hogar sin costo de envío.',
-      imageUrl: '/images/promotional-carousel/renovacion.webp',
-      imageAlt: 'Paquete de envío a domicilio',
-      ctaText: 'Comprar ahora',
-      ctaHref: '/productos',
-      textTone: 'light',
-      contentAlign: 'center',
-    },
-  },
-]
-
-function newSlide(): PromotionalCarouselSlide {
+function newSlide(context: CarouselContext = DEFAULT_CAROUSEL_CONTEXT): PromotionalCarouselSlide {
+  const cta = defaultSlideCta(context)
   return {
     id: crypto.randomUUID(),
     title: '',
     message: '',
     imageUrl: '',
     imageAlt: '',
-    ctaText: 'Ver productos',
-    ctaHref: '/productos',
+    ctaText: cta.ctaText,
+    ctaHref: cta.ctaHref,
     active: true,
     textTone: 'light',
     contentAlign: 'left',
@@ -341,6 +178,9 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
     slide.hideText ||
     (!slide.title?.trim() && !slide.message?.trim() && !slide.badge?.trim())
   )
+  // Recién creada y sin textos: no es «modo gráfico», todavía falta completarla.
+  const isBlank = !slide.hideText && isTextHidden && !slide.imageUrl
+  const graphicLabel = isBlank ? 'Escribí un título o elegí una plantilla para ver cómo queda' : null
 
   const intensity = slide.overlayIntensity || (slide.hideText ? 'none' : 'strong')
   const overlayColor = slide.overlayColor || (slide.textTone === 'light' ? 'black' : 'white')
@@ -419,7 +259,7 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
           isTextHidden ? (
             <div className="relative flex h-full flex-col justify-end p-4">
               <span className="w-fit rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-xs">
-                🖼️ Modo gráfico (sin textos superpuestos)
+                {graphicLabel ?? 'Modo gráfico (sin textos superpuestos)'}
                 {slide.ctaHref && <span className="ml-1 text-white/80">· Enlace: {slide.ctaHref}</span>}
               </span>
             </div>
@@ -458,7 +298,7 @@ function SlidePreview({ slide, uploading }: { slide: PromotionalCarouselSlide; u
         {mode === 'mobile' && (
           isTextHidden ? (
             <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20">
-              🖼️ Modo gráfico sin textos · Toda la imagen redirige {slide.ctaHref ? `a ${slide.ctaHref}` : 'al pulsar'}
+              {graphicLabel ?? <>Modo gráfico sin textos · Toda la imagen redirige {slide.ctaHref ? `a ${slide.ctaHref}` : 'al pulsar'}</>}
             </div>
           ) : (
             <div className={cn('flex min-h-[160px] flex-col justify-center px-5 py-5 text-foreground', alignClass)}>
@@ -711,13 +551,28 @@ type PromotionalCarouselEditorProps = {
   settingKey?: 'promotional_carousel' | 'offers_carousel'
   title?: string
   description?: string
+  /** Lo que tiene la tienda: plantillas, ideas y enlaces del rubro. */
+  capabilities?: CarouselContext & Partial<StorefrontCapabilities>
+  /** La plantilla de la tienda: dice dónde aparece el carrusel. */
+  storefrontStyle?: StorefrontStyle
+  onNavigate?: (section: Exclude<WebsiteSectionId, 'overview'>) => void
 }
 
 export function PromotionalCarouselEditor({
   settingKey = 'promotional_carousel',
   title = 'Carrusel de promociones',
   description = 'Publicá campañas con imágenes y mensajes propios en la página de inicio',
+  capabilities,
+  storefrontStyle,
+  onNavigate,
 }: PromotionalCarouselEditorProps = {}) {
+  const context: CarouselContext = capabilities
+    ? { businessVertical: capabilities.businessVertical, hasCatalog: capabilities.hasCatalog, hasServices: capabilities.hasServices, hasRepairs: capabilities.hasRepairs }
+    : DEFAULT_CAROUSEL_CONTEXT
+  const examples = carouselExamplesFor(context)
+  const suggestions = carouselSuggestions(context)
+  const linkShortcuts = carouselLinkShortcuts(context)
+  const placement = settingKey === 'promotional_carousel' && storefrontStyle ? carouselPlacement(storefrontStyle) : null
   const { settings, isLoading, error, isSaving, updateSetting, refetch } = useAdminWebsiteSettings()
   const defaults = getWebsiteSettingsDefaults()[settingKey]!
   const [draft, setDraft] = useState<PromotionalCarouselSettings | null>(null)
@@ -760,7 +615,7 @@ export function PromotionalCarouselEditor({
       toast.error(`Podés publicar hasta ${MAX_SLIDES} diapositivas`)
       return
     }
-    const slide = newSlide()
+    const slide = newSlide(context)
     originalSlideRef.current = slide
     editingUploadPathRef.current = null
     setFieldErrors({})
@@ -817,7 +672,7 @@ export function PromotionalCarouselEditor({
     originalSlideRef.current = null
   }
 
-  const applyTemplate = (example: (typeof CAROUSEL_EXAMPLES)[number]) => {
+  const applyTemplate = (example: CarouselExample) => {
     const hasContent = Boolean(
       editingSlide?.title.trim() || editingSlide?.message.trim() || editingSlide?.imageUrl.trim()
     )
@@ -1056,16 +911,26 @@ export function PromotionalCarouselEditor({
                 onToggle={(value) => patch('enabled', value)}
               />
             </div>
-            <Button
-              type="button"
-              onClick={openNewSlide}
-              disabled={current.slides.length >= MAX_SLIDES}
-              className="shrink-0 font-bold self-start sm:self-center h-10 px-4"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva diapositiva
-            </Button>
           </div>
+
+          {placement && (
+            <div role="note" className={cn('flex flex-col gap-2 rounded-xl border p-3 text-xs sm:flex-row sm:items-center sm:justify-between', placement.replacesHero ? 'border-sky-500/30 bg-sky-500/10' : 'bg-muted/30')}>
+              <p className="text-foreground">{placement.text}</p>
+              {placement.replacesHero && onNavigate && (
+                <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => onNavigate('hero')}>Ver portada principal</Button>
+              )}
+            </div>
+          )}
+          {current.enabled && current.slides.length > 0 && !current.slides.some((slide) => slide.active) && (
+            <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-foreground">
+              El carrusel está activado pero todas las diapositivas están ocultas: no se muestra nada. Activá al menos una.
+            </p>
+          )}
+          {!current.enabled && current.slides.some((slide) => slide.active) && (
+            <p role="note" className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+              El carrusel está apagado: tus diapositivas no se ven{placement?.replacesHero ? ' y la tienda muestra la portada principal' : ''}.
+            </p>
+          )}
 
           <div className="grid gap-4 border-t pt-5 sm:grid-cols-2">
             <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
@@ -1110,7 +975,7 @@ export function PromotionalCarouselEditor({
                     : 'border-border/80 hover:bg-muted/50'
                 )}
               >
-                <span className="text-xs font-bold text-foreground">📦 Enmarcado (Estándar)</span>
+                <span className="text-xs font-bold text-foreground">Enmarcado (estándar)</span>
                 <span className="text-[11px] text-muted-foreground leading-tight">Centrado con bordes redondeados y márgenes elegantes.</span>
               </button>
 
@@ -1124,7 +989,7 @@ export function PromotionalCarouselEditor({
                     : 'border-border/80 hover:bg-muted/50'
                 )}
               >
-                <span className="text-xs font-bold text-foreground">🖼️ Borde a Borde (Full Width)</span>
+                <span className="text-xs font-bold text-foreground">De borde a borde</span>
                 <span className="text-[11px] text-muted-foreground leading-tight">Ocupa el 100% del ancho de la pantalla sin márgenes laterales.</span>
               </button>
 
@@ -1138,7 +1003,7 @@ export function PromotionalCarouselEditor({
                     : 'border-border/80 hover:bg-muted/50'
                 )}
               >
-                <span className="text-xs font-bold text-foreground">📐 Compacto</span>
+                <span className="text-xs font-bold text-foreground">Compacto</span>
                 <span className="text-[11px] text-muted-foreground leading-tight">Formato más angosto y menor altura para ocupar menos espacio.</span>
               </button>
             </div>
@@ -1219,9 +1084,14 @@ export function PromotionalCarouselEditor({
                       : `${slide.ctaText || 'Sin botón'} · ${slide.contentAlign === 'left' ? 'Izquierda' : slide.contentAlign === 'center' ? 'Centro' : 'Derecha'}`}
                     {slide.overlayIntensity && slide.overlayIntensity !== 'strong' ? ` · Capa: ${slide.overlayIntensity === 'none' ? 'sin oscurecer' : slide.overlayIntensity}` : ''}
                   </p>
+                  {slideLinkProblem(slide.ctaHref, context) && (
+                    <p className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                      {slideLinkProblem(slide.ctaHref, context)} Editala y elegí otro destino.
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center justify-end gap-1">
-                  <Switch checked={slide.active} onCheckedChange={(value) => toggleSlide(slide.id, value)} aria-label={`Mostrar ${slide.title}`} />
+                  <Switch checked={slide.active} onCheckedChange={(value) => toggleSlide(slide.id, value)} aria-label={`Mostrar ${slide.title || slide.imageAlt || `diapositiva ${index + 1}`}`} />
                   <Button type="button" variant="ghost" size="icon" onClick={() => moveSlide(index, -1)} disabled={index === 0} title="Subir"><ArrowUp className="h-4 w-4" /></Button>
                   <Button type="button" variant="ghost" size="icon" onClick={() => moveSlide(index, 1)} disabled={index === current.slides.length - 1} title="Bajar"><ArrowDown className="h-4 w-4" /></Button>
                   <Button type="button" variant="ghost" size="icon" onClick={() => openSlide(slide)} title="Editar"><Pencil className="h-4 w-4" /></Button>
@@ -1537,7 +1407,7 @@ export function PromotionalCarouselEditor({
                               Sugerencias de títulos comerciales:
                             </p>
                             <div className="flex flex-wrap gap-1">
-                              {TITLE_SUGGESTIONS.map((sug, i) => (
+                              {suggestions.titles.map((sug, i) => (
                                 <button
                                   key={i}
                                   type="button"
@@ -1582,7 +1452,7 @@ export function PromotionalCarouselEditor({
                               Sugerencias de mensajes:
                             </p>
                             <div className="flex flex-wrap gap-1">
-                              {MESSAGE_SUGGESTIONS.map((sug, i) => (
+                              {suggestions.messages.map((sug, i) => (
                                 <button
                                   key={i}
                                   type="button"
@@ -1664,7 +1534,7 @@ export function PromotionalCarouselEditor({
                             Sugerencias de botón:
                           </p>
                           <div className="flex flex-wrap gap-1">
-                            {CTA_TEXT_SUGGESTIONS.map((sug, i) => (
+                            {suggestions.buttons.map((sug, i) => (
                               <button
                                 key={i}
                                 type="button"
@@ -1692,8 +1562,11 @@ export function PromotionalCarouselEditor({
                         </Label>
                         <CharCount value={editingSlide.ctaHref || ''} max={500} />
                       </div>
-                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder="/productos" className="text-sm font-mono" />
+                      <Input id="promotion-href" aria-invalid={Boolean(fieldErrors.ctaHref)} aria-describedby={fieldErrors.ctaHref ? 'promotion-href-error' : undefined} value={editingSlide.ctaHref || ''} onChange={(e) => updateSlideField('ctaHref', e.target.value)} maxLength={500} placeholder={linkShortcuts[0]?.href ?? "/productos"} className="text-sm font-mono" />
                       <FieldError id="promotion-href-error" message={fieldErrors.ctaHref} />
+                      {!fieldErrors.ctaHref && slideLinkProblem(editingSlide.ctaHref, context) && (
+                        <p role="alert" className="text-xs font-medium text-amber-700 dark:text-amber-300">{slideLinkProblem(editingSlide.ctaHref, context)}</p>
+                      )}
 
                       {/* Atajos de Destino */}
                       <div className="pt-1">
@@ -1702,7 +1575,7 @@ export function PromotionalCarouselEditor({
                           Destinos rápidos:
                         </p>
                         <div className="flex flex-wrap gap-1.5">
-                          {CTA_HREF_SHORTCUTS.map((shortcut, i) => (
+                          {linkShortcuts.map((shortcut, i) => (
                             <button
                               key={i}
                               type="button"
@@ -1846,7 +1719,7 @@ export function PromotionalCarouselEditor({
                 <FormSection icon={ImagePlus} label="Inicio rápido con plantillas por rubro" step={5}>
                   {/* Filtro por Categorías */}
                   <div className="flex flex-wrap gap-1.5 pb-2">
-                    {['all', 'Tecnología', 'Moda & Ropa', 'Cosmética', 'Ferretería', 'Promociones'].map((cat) => (
+                    {['all', ...Array.from(new Set(examples.map((example) => example.category)))].map((cat) => (
                       <button
                         key={cat}
                         type="button"
@@ -1864,24 +1737,31 @@ export function PromotionalCarouselEditor({
                   </div>
 
                   <div className="grid gap-2.5 sm:grid-cols-2">
-                    {CAROUSEL_EXAMPLES
+                    {examples
                       .filter((ex) => templateCategoryFilter === 'all' || ex.category === templateCategoryFilter)
                       .map((example) => (
                       <button
                         key={example.name}
                         type="button"
                         onClick={() => applyTemplate(example)}
-                        aria-pressed={editingSlide.imageUrl === example.slide.imageUrl}
+                        aria-pressed={editingSlide.title === example.slide.title}
                         className={cn(
                           'group overflow-hidden rounded-xl border bg-background text-left transition-all hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer',
-                          editingSlide.imageUrl === example.slide.imageUrl
+                          editingSlide.title === example.slide.title
                             ? 'border-primary ring-2 ring-primary/30 shadow-sm'
                             : 'border-border/70 hover:shadow-xs',
                         )}
                       >
                         { }
                         <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
-                          <AppImage src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                          {example.slide.imageUrl ? (
+                            <AppImage src={example.slide.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                          ) : (
+                            // Sin foto propia del rubro: completa los textos y la imagen la sube el dueño.
+                            <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/15 to-muted text-[11px] font-semibold text-muted-foreground">
+                              <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />Con tu foto
+                            </span>
+                          )}
                           <span className="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
                             {example.badgeIcon} {example.category}
                           </span>
@@ -1889,7 +1769,10 @@ export function PromotionalCarouselEditor({
                         <div className="p-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-foreground">{example.name}</span>
-                            {editingSlide.imageUrl === example.slide.imageUrl && (
+                            {example.recommended && editingSlide.title !== example.slide.title && (
+                              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Tu rubro</span>
+                            )}
+                            {editingSlide.title === example.slide.title && (
                               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary">
                                 <Check className="h-2.5 w-2.5 text-primary-foreground" />
                               </span>
@@ -1900,7 +1783,7 @@ export function PromotionalCarouselEditor({
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">Elegí una plantilla para autocompletar título, mensaje, imagen y botón en 1 toque.</p>
+                  <p className="text-xs text-muted-foreground">Elegí una plantilla para completar título, mensaje y botón en un toque. Las que dicen «Con tu foto» te piden subir una imagen de tu negocio.</p>
                 </FormSection>
                 </div>
 

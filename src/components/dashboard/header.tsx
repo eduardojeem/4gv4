@@ -19,6 +19,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { GlobalHelpButton } from '@/components/help/HelpButton'
 import { NotificationSystem, useNotifications, type Notification } from '@/components/dashboard/notification-system'
 import { useGlobalNotifications } from '@/hooks/use-global-notifications'
+import { isAppointmentNotification, useAppointmentNotifications } from '@/hooks/use-appointment-notifications'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import { useAuth } from '@/contexts/auth-context'
@@ -32,6 +33,8 @@ import { cn } from '@/lib/utils'
 import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { getDashboardNavItemByPath } from '@/config/dashboard-navigation'
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -61,6 +64,8 @@ export const Header = memo(function Header() {
     generateStockNotifications
   } = useNotifications()
   const shouldTrackStock = user?.role === 'admin' || user?.role === 'vendedor'
+  // El stock es de la tienda que se está administrando: con varias tiendas se mezclaban.
+  const activeOrganizationId = useOptionalActiveOrganization()?.organization?.id ?? null
 
   // Notificaciones globales (enviadas por el superadmin)
   const {
@@ -85,36 +90,45 @@ export const Header = memo(function Header() {
 
   const globalIds = useMemo(() => new Set(globalItems.map(g => g.id)), [globalItems])
 
+  // Reservas, cambios y cancelaciones de clientes: solo con el módulo de servicios.
+  const appointments = useAppointmentNotifications(Boolean(user) && effectiveModules.includes('services'))
+
   const allNotifications = useMemo(
-    () => [...globalAsNotifications, ...notifications],
-    [globalAsNotifications, notifications],
+    () => [...appointments.items, ...globalAsNotifications, ...notifications],
+    [appointments.items, globalAsNotifications, notifications],
   )
 
+  const { markAsRead: markAppointmentAsRead, markAllAsRead: markAllAppointmentsAsRead, dismiss: dismissAppointment, clearAll: clearAppointments } = appointments
+
   const handleMarkAsRead = useCallback((id: string) => {
-    if (globalIds.has(id)) markGlobalAsRead(id)
+    if (isAppointmentNotification(id)) markAppointmentAsRead(id)
+    else if (globalIds.has(id)) markGlobalAsRead(id)
     else markAsRead(id)
-  }, [globalIds, markGlobalAsRead, markAsRead])
+  }, [globalIds, markGlobalAsRead, markAsRead, markAppointmentAsRead])
 
   const handleMarkAllAsRead = useCallback(() => {
+    markAllAppointmentsAsRead()
     markAllGlobalAsRead()
     markAllAsRead()
-  }, [markAllGlobalAsRead, markAllAsRead])
+  }, [markAllGlobalAsRead, markAllAsRead, markAllAppointmentsAsRead])
 
   const handleDeleteNotification = useCallback((id: string) => {
-    if (globalIds.has(id)) dismissGlobal(id)
+    if (isAppointmentNotification(id)) dismissAppointment(id)
+    else if (globalIds.has(id)) dismissGlobal(id)
     else deleteNotification(id)
-  }, [globalIds, dismissGlobal, deleteNotification])
+  }, [globalIds, dismissGlobal, deleteNotification, dismissAppointment])
 
   const handleClearAll = useCallback(() => {
+    clearAppointments()
     globalItems.forEach(g => dismissGlobal(g.id))
     clearAll()
-  }, [globalItems, dismissGlobal, clearAll])
+  }, [globalItems, dismissGlobal, clearAll, clearAppointments])
 
   // Low-stock check: trae solo las columnas de stock de productos activos y
   // deja el filtrado a generateStockNotifications (compara contra min_stock,
   // sin umbral hardcodeado que ignore productos con min_stock alto).
   const fetchLowStockNotifications = useCallback(async () => {
-    if (!shouldTrackStock || !config.supabase.isConfigured) return
+    if (!shouldTrackStock || !activeOrganizationId || !config.supabase.isConfigured) return
     try {
       const supabase = createClient()
       // Sin sesión la consulta sale como anon y falla por RLS
@@ -123,13 +137,15 @@ export const Header = memo(function Header() {
       if (!session) return
       const { data } = await supabase
         .from('products')
-        .select('id, name, stock_quantity, min_stock')
+        .select('id, name, sku, unit_measure, stock_quantity, min_stock')
+        .eq('organization_id', activeOrganizationId)
         .eq('is_active', true)
-      if (data && data.length > 0) {
-        generateStockNotifications(data as Parameters<typeof generateStockNotifications>[0])
-      }
+      // Los servicios (corte, lavado…) no tienen stock: con stock 0 aparecían
+      // como «productos sin stock».
+      const physical = (data ?? []).filter((product) => !isServiceLikeProduct(product))
+      generateStockNotifications(physical as Parameters<typeof generateStockNotifications>[0])
     } catch { /* ignore */ }
-  }, [shouldTrackStock, generateStockNotifications])
+  }, [shouldTrackStock, activeOrganizationId, generateStockNotifications])
 
   // Check low stock periodically
   useEffect(() => {

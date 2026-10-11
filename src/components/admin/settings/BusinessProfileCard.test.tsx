@@ -34,6 +34,15 @@ const status: SubscriptionStatusData = {
 }
 
 describe('BusinessProfileCard', () => {
+  it('allows multiple specialties for service businesses without altering the stored sector', async () => {
+    const user = userEvent.setup()
+    render(<SubscriptionStatusProvider value={{ ...status, businessVertical: 'beauty_services', operatingModel: 'service' }}><BusinessProfileCard /></SubscriptionStatusProvider>)
+    await user.click(screen.getByRole('checkbox', { name: 'Uñas' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Pestañas' }))
+    expect(screen.getByRole('checkbox', { name: 'Uñas' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Pestañas' })).toBeChecked()
+    expect(screen.getByTestId('current-business-vertical')).toHaveTextContent('Belleza y cuidado personal')
+  })
   beforeAll(() => {
     Element.prototype.hasPointerCapture = vi.fn(() => false)
     Element.prototype.setPointerCapture = vi.fn()
@@ -167,6 +176,8 @@ describe('BusinessProfileCard', () => {
 
     await user.click(screen.getByLabelText('Rubro'))
     await user.click(screen.getByRole('option', { name: 'Barbería y peluquería' }))
+    expect(screen.getByRole('button', { name: 'Guardar perfil' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Guardar y preparar la página' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Forma de trabajo')).toHaveTextContent('Prestación de servicios')
     expect(screen.getByText(/agenda de turnos, reservas online y cobro del servicio en caja/)).toBeInTheDocument()
 
@@ -175,5 +186,46 @@ describe('BusinessProfileCard', () => {
     const menu = screen.getByRole('region', { name: 'Así queda tu menú' })
     expect(menu).toHaveTextContent('Agenda')
     expect(menu).not.toHaveTextContent('Reparaciones')
+  })
+
+  it('resalta las herramientas y la forma de trabajo recomendadas para el rubro', () => {
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        businessVertical: 'clothing',
+        operatingModel: 'retail',
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    // Sección de rubro destaca que define lo recomendado
+    expect(screen.getByText('Define lo recomendado')).toBeInTheDocument()
+
+    // Insignias de recomendado dentro de las herramientas visibles para el rubro ropa
+    const recommendedBadges = screen.getAllByText('Recomendado')
+    expect(recommendedBadges.length).toBeGreaterThan(0)
+  })
+
+  it('oculta «Especialidades y atención» cuando se selecciona otro tipo de rubro', async () => {
+    const user = userEvent.setup()
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        businessVertical: 'beauty_services',
+        operatingModel: 'service',
+      }}>
+        <BusinessProfileCard />
+      </SubscriptionStatusProvider>,
+    )
+
+    // En rubro de belleza se muestra Especialidades y atención
+    expect(screen.getByText('Especialidades y atención')).toBeInTheDocument()
+
+    // Al cambiar a otro rubro (ej. Ropa y moda), se oculta
+    await user.click(screen.getByLabelText('Rubro'))
+    await user.click(screen.getByRole('option', { name: 'Ropa y moda' }))
+
+    expect(screen.queryByText('Especialidades y atención')).not.toBeInTheDocument()
   })
 })

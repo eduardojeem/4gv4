@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bell,
   AlertTriangle,
@@ -10,6 +11,7 @@ import {
   Package,
   Settings,
   Trash2,
+  CalendarCheck2,
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Button } from '@/components/ui/button'
@@ -32,7 +34,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export type NotificationType = 'success' | 'warning' | 'error' | 'info'
-export type NotificationCategory = 'stock' | 'sales' | 'system' | 'product' | 'general'
+export type NotificationCategory = 'stock' | 'sales' | 'system' | 'product' | 'general' | 'agenda'
 
 export interface Notification {
   id: string
@@ -100,6 +102,7 @@ const categoryIcons = {
   system: Settings,
   product: Package,
   general: Info,
+  agenda: CalendarCheck2,
 }
 
 function NotificationItem({ 
@@ -384,7 +387,8 @@ export function NotificationSystem({
                     sales: 'Ventas',
                     system: 'Sistema',
                     product: 'Productos',
-                    general: 'General'
+                    general: 'General',
+                    agenda: 'Turnos',
                   }
 
                   return (
@@ -426,6 +430,7 @@ export function NotificationSystem({
 
 // Hook for managing notifications
 export function useNotifications() {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const lastStockSignatureRef = useRef<string | null>(null)
 
@@ -498,7 +503,7 @@ export function useNotifications() {
         actionable: true,
         action: {
           label: 'Ver productos',
-          onClick: () => console.log('Navigate to low stock products')
+          onClick: () => router.push('/dashboard/products?filter=low_stock')
         },
         data: { products: lowStockProducts }
       })
@@ -513,13 +518,13 @@ export function useNotifications() {
         message: `${outOfStockProducts.length} producto${outOfStockProducts.length > 1 ? 's' : ''} sin stock`,
         actionable: true,
         action: {
-          label: 'Reabastecer',
-          onClick: () => console.log('Navigate to restock products')
+          label: 'Ver agotados',
+          onClick: () => router.push('/dashboard/products?filter=out_of_stock')
         },
         data: { products: outOfStockProducts }
       })
     }
-  }, [addNotification])
+  }, [addNotification, router])
 
   return {
     notifications,

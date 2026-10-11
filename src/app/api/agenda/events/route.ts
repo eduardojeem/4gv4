@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,7 @@ const guard = { permission: 'pos.sales.read', module: 'services' } as const
 /** Las últimas novedades de turnos hechas por clientes y cuántas faltan ver. */
 export const GET = withTenantAuth(guard, async (_request, { organization }) => {
   const supabase = (await createClient()) as unknown as SupabaseClient
-  const [list, unseen] = await Promise.all([
+  const [list, unseen, zone] = await Promise.all([
     supabase
       .from('appointment_events')
       .select('id, appointment_id, kind, customer_name, service_name, starts_at, previous_starts_at, seen_at, created_at')
@@ -23,23 +24,31 @@ export const GET = withTenantAuth(guard, async (_request, { organization }) => {
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organization.id)
       .is('seen_at', null),
+    // Para escribir la hora del turno en la campanita general, fuera de la Agenda.
+    supabase.from('organization_settings').select('timezone').eq('organization_id', organization.id).maybeSingle(),
   ])
+  const timeZone = (zone.data as { timezone?: string | null } | null)?.timezone || 'America/Asuncion'
   // Sin la migración: sin novedades, en vez de un error en la Agenda.
   if (list.error) {
     if (!/does not exist|schema cache/i.test(list.error.message)) logger.error('No se pudieron cargar las novedades de turnos', { error: list.error.message })
-    return NextResponse.json({ events: [], unseen: 0, available: false })
+    return NextResponse.json({ events: [], unseen: 0, available: false, timeZone })
   }
-  return NextResponse.json({ events: list.data ?? [], unseen: unseen.count ?? 0, available: true })
+  return NextResponse.json({ events: list.data ?? [], unseen: unseen.count ?? 0, available: true, timeZone })
 })
 
-/** Marca todas como vistas. */
-export const PATCH = withTenantAuth(guard, async (_request, { organization }) => {
+/** Marca como vistas todas, o una sola si viene su uid=197609(EDU) gid=197121 groups=197121 (desde la campanita general). */
+export const PATCH = withTenantAuth(guard, async (request, { organization }) => {
+  const body = (await request.json().catch(() => null)) as { id?: unknown } | null
+  const id = body?.id === undefined ? null : z.string().uuid().safeParse(body.id)
+  if (id && !id.success) return NextResponse.json({ error: 'Revisá los datos' }, { status: 400 })
   const supabase = (await createClient()) as unknown as SupabaseClient
-  const { error } = await supabase
+  let query = supabase
     .from('appointment_events')
     .update({ seen_at: new Date().toISOString() })
     .eq('organization_id', organization.id)
     .is('seen_at', null)
+  if (id?.success) query = query.eq('id', id.data)
+  const { error } = await query
   if (error) {
     logger.error('No se pudieron marcar las novedades como vistas', { error: error.message })
     return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 })

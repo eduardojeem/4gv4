@@ -171,7 +171,9 @@ export function ServicesHero({ companyInfo, heroContent, bookingHref, contactHre
   const preview = menu.slice(0, 4)
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-muted/60 text-foreground dark:from-slate-950 dark:via-slate-950 dark:to-slate-950 dark:text-white" data-storefront-hero="services">
+    <section className={cn('relative overflow-hidden text-foreground dark:bg-slate-950 dark:text-white',
+      companyInfo.serviceWebsiteVariant === 'studio' ? 'bg-stone-50 dark:bg-slate-950' : companyInfo.serviceWebsiteVariant === 'barber' ? 'bg-slate-100 dark:bg-slate-950' : companyInfo.serviceWebsiteVariant === 'salon' ? 'bg-orange-50 dark:bg-slate-950' : companyInfo.serviceWebsiteVariant === 'professional' ? 'bg-muted/30' : 'bg-gradient-to-br from-primary/10 via-background to-muted/60 dark:from-slate-950 dark:via-slate-950 dark:to-slate-950')}
+      data-storefront-hero="services" data-service-variant={companyInfo.serviceWebsiteVariant ?? 'legacy'}>
       {/* Sigue al tema elegido: clara con el color de la marca, u oscura. */}
       <div aria-hidden="true" className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary/20 blur-3xl dark:bg-primary/30" />
       <div className="container relative mx-auto grid gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-12 lg:items-center lg:px-8 lg:py-20">
@@ -432,7 +434,7 @@ export function NextSlotBadge({
     </>
   )
   return onBook ? (
-    <button type="button" onClick={() => onBook(slot.serviceId)} className={className}>
+    <button type="button" suppressHydrationWarning onClick={() => onBook(slot.serviceId)} className={className}>
       {content}
     </button>
   ) : (
@@ -465,6 +467,7 @@ export function ServiceGallery({ settings }: { settings: GallerySectionSettings 
             <li key={image.id} className={cn(index === 0 && images.length > 4 && 'md:col-span-2 md:row-span-2')}>
               <button
                 type="button"
+                suppressHydrationWarning
                 onClick={() => setOpenIndex(index)}
                 aria-label={image.caption ? `Ver foto: ${image.caption}` : `Ver foto ${index + 1}`}
                 className="group relative block aspect-[4/5] h-full w-full overflow-hidden rounded-2xl bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"

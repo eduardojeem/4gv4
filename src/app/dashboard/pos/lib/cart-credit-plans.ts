@@ -126,3 +126,23 @@ export function getCartProductCreditPlans(
     }))
   })
 }
+
+/**
+ * El adelanto más chico para que el resto, con su interés, entre en el crédito
+ * disponible del cliente. Null si no hace falta adelanto o si no alcanza ni
+ * cobrando casi todo (sin disponible).
+ *
+ * Se deja un guaraní de margen cuando hay interés: el interés se redondea y,
+ * justo en el límite, el total financiado podía pasarse por uno y el servidor
+ * rechazaba la venta.
+ */
+export function minimumCreditDownPayment(cartTotal: number, availableCredit: number, interestRatePercent: number): number | null {
+  const total = Math.max(0, Number(cartTotal) || 0)
+  const available = Math.max(0, Number(availableCredit) || 0)
+  if (available <= 0 || total <= 0) return null
+  const rate = Math.max(0, Number(interestRatePercent) || 0) / 100
+  const maxPrincipal = Math.max(0, Math.floor(available / (1 + rate)) - (rate > 0 ? 1 : 0))
+  if (maxPrincipal >= total) return null
+  const minimum = Math.ceil(total - maxPrincipal)
+  return minimum < total ? minimum : null
+}

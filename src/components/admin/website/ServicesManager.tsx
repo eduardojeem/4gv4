@@ -1,6 +1,8 @@
 'use client'
 
 import { ServicesPublicationStatus } from './ServicesPublicationStatus'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { getServiceSpecialtySuggestions } from '@/lib/website/service-specialty-suggestions'
 
 import { createElement, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -491,8 +493,12 @@ export function ServicesManager({
 }) {
   // Ejemplos y textos del rubro primero; pagos y giros solo para comercio general.
   const family = capabilities ? guidanceFamily(capabilities) : 'general'
+  const { serviceSpecialties } = useSubscriptionStatus()
   const verticalPresetCategory = SERVICE_PRESET_CATEGORY[family]
-  const allowedPresets = PRESET_SERVICES.filter((preset) => preset.verticalCategory !== 'Financiero' || showsFinancialServices(family))
+  const specialtyPresets: PresetServiceItem[] = getServiceSpecialtySuggestions(serviceSpecialties ?? []).map(item => ({
+    ...item, description: '', icon: 'sparkles', color: 'rose', benefits: [], verticalCategory: 'Belleza', verticalBadge: item.category,
+  }))
+  const allowedPresets = [...specialtyPresets, ...PRESET_SERVICES].filter((preset) => preset.verticalCategory !== 'Financiero' || showsFinancialServices(family))
   const presetCategories = Array.from(new Set(allowedPresets.map((preset) => preset.verticalCategory)))
     .sort((a, b) => Number(b === verticalPresetCategory) - Number(a === verticalPresetCategory))
   const quickFillPresets = verticalPresetCategory

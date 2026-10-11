@@ -1,5 +1,6 @@
 'use client'
 
+import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import { useId } from 'react'
 import type { FirstInstallmentPayment } from '@/lib/credits/first-payment'
 
@@ -26,7 +27,7 @@ export function FirstInstallmentPaymentFields({ payment, onChange, amount, avail
       </select>
       {payment.method === 'cash' ? <>
         <label className="block text-sm" htmlFor={`${id}-received`}>Efectivo recibido para la cuota</label>
-        <input id={`${id}-received`} className="h-10 w-full rounded-md border bg-background px-2" type="number" inputMode="decimal" min={0} value={payment.cashReceived ?? ''} onChange={e => onChange({ ...payment, cashReceived: Number(e.target.value) })} />
+        <DraftNumberInput id={`${id}-received`} className="h-10 w-full rounded-md border bg-background px-2" decimals min={0} emptyValue={0} value={payment.cashReceived ?? Number.NaN} onValueChange={cashReceived => onChange({ ...payment, cashReceived })} />
         <p className="text-sm">Vuelto de la cuota: {formatCurrency(Math.max(0, (payment.cashReceived ?? 0) - amount))}</p>
       </> : <>
         <label className="block text-sm" htmlFor={`${id}-bank`}>Banco o cuenta receptora</label>

@@ -32,6 +32,9 @@ export type SubscriptionStatusData = {
   /** Módulos realmente utilizables: derecho comercial + selección de la organización. */
   effectiveModules: OrganizationModule[]
   businessVertical: BusinessVertical
+  serviceSpecialties?: import('@/lib/organization/service-specialties').ServiceSpecialty[]
+  attentionMode?: 'local' | 'home' | 'both'
+  appointmentMode?: 'booking' | 'walk_in' | 'both'
   operatingModel: OperatingModel
   /** true si la org quedó en FREE por impago (baja de cortesía) → mostrar aviso de reactivación. */
   downgradedFromExpiry: boolean

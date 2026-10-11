@@ -44,9 +44,7 @@ describe('professional settings editors',()=>{
     const fetchMock=vi.fn(async(input:RequestInfo|URL,_init?:RequestInit)=>new Response(JSON.stringify(String(input).includes('?')?{conflicts:[{id:'appointment',customer_name:'Cliente afectado',service_name:'Corte',starts_at:'2026-10-10T09:00:00Z'}],total:1}:{blocks:[]})))
     vi.stubGlobal('fetch',fetchMock)
     render(<TimeOffEditor professionals={[professional]} timeZone="UTC"/>)
-    fireEvent.change(screen.getByLabelText('Inicio de la ausencia'),{target:{value:'2026-10-10T09:00'}})
-    fireEvent.change(screen.getByLabelText('Fin de la ausencia'),{target:{value:'2026-10-10T10:00'}})
-    fireEvent.click(screen.getByRole('button',{name:'Revisar turnos afectados'}))
+    // La revisión de turnos corre sola al elegir el período (hoy, todo el día, por defecto).
     expect(await screen.findByText(/Cliente afectado/)).toBeInTheDocument()
     expect(screen.getByRole('button',{name:'Guardar ausencia'})).toBeDisabled()
     expect(fetchMock.mock.calls.every(([,init])=>!init?.method || init.method==='GET')).toBe(true)

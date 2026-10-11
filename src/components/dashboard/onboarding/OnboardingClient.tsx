@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ElementType } from 'react'
+import { ServiceBusinessFields } from '@/components/admin/settings/ServiceBusinessFields'
+import type { ServiceBusinessDetails } from '@/lib/organization/service-specialties'
 import { moduleDisplayName } from '@/lib/saas/plan-feature-catalog'
 import { AppImage as Image } from '@/components/ui/app-image'
 import Link from 'next/link'
@@ -110,6 +112,9 @@ type CompanyInfoForm = {
   /** La tienda arranca sin publicar y nada lo decia. */
   storefrontPublic: boolean
   businessVertical: string
+  serviceSpecialties?: ServiceBusinessDetails['serviceSpecialties']
+  attentionMode?: ServiceBusinessDetails['attentionMode']
+  appointmentMode?: ServiceBusinessDetails['appointmentMode']
   operatingModel: string
   instagram: string
   facebook: string
@@ -208,6 +213,11 @@ const VERTICAL_METADATA: Record<
     label: 'Barbería y peluquería',
     description: 'Cortes, barba, color y tratamientos con turnos online',
     icon: Scissors,
+  },
+  beauty_services: {
+    label: 'Belleza y cuidado personal',
+    description: 'Uñas, pestañas, cejas, maquillaje, peluquería y estética',
+    icon: Sparkles,
   },
   hardware: {
     label: 'Ferretería y construcción',
@@ -510,7 +520,7 @@ export function OnboardingClient({
     setForm((current) => ({
       ...current,
       [field]: value,
-      ...(field === 'businessVertical' && value === 'barbershop' ? { operatingModel: 'service' } : {}),
+      ...(field === 'businessVertical' && (value === 'barbershop' || value === 'beauty_services') ? { operatingModel: 'service' } : {}),
     }))
     if (field === 'currency') setConfirmCurrencyChange(false)
     setError('')
@@ -783,6 +793,7 @@ export function OnboardingClient({
                 </div>
 
                 {/* Grid Visual de Rubros */}
+                {(form.businessVertical === 'beauty_services' || form.businessVertical === 'barbershop') && <ServiceBusinessFields value={form} onChange={details => setForm(current => ({ ...current, ...details }))} />}
                 <div className="space-y-2">
                   <Label htmlFor="businessVertical" className="text-xs font-semibold text-foreground">
                     Rubro principal de actividad

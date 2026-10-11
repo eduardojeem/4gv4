@@ -18,6 +18,7 @@ export interface VerticalProductCopy {
 type Preset = Omit<VariantAttributeSuggestion, 'customizable'>
 
 const PRESETS: Record<BusinessVertical, Preset[]> = {
+  beauty_services: [],
   general: [],
   clothing: [
     { key: 'size', label: 'Talle', control: 'select', examples: ['S', 'M', 'L', 'XL'] },

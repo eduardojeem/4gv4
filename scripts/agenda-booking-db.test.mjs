@@ -43,6 +43,8 @@ before(async () => {
   if(posMigration)await db.exec(await readFile(new URL('../supabase/migrations/'+posMigration,import.meta.url),'utf8'))
   const termsMigration=(await readdir(new URL('../supabase/migrations/',import.meta.url))).find(name=>name.endsWith('_agenda_accepted_terms.sql'))
   if(termsMigration)await db.exec(await readFile(new URL('../supabase/migrations/'+termsMigration,import.meta.url),'utf8'))
+  const guardMigration=(await readdir(new URL('../supabase/migrations/',import.meta.url))).find(name=>name.endsWith('_agenda_settings_guard.sql'))
+  if(guardMigration)await db.exec(await readFile(new URL('../supabase/migrations/'+guardMigration,import.meta.url),'utf8'))
   await db.exec(`insert into agenda_professionals(id,organization_id,name) values ('${prof}','${org}','Ana');
     insert into agenda_settings(organization_id,online_booking,min_notice_minutes,opening_hours) values ('${org}',true,0,'{"0":[["08:00","18:00"]],"1":[["08:00","18:00"]],"2":[["08:00","18:00"]],"3":[["08:00","18:00"]],"4":[["08:00","18:00"]],"5":[["08:00","18:00"]],"6":[["08:00","18:00"]]}');
     insert into agenda_services(organization_id,product_id,duration_minutes) values ('${org}','${product}',30);`)
@@ -55,6 +57,20 @@ beforeEach(async () => {
     insert into agenda_professional_service_rates values ('${org}','${prof}','${product}',40000,45,5);`)
 })
 after(async () => { await db.close() })
+test('settings guard refuses stale drafts and unavailable required professionals atomically', async () => {
+  const grants = (await db.query("select has_function_privilege('anon','public.save_agenda_settings_checked(uuid,jsonb,jsonb,uuid,bigint)','execute') as anon, has_function_privilege('authenticated','public.save_agenda_settings_checked(uuid,jsonb,jsonb,uuid,bigint)','execute') as authenticated, has_function_privilege('service_role','public.save_agenda_settings_checked(uuid,jsonb,jsonb,uuid,bigint)','execute') as service_role")).rows[0]
+  assert.deepEqual(grants, { anon: false, authenticated: false, service_role: true })
+  const settings=(await db.query('select * from agenda_settings where organization_id=$1',[org])).rows[0]
+  const services=[{product_id:product,duration_minutes:30,online:true,buffer_minutes:0}]
+  const save=(draft,revision)=>db.query('select public.save_agenda_settings_checked($1,$2,$3,$4,$5)',[org,JSON.stringify(draft),JSON.stringify(services),actor,revision])
+  await save({...settings,booking_message:'Nuevo mensaje'},settings.booking_revision)
+  await assert.rejects(save({...settings,booking_message:'Borrador viejo'},settings.booking_revision),/AGENDA_SETTINGS_CHANGED/)
+  assert.equal((await db.query('select booking_message from agenda_settings')).rows[0].booking_message,'Nuevo mensaje')
+  await db.exec('update agenda_professionals set online_visible=false')
+  const fresh=(await db.query('select * from agenda_settings')).rows[0]
+  await assert.rejects(save({...fresh,professional_selection:'required'},fresh.booking_revision),/NO_ELIGIBLE_PROFESSIONAL/)
+  assert.equal((await db.query('select professional_selection from agenda_settings')).rows[0].professional_selection,'optional')
+})
 const quote = async () => (await db.query('select create_agenda_quote($1,$2,$3,$4) as quote', [org, product, prof, start])).rows[0].quote
 const reserve = async (id, body = customer) => (await db.query('select reserve_agenda_quote($1,$2,$3) as reservation', [id, key, JSON.stringify(body)])).rows[0].reservation
 

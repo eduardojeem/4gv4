@@ -55,22 +55,24 @@ export function StorefrontAppearanceEditor({
   // «Servicios» arma la portada con la agenda: sin el módulo se ofrece el resto.
   const { effectiveModules } = useSubscriptionStatus()
   const servicesAvailable = effectiveModules.includes('services')
+  // Un negocio de servicios sin productos no usa plantillas de tienda.
+  const catalogAvailable = effectiveModules.includes('inventory')
 
   const stylePreference = (value.storefrontStyle || 'auto') as StorefrontStylePreference
-  const activeStyle = resolveStorefrontStyle(stylePreference, businessVertical, { servicesAvailable })
-  // Quedó guardada «Servicios» y la cuenta ya no tiene agenda: la tienda usa otra.
-  const servicesFallback = !isStorefrontStyleAvailable(stylePreference, { servicesAvailable })
+  const activeStyle = resolveStorefrontStyle(stylePreference, businessVertical, { servicesAvailable, catalogAvailable })
+  // La plantilla guardada ya no corresponde (sin agenda, sin productos o de otro rubro): la tienda usa otra.
+  const styleFallback = !isStorefrontStyleAvailable(stylePreference, { servicesAvailable, catalogAvailable, businessVertical })
   const brandColor = value.brandColor || 'blue'
   const headerOption = headerOptionFor(value.headerStyle)
   const templateMeta = STOREFRONT_TEMPLATES_METADATA[activeStyle]
 
   const suggestion = useMemo(
-    () => suggestStorefrontAppearance({ businessVertical, name: value.name, slogan: value.slogan, description: value.description, servicesAvailable }),
-    [businessVertical, value.name, value.slogan, value.description, servicesAvailable]
+    () => suggestStorefrontAppearance({ businessVertical, name: value.name, slogan: value.slogan, description: value.description, servicesAvailable, catalogAvailable }),
+    [businessVertical, value.name, value.slogan, value.description, servicesAvailable, catalogAvailable]
   )
   // Si «Automático» ya da la plantilla sugerida, se queda en Automático para seguir al rubro.
   const suggestedPreference: StorefrontStylePreference =
-    resolveStorefrontStyle('auto', businessVertical, { servicesAvailable }) === suggestion.style ? 'auto' : suggestion.style
+    resolveStorefrontStyle('auto', businessVertical, { servicesAvailable, catalogAvailable }) === suggestion.style ? 'auto' : suggestion.style
   const followsSuggestion =
     activeStyle === suggestion.style && brandColor === suggestion.brandColor && headerOption === suggestion.headerStyle
   const suggestedColorName = BRAND_COLORS.find((color) => color.key === suggestion.brandColor)?.name ?? suggestion.brandColor
@@ -140,10 +142,13 @@ export function StorefrontAppearanceEditor({
               businessVertical={businessVertical}
               suggestedStyle={followsSuggestion ? undefined : suggestedPreference}
               servicesAvailable={servicesAvailable}
+              catalogAvailable={catalogAvailable}
             />
-            {servicesFallback && (
+            {styleFallback && (
               <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-                Tenías elegida la plantilla Servicios, pero tu cuenta no tiene la agenda de turnos activa. Tu tienda se muestra con{' '}
+                {stylePreference === 'services' && !servicesAvailable
+                  ? 'Tenías elegida la plantilla Servicios, pero tu cuenta no tiene la agenda de turnos activa.'
+                  : `La plantilla ${STOREFRONT_STYLE_LABELS[stylePreference as keyof typeof STOREFRONT_STYLE_LABELS] ?? ''} no corresponde a tu rubro o a lo que vendés.`}{' '}Tu tienda se muestra con{' '}
                 <strong>{STOREFRONT_STYLE_LABELS[activeStyle]}</strong>. Elegí la que prefieras y guardá.
               </p>
             )}
@@ -325,6 +330,7 @@ export function StorefrontAppearanceEditor({
           suggestedStyle={followsSuggestion ? undefined : suggestedPreference}
           storePath={storePath}
           servicesAvailable={servicesAvailable}
+              catalogAvailable={catalogAvailable}
         />
       )}
     </div>

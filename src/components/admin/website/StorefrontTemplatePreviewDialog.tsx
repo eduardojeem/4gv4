@@ -65,6 +65,7 @@ interface StorefrontTemplatePreviewDialogProps {
   storePath: string | null
   /** Sin la agenda (módulo Servicios) no se ofrece la plantilla «Servicios». */
   servicesAvailable?: boolean
+  catalogAvailable?: boolean
 }
 
 export function StorefrontTemplatePreviewDialog({
@@ -76,6 +77,7 @@ export function StorefrontTemplatePreviewDialog({
   suggestedStyle,
   storePath,
   servicesAvailable,
+  catalogAvailable,
 }: StorefrontTemplatePreviewDialogProps) {
   // Se monta al abrirse (ver StorefrontAppearanceEditor): arranca desde lo elegido en el formulario.
   const [look, setLook] = useState<StorefrontLook>(initial)
@@ -85,7 +87,7 @@ export function StorefrontTemplatePreviewDialog({
   const [isLoading, setIsLoading] = useState(true)
   const update = (patch: Partial<StorefrontLook>) => setLook((current) => ({ ...current, ...patch }))
 
-  const candidateStyle = resolveStorefrontStyle(look.storefrontStyle, businessVertical, { servicesAvailable })
+  const candidateStyle = resolveStorefrontStyle(look.storefrontStyle, businessVertical, { servicesAvailable, catalogAvailable })
   const meta = STOREFRONT_TEMPLATES_METADATA[candidateStyle]
   const templateLabel = look.storefrontStyle === 'auto' ? `Automático (${STOREFRONT_STYLE_LABELS[candidateStyle]})` : STOREFRONT_STYLE_LABELS[candidateStyle]
   const colorLabel = look.brandColor === 'custom' ? 'personalizado' : BRAND_COLORS.find((color) => color.key === look.brandColor)?.name ?? look.brandColor
@@ -206,8 +208,8 @@ export function StorefrontTemplatePreviewDialog({
                 <>
                   <BrandColorScope brandColor={look.brandColor} customBrandColor={look.customBrandColor}>
                     <div role="radiogroup" aria-label="Plantillas" className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-1">
-                      {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, { servicesAvailable })).map((option) => {
-                        const optionStyle = resolveStorefrontStyle(option.value, businessVertical, { servicesAvailable })
+                      {STOREFRONT_STYLE_OPTIONS.filter((option) => isStorefrontStyleAvailable(option.value, { servicesAvailable, catalogAvailable, businessVertical })).map((option) => {
+                        const optionStyle = resolveStorefrontStyle(option.value, businessVertical, { servicesAvailable, catalogAvailable })
                         const selected = look.storefrontStyle === option.value
                         const label = option.value === 'auto' ? 'Automático' : option.label
                         return (

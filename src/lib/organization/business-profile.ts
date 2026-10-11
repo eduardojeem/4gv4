@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ServiceBusinessDetailsSchema } from './service-specialties'
 
 export const BUSINESS_VERTICALS = [
   'general',
@@ -9,6 +10,7 @@ export const BUSINESS_VERTICALS = [
   'hardware',
   // Barberías y peluquerías: venden turnos más que productos.
   'barbershop',
+  'beauty_services',
   'other',
 ] as const
 
@@ -45,7 +47,7 @@ export const BusinessProfileInputSchema = z.object({
   businessVertical: z.enum(BUSINESS_VERTICALS),
   operatingModel: z.enum(OPERATING_MODELS),
   enabledModules: z.array(z.enum(ORGANIZATION_MODULES)).nullable(),
-})
+}).extend(ServiceBusinessDetailsSchema.shape)
 
 export type OrganizationBusinessProfileInput = z.infer<typeof BusinessProfileInputSchema>
 
@@ -74,12 +76,13 @@ const VERTICAL_RECOMMENDATIONS: Record<BusinessVertical, OrganizationModule[]> =
   hardware: ['inventory', 'inventory_admin', 'pos', 'crm', 'orders', 'delivery', 'credits', 'analytics'],
   // La agenda (módulo services) es el corazón; el inventario es para los productos que venden (ceras, shampoo).
   barbershop: ['services', 'pos', 'crm', 'inventory', 'promotions', 'web_analytics'],
+  beauty_services: ['services', 'pos', 'crm', 'promotions', 'web_analytics'],
   other: [],
 }
 
 /** Cómo trabaja el rubro por defecto. Las barberías venden turnos: prestación de servicios. */
 export function defaultOperatingModelFor(vertical: BusinessVertical | null | undefined): OperatingModel {
-  return vertical === 'barbershop' ? 'service' : 'retail'
+  return vertical === 'barbershop' || vertical === 'beauty_services' ? 'service' : 'retail'
 }
 
 export function getSuggestedModules(

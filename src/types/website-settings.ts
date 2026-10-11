@@ -19,6 +19,8 @@ export interface CompanyInfo {
   storefrontStyle?: 'auto' | 'classic' | 'fashion' | 'sport' | 'tech' | 'market' | 'modern' | 'services' | 'beauty'
   /** Variante específica dentro de la plantilla elegida */
   storefrontVariant?: string
+  serviceWebsiteVariant?: 'barber' | 'salon' | 'studio' | 'professional'
+  serviceSpecialties?: import('@/lib/organization/service-specialties').ServiceSpecialty[]
   headerColor?: string
   showTopBar?: boolean
   whatsapp?: string
