@@ -341,7 +341,7 @@ export function MarketplaceProductCarousel({
                                   : 'text-foreground'
                             )}
                           >
-                            {formatPrice(displayPrice)}
+                            {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
                           </p>
                           {hasOffer && (
                             <p className="text-xs text-muted-foreground line-through">

@@ -80,14 +80,14 @@ export function MarketplaceSearchBox({
           placeholder={placeholder}
           suppressHydrationWarning
           className={cn(
-            'h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-9 text-sm shadow-sm outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50 dark:placeholder-slate-500',
+            'h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-11 text-base sm:text-sm shadow-sm outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50 dark:placeholder-slate-500',
             // `type="search"` trae su propia X y quedaban dos, una al lado de la
             // otra. La nuestra es la que se ve y la que se puede alcanzar con el
             // teclado, asi que se esconde la del navegador.
             '[&::-webkit-search-cancel-button]:appearance-none',
             // En el encabezado el campo va chico para no comerse la fila; al
             // tomar el foco crece, que es cuando hace falta leer lo que se escribe.
-            compact && (focused ? 'h-10 text-sm shadow-md' : 'h-9 text-xs'),
+            compact && (focused ? 'sm:h-10 sm:text-sm shadow-md' : 'sm:h-9 sm:text-xs'),
             inputClassName
           )}
         />
@@ -95,7 +95,7 @@ export function MarketplaceSearchBox({
           <button
             type="button"
             onClick={() => setQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+            className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             aria-label="Limpiar busqueda"
           >
             <X className="h-4 w-4" />
@@ -107,7 +107,7 @@ export function MarketplaceSearchBox({
         size={compact ? 'sm' : 'default'}
         // El texto va explicito: el color del boton es fijo, pero el del texto salia
         // del tema y en oscuro quedaba oscuro sobre cian (3,55).
-        className={cn('shrink-0 bg-cyan-700 text-white hover:bg-cyan-800', buttonClassName)}
+        className={cn('min-h-11 sm:min-h-0 shrink-0 bg-cyan-700 text-white hover:bg-cyan-800', buttonClassName)}
       >
         Buscar
       </Button>

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { resolveProductImageUrl, shouldBypassImageOptimization } from '@/lib/images'
 import { formatPrice, cn } from '@/lib/utils'
 import { getOfferPricing } from '@/lib/public/marketplace-offers'
+import { hidesPublicPrice } from '@/lib/products/price-visibility'
 import { getWhatsAppLink } from '@/lib/whatsapp'
 import { FavoriteButton } from './Favorites'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
@@ -76,7 +77,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
               Comprá directo en Tiendas Oficiales
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
-              Negocios verificados en la plataforma. Productos con stock real, garantía y atención personalizada sin intermediarios.
+              Explorá los catálogos publicados y consultá disponibilidad, condiciones y atención directamente con cada negocio.
             </p>
           </div>
 
@@ -197,7 +198,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                         Comercio Oficial
                       </span>
                       <p className="text-xs text-emerald-100/80 mt-0.5 font-medium">
-                        {currentOrg.city || 'Tienda verificada'}
+                        {currentOrg.city || 'Tienda del marketplace'}
                       </p>
                     </div>
                   </div>
@@ -223,11 +224,11 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                       {currentOrg.products_count > 0 ? currentOrg.products_count : '100%'}
                     </span>
                     <span className="text-xs sm:text-sm font-extrabold uppercase leading-tight text-emerald-200">
-                      {currentOrg.products_count > 0 ? 'Productos en Stock' : 'Garantía Directa'}
+                      {currentOrg.products_count > 0 ? 'Productos publicados' : 'Atención directa'}
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-emerald-100/85 leading-snug">
-                    {currentOrg.slogan || currentOrg.description || 'Precios oficiales, productos originales y atención directa con el comercio.'}
+                    {currentOrg.slogan || currentOrg.description || 'Conocé el catálogo y consultá directamente con el comercio.'}
                   </p>
                 </div>
 
@@ -237,7 +238,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
                       <ShieldCheck className="h-3 w-3" />
                     </div>
-                    <span className="font-semibold text-white/95">Garantía oficial de {currentOrg.name}</span>
+                    <span className="font-semibold text-white/95">Consultá las condiciones con {currentOrg.name}</span>
                   </div>
                   {currentOrg.city && (
                     <div className="flex items-center gap-2">
@@ -334,7 +335,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                             name: product.name,
                             store: currentOrg.name,
                             image: product.image,
-                            price: pricing.price,
+                            price: hidesPublicPrice(product) || pricing.priceFrom ? 0 : pricing.price,
                           }}
                         />
                       </div>
@@ -387,9 +388,9 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                           <div>
                             <div className="flex items-baseline gap-2">
                               <p className="text-base sm:text-lg font-black text-foreground tabular-nums">
-                                {formatPrice(pricing.price)}
+                                {hidesPublicPrice(product) ? 'Consultar precio' : `${pricing.priceFrom ? 'Desde ' : ''}${formatPrice(pricing.price)}`}
                               </p>
-                              {pricing.hasOffer && (
+                              {!hidesPublicPrice(product) && pricing.hasOffer && (
                                 <p className="text-[11px] text-muted-foreground line-through tabular-nums">
                                   {formatPrice(pricing.regularPrice)}
                                 </p>
@@ -399,7 +400,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                             {/* Insignia de cuotas o beneficio directo (Similar a la pastilla de la foto) */}
                             <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
                               <Tag className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              <span>Venta directa · Garantía oficial</span>
+                              <span>Contacto directo con la tienda</span>
                             </div>
                           </div>
 
@@ -445,7 +446,7 @@ export function MarketplaceBusinessPromoShowcase({ organizations, className }: P
                 </p>
                 <Button asChild variant="outline" size="sm" className="mt-4 gap-1.5">
                   <Link href={`/${currentOrg.slug}/inicio`}>
-                    <span>Visitar tienda oficial</span>
+                    <span>Visitar tienda</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </Button>

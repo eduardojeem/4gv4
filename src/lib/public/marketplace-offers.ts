@@ -7,13 +7,17 @@
  * los primeros 120 productos del catálogo: las demás no aparecían.
  */
 
+import type { PublicCatalogSummary } from './catalog-summary'
+
 type OfferFields = {
+  catalog_summary?: PublicCatalogSummary
   has_offer?: boolean | null
   offer_price?: number | null
   sale_price: number
 }
 
 export type OfferPricing = {
+  priceFrom?: boolean
   hasOffer: boolean
   /** Lo que paga el cliente. */
   price: number
@@ -24,6 +28,15 @@ export type OfferPricing = {
 }
 
 export function getOfferPricing(product: OfferFields): OfferPricing {
+  const summary = product.catalog_summary
+  if (summary) {
+    const price = summary.price ?? 0
+    const regularPrice = summary.originalPrice ?? price
+    const hasOffer = summary.price !== null && summary.hasOffer && price > 0 && regularPrice > price
+    return { price, regularPrice, hasOffer, priceFrom: summary.price !== null && summary.priceFrom,
+      savings: hasOffer ? regularPrice - price : 0,
+      percent: hasOffer ? Math.round((1 - price / regularPrice) * 100) : 0 }
+  }
   const regularPrice = Number(product.sale_price) || 0
   const offerPrice = product.offer_price == null ? null : Number(product.offer_price)
   const hasOffer = Boolean(

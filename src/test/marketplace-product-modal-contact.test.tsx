@@ -1,7 +1,8 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { MarketplaceProductModal } from '@/components/public/MarketplaceProductModal'
 import { pickOrganizationContact, type MarketplaceProduct } from '@/lib/public/marketplace'
+vi.mock('server-only', () => ({}))
 
 /* eslint-disable @next/next/no-img-element -- The next/image test double must render a native image. */
 vi.mock('next/image', () => ({ default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} /> }))
@@ -25,6 +26,25 @@ const base = {
 } as unknown as MarketplaceProduct
 
 describe('detalle de producto del marketplace: contacto de la tienda', () => {
+  it('muestra Desde y luego el precio exacto de la variante, sin doble descuento', () => {
+    render(<MarketplaceProductModal open onClose={vi.fn()} product={{ ...base,
+      sale_price: 100, offer_price: 80, has_variants: true,
+      catalog_summary: { stockQuantity: 5, price: 80, originalPrice: 100, priceFrom: true, hasOffer: true, representativeVariantId: null, promotionName: null },
+      variants: [
+        { id: 'v1', product_id: 'p1', variant_name: 'Small', attributes: { size: 'Small' }, sku: 'small', sale_price: 100, stock_quantity: 2, is_active: true },
+        { id: 'v2', product_id: 'p1', variant_name: 'Large', attributes: { size: 'Large' }, sku: 'large', sale_price: 150, stock_quantity: 3, is_active: true },
+      ], organization_contact: { whatsapp: '0981123456', phone: null, instagram: null, facebook: null, tiktok: null },
+    }} />)
+    expect(screen.getByText(/Desde/)).toBeInTheDocument()
+    const before = decodeURIComponent(screen.getByRole('link', { name: /Consultar por WhatsApp/ }).getAttribute('href')!)
+    expect(before).not.toContain('*Precio:*')
+    fireEvent.click(screen.getByRole('button', { name: 'Large' }))
+    expect(screen.queryByText(/Desde/)).not.toBeInTheDocument()
+    const after = decodeURIComponent(screen.getByRole('link', { name: /Consultar por WhatsApp/ }).getAttribute('href')!)
+    expect(after).toContain('120')
+    expect(after).toContain('Large')
+    expect(after).not.toContain('Gs. 80')
+  })
   it('muestra las redes de la tienda y la consulta por WhatsApp sobre ese producto', () => {
     render(
       <MarketplaceProductModal

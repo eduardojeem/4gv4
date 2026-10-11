@@ -29,6 +29,7 @@ import type { MarketplaceProduct } from '@/lib/public/marketplace'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { PublicProductVariant } from '@/types/public'
 import { resolvePublicVariantPrice } from '@/lib/public/offer-pricing'
+import { getOfferPricing } from '@/lib/public/marketplace-offers'
 import { PublicVariantPicker } from './PublicVariantPicker'
 import { StoreSocialLinks } from './StoreSocialLinks'
 import { hidesPublicPrice } from '@/lib/products/price-visibility'
@@ -153,8 +154,10 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
     setActiveIdx(variantImageIdx)
   }
 
-  const selectedSalePrice = matchedVariant?.sale_price ?? product.sale_price
-  const displayPrice = resolvePublicVariantPrice({ isWholesale: false, product, variant: matchedVariant })
+  const catalogPricing = !matchedVariant && product.catalog_summary ? getOfferPricing(product) : null
+  const priceFrom = Boolean(catalogPricing?.priceFrom)
+  const selectedSalePrice = matchedVariant?.sale_price ?? catalogPricing?.regularPrice ?? product.sale_price
+  const displayPrice = catalogPricing?.price ?? resolvePublicVariantPrice({ isWholesale: false, product, variant: matchedVariant })
   const precioOculto = hidesPublicPrice(product)
   const deviceCompatibility = describeDeviceCompatibility(product.device_brand, product.device_models)
   const hasOffer = !precioOculto && displayPrice < selectedSalePrice
@@ -188,8 +191,8 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
         message: buildProductWhatsAppMessage({
           storeName: product.organization_name,
           productName: product.name,
-          price: precioOculto ? 0 : displayPrice,
-          originalPrice: !precioOculto && hasOffer ? selectedSalePrice : null,
+          price: precioOculto || priceFrom ? 0 : displayPrice,
+          originalPrice: !precioOculto && !priceFrom && hasOffer ? selectedSalePrice : null,
           sku: matchedVariant?.sku || product.sku,
           variantName: matchedVariant?.variant_name,
           attributes: matchedVariant?.attributes,
@@ -217,9 +220,9 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
         <DialogDescription className="sr-only">Vista previa del producto. Continuá en la tienda del vendedor para comprar.</DialogDescription>
 
-        <div className="grid min-h-0 flex-1 overflow-y-auto overscroll-contain md:h-[min(620px,calc(92dvh-4.5rem))] md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
+        <div className="grid min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain md:h-[min(620px,calc(92dvh-4.5rem))] md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
           {/* ── Galería ─────────────────────────────────────────────────────── */}
-          <div className="flex flex-col border-b bg-muted/30 md:min-h-0 md:border-b-0 md:border-r">
+          <div className="flex min-w-0 flex-col border-b bg-muted/30 md:min-h-0 md:border-b-0 md:border-r">
             <div className="relative aspect-square max-h-[42dvh] w-full md:aspect-auto md:max-h-none md:min-h-0 md:flex-1">
               {currentSrc && !mainError ? (
                 <Image
@@ -347,7 +350,7 @@ function MarketplaceProductModalContent({ product, open, onClose }: Props & { pr
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <p className={cn('text-3xl font-extrabold tracking-tight tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                    {formatPrice(displayPrice)}
+                    {priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
                   </p>
                   {hasOffer && (
                     <p className="text-base font-medium tabular-nums text-muted-foreground line-through">

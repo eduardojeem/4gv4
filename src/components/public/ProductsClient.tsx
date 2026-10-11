@@ -104,6 +104,11 @@ export function ProductsClient({
   const searchParams = useSearchParams()
 
   const [query, setQuery] = useState(initialQuery)
+  const [lastInitialQuery, setLastInitialQuery] = useState(initialQuery)
+  if (lastInitialQuery !== initialQuery) {
+    setLastInitialQuery(initialQuery)
+    setQuery(initialQuery)
+  }
   const onlyOffers = initialOnlyOffers
   const [sort, setSort] = useState<SortKey>(initialSort)
   const [lastInitialSort, setLastInitialSort] = useState(initialSort)
@@ -174,7 +179,7 @@ export function ProductsClient({
     } else {
       params.delete(key)
     }
-    if (key === 'categoria' && !value) {
+    if (key === 'categoria') {
       params.delete('subcategoria')
     }
     params.delete('pagina')
@@ -292,6 +297,7 @@ export function ProductsClient({
   }, [sort])
 
   const filtered = useMemo(() => {
+    if (serverPaginated) return products
     let result = products
 
     // Filtro por ofertas localmente
@@ -305,7 +311,6 @@ export function ProductsClient({
 
     // La pagina de catalogo ya llega ordenada desde el servidor. Mantener el
     // orden local solo para usos embebidos que entregan el conjunto completo.
-    if (serverPaginated) return result
 
     // Ordenar localmente
     switch (effectiveSort) {
@@ -352,9 +357,9 @@ export function ProductsClient({
   }, [products, onlyOffers, sort, serverPaginated])
 
   // ─── Paginación ─────────────────────────────────────────────────────────────
-  const effectiveTotal = serverPaginated && !onlyOffers ? totalProducts : filtered.length
+  const effectiveTotal = serverPaginated ? totalProducts : filtered.length
   const totalPages = Math.max(1, Math.ceil(effectiveTotal / activePageSize))
-  const safePage = serverPaginated && !onlyOffers ? currentPage : Math.min(page, totalPages)
+  const safePage = serverPaginated ? currentPage : Math.min(page, totalPages)
   const pageStart = (safePage - 1) * activePageSize
   const paginated = serverPaginated ? filtered : filtered.slice(pageStart, pageStart + activePageSize)
 
@@ -436,7 +441,8 @@ export function ProductsClient({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar productos..."
-                className="h-8 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-xs bg-background border-border/80 focus-visible:ring-primary"
+                aria-label="Buscar productos"
+                className="h-11 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-base sm:text-xs bg-background border-border/80 focus-visible:ring-primary"
               />
               {query && (
                 <button
@@ -971,7 +977,7 @@ export function ProductsClient({
                     ) : (
                       <div>
                         <p className={cn('text-base font-bold tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                          {formatPrice(displayPrice)}
+                          {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
                         </p>
                         {hasOffer && (
                           <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] tabular-nums">
