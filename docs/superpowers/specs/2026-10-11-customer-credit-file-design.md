@@ -1,6 +1,6 @@
 # Ficha para crédito desde Clientes
 
-Estado: diseño propuesto; pendiente de revisión del usuario. No implementado.
+Estado: diseño aprobado por el usuario el 2026-10-11. No implementado.
 
 ## Objetivo y alcance aprobado
 
