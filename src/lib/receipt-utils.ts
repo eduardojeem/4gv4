@@ -983,7 +983,9 @@ export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: Co
 
     const element = document.getElementById('receipt-content')
     if (!element) {
-      console.error('Receipt element not found')
+      // Sin la vista del ticket en pantalla (p. ej. desde otra sección) se baja la versión imprimible.
+      downloadReceiptHTML(receiptData, companyInfo)
+      toast.info('Se descargó el ticket para imprimir', { description: 'Abrilo y elegí «Guardar como PDF» si lo necesitás en PDF.' })
       return
     }
 
@@ -1000,21 +1002,22 @@ export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: Co
 
     // Crear PDF
     const imgData = canvas.toDataURL('image/png')
+    // La hoja mide lo que mide el ticket: con 297 mm fijos un ticket largo se
+    // cortaba y uno corto quedaba con media hoja en blanco.
+    const imgWidth = 80
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: [80, 297] // 80mm width, altura automática
+      format: [imgWidth, Math.max(60, Math.ceil(imgHeight))],
     })
-
-    const imgWidth = 80
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
 
     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
     pdf.save(`ticket-${receiptData.receiptNumber}.pdf`)
   } catch (error) {
     console.error('Error generating PDF:', error)
-    // Fallback al método anterior
     downloadReceiptHTML(receiptData, companyInfo)
+    toast.warning('No se pudo armar el PDF', { description: 'Se descargó el ticket para imprimir en su lugar.' })
   }
 }
 
@@ -1034,16 +1037,69 @@ const downloadReceiptHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo
   URL.revokeObjectURL(url)
 }
 
-// Compartir ticket como imagen
+const PAYMENT_LABELS: Record<PaymentSplit['method'], string> = {
+  cash: 'Efectivo',
+  card: 'Tarjeta',
+  transfer: 'Transferencia',
+  credit: 'Crédito',
+  store_credit: 'Saldo a favor',
+}
+
+/**
+ * El ticket en texto, para WhatsApp o para pegar: productos, total, cómo pagó
+ * y, si fue a crédito, las cuotas. Antes el texto solo decía número y total.
+ */
+export function buildReceiptShareText(receiptData: ReceiptData, companyName: string): string {
+  const lines = [
+    `*${companyName}*`,
+    `Ticket ${receiptData.receiptNumber} · ${receiptData.date} ${receiptData.time}`,
+    '',
+    ...receiptData.items.map((item) => `${item.quantity} × ${item.name} — ${formatCurrency(item.price * item.quantity - (item.discount ?? 0))}`),
+    '',
+    ...(receiptData.totalDiscount > 0 ? [`Descuento: -${formatCurrency(receiptData.totalDiscount)}`] : []),
+    `*Total: ${formatCurrency(receiptData.total)}*`,
+    ...receiptData.payments.map((payment) => `${PAYMENT_LABELS[payment.method] ?? payment.method}: ${formatCurrency(payment.amount)}`),
+    ...(receiptData.change && receiptData.change > 0 ? [`Vuelto: ${formatCurrency(receiptData.change)}`] : []),
+    ...(receiptData.creditInfo
+      ? [`Crédito: ${receiptData.creditInfo.installmentCount} cuotas de ${formatCurrency(receiptData.creditInfo.installmentAmount)}${receiptData.creditInfo.firstDueDate ? ` · primera el ${formatPosCreditDueDate(receiptData.creditInfo.firstDueDate)}` : ''}`]
+      : []),
+    '',
+    `¡Gracias por tu compra!`,
+  ]
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** Teléfono para wa.me: solo dígitos y, si empieza con 0 (0981…), con el 595 de Paraguay. */
+export function whatsappNumber(phone: string | undefined | null): string | null {
+  const digits = String(phone ?? '').replace(/\D/g, '')
+  if (digits.length < 6) return null
+  return digits.startsWith('0') ? `595${digits.slice(1)}` : digits
+}
+
+/** Enlace para mandar el ticket por WhatsApp: al cliente si tiene teléfono; si no, para elegir el contacto. */
+export function receiptWhatsAppHref(receiptData: ReceiptData, companyName: string): string {
+  const number = whatsappNumber(receiptData.customer?.phone)
+  const text = encodeURIComponent(buildReceiptShareText(receiptData, companyName))
+  return number ? `https://wa.me/${number}?text=${text}` : `https://wa.me/?text=${text}`
+}
+
+export const sendReceiptByWhatsApp = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
+  const companyName = companyInfo?.name || config.company.name
+  window.open(receiptWhatsAppHref(receiptData, companyName), '_blank', 'noopener,noreferrer')
+}
+
+const isShareCancelled = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
+
+// Compartir el ticket: como imagen si el dispositivo lo permite; si no, como texto.
 export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: CompanyInfo): Promise<void> => {
   const companyName = companyInfo?.name || config.company.name
+  const shareText = buildReceiptShareText(receiptData, companyName)
+  const title = `Ticket ${receiptData.receiptNumber}`
 
   try {
-    // Intentar compartir como imagen
-    const html2canvas = (await import('html2canvas')).default
     const element = document.getElementById('receipt-content')
-
-    if (element && navigator.share) {
+    if (element && typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+      const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(element, {
         scale: 2,
         backgroundColor: '#ffffff',
@@ -1053,54 +1109,32 @@ export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: Compa
           sanitizeCloneStylesForHtml2Canvas(clonedDoc)
         }
       })
-
-      // Convertir canvas a blob
-      const blob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => resolve(blob!), 'image/png')
-      })
-
-      const file = new File([blob], `ticket-${receiptData.receiptNumber}.png`, { type: 'image/png' })
-
-      await navigator.share({
-        title: `Ticket ${receiptData.receiptNumber}`,
-        text: `Ticket de venta - ${companyName}\nTotal: ${formatCurrency(receiptData.total)}`,
-        files: [file]
-      })
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+      const file = blob ? new File([blob], `ticket-${receiptData.receiptNumber}.png`, { type: 'image/png' }) : null
+      // En compu muchos navegadores comparten texto pero no archivos: se pregunta antes.
+      if (file && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title, text: shareText, files: [file] })
+        return
+      }
+    }
+    if (typeof navigator.share === 'function') {
+      await navigator.share({ title, text: shareText })
       return
     }
   } catch (error) {
-    console.log('Error sharing as image:', error)
+    // Cerrar la ventana de compartir no es un error: antes abría una segunda con el texto.
+    if (isShareCancelled(error)) return
+    console.error('Error sharing receipt:', error)
   }
 
-  // Fallback: compartir como texto
-  const shareText = `
-Ticket: ${receiptData.receiptNumber}
-Fecha: ${receiptData.date} ${receiptData.time}
-Total: ${formatCurrency(receiptData.total)}
-
-¡Gracias por su compra en ${companyName}!
-  `.trim()
-
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: `Ticket ${receiptData.receiptNumber}`,
-        text: shareText
-      })
-    } catch (error) {
-      console.log('Error sharing:', error)
-      fallbackShare(shareText)
-    }
-  } else {
-    fallbackShare(shareText)
-  }
+  fallbackShare(shareText)
 }
 
 // Compartir alternativo (copiar al portapapeles)
 const fallbackShare = (text: string): void => {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => {
-      alert('Información del ticket copiada al portapapeles')
+      toast.success('Ticket copiado', { description: 'Pegalo en WhatsApp, un mail o donde lo necesites.' })
     }).catch(() => {
       showShareModal(text)
     })
@@ -1153,5 +1187,6 @@ const showShareModal = (text: string): void => {
   })
 }
 import { config } from './config'
+import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
 import { formatPosCreditDueDate } from '@/lib/credits/pos-credit-summary'

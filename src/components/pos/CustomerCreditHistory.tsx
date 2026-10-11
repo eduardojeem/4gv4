@@ -29,7 +29,9 @@ import {
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCreditSystem } from '@/hooks/use-credit-system'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
+import { useAuth } from '@/contexts/auth-context'
+import { installmentPaymentWhatsAppHref, printInstallmentPayment, type InstallmentPaymentReceipt } from '@/lib/credits/installment-payment-receipt'
 import { toast } from 'sonner'
 
 interface CustomerCreditHistoryProps {
@@ -55,6 +57,10 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [paymentReference, setPaymentReference] = useState('')
+  // Después de cobrar queda el comprobante para mandarlo o imprimirlo: antes el
+  // diálogo se cerraba y el cliente se iba sin nada.
+  const [lastPayment, setLastPayment] = useState<InstallmentPaymentReceipt | null>(null)
+  const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -92,8 +98,9 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
 
   // Manejar pago
   const handlePayment = async () => {
-    const amount = parseFloat(paymentAmount)
-    if (isNaN(amount) || amount <= 0) {
+    // En guaraníes se escribe «100.000»: con parseFloat eso valía 100.
+    const amount = parseThousands(paymentAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('Ingrese un monto válido')
       return
     }
@@ -105,7 +112,16 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
 
     const success = await recordPayment(customer.id, amount, paymentMethod, paymentReference)
     if (success) {
-      setShowPaymentModal(false)
+      setLastPayment({
+        storeName: user?.organization?.name || 'Tu tienda',
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        amount,
+        method: paymentMethod,
+        reference: paymentMethod === 'transfer' ? paymentReference || null : null,
+        paidAt: new Date(),
+        balanceAfter: Math.max(0, creditSummary.usedCredit - amount),
+      })
       setPaymentAmount('')
       setPaymentReference('')
     }
@@ -435,8 +451,35 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
       </Tabs>
 
       {/* Modal de pago */}
-      <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+      <Dialog open={showPaymentModal} onOpenChange={(open) => { setShowPaymentModal(open); if (!open) setLastPayment(null) }}>
         <DialogContent>
+          {lastPayment ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Pago registrado</DialogTitle>
+                <DialogDescription>Mandale el comprobante al cliente o imprimilo.</DialogDescription>
+              </DialogHeader>
+              <dl className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-sm">
+                <div className="flex justify-between"><dt className="text-muted-foreground">Cliente</dt><dd className="font-medium">{lastPayment.customerName}</dd></div>
+                <div className="flex justify-between"><dt className="text-muted-foreground">Pagó</dt><dd className="text-base font-bold">{formatCurrency(lastPayment.amount)}</dd></div>
+                <div className="flex justify-between"><dt className="text-muted-foreground">Saldo pendiente</dt><dd className="font-medium">{formatCurrency(lastPayment.balanceAfter)}</dd></div>
+              </dl>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button variant="outline" onClick={() => { if (!printInstallmentPayment(lastPayment)) toast.error('El navegador bloqueó la ventana para imprimir', { description: 'Permití las ventanas emergentes para este sitio.' }) }}>
+                  Imprimir
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" asChild>
+                    <a href={installmentPaymentWhatsAppHref(lastPayment)} target="_blank" rel="noopener noreferrer">
+                      {lastPayment.customerPhone ? 'Enviar por WhatsApp' : 'Enviar por WhatsApp…'}
+                    </a>
+                  </Button>
+                  <Button onClick={() => { setShowPaymentModal(false); setLastPayment(null) }}>Listo</Button>
+                </div>
+              </DialogFooter>
+            </>
+          ) : (
+          <>
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
             <DialogDescription className="sr-only">
@@ -448,11 +491,19 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
               <Label htmlFor="amount">Monto a Pagar</Label>
               <Input
                 id="amount"
-                type="number"
-                placeholder="0.00"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={formatThousands(paymentAmount)}
+                onChange={(e) => {
+                  const raw = parseThousands(e.target.value)
+                  setPaymentAmount(raw > 0 ? String(raw) : '')
+                }}
+                onFocus={(e) => e.target.select()}
               />
+              <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => setPaymentAmount(String(Math.round(creditSummary.usedCredit)))}>
+                Pagar todo el saldo
+              </Button>
               <div className="text-sm text-gray-600 mt-1">
                 Saldo pendiente: {formatCurrency(creditSummary.usedCredit)}
               </div>
@@ -490,6 +541,8 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
               Registrar Pago
             </Button>
           </DialogFooter>
+          </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

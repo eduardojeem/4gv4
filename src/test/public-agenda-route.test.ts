@@ -1,9 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const SERVICE = '11111111-2222-4333-8444-555555555555'
+const closuresResult = { data: [] as Array<{ starts_at: string; ends_at: string; public_message: string }>, error: null as { message: string } | null }
+const closuresQuery = {
+  select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
+  is: vi.fn().mockReturnThis(), not: vi.fn().mockReturnThis(),
+  gt: vi.fn().mockReturnThis(), lt: vi.fn().mockReturnThis(),
+  order: vi.fn().mockReturnThis(), limit: vi.fn(async () => closuresResult),
+}
+beforeEach(() => { vi.clearAllMocks(); closuresResult.data = []; closuresResult.error = null })
 
 const agenda = {
-  organization: { name: 'Barbería Don Pepe' },
+  admin: { from: vi.fn(() => closuresQuery) },
+  organization: { id: 'org-don-pepe', name: 'Barbería Don Pepe' },
   config: {
     timeZone: 'America/Asuncion',
     currency: 'PYG',
@@ -37,6 +46,23 @@ describe('GET de la reserva online', () => {
     // Ana tiene servicios asignados y no incluye el corte; Pepe no tiene asignados: hace todo.
     expect(body.services).toEqual([expect.objectContaining({ id: SERVICE, name: 'Corte', professionalIds: ['pepe'] })])
     expect(body.professionals[0]).toMatchObject({ name: 'Ana', photoUrl: 'https://cdn/ana.webp', specialty: 'Colorista' })
+    expect(body.closures).toEqual([])
+  })
+
+  it('incluye los avisos públicos de cierre de la misma organización', async () => {
+    closuresResult.data = [{ starts_at: '2026-10-14T12:00:00Z', ends_at: '2026-10-14T15:00:00Z', public_message: 'Cerrado por capacitación' }]
+    const body = await (await call()).json()
+    expect(body.closures).toEqual([{ startsAt: '2026-10-14T12:00:00Z', endsAt: '2026-10-14T15:00:00Z', message: 'Cerrado por capacitación' }])
+    expect(agenda.admin.from).toHaveBeenCalledWith('agenda_time_off')
+    expect(closuresQuery.eq).toHaveBeenCalledWith('organization_id', 'org-don-pepe')
+    expect(closuresQuery.is).toHaveBeenCalledWith('professional_id', null)
+  })
+
+  it('mantiene el catálogo disponible si falla la consulta opcional de avisos', async () => {
+    closuresResult.error = { message: 'column public_message does not exist' }
+    const response = await call()
+    expect(response.status).toBe(200)
+    expect((await response.json()).closures).toEqual([])
   })
 
   it('devuelve los horarios de un día', async () => {

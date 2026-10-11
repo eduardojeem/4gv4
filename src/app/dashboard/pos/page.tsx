@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   Search, Plus, ShoppingCart, CreditCard, FileText, Package, Star, Filter, Grid, List,
   Keyboard, Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
-  Printer, Download, Share2, Settings, AlertTriangle,
+  Printer, Download, Share2, Settings, AlertTriangle, MessageCircle,
   Loader2, XCircle, Tag, Sparkles, Wrench, MoreHorizontal, UserPlus, DollarSign, RotateCcw, SlidersHorizontal, BookOpen
 } from 'lucide-react'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
@@ -37,7 +37,7 @@ import {
 import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
-import { printReceipt, downloadReceipt, shareReceipt, type ReceiptData } from '@/lib/receipt-utils'
+import { printReceipt, downloadReceipt, shareReceipt, sendReceiptByWhatsApp, type ReceiptData } from '@/lib/receipt-utils'
 // Limpieza: se retiran componentes de debug/diagnóstico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
@@ -3014,6 +3014,17 @@ function POSPageContent() {
                   Compartir
                 </Button>
               </div>
+
+              {/* Directo al WhatsApp del cliente (o para elegir el contacto si no tiene teléfono). */}
+              <Button
+                variant="outline"
+                className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                onClick={() => sendReceiptByWhatsApp(currentReceipt, companyInfo)}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                {currentReceipt.customer?.phone ? `Enviar por WhatsApp a ${currentReceipt.customer.name}` : 'Enviar por WhatsApp'}
+              </Button>
+
 
               <Button
                 className="w-full"
