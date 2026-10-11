@@ -11,6 +11,10 @@ export interface LoyaltySettingsRow {
   rounding: 'floor' | 'round'
   max_points_per_customer_per_day: number | null
   points_expiration_months: number | null
+  /** Cuánto vale un punto al canjearlo por saldo a favor. null = canje apagado. */
+  redemption_value?: number | null
+  /** Desde cuántos puntos se puede canjear. */
+  min_redemption_points?: number | null
 }
 
 export interface PointRuleRow {
@@ -61,6 +65,8 @@ export const DEFAULT_LOYALTY_SETTINGS: Omit<LoyaltySettingsRow, 'organization_id
   rounding: 'floor',
   max_points_per_customer_per_day: null,
   points_expiration_months: null,
+  redemption_value: null,
+  min_redemption_points: null,
 }
 
 async function readJson(response: Response) {

@@ -234,6 +234,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   const confirmationTotal = cartCalculations.total + (confirmationHasCredit ? confirmationCreditSummary.interestAmount : 0)
   // Puntos que va a sumar: solo lo que se paga ahora, como acredita el servidor.
   const loyaltyPreview = useLoyaltyPreview(isCheckoutOpen && Boolean(selectedCustomer))
+  const [redeemVersion, setRedeemVersion] = React.useState(0)
   const pointsPreview = selectedCustomer
     ? pointsPreviewText({
         ...loyaltyPreview,
@@ -354,6 +355,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               supabaseStatusToLabel={supabaseStatusToLabel}
               paymentStatus={paymentStatus}
               pointsPreview={pointsPreview}
+              redemption={loyaltyPreview.redemption}
+              onPointsRedeemed={() => setRedeemVersion((version) => version + 1)}
             />
 
             {/* Selector de reparacion vinculada (Multiple) */}
@@ -572,7 +575,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             )}
 
             <StoreCreditPanel
-              key={selectedCustomer || 'sin-cliente'}
+              // Tras un canje de puntos el saldo a favor cambió: se recarga.
+              key={`${selectedCustomer || 'sin-cliente'}:${redeemVersion}`}
               customerId={selectedCustomer}
               cartTotal={cartCalculations.total}
               formatCurrency={formatCurrency}

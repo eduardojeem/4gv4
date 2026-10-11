@@ -22,6 +22,7 @@ import { usePOSCustomer } from '../../contexts/POSCustomerContext'
 import { useCreditSystem } from '@/hooks/use-credit-system'
 import { CustomerQuickCreateDialog } from '@/components/dashboard/repairs/CustomerQuickCreateDialog'
 import { customerTypeKey, customerTypeLabel } from '@/lib/i18n/labels'
+import { RedeemPointsControl, type RedemptionConfig } from './RedeemPointsControl'
 
 interface CreditSummary {
   totalCredit: number
@@ -53,6 +54,9 @@ interface CustomerSelectionProps {
   paymentStatus?: 'idle' | 'processing' | 'success' | 'failed'
   /** «Esta compra suma X puntos», antes de cobrar. */
   pointsPreview?: string | null
+  /** Canje de puntos por saldo a favor, si la tienda lo ofrece. */
+  redemption?: RedemptionConfig | null
+  onPointsRedeemed?: () => void
 }
 
 export function CustomerSelection({
@@ -64,6 +68,8 @@ export function CustomerSelection({
   supabaseStatusToLabel = {},
   paymentStatus = 'idle',
   pointsPreview = null,
+  redemption = null,
+  onPointsRedeemed,
 }: CustomerSelectionProps) {
   
   const {
@@ -269,6 +275,21 @@ export function CustomerSelection({
                     <div className="flex flex-col items-end bg-primary/5 p-2 rounded-lg mb-2">
                       <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Puntos</span>
                       <span className="font-bold text-xl text-primary">{activeCustomer.loyalty_points}</span>
+                    </div>
+                  )}
+                  {redemption && activeCustomer.loyalty_points > 0 && (
+                    <div className="mb-2 flex justify-end">
+                      <RedeemPointsControl
+                        customerId={activeCustomer.id}
+                        balance={activeCustomer.loyalty_points}
+                        redemption={redemption}
+                        formatCurrency={formatCurrency}
+                        onRedeemed={(result) => {
+                          // El saldo nuevo se ve enseguida; el de saldo a favor lo recarga el cobro.
+                          setCustomers((current) => current.map((customer) => customer.id === activeCustomer.id ? { ...customer, loyalty_points: result.balance } : customer))
+                          onPointsRedeemed?.()
+                        }}
+                      />
                     </div>
                   )}
                   {pointsPreview && (

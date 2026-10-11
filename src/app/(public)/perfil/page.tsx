@@ -11,6 +11,7 @@ import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { EMPTY_CUSTOMER_APPOINTMENTS, loadCustomerAppointments } from '@/lib/agenda/customer-appointments'
+import { loadCustomerPoints } from '@/lib/loyalty/customer-points'
 
 interface RecentProfileRepair {
   id: string
@@ -81,13 +82,15 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
   let recentRepairs: RecentProfileRepair[] = []
   let recentOrders: ProfileOrder[] = []
 
-  const [activity, userOrganization, appointments] = await Promise.all([
+  const [activity, userOrganization, appointments, loyaltyPoints] = await Promise.all([
     fetchCustomerActivity(organizationId),
     getCurrentOrganizationContext(user.id).catch(() => null),
     // Sus turnos en esta tienda, si toma turnos.
     organizationId && servicesAvailable
       ? loadCustomerAppointments(createAdminSupabase(), organizationId, user.id)
       : Promise.resolve(EMPTY_CUSTOMER_APPOINTMENTS),
+    // Sus puntos en esta tienda, si tiene el programa prendido.
+    organizationId ? loadCustomerPoints(createAdminSupabase(), organizationId, user.id) : Promise.resolve(null),
   ])
   const { history, orders, ordersCount, storeCreditsByOrganization, stores } = activity
   accountSummary = activity.accountSummary
@@ -152,6 +155,7 @@ export default async function CustomerProfilePage({ basePath }: { basePath?: str
       repairsAvailable={repairsAvailable}
       storeFeatures={{ services: servicesAvailable, orders: ordersAvailable, credits: creditsAvailable, catalog: catalogAvailable }}
       appointments={appointments}
+      loyaltyPoints={loyaltyPoints}
       organization={userOrganization ? {
         id: userOrganization.id,
         name: userOrganization.name,

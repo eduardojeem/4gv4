@@ -79,10 +79,19 @@ export function pointsPreviewText(input: {
   return `Esta compra suma ${capped}${breakdown.totalPoints} ${plural}${promo}`
 }
 
+/** Canje por saldo a favor, si la tienda lo ofrece. */
+export function redemptionFromRow(row: (SettingsRow & { redemption_value?: number | string | null; min_redemption_points?: number | string | null }) | null | undefined) {
+  const value = Number(row?.redemption_value)
+  if (!row?.enabled || !Number.isFinite(value) || value <= 0) return null
+  const min = toNumberOrNull(row.min_redemption_points)
+  return { value, min: min && min > 0 ? min : null }
+}
+
 /** Configuración y promociones de puntos, una vez por apertura del cobro. */
 export function useLoyaltyPreview(enabled: boolean) {
   const [settings, setSettings] = useState<LoyaltySettings | null>(null)
   const [rules, setRules] = useState<PointRule[]>([])
+  const [redemption, setRedemption] = useState<{ value: number; min: number | null } | null>(null)
 
   useEffect(() => {
     if (!enabled) return
@@ -95,10 +104,11 @@ export function useLoyaltyPreview(enabled: boolean) {
         // Sin el módulo de promociones o sin permiso: no se muestra nada.
         setSettings(settingsFromRow(settingsBody?.settings))
         setRules(rulesFromRows(rulesBody?.rules))
+        setRedemption(redemptionFromRow(settingsBody?.settings))
       })
       .catch(() => {})
     return () => controller.abort()
   }, [enabled])
 
-  return { settings, rules }
+  return { settings, rules, redemption }
 }
