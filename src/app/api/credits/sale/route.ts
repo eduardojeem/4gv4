@@ -153,6 +153,7 @@ export async function POST(request: Request) {
     const result = await createCreditAccount({
       supabase,
       organizationId: organization.id,
+      actorId: staffAuth.user.id,
       customerId,
       creditLimit,
       amount,
