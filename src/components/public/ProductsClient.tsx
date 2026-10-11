@@ -32,6 +32,7 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct, MarketplaceCategory, MarketplaceBrand } from '@/lib/public/marketplace'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
+import { HorizontalScroller } from './HorizontalScroller'
 import { FavoriteButton } from './Favorites'
 import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
@@ -336,6 +337,9 @@ export function ProductsClient({
       if (p > 1) params.set('pagina', String(p))
       else params.delete('pagina')
       router.push(`${pathname}?${params.toString()}#catalogo`, { scroll: false })
+      // Con `scroll: false` la pantalla quedaba abajo de todo y se veía el
+      // final de la página nueva.
+      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
     setPage(p)
@@ -348,6 +352,7 @@ export function ProductsClient({
       params.set('porPagina', String(size))
       params.delete('pagina')
       router.push(`${pathname}?${params.toString()}#catalogo`, { scroll: false })
+      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
     setPageSize(size)
@@ -390,7 +395,7 @@ export function ProductsClient({
   return (
     <>
       {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS EN 1 SOLA LÍNEA ULTRA COMPACTA (STICKY) ── */}
-      <div suppressHydrationWarning className="sticky top-16 z-30 mb-3 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
+      <div suppressHydrationWarning className="relative z-30 mb-3 sm:sticky sm:top-16 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
         
         {/* ── FILA ÚNICA: Buscador + Ofertas + Marca + Orden + Vista ── */}
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -566,10 +571,11 @@ export function ProductsClient({
         {/* ── Franja de Categorías Compacta Directo Abajo del Buscador ── */}
         {categories.length > 0 && (
           <div className="pt-1 border-t border-border/50">
-            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+            <HorizontalScroller label="categorías" activeKey={initialCategory} className="flex items-center gap-1 sm:gap-1.5 pb-0.5 text-xs">
               {/* Pill "Todas" */}
               <button
                 type="button"
+                data-active={!initialCategory ? 'true' : undefined}
                 onClick={() => updateUrlParam('categoria', '')}
                 className={cn(
                   'shrink-0 flex items-center gap-1 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
@@ -589,6 +595,8 @@ export function ProductsClient({
                   <button
                     key={cat.id}
                     type="button"
+                    data-active={isActive ? 'true' : undefined}
+                    aria-pressed={isActive}
                     onClick={() => updateUrlParam('categoria', isActive ? '' : cat.id)}
                     className={cn(
                       'shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg border px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
@@ -610,14 +618,14 @@ export function ProductsClient({
                   </button>
                 )
               })}
-            </div>
+            </HorizontalScroller>
           </div>
         )}
 
         {/* ── Subcategorías / Ramas Hijas (si la categoría seleccionada tiene hijos) ── */}
         {initialCategory && childSubcategories.length > 0 && (
           <div className="pt-1 border-t border-border/60">
-            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+            <HorizontalScroller label="ramas" activeKey={initialSubcategory} className="flex items-center gap-1 sm:gap-1.5 pb-0.5 text-xs">
               <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1 text-[11px] sm:text-xs">
                 <FolderTree className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-primary" />
                 <span>Ramas:</span>
@@ -642,6 +650,8 @@ export function ProductsClient({
                   <button
                     key={sub.id}
                     type="button"
+                    data-active={isSubActive ? 'true' : undefined}
+                    aria-pressed={isSubActive}
                     onClick={() => updateUrlParam('subcategoria', isSubActive ? '' : sub.id)}
                     className={cn(
                       'shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold transition-all border shadow-2xs',
@@ -660,11 +670,9 @@ export function ProductsClient({
                   </button>
                 )
               })}
-            </div>
+            </HorizontalScroller>
           </div>
         )}
-
-
 
         {/* ── Chips de Filtros Activos (Mostrados juntos al lado) ── */}
         {hasAnyFilter && (
@@ -747,7 +755,7 @@ export function ProductsClient({
       </div>
 
       {/* ── GRID DE PRODUCTOS ───────────────────────────────────────────────── */}
-      <div ref={gridTopRef} className="-mt-4 pt-4" />
+      <div ref={gridTopRef} className="-mt-4 pt-4 scroll-mt-20 sm:scroll-mt-40" />
 
       {filtered.length > 0 ? (
         <div className={gridClass}>
@@ -789,7 +797,7 @@ export function ProductsClient({
                 )}
               >
                 {/* Imagen (clic abre modal de detalle) */}
-                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} /></div>
+                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: precioOculto ? null : displayPrice }} /></div>
                 <div
                   suppressHydrationWarning
                   onClick={() => setSelected(product)}
