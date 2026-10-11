@@ -173,7 +173,8 @@ describe('cada tienda con su color', () => {
 
 describe('se muestra el logo de la tienda', () => {
   it('la tarjeta lo usa cuando existe', () => {
-    expect([...SAAS.matchAll(/src=\{store\.logo_url\}/g)].length).toBe(1)
+    // En la tarjeta y, mientras no haya cifras que mostrar, en la portada.
+    expect([...SAAS.matchAll(/src=\{store\.logo_url\}/g)].length).toBe(2)
     expect(SAAS).toContain('alt={`Logo de ${store.name}`}')
   })
 
