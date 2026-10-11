@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { createCreditAccount, CreditAccountError } from '@/lib/credits/create-credit-account'
 import type { CreateCreditAccountInput } from '@/lib/credits/create-credit-account'

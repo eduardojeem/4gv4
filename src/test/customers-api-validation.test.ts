@@ -1,7 +1,9 @@
+// @vitest-environment node
 import { NextRequest } from 'next/server'
 import { describe, expect, it, vi } from 'vitest'
 
 const escrituras = vi.hoisted(() => ({ count: 0 }))
+vi.mock('server-only', () => ({}))
 
 vi.mock('@/lib/api/withTenantAuth', () => ({
   withTenantAuth: (_o: unknown, handler: (req: unknown, ctx: unknown) => unknown) =>

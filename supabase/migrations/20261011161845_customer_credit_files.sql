@@ -202,13 +202,14 @@ end $$;
 revoke all on function public.save_customer_credit_file(uuid,uuid,uuid,integer,jsonb) from public,anon,authenticated;
 grant execute on function public.save_customer_credit_file(uuid,uuid,uuid,integer,jsonb) to service_role;
 
-create function public.decide_customer_credit_file(p_organization_id uuid,p_customer_id uuid,p_actor_id uuid,p_expected_version integer,p_status text,p_limit numeric,p_reason text)
+create or replace function public.decide_customer_credit_file(p_organization_id uuid,p_customer_id uuid,p_actor_id uuid,p_expected_version integer,p_status text,p_limit numeric,p_reason text)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
 declare f public.customer_credit_files%rowtype; missing text[];
 begin
  perform public.assert_customer_credit_file_actor(p_organization_id,p_actor_id);
  perform 1 from public.customers where id=p_customer_id and organization_id=p_organization_id for update;
  if not found then raise exception using errcode='P0002',message='CUSTOMER_NOT_FOUND'; end if;
+ perform 1 from public.organizations where id=p_organization_id for share;
  select * into f from public.customer_credit_files where organization_id=p_organization_id and customer_id=p_customer_id for update;
  if f.id is null then raise exception using errcode='P0002',message='CREDIT_FILE_NOT_FOUND'; end if;
  if p_expected_version is null or f.version<>p_expected_version then raise exception using errcode='40001',message='CREDIT_FILE_VERSION_CONFLICT'; end if;
@@ -227,5 +228,30 @@ begin
 end $$;
 revoke all on function public.decide_customer_credit_file(uuid,uuid,uuid,integer,text,numeric,text) from public,anon,authenticated;
 grant execute on function public.decide_customer_credit_file(uuid,uuid,uuid,integer,text,numeric,text) to service_role;
+
+create function public.save_customer_credit_file_policy(p_organization_id uuid,p_actor_id uuid,p_expected_version integer,p_payload jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog as $$
+declare p public.organization_credit_file_policies%rowtype; doc_types text[];
+begin
+ if not exists(select 1 from public.organization_members where organization_id=p_organization_id and user_id=p_actor_id and status='active' and role::text in ('owner','admin')) then
+   raise exception using errcode='42501',message='CREDIT_FILE_POLICY_FORBIDDEN';
+ end if;
+ -- Policy changes serialize with concessions/decisions, including first policy creation.
+ perform 1 from public.organizations where id=p_organization_id for update;
+ if not found then raise exception using errcode='P0002',message='ORGANIZATION_NOT_FOUND'; end if;
+ if jsonb_typeof(p_payload) is distinct from 'object' or (p_payload-array['version','mode','requireIdentity','minVerifiedReferences','requiredDocuments'])<>'{}'::jsonb
+   or coalesce(p_payload->>'mode','') not in ('informational','warning','required')
+   or (p_payload ? 'requiredDocuments' and jsonb_typeof(p_payload->'requiredDocuments') is distinct from 'array') then raise exception using errcode='22023',message='INVALID_CREDIT_FILE_POLICY'; end if;
+ select coalesce(array_agg(value),'{}'::text[]) into doc_types from jsonb_array_elements_text(coalesce(p_payload->'requiredDocuments','[]'::jsonb));
+ if cardinality(doc_types)>4 or cardinality(doc_types)<>(select count(distinct x) from unnest(doc_types) x) then raise exception using errcode='22023',message='INVALID_CREDIT_FILE_DOCUMENT_REQUIREMENTS'; end if;
+ select * into p from public.organization_credit_file_policies where organization_id=p_organization_id;
+ if p_expected_version is null or p_expected_version<0 or coalesce(p.version,0)<>p_expected_version then raise exception using errcode='40001',message='CREDIT_FILE_POLICY_VERSION_CONFLICT'; end if;
+ insert into public.organization_credit_file_policies(organization_id,version,mode,require_identity,min_verified_references,required_documents,updated_at,updated_by)
+ values(p_organization_id,p_expected_version+1,p_payload->>'mode',coalesce((p_payload->>'requireIdentity')::boolean,false),coalesce((p_payload->>'minVerifiedReferences')::integer,0),doc_types,clock_timestamp(),p_actor_id)
+ on conflict(organization_id) do update set version=excluded.version,mode=excluded.mode,require_identity=excluded.require_identity,min_verified_references=excluded.min_verified_references,required_documents=excluded.required_documents,updated_at=excluded.updated_at,updated_by=excluded.updated_by returning * into p;
+ return jsonb_build_object('version',p.version,'mode',p.mode,'requireIdentity',p.require_identity,'minVerifiedReferences',p.min_verified_references,'requiredDocuments',p.required_documents);
+end $$;
+revoke all on function public.save_customer_credit_file_policy(uuid,uuid,integer,jsonb) from public,anon,authenticated;
+grant execute on function public.save_customer_credit_file_policy(uuid,uuid,integer,jsonb) to service_role;
 
 commit;

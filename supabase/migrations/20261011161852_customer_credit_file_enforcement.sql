@@ -33,7 +33,7 @@ grant execute on function public.customer_credit_outstanding(uuid,uuid) to servi
 
 -- All creation paths (including legacy/direct insert) serialize on the customer.
 -- Checklist is reevaluated using the current policy, not a cached approved flag.
-create function public.lock_customer_credit_concession()
+create or replace function public.lock_customer_credit_concession()
 returns trigger language plpgsql security definer set search_path=pg_catalog as $$
 declare missing text[];
 begin
@@ -44,6 +44,7 @@ begin
  end if;
  perform 1 from public.customers where id=new.customer_id and organization_id=new.organization_id for update;
  if not found then raise exception using errcode='23514',message='CREDIT_CUSTOMER_ORGANIZATION_MISMATCH'; end if;
+ perform 1 from public.organizations where id=new.organization_id for share;
  if exists(select 1 from public.organization_credit_file_policies where organization_id=new.organization_id and mode='required') then
    missing:=public.customer_credit_file_missing(new.organization_id,new.customer_id);
    if cardinality(missing)>0 then raise exception using errcode='23514',message='CREDIT_FILE_REQUIRED'; end if;
@@ -114,5 +115,15 @@ begin
 end $$;
 revoke all on function public.create_customer_credit_account_atomic(uuid,uuid,uuid,jsonb,jsonb) from public,anon,authenticated;
 grant execute on function public.create_customer_credit_account_atomic(uuid,uuid,uuid,jsonb,jsonb) to service_role;
+
+create function public.customer_credit_overdue_count(p_organization_id uuid,p_customer_id uuid)
+returns integer language sql stable security invoker set search_path=pg_catalog as $$
+ select count(*)::integer from public.customer_credits c join public.credit_installments i on i.credit_id=c.id
+ where c.organization_id=p_organization_id and c.customer_id=p_customer_id and lower(i.status) in ('pending','late')
+   and greatest(0,coalesce(i.amount,0))>greatest(0,coalesce(i.amount_paid,0))
+   and (i.due_date at time zone 'America/Asuncion')::date<(now() at time zone 'America/Asuncion')::date;
+$$;
+revoke all on function public.customer_credit_overdue_count(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.customer_credit_overdue_count(uuid,uuid) to service_role;
 
 commit;

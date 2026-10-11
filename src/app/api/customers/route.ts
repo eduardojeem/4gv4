@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { customerIdsWithOutstandingDebt } from '@/lib/credits/customers-with-debt'
+import { CreditFileError, creditFileErrorResponse, validateGenericCreditLimitUpdate } from '@/lib/credits/credit-file-server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
@@ -386,6 +387,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
     }
 
     const { id, ...updates } = validation.data
+    await validateGenericCreditLimitUpdate(organization.id, id, updates.credit_limit)
     const supabase = await createClient()
 
     const { data: current, error: currentError } = await supabase
@@ -438,6 +440,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
 
     return NextResponse.json({ success: true, data: normalizeCustomerResponse(data) })
   } catch (error) {
+    if (error instanceof CreditFileError) return creditFileErrorResponse(error)
     logger.error('Customers API PUT error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar el cliente.' }, { status: 500 })
   }
