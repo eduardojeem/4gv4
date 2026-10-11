@@ -45,7 +45,11 @@ describe('el estado del catálogo dice cuál es', () => {
 
   it('se cuenta lo publicado y lo total por separado', () => {
     expect(MARKETPLACE).toContain('const productTotalByOrganization = new Map<string, number>()')
-    expect(MARKETPLACE).toContain("row.visibility === 'public' && Number(row.stock_quantity ?? 0) > 0")
+    // Lo publicado sale del mismo catálogo efectivo que ve el comprador (2fd85f79):
+    // la regla anterior, `visibility === 'public' && stock_quantity > 0`, no
+    // contaba un producto con variantes cuyo stock está en las variantes.
+    expect(MARKETPLACE).toContain('availableCountByOrganization.set(organizationId, page.total)')
+    expect(MARKETPLACE).toContain('availableCountByOrganization.forEach((total, id) => productCountByOrganization.set(id, total))')
   })
 
   it('lo usan las dos tarjetas públicas', () => {

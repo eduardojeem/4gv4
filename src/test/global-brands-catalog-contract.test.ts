@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -8,7 +8,6 @@ const MIGRACION = leer('supabase/migrations_legacy/20260915120000_global_brands_
 const API_EMPRESA = leer('src/app/api/brands/route.ts')
 const API_CATALOGO = leer('src/app/api/brands/catalog/route.ts')
 const API_SUPERADMIN = leer('src/app/api/superadmin/global-brands/route.ts')
-const MARKETPLACE = leer('src/lib/public/marketplace.ts')
 
 /**
  * El marketplace agrupa las marcas por nombre y mostraba el primer logo
@@ -69,7 +68,17 @@ describe('catálogo global de marcas', () => {
   })
 
   it('el marketplace muestra solo el logo oficial', () => {
-    expect(MARKETPLACE).toContain('global_brands:global_brand_id(name, logo_url)')
-    expect(MARKETPLACE).toContain('const brandLogo = official?.logo_url || null')
+    // Desde 2fd85f79 las marcas del marketplace salen de la función del
+    // catálogo efectivo: la regla vive en su última versión.
+    const migraciones = readdirSync('supabase/migrations')
+      .filter((archivo) => archivo.endsWith('.sql'))
+      .sort()
+      .map((archivo) => leer(`supabase/migrations/${archivo}`))
+      .filter((sql) => sql.includes('function public.get_marketplace_effective_catalog'))
+    const ultima = migraciones.at(-1) ?? ''
+
+    expect(ultima).toContain('gb.logo_url as brand_logo')
+    // El logo de la marca de una tienda no puede representar a la marca para todas.
+    expect(ultima).not.toContain('coalesce(gb.logo_url,b.logo_url)')
   })
 })

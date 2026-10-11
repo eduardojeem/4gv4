@@ -8,6 +8,12 @@ import { expect, afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { server } from './mocks/server'
 
+// `server-only` lanza fuera de un componente de servidor, y en jsdom todo lo es.
+// Desde que el catálogo (effective-catalog.ts) lo importa, cualquier test que
+// cargara lib/public/marketplace sin mockearlo se caía antes de correr. Es lo
+// mismo que ya hacían, uno por uno, los tests de las rutas de servidor.
+vi.mock('server-only', () => ({}))
+
 // Configuración global de mocks
 beforeAll(() => {
   // Iniciar MSW server para mocks de API

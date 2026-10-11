@@ -37,12 +37,21 @@ describe('SaaSBusinessPageContent', () => {
     vi.unstubAllGlobals()
   })
 
-  it('muestra la portada con cifras reales de todos los negocios publicados', () => {
+  it('con pocos negocios no muestra cifras, sino la frase', () => {
+    // 4 negocios, 3 ciudades y 250 productos restan más de lo que suman.
     render(<SaaSBusinessPageContent initialPage={pageDirectory(mockOrgs, { page: 1 })} />)
     expect(screen.getByRole('heading', { name: /Negocios que crecen con nuestra plataforma/i })).toBeInTheDocument()
-    expect(screen.getByText('negocios publicados').nextSibling).toHaveTextContent('4')
-    expect(screen.getByText('ciudades').nextSibling).toHaveTextContent('3')
-    expect(screen.getByText('productos publicados').nextSibling).toHaveTextContent('250')
+    expect(screen.queryByText('negocios publicados')).not.toBeInTheDocument()
+    expect(screen.queryByText('ciudades')).not.toBeInTheDocument()
+    expect(screen.getByText(/ya venden con nosotros/)).toBeInTheDocument()
+  })
+
+  it('muestra cada cifra real cuando llega a su mínimo', () => {
+    const page = pageDirectory(mockOrgs, { page: 1 })
+    render(<SaaSBusinessPageContent initialPage={{ ...page, summary: { ...page.summary, stores: 40, cities: 6, products: 2500 } }} />)
+    expect(screen.getByText('negocios publicados').nextSibling).toHaveTextContent('40')
+    expect(screen.getByText('ciudades').nextSibling).toHaveTextContent('6')
+    expect(screen.getByText('productos publicados').nextSibling).toHaveTextContent('2.500')
   })
 
   it('muestra cada tienda, primero las que tienen más productos', () => {
