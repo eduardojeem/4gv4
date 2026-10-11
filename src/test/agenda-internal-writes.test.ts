@@ -25,10 +25,29 @@ describe('internal transactional appointments',()=>{
     const q={upsert:()=>q,then:(resolve:(v:unknown)=>unknown)=>Promise.resolve({error:null}).then(resolve)}
     mocks.from.mockReturnValue(q)
     mocks.rpc.mockResolvedValue({data:null,error:null})
-    const body={slot_minutes:30,opening_hours:{'1':[['08:00','18:00']]},online_booking:true,require_confirmation:true,min_notice_minutes:60,max_days_ahead:30,professional_selection:'required',services:[]}
+    const body={expected_revision:7,slot_minutes:30,opening_hours:{'1':[['08:00','18:00']]},online_booking:true,require_confirmation:true,min_notice_minutes:60,max_days_ahead:30,professional_selection:'required',services:[]}
     const response=await saveSettings(new NextRequest('http://x/api/agenda/settings',{method:'PUT',body:JSON.stringify(body)}))
     expect(response.status).toBe(200)
-    expect(mocks.rpc).toHaveBeenCalledWith('save_agenda_settings',expect.objectContaining({p_org:'org',p_actor:'actor',p_settings:expect.objectContaining({professional_selection:'required'})}))
+    expect(mocks.rpc).toHaveBeenCalledTimes(1)
+    expect(mocks.rpc).toHaveBeenCalledWith('save_agenda_settings_checked',expect.objectContaining({p_org:'org',p_actor:'actor',p_expected_revision:7,p_settings:expect.objectContaining({professional_selection:'required'})}))
+  })
+  it('rejects missing revision without invoking a privileged write',async()=>{
+    mocks.rpc.mockClear()
+    const body={slot_minutes:30,opening_hours:{'1':[['08:00','18:00']]},online_booking:true,require_confirmation:true,min_notice_minutes:60,max_days_ahead:30,professional_selection:'required',services:[]}
+    const response=await saveSettings(new NextRequest('http://x/api/agenda/settings',{method:'PUT',body:JSON.stringify(body)}))
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('AGENDA_SETTINGS_CHANGED')
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+  it('returns conflict when the database rejects a stale revision without retrying the old RPC',async()=>{
+    mocks.rpc.mockClear()
+    mocks.rpc.mockResolvedValue({data:null,error:{code:'P0001',message:'AGENDA_SETTINGS_CHANGED'}})
+    const body={expected_revision:6,slot_minutes:30,opening_hours:{'1':[['08:00','18:00']]},online_booking:true,require_confirmation:true,min_notice_minutes:60,max_days_ahead:30,professional_selection:'required',services:[]}
+    const response=await saveSettings(new NextRequest('http://x/api/agenda/settings',{method:'PUT',body:JSON.stringify(body)}))
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('AGENDA_SETTINGS_CHANGED')
+    expect(mocks.rpc).toHaveBeenCalledTimes(1)
+    expect(mocks.rpc).toHaveBeenCalledWith('save_agenda_settings_checked',expect.objectContaining({p_expected_revision:6}))
   })
   it('replaces professional eligibility in one transaction',async()=>{
     mocks.rpc.mockClear()
