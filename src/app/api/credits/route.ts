@@ -1,3 +1,5 @@
+import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -232,9 +234,20 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
       applied_amount?: number
     } | null
 
+    // Las ventas a crédito suman puntos al cobrar cada cuota. No frena el cobro si falla.
+    const loyalty = await awardCreditInstallmentLoyaltyPoints(supabase as never, {
+      organizationId: organization.id,
+      installmentId: result?.installment_id ?? installmentId,
+      paidAmount: Number(result?.applied_amount || 0),
+    }).catch((loyaltyError: unknown) => ({ points: 0, error: { message: loyaltyError instanceof Error ? loyaltyError.message : String(loyaltyError) } }))
+    if (loyalty.error && !isLoyaltyModuleMissing(loyalty.error)) {
+      logger.warn('No se pudieron acreditar los puntos de la cuota', { installmentId, error: loyalty.error.message })
+    }
+
     return NextResponse.json({
       success: true,
       data: {
+        loyaltyPoints: loyalty.points,
         installmentId: result?.installment_id ?? installmentId,
         creditId: result?.credit_id,
         installmentNumber: result?.installment_number,

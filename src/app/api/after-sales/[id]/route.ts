@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import {
   isLegacyAfterSalesStatus,
   normalizeAfterSalesCase,
@@ -159,6 +160,7 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
       refund?: { method: string; amount: number }
       restock?: { restocked: number; action: RestockAction }
       replacement?: { dispatched: number }
+      loyaltyPointsReversed?: number
     } = {}
 
     try {
@@ -233,6 +235,23 @@ export const PATCH = withTenantAuth({ permission: 'crm.customers.manage', module
           patch.refund_amount = amount
           patch.refund_method = applied.method
           sideEffect = { ...sideEffect, refund: applied }
+
+          // Devolución con reintegro: se descuentan los puntos que sumó esa compra,
+          // en proporción y una sola vez por caso. No frena la devolución si falla.
+          if (current.sale_id && current.customer_id) {
+            const { data: reversed, error: reversalError } = await supabase.rpc('reverse_loyalty_points_for_refund', {
+              p_organization_id: organization.id,
+              p_customer_id: current.customer_id,
+              p_sale_id: current.sale_id,
+              p_refund_amount: amount,
+              p_idempotency_key: `refund:${id}`,
+            })
+            if (reversalError && !isLoyaltyModuleMissing(reversalError)) {
+              logger.warn('No se pudieron descontar los puntos de la devolución', { caseId: id, error: reversalError.message })
+            }
+            const reversedPoints = Math.abs(Number((reversed as { points?: unknown } | null)?.points) || 0)
+            if (reversedPoints > 0) sideEffect = { ...sideEffect, loyaltyPointsReversed: reversedPoints }
+          }
         }
       }
     } catch (effectError) {

@@ -5,6 +5,8 @@ import { logger } from '@/lib/logger'
 import { normalizeOrder } from '@/lib/orders/helpers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { awardPaidOrderLoyaltyPoints } from '@/lib/loyalty/order-points'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 
 const paymentSchema = z.object({
   collectionAmount: z.coerce.number().positive().max(999_999_999_999),
@@ -92,7 +94,21 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage', mod
       .single()
     if (error) throw error
 
-    return NextResponse.json({ success: true, data: normalizeOrder(data) })
+    // Pedido totalmente pagado: suma puntos al cliente. No frena el cobro si falla.
+    const loyalty = await awardPaidOrderLoyaltyPoints(supabase, {
+      organizationId: organization.id,
+      orderId: id,
+      customerId: data.customer_id ?? null,
+      paymentStatus: String(data.payment_status ?? ''),
+      total: Number(data.total ?? 0),
+      storeCreditApplied: Number(data.store_credit_applied ?? 0),
+      storeCreditReserved: Number(data.store_credit_reserved ?? 0),
+    }).catch((loyaltyError: unknown) => ({ points: 0, error: { message: loyaltyError instanceof Error ? loyaltyError.message : String(loyaltyError) } }))
+    if (loyalty.error && !isLoyaltyModuleMissing(loyalty.error)) {
+      logger.warn('No se pudieron acreditar los puntos del pedido', { orderId: id, error: loyalty.error.message })
+    }
+
+    return NextResponse.json({ success: true, data: normalizeOrder(data), loyaltyPoints: loyalty.points })
   } catch (error) {
     logger.error('Orders payment API error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar el pago.' }, { status: 500 })

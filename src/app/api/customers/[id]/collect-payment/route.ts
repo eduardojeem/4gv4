@@ -1,3 +1,6 @@
+import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points'
+import { awardPaidRepairLoyaltyPoints } from '@/lib/loyalty/repair-points'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -272,6 +275,17 @@ export const POST = withTenantAuth(
               source: 'repairs',
             })
             const newPending = Math.max(0, Number(result.balance ?? debt.pendingAmount - amount))
+            // Reparación saldada desde el cobro por cliente: suma como en su pantalla (misma clave).
+            const repairLoyalty = await awardPaidRepairLoyaltyPoints(supabase, {
+              organizationId: organization.id,
+              repairId: debt.id,
+              customerId: customerId ?? null,
+              total: Number(result.total ?? 0),
+              paymentStatus: String(result.payment_status ?? ''),
+            }).catch((loyaltyError: unknown) => ({ reason: 'error' as const, error: { message: loyaltyError instanceof Error ? loyaltyError.message : String(loyaltyError) } }))
+            if (repairLoyalty.reason === 'error' && !isLoyaltyModuleMissing(repairLoyalty.error)) {
+              logger.warn('No se pudieron acreditar los puntos de la reparación cobrada', { repairId: debt.id, error: repairLoyalty.error?.message })
+            }
             applied.push({
               id: debt.id,
               type: debt.type,
@@ -297,6 +311,15 @@ export const POST = withTenantAuth(
             const appliedAmount = Math.min(amount, Number((data as { applied_amount?: number } | null)?.applied_amount ?? amount))
             unapplied += amount - appliedAmount
             const newPending = Math.max(0, debt.pendingAmount - appliedAmount)
+            // Las ventas a crédito suman puntos al cobrar cada cuota.
+            const creditLoyalty = await awardCreditInstallmentLoyaltyPoints(supabase as never, {
+              organizationId: organization.id,
+              installmentId: debt.id,
+              paidAmount: appliedAmount,
+            }).catch((loyaltyError: unknown) => ({ points: 0, error: { message: loyaltyError instanceof Error ? loyaltyError.message : String(loyaltyError) } }))
+            if (creditLoyalty.error && !isLoyaltyModuleMissing(creditLoyalty.error)) {
+              logger.warn('No se pudieron acreditar los puntos de la cuota', { installmentId: debt.id, error: creditLoyalty.error.message })
+            }
             applied.push({
               id: debt.id,
               type: debt.type,

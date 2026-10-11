@@ -51,6 +51,8 @@ interface CustomerSelectionProps {
   selectedRepairIds?: string[]
   supabaseStatusToLabel?: Record<string, string>
   paymentStatus?: 'idle' | 'processing' | 'success' | 'failed'
+  /** «Esta compra suma X puntos», antes de cobrar. */
+  pointsPreview?: string | null
 }
 
 export function CustomerSelection({
@@ -60,7 +62,8 @@ export function CustomerSelection({
   customerRepairs = [],
   selectedRepairIds = [],
   supabaseStatusToLabel = {},
-  paymentStatus = 'idle'
+  paymentStatus = 'idle',
+  pointsPreview = null,
 }: CustomerSelectionProps) {
   
   const {
@@ -267,6 +270,9 @@ export function CustomerSelection({
                       <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Puntos</span>
                       <span className="font-bold text-xl text-primary">{activeCustomer.loyalty_points}</span>
                     </div>
+                  )}
+                  {pointsPreview && (
+                    <p className="max-w-[12rem] text-[11px] font-semibold leading-snug text-primary">{pointsPreview}</p>
                   )}
                 </div>
               </div>
