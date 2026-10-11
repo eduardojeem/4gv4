@@ -35,15 +35,26 @@ export const revalidate = 30
 const MARKETPLACE_HOME_PRODUCT_LIMIT = 24
 const MARKETPLACE_HOME_OFFER_LIMIT = 48
 
+/**
+ * Respaldo solo para `next build`. En CI se compila con un Supabase de prueba y
+ * la portada se prerenderiza: sin respaldo el build fallaba. En producción un
+ * fallo del catálogo tiene que llegar a error.tsx («No pudimos cargar el
+ * marketplace» con «Reintentar»), no mostrar un marketplace vacío que parece
+ * no tener productos. Lo prerenderizado vacío se regenera a los 30 s.
+ */
+function duringBuild<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return process.env.NEXT_PHASE === 'phase-production-build' ? promise.catch(() => fallback) : promise
+}
+
 export default async function MarketplacePage() {
   const [organizations, directory, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
     getMarketplaceOrganizations().catch(() => []),
     // Solo para contar: la lista de la portada trae 24 y la cifra se quedaba en
     // 24. Es la misma lista cacheada de /marketplace/empresas y /saas/negocios.
     getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES).catch(() => []),
-    getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT),
-    getMarketplaceBrands(30),
-    getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT),
+    duringBuild(getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT), { products: [], total: 0 }),
+    duringBuild(getMarketplaceBrands(30), []),
+    duringBuild(getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT), []),
     getPlatformAnnouncements().catch(() => []),
   ])
   const marketplaceProducts = marketplacePage.products
