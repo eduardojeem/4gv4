@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { execFile, spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
@@ -28,6 +29,55 @@ function psql(sql: string, onOutput?: (text: string) => void) {
 
 // Deliberately opt-in: never connects to linked/remote Supabase or mutates real customers.
 describe.skipIf(process.env.CREDIT_FILE_LOCAL_SQL !== '1')('customer credit file — real local Postgres', () => {
+  it('serializes competing tenth-document reservations without exceeding the quota', async () => {
+    const o = 'cf150000-0000-4000-8000-000000000001', c = 'cf250000-0000-4000-8000-000000000001', a = 'cf050000-0000-4000-8000-000000000001'
+    const reserve = (version: number) => `select public.reserve_customer_credit_document('${o}','${c}','${a}',${version},'other','fixture.jpg','image/jpeg',8,'jpg');`
+    const seed = await psql(`begin; set local session_replication_role=replica;
+      insert into auth.users(id) values('${a}');
+      insert into public.organizations(id,name,slug) values('${o}','Reservation concurrency fixture','reservation-concurrency-fixture');
+      insert into public.organization_members(organization_id,user_id,role) values('${o}','${a}','owner');
+      insert into public.customers(id,organization_id,name,status) values('${c}','${o}','Reservation concurrency fixture','activo');
+      insert into public.customer_credit_files(organization_id,customer_id) values('${o}','${c}');
+      set local session_replication_role=origin; set local role service_role;
+      ${Array.from({ length: 9 }, (_, version) => reserve(version)).join('\n')} commit;`).done
+    expect(seed.code, seed.output).toBe(0)
+    try {
+      let held!: () => void
+      const ready = new Promise<void>(resolve => { held = resolve })
+      const first = psql(`begin; set local role service_role; ${reserve(9)} select 'RESERVATION_HELD'; select pg_sleep(1); commit;`, output => { if (output.includes('RESERVATION_HELD')) held() })
+      await Promise.race([ready, first.done.then(result => { throw new Error(result.output) })])
+      const second = psql(`begin; set local role service_role; ${reserve(9)} commit;`)
+      const [one, two] = await Promise.all([first.done, second.done])
+      expect(one.code, one.output).toBe(0)
+      expect(two.output).toContain('CREDIT_FILE_VERSION_CONFLICT')
+      const count = await psql(`select count(*) from public.customer_credit_documents where organization_id='${o}' and lifecycle<>'deleted';`).done
+      expect(count.output).toMatch(/\b10\b/)
+      const retry = await psql(`begin; set local role service_role; ${reserve(10)} rollback;`).done
+      expect(retry.output).toContain('CREDIT_DOCUMENT_LIMIT')
+    } finally {
+      const removed = await psql(`begin; set local session_replication_role=replica;
+        delete from public.customer_credit_file_events where organization_id='${o}';
+        delete from public.customer_credit_documents where organization_id='${o}';
+        delete from public.customer_credit_files where organization_id='${o}';
+        delete from public.customers where organization_id='${o}' and id='${c}';
+        delete from public.organization_members where organization_id='${o}' and user_id='${a}';
+        delete from public.organizations where id='${o}' and slug='reservation-concurrency-fixture';
+        delete from auth.users where id='${a}'; commit;`).done
+      expect(removed.code, removed.output).toBe(0)
+    }
+  }, 30_000)
+  it('reserves, finalizes, reviews and retires documents transactionally', async () => {
+    const fixture = await readFile('supabase/tests/customer_credit_document_lifecycle.test.sql', 'utf8')
+    const result = await psql(fixture).done
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('ROLLBACK')
+  }, 30_000)
+  it('limits new documents to 4 MiB without deleting older metadata and blocks broad Storage policies', async () => {
+    const fixture = await readFile('supabase/tests/customer_credit_document_limits.test.sql', 'utf8')
+    const result = await psql(fixture).done
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('ROLLBACK')
+  }, 30_000)
   it('enforces permissions, tenant FK, versions, atomic decisions and current requirements', async () => {
     const fixture = await readFile('supabase/tests/customer_credit_file.test.sql', 'utf8')
     const result = await psql(fixture).done

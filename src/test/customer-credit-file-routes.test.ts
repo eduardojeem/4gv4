@@ -19,6 +19,7 @@ import { GET as summary } from '@/app/api/customers/[id]/credit-file/summary/rou
 import { PUT as policyUpdate } from '@/app/api/credits/file-policy/route'
 import { validateGenericCreditLimitUpdate } from '@/lib/credits/credit-file-server'
 import { PUT as customerUpdate } from '@/app/api/customers/route'
+import { GET as documentDownload, PATCH as documentReview, DELETE as documentDelete } from '@/app/api/customers/[id]/credit-file/documents/[documentId]/route'
 
 const actor = 'cf010000-0000-4000-8000-000000000001'
 const org = 'cf110000-0000-4000-8000-000000000001'
@@ -52,6 +53,23 @@ beforeEach(() => {
 })
 
 describe('private customer credit file routes', () => {
+  it.each(['download', 'review', 'delete'])('seller cannot use private document %s', async action => {
+    h.organization.mockResolvedValue({ id: org, role: 'seller', name: 'Fixture', slug: 'fixture', plan: 'pro' })
+    const documentContext = { params: Promise.resolve({ id: customer, documentId: 'cf440000-0000-4000-8000-000000000001' }) }
+    const response = await ({ download: documentDownload, review: documentReview, delete: documentDelete }[action])(request({ version: 1 }), documentContext)
+    expect(response.status).toBe(403)
+    expect(h.admin).not.toHaveBeenCalled()
+  })
+  it('downloads only through a private attachment response', async () => {
+    h.rows.customer_credit_documents = { id: 'cf440000-0000-4000-8000-000000000001', lifecycle: 'ready', object_path: 'never-public.jpg', filename: 'fixture.jpg', mime_type: 'image/jpeg', byte_size: 3 }
+    h.admin.mockReturnValue({ from: h.from, rpc: h.rpc, storage: { from: () => ({ download: async () => ({ data: new Blob([new Uint8Array([255,216,255])]), error: null }) }) } })
+    const response = await documentDownload(request(), { params: Promise.resolve({ id: customer, documentId: 'cf440000-0000-4000-8000-000000000001' }) })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(response.headers.get('content-disposition')).toContain('attachment;')
+    expect(response.headers.get('content-disposition')).not.toContain('never-public')
+  })
   it('requires an authenticated session before any privileged query', async () => {
     h.auth.mockResolvedValue({ reason: 'unauthenticated' })
     expect((await GET(request(), routeContext)).status).toBe(401)

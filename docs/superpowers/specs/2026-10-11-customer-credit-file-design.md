@@ -64,7 +64,7 @@ Tablas separadas para ficha, referencias, metadatos de documentos, eventos de au
 
 Bucket nuevo privado y separado de imágenes públicas. Rutas generadas por servidor con organización/cliente/documento UUID; nunca confiar en un path suministrado por el usuario. Sin URLs permanentes públicas.
 
-Primera versión: JPEG, PNG y WebP, máximo 5 MB por archivo, máximo 10 archivos activos por ficha. Comprobar tamaño, tipo y firma, y rechazar archivos vacíos, SVG, HTML y ejecutables. PDF queda fuera de la primera versión hasta definir análisis de contenido; mostrar esta limitación en UI.
+Primera versión: JPEG, PNG y WebP, máximo 4 MiB (4.194.304 bytes) por archivo, máximo 10 archivos activos por ficha. Ajuste aprobado por el usuario para respetar el límite de 4,5 MB de las funciones de Vercel. Comprobar tamaño, tipo y firma, y rechazar archivos vacíos, SVG, HTML y ejecutables. PDF queda fuera de la primera versión hasta definir análisis de contenido; mostrar esta limitación en UI.
 
 Descarga autenticada con comprobación de permisos vigente y respuestas privadas sin caché compartida. No cargar archivos con el endpoint público genérico de imágenes. No incluirlos en exportaciones generales de clientes, marketplace, PWA o recordatorios.
 

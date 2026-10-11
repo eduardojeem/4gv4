@@ -15,7 +15,7 @@
 - Entregar en la rama actual; preservar cambios ajenos. No ejecutar SQL remoto, publicar ni otorgar créditos reales.
 - `customers.credit_limit` sigue siendo la única fuente operativa de límite.
 - Una ficha por cliente y organización; una referencia no es un garante.
-- Hasta cinco referencias; JPEG, PNG y WebP; máximo 5 MB por archivo y 10 archivos activos por ficha. PDF fuera de esta versión.
+- Hasta cinco referencias; JPEG, PNG y WebP; máximo 4 MiB por archivo y 10 archivos activos por ficha. PDF fuera de esta versión. Ajuste de tamaño aprobado después de aplicar las dos migraciones iniciales: usar migración adicional, no reescribirlas.
 - Modos informativo/advertir/exigir, predeterminado informativo. No aprobar clientes existentes automáticamente.
 - Propietario/administrador/gerente con permiso CRM y módulo créditos gestionan expediente. Vendedor ve solo resumen operativo.
 - Actor, fecha, organización y path de archivos se derivan en servidor. Sin URLs públicas, logs con contenido sensible, scoring ni llamadas a referencias.
@@ -90,7 +90,7 @@ DTO: version, status, identity {type,number}, occupation, company, position, dec
 
 **Interfaces:** `validateCreditDocument(bytes: Uint8Array,declaredType: string): {mimeType:string;extension:string}`, `uploadCreditDocument(context,customerId,file,type,expectedVersion): Promise<CreditFileDTO>`, `downloadCreditDocument(context,customerId,documentId): Promise<{bytes:Uint8Array;mimeType:string;filename:string}>`, `deleteCreditDocument(context,customerId,documentId,expectedVersion): Promise<CreditFileDTO>`. POST upload multipart, GET descarga autenticada, PATCH revisión con versión, DELETE con versión.
 
-- [ ] Tests RED: 0 bytes, 5 MB+1, firma/MIME distintos, SVG/HTML/PDF rechazados, undécimo archivo rechazado concurrentemente, vendedor y tenant ajeno denegados; path generado y nunca recibido del cliente.
+- [ ] Tests RED: 0 bytes, 4 MiB+1, firma/MIME distintos, SVG/HTML/PDF rechazados, undécimo archivo rechazado concurrentemente, vendedor y tenant ajeno denegados; path generado y nunca recibido del cliente.
 - [ ] Test upload interrumpido: metadatos no pasan ready, archivo huérfano se limpia; eliminación retira descarga antes de limpieza, reintento idempotente; documento deleted no satisface checklist. Cambio de documento invalida revisión vigente.
 - [ ] Implementar upload server-side con límite de cuerpo/archivo, reservation pending y compensación; no reutilizar `/api/upload` genérico. Guardar eliminación lógica/evento y cleanup idempotente; documentar cómo reintentar cleanup fallido sin exponer el objeto.
 - [ ] Descargar por API autorizada con MIME y filename seguros, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`. No persistir signed URL ni token en UI; no caché PWA. Comprobar bucket privado/RLS/grants reales en Docker.
