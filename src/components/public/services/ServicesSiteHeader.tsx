@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, CalendarCheck2, CalendarOff, Clock, MapPin, Menu, MessageCircle, Moon, Phone, Sun, User, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarCheck2, CalendarOff, ChevronRight, Clock, MapPin, Menu, MessageCircle, Moon, Phone, Store, Sun, User, X } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useStorefrontCompanyInfo } from '@/components/public/storefront-style-context'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
@@ -90,7 +90,7 @@ function useActiveSection(ids: string[], enabled: boolean) {
 
 /**
  * El encabezado de la plantilla «Servicios»: un sitio de peluquería o
- * barbería, no una tienda. Sin buscador ni franja de marketplace, con los
+ * barbería, no una tienda. Sin buscador, con «Volver al Marketplace» como las demás plantillas, con los
  * accesos del negocio, si está abierto ahora y «Reservar» siempre a mano.
  */
 export function ServicesSiteHeader({
@@ -268,6 +268,17 @@ export function ServicesSiteHeader({
         </nav>
 
         <div className="flex shrink-0 items-center gap-1">
+          {/* Dentro del marketplace (/tienda) se vuelve a explorar otras tiendas, como en las demás plantillas. */}
+          {prefix && (
+            <Link
+              href="/marketplace"
+              aria-label="Volver al marketplace"
+              className={cn('hidden h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors lg:inline-flex', tone.link, 'border-current/20')}
+            >
+              <Store aria-hidden="true" className="h-3.5 w-3.5" />
+              Marketplace
+            </Link>
+          )}
           {catalogEnabled && <PublicCartButton />}
           {/* El ícono lo decide la clase «dark» (CSS): el servidor no sabe el tema elegido. */}
           <button
@@ -332,6 +343,21 @@ export function ServicesSiteHeader({
         </div>
       </div>
 
+      {prefix && (
+        <div className="border-t border-primary-foreground/15 bg-primary text-primary-foreground lg:hidden">
+          <Link
+            href="/marketplace"
+            aria-label="Volver al Marketplace"
+            className="container mx-auto flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-sm font-bold transition-colors hover:bg-primary-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-foreground/70"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Volver al Marketplace</span>
+            <span className="hidden text-xs font-medium text-primary-foreground/80 sm:inline">· Explorar más tiendas</span>
+          </Link>
+        </div>
+      )}
+
       {open && (
         <nav id="services-site-menu" aria-label="Menú" className={cn('border-t shadow-lg lg:hidden', tone.panel)}>
           <div className="container mx-auto px-4 py-4">
@@ -373,6 +399,16 @@ export function ServicesSiteHeader({
                 )}
               </li>
             </ul>
+            {prefix && (
+              <Link
+                href="/marketplace"
+                onClick={() => setOpen(false)}
+                className={cn('mt-2 flex items-center justify-between rounded-xl border border-current/15 px-3 py-2.5 text-sm font-semibold', tone.link)}
+              >
+                <span className="flex items-center gap-2"><Store aria-hidden="true" className="h-4 w-4" />Volver al Marketplace</span>
+                <ChevronRight aria-hidden="true" className="h-4 w-4 opacity-60" />
+              </Link>
+            )}
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {bookingHref && (
                 <Link
