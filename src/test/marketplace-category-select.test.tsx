@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const push = vi.fn()
 let search = ''
@@ -23,7 +23,22 @@ const categorias = [
 const dibujar = (props: Record<string, string> = {}) =>
   render(<ProductsClient products={[]} serverPaginated categories={categorias} brands={[]} {...props} />)
 
+const abrir = (nombre: RegExp | string = 'Filtrar por categoría') =>
+  fireEvent.click(screen.getByRole('button', { name: nombre }))
+
+// Nombre y cantidad, separados como se leen.
+const opciones = () =>
+  screen.getAllByRole('option').map((o) =>
+    [...o.querySelectorAll('span')].map((span) => span.textContent?.trim()).filter(Boolean).join(' ') || o.textContent?.trim()
+  )
+
 const destino = () => new URL(String(push.mock.calls.at(-1)?.[0]), 'http://x').searchParams
+
+beforeAll(() => {
+  // cmdk y Radix usan APIs de diseño que jsdom no trae.
+  Element.prototype.scrollIntoView ??= () => {}
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+})
 
 beforeEach(() => {
   push.mockClear()
@@ -31,41 +46,59 @@ beforeEach(() => {
 })
 
 describe('el selector de categoría, al lado de marcas', () => {
-  it('lista cada categoría con sus ramas, por nombre', () => {
+  it('lista las categorías por cantidad de productos, con sus ramas debajo', () => {
     dibujar()
-    const select = screen.getByRole('combobox', { name: 'Filtrar por categoría' })
-    const grupos = [...select.querySelectorAll('optgroup')].map((g) => g.label)
-    expect(grupos).toEqual(['Accesorios de Celular', 'Electrónica'])
-    expect(screen.getByRole('option', { name: 'Todo Accesorios de Celular (6)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Cargadores y Cables (3)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Electrónica (80)' })).toBeInTheDocument()
+    abrir()
+    expect(opciones()).toEqual([
+      'Todas las categorías',
+      'Electrónica 80',
+      'Accesorios de Celular 6',
+      'Cargadores y Cables 3',
+    ])
+  })
+
+  it('busca sin tildes y muestra la rama con su categoría', () => {
+    dibujar()
+    abrir()
+    fireEvent.change(screen.getByPlaceholderText('Buscar categoría…'), { target: { value: 'electronica' } })
+    expect(opciones()).toEqual(['Electrónica 80'])
+
+    fireEvent.change(screen.getByPlaceholderText('Buscar categoría…'), { target: { value: 'cargad' } })
+    expect(opciones()).toEqual(['Accesorios de Celular 6', 'Cargadores y Cables 3'])
+  })
+
+  it('avisa cuando ninguna coincide', () => {
+    dibujar()
+    abrir()
+    fireEvent.change(screen.getByPlaceholderText('Buscar categoría…'), { target: { value: 'zapatos' } })
+    expect(screen.getByText('Ninguna categoría se llama así.')).toBeInTheDocument()
   })
 
   it('elegir una rama marca también su categoría', () => {
     dibujar()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por categoría' }), { target: { value: 'sub:acc:cab' } })
+    abrir()
+    fireEvent.click(screen.getByRole('option', { name: /Cargadores y Cables/ }))
     expect(destino().get('categoria')).toBe('acc')
     expect(destino().get('subcategoria')).toBe('cab')
   })
 
-  it('cambiar de categoría borra la rama anterior y la página', () => {
+  it('muestra lo elegido y al cambiar borra la rama y la página, no la marca', () => {
     search = 'categoria=acc&subcategoria=cab&pagina=3&marca=Xiaomi'
     dibujar({ initialCategory: 'acc', initialSubcategory: 'cab' })
-    const select = screen.getByRole('combobox', { name: 'Filtrar por categoría' }) as HTMLSelectElement
-    expect(select.value).toBe('sub:acc:cab')
+    abrir('Categoría: Cargadores y Cables. Cambiar categoría')
 
-    fireEvent.change(select, { target: { value: 'cat:elec' } })
+    fireEvent.click(screen.getByRole('option', { name: /Electrónica/ }))
     expect(destino().get('categoria')).toBe('elec')
     expect(destino().has('subcategoria')).toBe(false)
     expect(destino().has('pagina')).toBe(false)
-    // La marca elegida se mantiene.
     expect(destino().get('marca')).toBe('Xiaomi')
   })
 
-  it('«Categorías» quita el filtro', () => {
+  it('«Todas las categorías» quita el filtro', () => {
     search = 'categoria=elec'
     dibujar({ initialCategory: 'elec' })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por categoría' }), { target: { value: '' } })
+    abrir('Categoría: Electrónica. Cambiar categoría')
+    fireEvent.click(screen.getByRole('option', { name: 'Todas las categorías' }))
     expect(destino().has('categoria')).toBe(false)
   })
 })

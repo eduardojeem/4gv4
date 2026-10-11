@@ -33,6 +33,7 @@ import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct, MarketplaceCategory, MarketplaceBrand } from '@/lib/public/marketplace'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
 import { HorizontalScroller } from './HorizontalScroller'
+import { CategoryPicker } from './CategoryPicker'
 import { FavoriteButton } from './Favorites'
 import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
@@ -487,31 +488,12 @@ export function ProductsClient({
               selector, para ir directo a una que ya se conoce. */}
           {categoryOptions.length > 0 && (
             <div className="relative min-w-0 flex-1 sm:flex-none">
-              <select
-                suppressHydrationWarning
-                value={initialSubcategory ? `sub:${initialCategory}:${initialSubcategory}` : initialCategory ? `cat:${initialCategory}` : ''}
-                onChange={(e) => {
-                  const [kind, first, second] = e.target.value.split(':')
-                  if (kind === 'sub') selectCategory(first, second)
-                  else selectCategory(kind === 'cat' ? first : '')
-                }}
-                className="h-8 sm:h-9 w-full sm:w-auto sm:max-w-[200px] rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
-                aria-label="Filtrar por categoría"
-              >
-                <option value="">Categorías</option>
-                {categoryOptions.map(({ category, children }) => (
-                  <optgroup key={category.id} label={category.name}>
-                    <option value={`cat:${category.id}`}>
-                      {children.length > 0 ? `Todo ${category.name}` : category.name} ({category.product_count})
-                    </option>
-                    {children.map((child) => (
-                      <option key={child.id} value={`sub:${category.id}:${child.id}`}>
-                        {child.name} ({child.product_count})
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <CategoryPicker
+                options={categoryOptions}
+                activeCategory={initialCategory}
+                activeSubcategory={initialSubcategory}
+                onSelect={selectCategory}
+              />
             </div>
           )}
 

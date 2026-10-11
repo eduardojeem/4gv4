@@ -691,15 +691,31 @@ async function getMarketplaceProductsPageUncached(
   const categoryIds = requestedCategory ? await resolveCategoryIds(supabase, requestedCategory) : undefined
   if (requestedCategory && !categoryIds) return { products: [], total: 0 }
   const brand = options?.marca?.trim().slice(0,100)
-  const selection = await readEffectiveCatalog({
-    organization_id: options?.organizationId,
-    q: options?.q?.trim().slice(0,120), category_ids: categoryIds ?? undefined,
-    brand, brand_ids: brand ? await resolveBrandIds(supabase, brand) : undefined,
-    only_offers: options?.onlyOffers, sort: options?.orden,
-    offset: Math.max(0,Math.trunc(options?.offset ?? 0)), limit: Math.min(100,Math.max(1,Math.trunc(limit))),
-  })
+  const brandIds = brand ? await resolveBrandIds(supabase, brand) : undefined
+  const [selection, categoryFacet] = await Promise.all([
+    readEffectiveCatalog({
+      organization_id: options?.organizationId,
+      q: options?.q?.trim().slice(0,120), category_ids: categoryIds ?? undefined,
+      brand, brand_ids: brandIds,
+      only_offers: options?.onlyOffers, sort: options?.orden,
+      offset: Math.max(0,Math.trunc(options?.offset ?? 0)), limit: Math.min(100,Math.max(1,Math.trunc(limit))),
+    }),
+    // La lista de categorías no puede depender de la categoría elegida: salía
+    // solo esa y para cambiar a otra había que borrar el filtro. Se cuenta con
+    // los demás filtros (búsqueda, marca, ofertas) y sin el de categoría.
+    categoryIds
+      ? readEffectiveCatalog({
+          organization_id: options?.organizationId,
+          q: options?.q?.trim().slice(0,120),
+          brand, brand_ids: brandIds,
+          only_offers: options?.onlyOffers,
+          limit: 1,
+        }).then((result) => result.categories)
+      : Promise.resolve(null),
+  ])
+  const categories = categoryFacet ?? selection.categories
   const summaries = new Map(selection.rows.map((row) => [row.product_id,row]))
-  if (selection.rows.length === 0) return { products: [], total: selection.total, brands: selection.brands, categories: selection.categories }
+  if (selection.rows.length === 0) return { products: [], total: selection.total, brands: selection.brands, categories }
 
   const query = supabase
     .from('products')
@@ -832,7 +848,7 @@ async function getMarketplaceProductsPageUncached(
     products,
     total: selection.total,
     brands: selection.brands,
-    categories: selection.categories,
+    categories,
   }
 }
 
