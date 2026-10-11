@@ -15,6 +15,7 @@ declare
   v_offers boolean := coalesce((p_filters->>'only_offers')::boolean,false);
   v_category_ids uuid[];
   v_brand_ids uuid[];
+  v_organization_id uuid := (p_filters->>'organization_id')::uuid;
   v_words text[];
   v_result jsonb;
 begin
@@ -39,6 +40,7 @@ begin
     left join public.categories c on c.id=p.category_id and c.organization_id=p.organization_id
     left join public.global_categories gc on gc.id=c.global_category_id
     where p.is_active and p.visibility='public'
+      and (v_organization_id is null or p.organization_id=v_organization_id)
       and not exists(select 1 from public.subscriptions s where s.organization_id=o.id and s.status::text in ('past_due','canceled','suspended'))
       and (v_category_ids is null or p.category_id=any(v_category_ids))
       and not exists(select 1 from unnest(v_words) word where word<>'' and strpos(

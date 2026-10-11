@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { ArrowRight, ChevronRight, Package, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProductsClient } from '@/components/public/ProductsClient'
-import { getMarketplaceProductsPage, getMarketplaceCategories, getMarketplaceBrands } from '@/lib/public/marketplace'
+import { getMarketplaceProductsPage } from '@/lib/public/marketplace'
 
 export const metadata: Metadata = {
   title: 'Productos | Marketplace MiPOS',
@@ -22,6 +22,7 @@ type PageProps = {
     pagina?: string
     porPagina?: string
     orden?: string
+    ofertas?: string
   }>
 }
 
@@ -34,7 +35,8 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
 }
 
 export default async function MarketplaceProductsPage({ searchParams }: PageProps) {
-  const { q, categoria, subcategoria, marca, pagina, porPagina, orden } = await searchParams
+  const { q, categoria, subcategoria, marca, pagina, porPagina, orden, ofertas } = await searchParams
+  const onlyOffers = ofertas === '1'
   const requestedPage = parsePositiveInteger(pagina, 1)
   const parsedPageSize = parsePositiveInteger(porPagina, 28)
   const pageSize = PAGE_SIZE_OPTIONS.includes(parsedPageSize as (typeof PAGE_SIZE_OPTIONS)[number]) ? parsedPageSize : 28
@@ -43,21 +45,17 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
     : 'default'
   const offset = (requestedPage - 1) * pageSize
 
-  const [productPage, categories, categoryBrands, allBrands] = await Promise.all([
-    getMarketplaceProductsPage(pageSize, { q, categoria, subcategoria, marca, offset, orden: sort }),
-    getMarketplaceCategories(),
-    categoria ? getMarketplaceBrands(30, { categoria }) : Promise.resolve([]),
-    getMarketplaceBrands(60),
-  ])
-
-  const brands = categoria && categoryBrands.length > 0 ? categoryBrands : allBrands
+  const productPage = await getMarketplaceProductsPage(pageSize, { q, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })
+  const categories = productPage.categories ?? []
+  const brands = productPage.brands ?? []
   const totalPages = Math.max(1, Math.ceil(productPage.total / pageSize))
-  if (productPage.total > 0 && requestedPage > totalPages) {
+  if (requestedPage > totalPages) {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (categoria) params.set('categoria', categoria)
     if (subcategoria) params.set('subcategoria', subcategoria)
     if (marca) params.set('marca', marca)
+    if (onlyOffers) params.set('ofertas', '1')
     if (pageSize !== 28) params.set('porPagina', String(pageSize))
     if (sort !== 'default') params.set('orden', sort)
     if (totalPages > 1) params.set('pagina', String(totalPages))
@@ -146,6 +144,7 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
           initialSubcategory={subcategoria ?? ''}
           initialBrand={marca ?? ''}
           initialSort={sort}
+          initialOnlyOffers={onlyOffers}
         />
       </section>
     </div>

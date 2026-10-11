@@ -11,6 +11,8 @@ import type { PublicProductVariant } from '@/types/public'
 import { deriveVariantAttributeConfig } from '@/lib/products/variant-attributes'
 import { productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { productsHaveHidePriceColumn } from '@/lib/products/price-visibility'
+import { readEffectiveCatalog, MarketplaceCatalogUnavailableError } from '@/lib/public/effective-catalog'
+import type { PublicCatalogSummary } from '@/lib/public/catalog-summary'
 
 // Precio, stock y promociones cambian con frecuencia. El directorio y sus
 // facetas cambian mucho menos, por eso pueden vivir mas tiempo sin volver a
@@ -48,47 +50,6 @@ function isUuid(value: string) {
  * Una condicion por palabra, y todas tienen que cumplirse: «mouse gamer» antes
  * buscaba esa frase literal y no encontraba «Mouse UP GAMER CHROMA».
  */
-function buildProductSearchExpressions(rawQuery: string, conCelular = false, conTextoBuscable = false): string[] {
-  const term = sanitizeFilterTerm(rawQuery)
-  if (!term) return []
-
-  const words = term.split(/\s+/).filter(Boolean).slice(0, 6)
-  if (conTextoBuscable) {
-    // `search_text` está en minúsculas y sin tildes: «basica» encuentra «Básica».
-    return words.map((word) => {
-      const plain = removeAccents(word).toLowerCase()
-      return [`search_text.ilike.%${plain}%`, ...(conCelular ? [`device_brand.ilike.%${word}%`] : [])].join(',')
-    })
-  }
-
-  const cols = ['name', 'sku', 'brand', 'description']
-  if (conCelular) cols.push('device_brand')
-  return words.map((word) => cols.map((column) => `${column}.ilike.%${word}%`).join(','))
-}
-
-function removeAccents(value: string) {
-  return value.normalize('NFD').replace(/\p{M}/gu, '')
-}
-
-const REVISAR_COLUMNAS_EN_MS = 60_000
-let columnasDeCatalogo: { valor: boolean; hasta: number } | null = null
-
-/**
- * `search_text` y `public_price` llegan con una migración que aplica el
- * dueño de la base; hasta entonces se busca y se ordena como antes. El «sí» se
- * recuerda para siempre; el «no», un minuto.
- */
-async function productsHaveCatalogSearchColumns(supabase: ReturnType<typeof createAdminSupabase>): Promise<boolean> {
-  if (columnasDeCatalogo && (columnasDeCatalogo.valor || Date.now() < columnasDeCatalogo.hasta)) return columnasDeCatalogo.valor
-  const { error } = await supabase.from('products').select('search_text, public_price').limit(0)
-  columnasDeCatalogo = { valor: !error, hasta: Date.now() + REVISAR_COLUMNAS_EN_MS }
-  return columnasDeCatalogo.valor
-}
-
-/** Sólo para los tests. */
-export function forgetCatalogSearchColumnsCheck() {
-  columnasDeCatalogo = null
-}
 
 /** `ilike` sin comodines: `?marca=%` no puede traer todas las marcas. */
 function escapeLikeValue(value: string) {
@@ -174,10 +135,12 @@ export function blockedShowcaseOrganizationIds(
  * suspendida salía del listado y sus productos seguían apareciendo.
  */
 async function getShowcaseOrganizationIds(supabase: ReturnType<typeof createAdminSupabase>): Promise<string[]> {
-  const [{ data: organizations }, { data: subscriptions }] = await Promise.all([
+  const [{ data: organizations, error: organizationsError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
     supabase.from('organizations').select('id').eq('marketplace_public', true).eq('storefront_public', true),
     supabase.from('subscriptions').select('organization_id, status'),
   ])
+
+  if (organizationsError || subscriptionsError) throw new MarketplaceCatalogUnavailableError()
 
   const blocked = blockedShowcaseOrganizationIds(subscriptions as Array<{ organization_id: string; status: string | null }> | null)
   return ((organizations ?? []) as Array<{ id: string }>).map((row) => row.id).filter((id) => !blocked.has(id))
@@ -236,6 +199,7 @@ export type MarketplaceOrganizationContact = {
 }
 
 export type MarketplaceProduct = PublicProduct & {
+  catalog_summary?: PublicCatalogSummary
   organization_id: string
   organization_name: string
   organization_slug: string
@@ -292,6 +256,9 @@ type OrganizationRow = {
 }
 
 type ProductRow = {
+  catalog_summary?: PublicCatalogSummary
+  variants?: PublicProductVariant[]
+  promotion_name?: string | null
   id: string
   organization_id: string
   name: string
@@ -323,6 +290,9 @@ function toPublicProduct(product: ProductRow): PublicProduct {
 
   return {
     id: product.id,
+    catalog_summary: product.catalog_summary,
+    variants: product.variants,
+    promotion_name: product.promotion_name,
     name: product.name,
     sku: product.sku ?? '',
     description: product.description,
@@ -432,26 +402,12 @@ async function getMarketplaceOrganizationsUncached(
    * celulares mostraba 1 de sus 5 productos publicados. Es el mismo error que
    * ya se había corregido para `products_count`, más abajo.
    */
-  const [conCelular, conPrecioOculto] = await Promise.all([
-    productsHaveDeviceColumns(supabase),
-    productsHaveHidePriceColumn(supabase),
-  ])
-  const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
-
-  const productsPorTienda = Promise.all(
-    organizationIds.map((organizationId) =>
-      supabase
-        .from('products')
-        .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)${camposExtras}`)
-        .eq('organization_id', organizationId)
-        .eq('is_active', true)
-        .eq('visibility', 'public')
-        .gt('stock_quantity', 0)
-        .order('featured', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(FEATURED_PRODUCTS_PER_ORGANIZATION)
-    )
-  ).then((respuestas) => ({ data: respuestas.flatMap((respuesta) => respuesta.data ?? []) }))
+  const availableCountByOrganization = new Map<string, number>()
+  const productsPorTienda = Promise.all(organizationIds.map(async (organizationId) => {
+    const page = await getMarketplaceProductsPageUncached(FEATURED_PRODUCTS_PER_ORGANIZATION, { organizationId })
+    availableCountByOrganization.set(organizationId, page.total)
+    return page.products.map((product) => ({ ...product, image_url: product.image, categories: product.category }))
+  })).then((responses) => ({ data: responses.flat() }))
 
   const [
     { data: products },
@@ -512,10 +468,8 @@ async function getMarketplaceOrganizationsUncached(
       const org = row.organization_id
       productTotalByOrganization.set(org, (productTotalByOrganization.get(org) ?? 0) + 1)
 
-      if (row.visibility === 'public' && Number(row.stock_quantity ?? 0) > 0) {
-        productCountByOrganization.set(org, (productCountByOrganization.get(org) ?? 0) + 1)
-      }
     })
+  availableCountByOrganization.forEach((total, id) => productCountByOrganization.set(id, total))
 
   const productsByOrganization = new Map<string, ProductRow[]>()
   ;((products ?? []) as unknown as ProductRow[]).forEach((product) => {
@@ -638,10 +592,12 @@ async function getMarketplaceOrganizationsUncached(
 }
 
 type MarketplaceProductFilters = {
+  organizationId?: string
   q?: string
   categoria?: string
   subcategoria?: string
   marca?: string
+  onlyOffers?: boolean
   offset?: number
   orden?: 'default' | 'price_asc' | 'price_desc' | 'newest' | 'name_asc'
 }
@@ -663,13 +619,13 @@ const getCachedMarketplaceProductsPage = unstable_cache(
 export const getMarketplaceCategories = unstable_cache(
   getMarketplaceCategoriesUncached,
   ['marketplace-categories'],
-  { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:categories'] }
+  { revalidate: MARKETPLACE_CATALOG_REVALIDATE_SECONDS, tags: ['marketplace:categories'] }
 )
 
 const getCachedMarketplaceBrands = unstable_cache(
   getMarketplaceBrandsUncached,
   ['marketplace-brands'],
-  { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:brands'] }
+  { revalidate: MARKETPLACE_CATALOG_REVALIDATE_SECONDS, tags: ['marketplace:brands'] }
 )
 
 export const getMarketplaceOffers = unstable_cache(
@@ -683,7 +639,7 @@ function hasMarketplaceProductFilters(options?: MarketplaceProductFilters) {
     options?.q ||
     options?.categoria ||
     options?.subcategoria ||
-    options?.marca ||
+    options?.marca || options?.onlyOffers || options?.organizationId ||
     options?.offset ||
     (options?.orden && options.orden !== 'default')
   )
@@ -714,6 +670,8 @@ export function getMarketplaceBrands(limit = 50, options?: { categoria?: string 
 export type MarketplaceProductsPage = {
   products: MarketplaceProduct[]
   total: number
+  brands?: MarketplaceBrand[]
+  categories?: MarketplaceCategory[]
 }
 
 async function getMarketplaceProductsPageUncached(
@@ -722,16 +680,28 @@ async function getMarketplaceProductsPageUncached(
 ): Promise<MarketplaceProductsPage> {
   const supabase = createAdminSupabase()
   const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
-  if (showcaseOrganizationIds.length === 0) return { products: [], total: 0 }
 
-  const [conCelular, conPrecioOculto, conColumnasDeCatalogo] = await Promise.all([
+  const [conCelular, conPrecioOculto] = await Promise.all([
     productsHaveDeviceColumns(supabase),
     productsHaveHidePriceColumn(supabase),
-    productsHaveCatalogSearchColumns(supabase),
   ])
   const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
 
-  let query = supabase
+  const requestedCategory = options?.subcategoria || options?.categoria
+  const categoryIds = requestedCategory ? await resolveCategoryIds(supabase, requestedCategory) : undefined
+  if (requestedCategory && !categoryIds) return { products: [], total: 0 }
+  const brand = options?.marca?.trim().slice(0,100)
+  const selection = await readEffectiveCatalog({
+    organization_id: options?.organizationId,
+    q: options?.q?.trim().slice(0,120), category_ids: categoryIds ?? undefined,
+    brand, brand_ids: brand ? await resolveBrandIds(supabase, brand) : undefined,
+    only_offers: options?.onlyOffers, sort: options?.orden,
+    offset: Math.max(0,Math.trunc(options?.offset ?? 0)), limit: Math.min(100,Math.max(1,Math.trunc(limit))),
+  })
+  const summaries = new Map(selection.rows.map((row) => [row.product_id,row]))
+  if (selection.rows.length === 0) return { products: [], total: selection.total, brands: selection.brands, categories: selection.categories }
+
+  const query = supabase
     .from('products')
     .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, has_variants, variant_attribute_config, categories(id, name, parent_id), ${PRODUCT_ORGANIZATION}!inner(id, name, slug, logo_url)${camposExtras}`, { count: 'exact' })
     .in('organization_id', showcaseOrganizationIds)
@@ -739,69 +709,8 @@ async function getMarketplaceProductsPageUncached(
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
     .eq('organizations.storefront_public', true)
-    .gt('stock_quantity', 0)
-
-  // Filtro por marca
-  if (options?.marca) {
-    const marcaClean = sanitizeFilterTerm(options.marca, 100)
-    if (marcaClean) {
-      const brandIds = await resolveBrandIds(supabase, marcaClean)
-      // Entre comillas la barra invertida la consume PostgREST; sin % ni * el valor ya no ensancha nada.
-      const byText = `brand.ilike."${marcaClean}"`
-      query = brandIds.length > 0
-        ? query.or(`${byText},brand_id.in.(${brandIds.join(',')})`)
-        : query.ilike('brand', escapeLikeValue(marcaClean))
-    }
-  }
-
-  // Filtro por subcategoría específica. Puede ser una categoría general (del
-  // catálogo compartido): antes se comparaba directo contra la de cada
-  // producto y «Cargadores y Cables (3)» mostraba 0 resultados.
-  if (options?.subcategoria) {
-    const categoryIds = await resolveCategoryIds(supabase, options.subcategoria)
-    if (!categoryIds) return { products: [], total: 0 }
-    query = query.in('category_id', categoryIds)
-  } else if (options?.categoria) {
-    // Si se pasa una categoría padre, buscar todos los hijos/subcategorías para incluir sus productos
-    const categoryIds = await resolveCategoryIds(supabase, options.categoria)
-    if (!categoryIds) return { products: [], total: 0 }
-    query = query.in('category_id', categoryIds)
-  }
-
-  if (options?.q) {
-    for (const searchExpression of buildProductSearchExpressions(options.q, conCelular, conColumnasDeCatalogo)) {
-      query = query.or(searchExpression)
-    }
-  }
-
-  // Por el precio que se ve (con la oferta), y los de «Consultar precio» al
-  // final: ordenarlos por su precio oculto dejaba adivinarlo por la posición.
-  const priceColumn = conColumnasDeCatalogo ? 'public_price' : 'sale_price'
-  if ((options?.orden === 'price_asc' || options?.orden === 'price_desc') && conPrecioOculto) {
-    query = query.order('hide_price', { ascending: true, nullsFirst: true })
-  }
-  switch (options?.orden) {
-    case 'price_asc':
-      query = query.order(priceColumn, { ascending: true }).order('created_at', { ascending: false })
-      break
-    case 'price_desc':
-      query = query.order(priceColumn, { ascending: false }).order('created_at', { ascending: false })
-      break
-    case 'name_asc':
-      query = query.order('name', { ascending: true }).order('created_at', { ascending: false })
-      break
-    case 'newest':
-      query = query.order('created_at', { ascending: false })
-      break
-    case 'default':
-    default:
-      query = query.order('featured', { ascending: false }).order('created_at', { ascending: false })
-      break
-  }
-
-  const offset = Math.max(0, Math.trunc(options?.offset ?? 0))
-  const safeLimit = Math.max(1, Math.trunc(limit))
-  const { data, count, error } = await query.range(offset, offset + safeLimit - 1)
+    .in('id', selection.rows.map((row) => row.product_id))
+  const { data, error } = await query
 
   if (error || !data) {
 
@@ -809,20 +718,25 @@ async function getMarketplaceProductsPageUncached(
 
     if (error) logMarketplaceError('productos', error)
 
-    return { products: [], total: 0 }
+    throw new MarketplaceCatalogUnavailableError()
 
   }
 
-  const rows = (data ?? []) as unknown as ProductRow[]
+  const fetchedRows = (data ?? []) as unknown as ProductRow[]
+  const byId = new Map(fetchedRows.map((row) => [row.id,row]))
+  if (selection.rows.some((row) => !byId.has(row.product_id))) throw new MarketplaceCatalogUnavailableError()
+  const rows = selection.rows.map((row) => byId.get(row.product_id)!)
   const productIds = rows.map((product) => product.id)
-  const { data: variantRows } = productIds.length > 0
+  const { data: variantRows, error: variantError } = productIds.length > 0
     ? await supabase
         .from('product_variants')
         .select('id, product_id, variant_name, attributes, sku, sale_price, stock_quantity, is_active')
         .in('product_id', productIds)
+        .in('organization_id', showcaseOrganizationIds)
         .eq('is_active', true)
         .order('variant_name')
-    : { data: [] }
+    : { data: [], error: null }
+  if (variantError) throw new MarketplaceCatalogUnavailableError()
   const variantsByProduct = new Map<string, PublicProductVariant[]>()
   for (const variant of variantRows ?? []) {
     const key = String(variant.product_id)
@@ -841,26 +755,16 @@ async function getMarketplaceProductsPageUncached(
   }
   const organizationIds = [...new Set(rows.map((product) => product.organization_id))]
   const [
-    { data: automaticRows },
     { data: orgSettings },
     { data: branches },
     { data: websiteSettings },
   ] = organizationIds.length > 0
     ? await Promise.all([
-        supabase.from('promotions').select('*').in('organization_id', organizationIds).eq('public_mode', 'automatic').eq('is_active', true),
         supabase.from('organization_settings').select('organization_id, city, company_address').in('organization_id', organizationIds),
         supabase.from('branches').select('organization_id, city, address, is_default, is_active').in('organization_id', organizationIds).eq('is_active', true),
         supabase.from('website_settings').select('organization_id, key, value').in('organization_id', organizationIds).in('key', ['company_info']),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
-
-  const promotionsByOrganization = new Map<string, ReturnType<typeof mapPublicPromotion>[]>()
-  ;(automaticRows ?? []).forEach((row) => {
-    const organizationId = String(row.organization_id)
-    const promotions = promotionsByOrganization.get(organizationId) ?? []
-    promotions.push(mapPublicPromotion(row as Record<string, unknown>))
-    promotionsByOrganization.set(organizationId, promotions)
-  })
+    : [{ data: [] }, { data: [] }, { data: [] }]
 
   const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
   ;(orgSettings ?? []).forEach((s) => {
@@ -887,10 +791,8 @@ async function getMarketplaceProductsPageUncached(
       if (!organization) return null
       const publicProduct = toPublicProduct(product)
       const variants = variantsByProduct.get(product.id) ?? []
-      const priced = applyAutomaticPromotionToProduct({
-        ...publicProduct,
-        category_id: publicProduct.category?.id ?? null,
-      }, promotionsByOrganization.get(product.organization_id) ?? [])
+      const catalog = summaries.get(product.id)!
+      const priced = catalog.pricing ?? { has_offer: false, offer_price: null, promotion_name: null }
 
       const orgSetting = settingsByOrganization.get(product.organization_id)
       const orgBranches = branchesByOrganization.get(product.organization_id) ?? []
@@ -905,6 +807,9 @@ async function getMarketplaceProductsPageUncached(
 
       return {
         ...publicProduct,
+        catalog_summary: catalog.summary,
+        stock_quantity: catalog.summary.stockQuantity,
+        in_stock: catalog.summary.stockQuantity > 0,
         has_variants: variants.length > 0,
         variants,
         has_offer: priced.has_offer,
@@ -922,183 +827,23 @@ async function getMarketplaceProductsPageUncached(
     })
     .filter((product): product is MarketplaceProduct => product !== null)
 
+  if (products.length !== selection.rows.length) throw new MarketplaceCatalogUnavailableError()
   return {
     products,
-    total: count ?? products.length,
+    total: selection.total,
+    brands: selection.brands,
+    categories: selection.categories,
   }
 }
 
 async function getMarketplaceCategoriesUncached(): Promise<MarketplaceCategory[]> {
-  const supabase = createAdminSupabase()
-  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
-  if (showcaseOrganizationIds.length === 0) return []
-
-  // Doble nivel: si la categoría tenant tiene global_category_id →
-  // agrupa por la categoría global (normalizada). Si no → usa la del tenant.
-  const { data, error } = await supabase
-    .from('products')
-    .select(`
-      organization_id,
-      categories(id, name, parent_id, global_category_id, global_categories:global_category_id(id, name, slug, parent_id)),
-      ${PRODUCT_ORGANIZATION}!inner(id)
-    `)
-    .in('organization_id', showcaseOrganizationIds)
-    .eq('is_active', true)
-    .eq('visibility', 'public')
-    .eq('organizations.marketplace_public', true)
-    .eq('organizations.storefront_public', true)
-    .gt('stock_quantity', 0)
-    .limit(20000)
-
-  if (error || !data) {
-
-    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
-
-    if (error) logMarketplaceError('categorías', error)
-
-    return []
-
-  }
-
-  const categories = new Map<string, MarketplaceCategory & { organizationIds: Set<string> }>()
-
-  ;((data ?? []) as unknown as ProductRow[]).forEach((product) => {
-    const tenantCategory = getProductCategory(product)
-    if (!tenantCategory) return
-
-    // Preferir la categoría global si existe
-    const globalCategoryRelation = (tenantCategory as { parent_id?: string | null; global_categories?: { id: string; name: string; parent_id?: string | null } | { id: string; name: string; parent_id?: string | null }[] | null }).global_categories
-    const globalCat = Array.isArray(globalCategoryRelation) ? globalCategoryRelation[0] : globalCategoryRelation
-    const displayId   = globalCat?.id   ?? tenantCategory.id
-    const displayName = globalCat?.name ?? tenantCategory.name
-    const parentId    = globalCat?.parent_id ?? (tenantCategory as { parent_id?: string | null }).parent_id ?? null
-
-    const existing = categories.get(displayId) ?? {
-      id: displayId,
-      name: displayName,
-      parent_id: parentId,
-      product_count: 0,
-      organization_count: 0,
-      organizationIds: new Set<string>(),
-    }
-
-    existing.product_count += 1
-    existing.organizationIds.add(product.organization_id)
-    existing.organization_count = existing.organizationIds.size
-    categories.set(displayId, existing)
-  })
-
-  return Array.from(categories.values())
-    .map((category) => ({
-      id: category.id,
-      name: category.name,
-      parent_id: category.parent_id ?? null,
-      product_count: category.product_count,
-      organization_count: category.organization_count,
-    }))
-    .sort((a, b) => b.product_count - a.product_count)
+  return (await readEffectiveCatalog({ limit: 1 })).categories
 }
 
-async function getMarketplaceBrandsUncached(
-  limit = 50,
-  options?: { categoria?: string }
-): Promise<MarketplaceBrand[]> {
-  const supabase = createAdminSupabase()
-
-  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
-  if (showcaseOrganizationIds.length === 0) return []
-
-  let query = supabase
-    .from('products')
-    .select(`organization_id, brand, brand_id, category_id, brands:brand_id(name, logo_url, global_brands:global_brand_id(name, logo_url)), ${PRODUCT_ORGANIZATION}!inner(id)`)
-    .in('organization_id', showcaseOrganizationIds)
-    .eq('is_active', true)
-    .eq('visibility', 'public')
-    .eq('organizations.marketplace_public', true)
-    .eq('organizations.storefront_public', true)
-    .gt('stock_quantity', 0)
-
-  if (options?.categoria) {
-    const categoryIds = await resolveCategoryIds(supabase, options.categoria)
-    if (!categoryIds) return []
-    query = query.in('category_id', categoryIds)
-  }
-
-  const { data, error } = await query.limit(20000)
-
-  if (error || !data) {
-
-    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
-
-    if (error) logMarketplaceError('marcas', error)
-
-    return []
-
-  }
-
-  type BrandRow = {
-    organization_id: string
-    brand: string | null
-    brands: {
-      name: string
-      logo_url?: string | null
-      global_brands?: { name: string; logo_url?: string | null } | null
-    } | null
-  }
-  const brands = new Map<string, MarketplaceBrand & { organizationIds: Set<string>; nameCounts: Map<string, number> }>()
-
-  ;((data ?? []) as unknown as BrandRow[]).forEach((row) => {
-    const official = row.brands?.global_brands ?? null
-    // El nombre oficial manda: «samsung» y «Samsung Electronics» son la misma
-    // marca en la vitrina.
-    const rawName = (official?.name ?? row.brands?.name ?? row.brand ?? '').trim()
-    if (!rawName) return
-
-    const key = rawName.toLowerCase()
-    // Solo el logo del catálogo global. Antes se tomaba el de la marca de cada
-    // empresa y la primera imagen cargada representaba a la marca para todas.
-    const brandLogo = official?.logo_url || null
-
-    const existing = brands.get(key) ?? {
-      name: rawName,
-      logo_url: brandLogo,
-      product_count: 0,
-      organization_count: 0,
-      organizationIds: new Set<string>(),
-      nameCounts: new Map<string, number>(),
-    }
-
-    if (brandLogo && !existing.logo_url) {
-      existing.logo_url = brandLogo
-    }
-
-    existing.product_count += 1
-    existing.organizationIds.add(row.organization_id)
-    existing.organization_count = existing.organizationIds.size
-
-    const count = existing.nameCounts.get(rawName) ?? 0
-    existing.nameCounts.set(rawName, count + 1)
-
-    let best = existing.name
-    let bestCount = existing.nameCounts.get(best) ?? 0
-    for (const [n, c] of existing.nameCounts) {
-      if (c > bestCount) { best = n; bestCount = c }
-    }
-    existing.name = best
-
-    brands.set(key, existing)
-  })
-
-  return Array.from(brands.values())
-    .filter((brand) => brand.product_count > 0)
-    .map((brand) => ({
-      name: brand.name,
-      logo_url: brand.logo_url ?? null,
-      product_count: brand.product_count,
-      organization_count: brand.organization_count,
-    }))
-    .sort((a, b) => b.product_count - a.product_count)
-    .slice(0, limit)
+async function getMarketplaceBrandsUncached(limit = 50, options?: { categoria?: string }): Promise<MarketplaceBrand[]> {
+  const categoryIds = options?.categoria ? await resolveCategoryIds(createAdminSupabase(), options.categoria) : undefined
+  if (options?.categoria && !categoryIds) return []
+  return (await readEffectiveCatalog({ limit: 1, category_ids: categoryIds ?? undefined })).brands.slice(0, limit)
 }
 
 export async function getPublicOrganizationPage(slug: string) {
@@ -1286,138 +1031,5 @@ export async function getStorefrontOffers(tenantSlug: string | null): Promise<Ma
 }
 
 async function getMarketplaceOffersUncached(limit = 100): Promise<MarketplaceProduct[]> {
-  const supabase = createAdminSupabase()
-
-  // 1. Las organizaciones que hoy pueden mostrarse: publicadas y con la
-  // suscripción al día, el mismo criterio del directorio y del catálogo.
-  const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
-  if (showcaseOrganizationIds.length === 0) return []
-
-  const { data: organizations } = await supabase
-    .from('organizations')
-    .select('id, name, slug, logo_url')
-    .in('id', showcaseOrganizationIds)
-
-  if (!organizations || organizations.length === 0) return []
-
-  const organizationIds = organizations.map((o) => o.id)
-  const orgMap = new Map(organizations.map((o) => [o.id, o]))
-
-  // 2. Obtener promociones automáticas vigentes y datos de ubicación de estas organizaciones
-  const [
-    { data: promotionRows },
-    { data: orgSettings },
-    { data: branches },
-    { data: websiteSettings },
-  ] = await Promise.all([
-    supabase.from('promotions').select('*').in('organization_id', organizationIds).eq('public_mode', 'automatic').eq('is_active', true),
-    supabase.from('organization_settings').select('organization_id, city, company_address').in('organization_id', organizationIds),
-    supabase.from('branches').select('organization_id, city, address, is_default, is_active').in('organization_id', organizationIds).eq('is_active', true),
-    supabase.from('website_settings').select('organization_id, key, value').in('organization_id', organizationIds).in('key', ['company_info']),
-  ])
-
-  const automaticPromotions = (promotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
-  const promotionsByOrg = new Map<string, ReturnType<typeof mapPublicPromotion>[]>()
-  ;(promotionRows ?? []).forEach((row) => {
-    const orgId = String(row.organization_id)
-    const list = promotionsByOrg.get(orgId) ?? []
-    list.push(mapPublicPromotion(row as Record<string, unknown>))
-    promotionsByOrg.set(orgId, list)
-  })
-
-  const settingsByOrganization = new Map<string, { city?: string | null; company_address?: string | null }>()
-  ;(orgSettings ?? []).forEach((s) => {
-    settingsByOrganization.set(s.organization_id, s)
-  })
-
-  const branchesByOrganization = new Map<string, Array<{ city?: string | null; address?: string | null; is_default?: boolean }>>()
-  ;(branches ?? []).forEach((b) => {
-    const list = branchesByOrganization.get(b.organization_id) ?? []
-    list.push(b)
-    branchesByOrganization.set(b.organization_id, list)
-  })
-
-  const webSettingsByOrganization = new Map<string, Record<string, unknown>>()
-  ;(websiteSettings ?? []).forEach((w) => {
-    if (w.value && typeof w.value === 'object') {
-      webSettingsByOrganization.set(w.organization_id, w.value as Record<string, unknown>)
-    }
-  })
-
-  const offerCandidateFilter = buildPublicOfferCandidateFilter(automaticPromotions)
-
-  const [conCelular, conPrecioOculto] = await Promise.all([
-    productsHaveDeviceColumns(supabase),
-    productsHaveHidePriceColumn(supabase),
-  ])
-  const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
-
-  // 3. Consultar todos los productos con oferta directa o promociones automáticas
-  const { data, error } = await supabase
-    .from('products')
-    .select(`id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, created_at, categories(id, name)${camposExtras}`)
-    .in('organization_id', organizationIds)
-    .eq('is_active', true)
-    .eq('visibility', 'public')
-    .gt('stock_quantity', 0)
-    .or(offerCandidateFilter)
-    .order('featured', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (error || !data) {
-
-    // Antes se devolvía vacío sin avisar: un error de la consulta parecía «no hay nada».
-
-    if (error) logMarketplaceError('ofertas', error)
-
-    return []
-
-  }
-
-  const rows = data as unknown as ProductRow[]
-
-  return rows
-    .map<MarketplaceProduct | null>((product) => {
-      const org = orgMap.get(product.organization_id)
-      if (!org) return null
-
-      const category = Array.isArray(product.categories) ? product.categories[0] : product.categories
-      const cat = category ? { id: category.id, name: category.name } : undefined
-      const publicProduct = toPublicProduct(product)
-      const orgPromos = promotionsByOrg.get(product.organization_id) ?? []
-      const priced = applyAutomaticPromotionToProduct({
-        ...publicProduct,
-        category_id: cat?.id ?? null,
-      }, orgPromos)
-
-      const orgSetting = settingsByOrganization.get(product.organization_id)
-      const orgBranches = branchesByOrganization.get(product.organization_id) ?? []
-      const defaultBranch = orgBranches.find((b) => b.is_default) || orgBranches[0]
-      const companyInfo = webSettingsByOrganization.get(product.organization_id)
-
-      const city = orgSetting?.city?.trim() || defaultBranch?.city?.trim() || null
-      const companyAddress = typeof companyInfo?.address === 'string' ? companyInfo.address : null
-      const companyMapsUrl = typeof companyInfo?.mapsUrl === 'string' ? companyInfo.mapsUrl : null
-      const address = orgSetting?.company_address?.trim() || defaultBranch?.address?.trim() || companyAddress?.trim() || null
-      const mapsHref = getCompanyMapsHref(companyMapsUrl, address || (city ? `${city}, Paraguay` : null))
-
-      return {
-        ...publicProduct,
-        category: cat,
-        has_offer: priced.has_offer,
-        offer_price: priced.offer_price,
-        promotion_name: priced.promotion_name,
-        organization_id: org.id,
-        organization_name: org.name,
-        organization_slug: org.slug,
-        organization_logo_url: org.logo_url ?? null,
-        organization_city: city,
-        organization_address: address,
-        organization_maps_url: mapsHref,
-        organization_contact: pickOrganizationContact(companyInfo),
-        created_at: product.created_at ?? null,
-      }
-    })
-    .filter((product): product is MarketplaceProduct => Boolean(product && product.has_offer && product.offer_price && product.offer_price < product.sale_price))
+  return (await getMarketplaceProductsPageUncached(limit, { onlyOffers: true })).products
 }

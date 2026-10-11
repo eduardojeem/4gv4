@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Building2, ChevronRight, Package, Search, Store } from 'lucide-react'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
@@ -14,30 +15,45 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
-/**
- * Cuantos resultados se traen por busqueda. La coincidencia la resuelve la base,
- * asi que este numero acota lo que se muestra, no lo que se busca: antes se
- * traian las 160 filas mas recientes y se filtraban en JavaScript, y todo lo que
- * quedaba fuera de esas 160 era inencontrable aunque escribieras su nombre exacto.
- */
-const PRODUCT_RESULTS = 120
+/** La búsqueda y la paginación se resuelven sobre el catálogo en el servidor. */
+const PRODUCT_RESULTS = 28
 const ORGANIZATION_RESULTS = 48
 
 type PageProps = {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; marca?: string; categoria?: string; subcategoria?: string; ofertas?: string; pagina?: string; porPagina?: string; orden?: string }>
 }
 
 export default async function MarketplaceSearchPage({ searchParams }: PageProps) {
-  const { q } = await searchParams
+  const { q, marca, categoria, subcategoria, ofertas, pagina, porPagina, orden } = await searchParams
+  const onlyOffers = ofertas === '1'
   const query = q?.trim() ?? ''
+  const requestedPage = Number(pagina)
+  const currentPage = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
+  const requestedSize = Number(porPagina)
+  const pageSize = [12, 28, 48, 100].includes(requestedSize) ? requestedSize : PRODUCT_RESULTS
+  const sort = orden === 'price_asc' || orden === 'price_desc' || orden === 'newest' || orden === 'name_asc' ? orden : 'default'
+  const offset = (currentPage - 1) * pageSize
 
   const [productPage, organizations] = await Promise.all([
-    getMarketplaceProductsPage(PRODUCT_RESULTS, { q: query || undefined }),
+    getMarketplaceProductsPage(pageSize, { q: query || undefined, categoria, subcategoria, marca, offset, orden: sort, onlyOffers }),
     getMarketplaceOrganizations(ORGANIZATION_RESULTS, { q: query || undefined }),
   ])
+  const brands = productPage.brands ?? []
 
   const products = productPage.products
-  const hiddenProducts = Math.max(0, productPage.total - products.length)
+  const lastPage = Math.max(1, Math.ceil(productPage.total / pageSize))
+  if (currentPage > lastPage) {
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    if (marca) params.set('marca', marca)
+    if (categoria) params.set('categoria', categoria)
+    if (subcategoria) params.set('subcategoria', subcategoria)
+    if (onlyOffers) params.set('ofertas', '1')
+    if (sort !== 'default') params.set('orden', sort)
+    if (pageSize !== PRODUCT_RESULTS) params.set('porPagina', String(pageSize))
+    if (lastPage > 1) params.set('pagina', String(lastPage))
+    redirect(`/marketplace/buscar?${params.toString()}#catalogo`)
+  }
 
   return (
     <div>
@@ -77,9 +93,6 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
         {query ? (
           <div className="mb-8 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
             Resultados para <strong className="text-slate-900 dark:text-slate-50">&quot;{query}&quot;</strong>: {productPage.total} producto{productPage.total !== 1 ? 's' : ''} y {organizations.length} empresa{organizations.length !== 1 ? 's' : ''}.
-            {hiddenProducts > 0 && (
-              <> Se muestran los primeros {products.length}; afina la busqueda para ver el resto.</>
-            )}
           </div>
         ) : (
           <div className="mb-8 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
@@ -87,7 +100,7 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
           </div>
         )}
 
-        {products.length > 0 && (
+        {(
           <div>
             <div className="mb-5 flex items-center gap-2">
               <Package className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
@@ -99,7 +112,11 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
               a los 400 ms reescribe la URL sin el termino y borra la busqueda recien
               hecha. `hideSearch` deja un solo buscador en la pantalla: el de arriba.
             */}
-            <ProductsClient products={products} initialQuery={query} hideSearch />
+            <ProductsClient products={products} initialQuery={query} initialBrand={marca ?? ''}
+              initialCategory={categoria ?? ''} initialSubcategory={subcategoria ?? ''}
+              categories={productPage.categories ?? []} initialOnlyOffers={onlyOffers}
+              initialSort={sort} brands={brands} totalProducts={productPage.total}
+              currentPage={currentPage} currentPageSize={pageSize} serverPaginated hideSearch />
           </div>
         )}
 

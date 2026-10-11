@@ -21,6 +21,11 @@ declare result jsonb; hidden_order jsonb;
 begin
  result:=public.get_marketplace_effective_catalog('{"q":"__catalog_fixture__","sort":"price_asc","limit":12}');
  assert (result->>'total')::int=16, 'public variant-aware total';
+ result:=public.get_marketplace_effective_catalog('{"q":"__catalog_fixture__","organization_id":"11000000-0000-4000-8000-000000000002"}');
+ assert (result->>'total')::int=0,'organization restriction cannot expose private products';
+ result:=public.get_marketplace_effective_catalog('{"q":"zzz%,cost_price.gt.500000,name.ilike.%zzz"}');
+ assert (result->>'total')::int=0,'search injection is only literal text';
+ result:=public.get_marketplace_effective_catalog('{"q":"__catalog_fixture__","sort":"price_asc","limit":12}');
  assert jsonb_array_length(result->'rows')=12, 'server page size';
  assert result#>>'{rows,0,product_id}'='22000000-0000-4000-8000-000000000015','discount must sort before pagination';
  assert (result#>>'{rows,1,summary,price}')::numeric=80,'depleted variant must not set minimum';

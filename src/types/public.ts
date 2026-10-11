@@ -4,6 +4,7 @@
  */
 
 import { RepairStatus, RepairPriority } from './repairs'
+import type { PublicCatalogSummary } from '@/lib/public/catalog-summary'
 
 /**
  * Public Product - Safe for public viewing
@@ -44,6 +45,7 @@ export interface PublicProductVariant {
 }
 
 export interface PublicProduct {
+  catalog_summary?: PublicCatalogSummary
   id: string
   name: string
   sku: string
