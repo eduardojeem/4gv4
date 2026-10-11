@@ -182,6 +182,19 @@ export function ProductsClient({
     router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
+  // Categoría y rama juntas: elegir una rama desde el selector deja marcada
+  // también su categoría, como al tocarla en «Ramas».
+  const selectCategory = (categoryId: string, subcategoryId = '') => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (categoryId) params.set('categoria', categoryId)
+    else params.delete('categoria')
+    if (subcategoryId) params.set('subcategoria', subcategoryId)
+    else params.delete('subcategoria')
+    params.delete('pagina')
+    setPage(1)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
   const clearAllFilters = () => {
     setQuery('')
     setSort('default')
@@ -213,6 +226,20 @@ export function ProductsClient({
       .filter((c) => !c.parent_id || !ids.has(c.parent_id) || c.id === initialCategory)
       .map((c) => ({ ...c, product_count: c.product_count + (childCount.get(c.id) ?? 0) }))
   }, [categories, initialCategory])
+
+  // Para el selector: cada categoría principal con sus ramas, por nombre.
+  const categoryOptions = useMemo(() => {
+    const ids = new Set(categories.map((c) => c.id))
+    return topCategories
+      .filter((c) => !c.parent_id || !ids.has(c.parent_id))
+      .map((category) => ({
+        category,
+        children: categories
+          .filter((c) => c.parent_id === category.id && c.id !== category.id)
+          .sort((a, b) => a.name.localeCompare(b.name, 'es')),
+      }))
+      .sort((a, b) => a.category.name.localeCompare(b.category.name, 'es'))
+  }, [categories, topCategories])
 
   // ─── Marcas contextuales (Marcas presentes en los productos actuales) ────────
   const contextBrands = useMemo(() => {
@@ -398,12 +425,12 @@ export function ProductsClient({
       <div suppressHydrationWarning className="relative z-30 mb-3 sm:sticky sm:top-16 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
         
         {/* ── FILA ÚNICA: Buscador + Ofertas + Marca + Orden + Vista ── */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-2">
           {/* Input de Búsqueda */}
           {hideSearch ? (
             <div className="flex-1 min-w-0" />
           ) : (
-            <div className="relative flex-1 min-w-0">
+            <div className="relative min-w-0 basis-full sm:basis-auto sm:flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
@@ -450,14 +477,46 @@ export function ProductsClient({
             </button>
           )}
 
+          {/* Selector de Categoría: la franja de abajo sirve para mirar; el
+              selector, para ir directo a una que ya se conoce. */}
+          {categoryOptions.length > 0 && (
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <select
+                suppressHydrationWarning
+                value={initialSubcategory ? `sub:${initialCategory}:${initialSubcategory}` : initialCategory ? `cat:${initialCategory}` : ''}
+                onChange={(e) => {
+                  const [kind, first, second] = e.target.value.split(':')
+                  if (kind === 'sub') selectCategory(first, second)
+                  else selectCategory(kind === 'cat' ? first : '')
+                }}
+                className="h-8 sm:h-9 w-full sm:w-auto sm:max-w-[200px] rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
+                aria-label="Filtrar por categoría"
+              >
+                <option value="">Categorías</option>
+                {categoryOptions.map(({ category, children }) => (
+                  <optgroup key={category.id} label={category.name}>
+                    <option value={`cat:${category.id}`}>
+                      {children.length > 0 ? `Todo ${category.name}` : category.name} ({category.product_count})
+                    </option>
+                    {children.map((child) => (
+                      <option key={child.id} value={`sub:${category.id}:${child.id}`}>
+                        {child.name} ({child.product_count})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Selector de Marca (Dropdown) */}
           {contextBrands.length > 0 && (
-            <div className="relative shrink-0">
+            <div className="relative min-w-0 flex-1 sm:flex-none">
               <select
                 suppressHydrationWarning
                 value={contextBrands.find((b) => b.name.toLowerCase() === initialBrand.toLowerCase())?.name ?? initialBrand}
                 onChange={(e) => updateUrlParam('marca', e.target.value)}
-                className="h-8 sm:h-9 max-w-[90px] xs:max-w-[120px] sm:max-w-none rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
+                className="h-8 sm:h-9 w-full sm:w-auto rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
                 aria-label="Filtrar por marca"
               >
                 <option value="">Marcas</option>
