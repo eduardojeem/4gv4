@@ -18,6 +18,7 @@ export const quoteReservationSchema = z.object({
   notes: z.string().trim().max(500).nullable().optional(), website: z.string().max(0).optional(),
 })
 export const BOOKING_ERRORS: Record<string, string> = {
+  AGENDA_SETTINGS_CHANGED: 'La agenda cambió desde que abriste esta configuración. Conservamos tu borrador; recargá y revisá los cambios antes de guardar.',
   QUOTE_EXPIRED: 'La cotización venció. Revisá el horario y confirmá nuevamente.',
   QUOTE_CHANGED: 'Cambió la disponibilidad o la tarifa. Revisá una nueva cotización.',
   QUOTE_UNAVAILABLE: 'La cotización ya no está disponible. Solicitá una nueva.',

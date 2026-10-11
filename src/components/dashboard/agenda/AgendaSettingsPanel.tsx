@@ -20,6 +20,7 @@ import { SuggestedServicesCard } from '@/components/dashboard/agenda/SuggestedSe
 import { ProfessionalsManager } from '@/components/dashboard/agenda/ProfessionalsManager'
 import { TimeOffEditor } from '@/components/dashboard/agenda/TimeOffEditor'
 import { NewServiceDialog } from '@/components/dashboard/agenda/NewServiceDialog'
+import { reservationReadiness } from '@/lib/agenda/reservation-readiness'
 
 const RUBRO_LABELS: Record<string, string> = { barbershop: 'barbería y peluquería', beauty_services: 'belleza y cuidado personal' }
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
@@ -33,6 +34,9 @@ type Config = {
   timeZone: string
   capabilities?: { professionalBooking: boolean }
   professionalRates?: AgendaProfessionalRate[]
+  settingsRevision?: number
+  professionalCount?: number
+  bookingContext?: { storefrontPublic: boolean; notificationEmail: string | null }
 }
 
 export type AgendaSection = 'horario' | 'equipo' | 'servicios' | 'reservas' | 'ausencias'
@@ -66,6 +70,8 @@ export function AgendaSettingsPanel() {
   const [section, setSection] = useState<AgendaSection>('horario')
   const [savedSnapshot, setSavedSnapshot] = useState('')
   const [newServiceOpen, setNewServiceOpen] = useState(false)
+  const [daysText, setDaysText] = useState('30')
+  const [conflict, setConflict] = useState(false)
   const { businessVertical, serviceSpecialties } = useSubscriptionStatus()
   // Snapshot del servidor; las altas no reenvían configuración global.
   const savedSettingsRef = useRef<AgendaSettings | null>(null)
@@ -82,6 +88,8 @@ export function AgendaSettingsPanel() {
         savedSettingsRef.current = body.settings
         savedConfigRef.current = body
         setConfig(body)
+        setDaysText(String(body.settings.max_days_ahead))
+        setConflict(false)
         setSavedSnapshot(agendaDraftSnapshot(body, body.capabilities?.professionalBooking === true))
       }
     } catch (cause) {
@@ -89,6 +97,10 @@ export function AgendaSettingsPanel() {
     }
   }, [])
   useEffect(() => { void load() }, [load])
+  const configuredDays = config?.settings.max_days_ahead
+  useEffect(() => {
+    if (configuredDays !== undefined) setDaysText(String(configuredDays))
+  }, [configuredDays])
 
   /**
    * Trae lo nuevo (un servicio recién creado) sin perder lo que se está editando:
@@ -102,15 +114,16 @@ export function AgendaSettingsPanel() {
     savedSettingsRef.current = body.settings
     savedConfigRef.current = body
     setSavedSnapshot(agendaDraftSnapshot(body, isAdvanced))
-    setConfig(draft => draft ? {
+    setConfig(draft => draft && agendaDraftSnapshot(draft, isAdvanced) !== savedSnapshot ? {
       ...body,
+      settingsRevision: draft.settingsRevision,
       settings: draft.settings,
       services: (body.services as AgendaService[]).map((service) => {
         const edited = draft.services.find((item) => item.product_id === service.product_id)
         return edited ? { ...service, duration_minutes: edited.duration_minutes, online: edited.online, buffer_minutes: edited.buffer_minutes } : service
       }),
     } : body)
-  }, [])
+  }, [savedSnapshot])
 
   // La sección se recuerda en la dirección (#equipo), para volver o compartirla.
   useEffect(() => {
@@ -128,7 +141,8 @@ export function AgendaSettingsPanel() {
   }
 
   const advanced = config?.capabilities?.professionalBooking === true
-  const dirty = Boolean(config) && agendaDraftSnapshot(config!, advanced) !== savedSnapshot
+  const daysValid = /^\d+$/.test(daysText) && Number(daysText) >= 1 && Number(daysText) <= 180
+  const dirty = Boolean(config) && (agendaDraftSnapshot(config!, advanced) !== savedSnapshot || daysText !== String(config!.settings.max_days_ahead))
 
   useEffect(() => {
     if (!dirty) return
@@ -145,7 +159,7 @@ export function AgendaSettingsPanel() {
       { id: 'horario' as const, label: 'Horario', icon: Clock, summary: openingSummary(config.settings) },
       { id: 'equipo' as const, label: 'Quién atiende', icon: Users, summary: activeTeam === 0 ? 'Una sola agenda' : `${activeTeam} ${activeTeam === 1 ? 'profesional' : 'profesionales'}` },
       { id: 'servicios' as const, label: 'Servicios', icon: Scissors, summary: config.services.length === 0 ? 'Sin servicios' : `${config.services.length} · ${onlineServices} online` },
-      { id: 'reservas' as const, label: 'Reservas online', icon: Globe, summary: config.settings.online_booking ? 'Activas' : 'Apagadas' },
+      { id: 'reservas' as const, label: 'Reservas online', icon: Globe, summary: !config.settings.online_booking ? 'Apagadas' : reservationReadiness({ ...config, storefrontPublic: config.bookingContext?.storefrontPublic === true }).ready ? 'Configuración lista' : 'Revisar configuración' },
       ...(advanced ? [{ id: 'ausencias' as const, label: 'Ausencias', icon: CalendarOff, summary: 'Vacaciones y pausas' }] : []),
     ]
   }, [config, advanced])
@@ -176,10 +190,16 @@ export function AgendaSettingsPanel() {
     const saved = savedConfigRef.current
     if (!saved) return
     // El equipo no se descarta: ya está guardado.
-    setConfig((current) => (current ? { ...current, settings: saved.settings, services: saved.services } : current))
+    setConfig((current) => (current ? { ...current, settings: saved.settings, services: saved.services, settingsRevision: saved.settingsRevision } : current))
+    setDaysText(String(saved.settings.max_days_ahead))
   }
 
   const save = async () => {
+    if (!daysValid || (settings.booking_message?.length ?? 0) > 500) {
+      toast.error('Revisá los días de anticipación y el mensaje (máximo 500 caracteres).')
+      goTo('reservas')
+      return
+    }
     const invalid = DAY_ORDER.find((day) => (settings.opening_hours[day] ?? []).some(([from, to]) => !from || !to || from >= to))
     if (invalid !== undefined) {
       toast.error(`Revisá el horario del ${WEEKDAY_LABELS[invalid].toLowerCase()}: el inicio tiene que ser antes del cierre.`)
@@ -193,6 +213,8 @@ export function AgendaSettingsPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...Object.fromEntries(Object.entries(settings).filter(([key]) => advanced || key !== 'professional_selection')),
+          max_days_ahead: Number(daysText),
+          ...(advanced ? { expected_revision: config.settingsRevision } : {}),
           services: config.services.map((service) => ({
             product_id: service.product_id,
             duration_minutes: service.duration_minutes,
@@ -203,6 +225,7 @@ export function AgendaSettingsPanel() {
       })
       const body = await response.json().catch(() => ({}))
       if (!response.ok) {
+        if (body.code === 'AGENDA_SETTINGS_CHANGED') setConflict(true)
         toast.error(body.error || 'No se pudo guardar')
         return
       }
@@ -215,12 +238,19 @@ export function AgendaSettingsPanel() {
     }
   }
 
-  const copyLink = () => void navigator.clipboard.writeText(config.bookingUrl).then(() => toast.success('Enlace copiado'))
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(config.bookingUrl); toast.success('Enlace copiado') }
+    catch { toast.error('No se pudo copiar. Seleccioná el enlace y copialo manualmente.') }
+  }
+  const readiness = reservationReadiness({ ...config, storefrontPublic: config.bookingContext?.storefrontPublic === true })
+  const saved = savedConfigRef.current
+  const linkReady = saved ? reservationReadiness({ ...saved, storefrontPublic: saved.bookingContext?.storefrontPublic === true }).ready : false
   const mondayRanges = settings.opening_hours[1] ?? []
 
   return (
     <div className="space-y-5">
       {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
+      {conflict && <div role="alert" className="rounded-xl border border-amber-300 p-4 text-sm"><p>Otra persona modificó la agenda. Tu borrador sigue aquí; no se sobrescribió la configuración guardada.</p><Button variant="outline" className="mt-2" disabled={saving} onClick={() => { if (window.confirm('Recargar descarta tu borrador y trae la configuración actual. ¿Continuar?')) void load() }}>Recargar y descartar borrador</Button></div>}
 
       <div className="space-y-1">
         <Link href="/dashboard/agenda" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Agenda</Link>
@@ -392,21 +422,32 @@ export function AgendaSettingsPanel() {
           {section === 'reservas' && (
             <SectionCard title="Reservas online" description="Tus clientes eligen servicio, día y horario desde tu tienda, y el turno aparece en la agenda.">
               <div className="space-y-5 text-sm">
+                <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
+                  <h3 className="font-semibold">Estado de las reservas</h3>
+                  <p>{!settings.online_booking ? 'Reservas online apagadas' : readiness.ready ? 'Configuración básica lista' : 'Faltan requisitos para ofrecer reservas'}</p>
+                  <ul className="space-y-1">{readiness.checks.map(check => <li key={check.label}>{check.ok ? '✓' : 'Pendiente:'} {check.label}</li>)}</ul>
+                  {readiness.uncovered.length > 0 && <p>Sin personal online habilitado: {readiness.uncovered.join(', ')}.</p>}
+                  <p className="text-xs text-muted-foreground">Revisa requisitos básicos, no garantiza horarios libres: al reservar también se consideran turnos y ausencias.</p>
+                </div>
+                <h3 className="font-semibold">Cómo reserva el cliente</h3>
                 <div className="divide-y rounded-xl border">
                   <ToggleRow title="Aceptar reservas desde la tienda" checked={settings.online_booking} onChange={(on) => setSettings({ online_booking: on })} />
                   <ToggleRow title="Confirmarlas yo antes" detail="Si está apagado, quedan confirmadas solas." checked={settings.require_confirmation} onChange={(on) => setSettings({ require_confirmation: on })} />
                   <ToggleRow title="Avisarme por email" detail="Cuando un cliente reserva, cambia o cancela. Llega al email de contacto de la tienda; igual lo ves en la campanita de la Agenda." checked={settings.notify_email !== false} onChange={(on) => setSettings({ notify_email: on })} />
                 </div>
 
-                {settings.online_booking && (
+                <h3 className="font-semibold">Avisos y enlace</h3>
+                <p>{config.bookingContext?.notificationEmail ? `Email de contacto: ${config.bookingContext.notificationEmail}` : <>No hay un email de contacto válido. <Link className="underline" href="/admin/website">Configurá el contacto de tu tienda</Link> para recibir estos avisos.</>}</p>
+                {dirty && <p className="text-xs text-muted-foreground">El enlace utiliza la configuración guardada, no los cambios pendientes.</p>}
+                {(
                   <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/50 p-3">
                     <code className="min-w-0 flex-1 truncate text-xs">{config.bookingUrl}</code>
-                    <Button size="sm" variant="outline" className="h-8" onClick={copyLink}><Copy className="h-3.5 w-3.5" /> Copiar</Button>
-                    <Button size="sm" variant="ghost" className="h-8" asChild><a href={config.bookingUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /> Ver</a></Button>
+                    <Button size="sm" variant="outline" disabled={!linkReady} onClick={() => void copyLink()}><Copy className="h-3.5 w-3.5" /> Copiar</Button>
+                    {linkReady && <Button size="sm" variant="ghost" asChild><a href={config.bookingUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /> Ver</a></Button>}
                   </div>
                 )}
 
-                {advanced && config.professionals.some((professional) => professional.is_active) && (
+                {advanced && (
                   <label className="block space-y-1.5">
                     <span className="font-medium">Elección del profesional</span>
                     <select className="min-h-10 w-full rounded-md border bg-background px-3 text-sm" value={settings.professional_selection ?? 'optional'} onChange={(event) => setSettings({ professional_selection: event.target.value as NonNullable<AgendaSettings['professional_selection']> })}>
@@ -429,14 +470,15 @@ export function AgendaSettingsPanel() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="max-days-ahead">Hasta cuántos días adelante</Label>
-                    <Input id="max-days-ahead" type="number" min={1} max={180} className="h-10" value={settings.max_days_ahead} onChange={(event) => setSettings({ max_days_ahead: Math.min(180, Math.max(1, Number(event.target.value) || 1)) })} />
-                    <p className="text-xs text-muted-foreground">De 1 a 180 días.</p>
+                    <Input id="max-days-ahead" inputMode="numeric" className="h-11 text-base" value={daysText} aria-invalid={!daysValid} aria-describedby="days-help" onChange={(event) => { setDaysText(event.target.value); if (/^\d+$/.test(event.target.value) && Number(event.target.value) >= 1 && Number(event.target.value) <= 180) setSettings({ max_days_ahead: Number(event.target.value) }) }} />
+                    <p id="days-help" className={cn('text-xs', daysValid ? 'text-muted-foreground' : 'text-destructive')}>Ingresá un número entero de 1 a 180 días.</p>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="booking-message">Mensaje para el cliente <span className="font-normal text-muted-foreground">(opcional)</span></Label>
-                  <Textarea id="booking-message" rows={3} value={settings.booking_message ?? ''} placeholder="Ej.: llegá 5 minutos antes. Si no podés venir, cancelá desde el enlace." onChange={(event) => setSettings({ booking_message: event.target.value })} />
+                  <Textarea id="booking-message" rows={3} maxLength={500} className="text-base" aria-describedby="message-count" value={settings.booking_message ?? ''} placeholder="Ej.: llegá 5 minutos antes. Si no podés venir, cancelá desde el enlace." onChange={(event) => setSettings({ booking_message: event.target.value })} />
+                  <p id="message-count" className="text-xs text-muted-foreground">{settings.booking_message?.length ?? 0}/500 caracteres</p>
                 </div>
               </div>
             </SectionCard>

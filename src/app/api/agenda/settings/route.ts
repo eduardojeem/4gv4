@@ -17,10 +17,18 @@ export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'servi
   const supabase = (await createClient()) as unknown as SupabaseClient
   const config = await loadAgendaConfig(supabase, organization.id)
   if (!config) return NextResponse.json({ available: false })
-  return NextResponse.json({ available: true, ...config, bookingUrl: siteUrl(`/${organization.slug}/turnos`) })
+  const [{data:store,error:storeError},{data:contact,error:contactError}] = await Promise.all([
+    supabase.from('organizations').select('storefront_public').eq('id',organization.id).maybeSingle(),
+    supabase.from('website_settings').select('value').eq('organization_id',organization.id).eq('key','company_info').maybeSingle(),
+  ])
+  const email = contact?.value && typeof contact.value === 'object' && typeof contact.value.email === 'string' ? contact.value.email.trim() : ''
+  return NextResponse.json({ available: true, ...config,
+    bookingContext: { storefrontPublic: !storeError && store?.storefront_public === true, notificationEmail: !contactError && z.string().email().safeParse(email).success ? email : null },
+    bookingUrl: siteUrl(`/${organization.slug}/turnos`) })
 })
 
 const settingsSchema = z.object({
+  expected_revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   slot_minutes: z.union([z.literal(10), z.literal(15), z.literal(20), z.literal(30), z.literal(45), z.literal(60)]),
   opening_hours: openingHoursSchema,
   online_booking: z.boolean(),
@@ -42,11 +50,13 @@ export const PUT = withTenantAuth({ permission: 'settings.manage', module: 'serv
   const parsed = settingsSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Revisá la configuración de la agenda' }, { status: 400 })
   const supabase = (await createClient()) as unknown as SupabaseClient
-  const { services, ...settings } = parsed.data
+  const { services, expected_revision, ...settings } = parsed.data
   const config = await loadAgendaConfig(supabase, organization.id)
   if (config?.capabilities.professionalBooking) {
-    const { error } = await createAdminSupabase().rpc('save_agenda_settings', {
+    if (expected_revision === undefined) return NextResponse.json({error:'Recargá la configuración antes de guardar.',code:'AGENDA_SETTINGS_CHANGED'},{status:409})
+    const { error } = await createAdminSupabase().rpc('save_agenda_settings_checked', {
       p_org: organization.id, p_settings: { ...settings, opening_hours: normalizeOpeningHours(settings.opening_hours) }, p_services: services, p_actor: user.id,
+      p_expected_revision: expected_revision,
     })
     if (error) {
       const failure = bookingWriteError(error)
