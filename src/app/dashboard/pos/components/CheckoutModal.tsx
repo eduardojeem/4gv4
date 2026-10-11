@@ -1,5 +1,6 @@
 'use client'
 
+import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import React, { memo } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -10,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
@@ -603,14 +603,16 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 />
                 <div>
                   <label className="mb-2 block text-sm font-medium" htmlFor="pos-checkout-discount">Descuento general (%)</label>
-                  <Input
+                  <DraftNumberInput
                     id="pos-checkout-discount"
-                    type="number"
+                    decimals
                     value={discount}
-                    onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                    onValueChange={onDiscountChange}
                     placeholder="0"
-                    min="0"
-                    max="100"
+                    min={0}
+                    max={100}
+                    emptyValue={0}
+                    className="border-input h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
                   />
                 </div>
                 <div>

@@ -1,4 +1,5 @@
 
+import { DraftNumberInput } from '@/components/ui/draft-number-input'
 import React from 'react'
 import { Clock, AlertCircle, Calendar } from 'lucide-react'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
@@ -164,9 +165,10 @@ export function CreditStatusPanel({
           <div className="grid grid-cols-3 gap-2">
             <label className="flex flex-col gap-1">
               <span className="text-[10px] text-blue-600 dark:text-blue-400">Cuotas</span>
-              <input
-                type="number" min={1} max={60} value={terms.count}
-                onChange={e => onTermsChange({ ...terms, count: Math.min(60, Math.max(1, Number(e.target.value) || 1)) })}
+              <DraftNumberInput
+                min={1} max={60} value={terms.count} emptyValue={1}
+                onValueChange={count => onTermsChange({ ...terms, count })}
+                aria-label="Cantidad de cuotas"
                 className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
               />
             </label>
@@ -183,10 +185,11 @@ export function CreditStatusPanel({
               </select>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] text-blue-600 dark:text-blue-400">Interés %</span>
-              <input
-                type="number" min={0} step="0.1" value={terms.interestRate}
-                onChange={e => onTermsChange({ ...terms, interestRate: Math.max(0, Number(e.target.value) || 0) })}
+              <span className="text-[10px] text-blue-600 dark:text-blue-400" title="Porcentaje sobre el monto financiado, por todo el crédito (no por mes)">Interés total %</span>
+              <DraftNumberInput
+                decimals min={0} max={500} value={terms.interestRate} emptyValue={0}
+                onValueChange={interestRate => onTermsChange({ ...terms, interestRate })}
+                aria-label="Interés total del crédito en porcentaje"
                 className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
               />
             </label>

@@ -12,6 +12,7 @@ import { GSIcon } from '@/components/ui/standardized-components'
 import { useCheckout } from '../../contexts/CheckoutContext'
 import { usePOSCustomer } from '../../contexts/POSCustomerContext'
 import { useCreditSystem } from '@/hooks/use-credit-system'
+import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -21,6 +22,7 @@ import {
   buildManualDownPaymentSplit,
   buildProductCreditPayments,
   getProductCreditAllocation,
+  minimumCreditDownPayment,
   type CartProductCreditPlan,
 } from '../../lib/cart-credit-plans'
 
@@ -66,6 +68,8 @@ interface PaymentMethodsProps {
   creditSummary?: {
     availableCredit: number
     usedCredit: number
+    /** Saldo de cuotas vencidas: conviene cobrarlo antes de dar más crédito. */
+    overdueAmount?: number
   }
   
   formatCurrency: (amount: number) => string
@@ -122,6 +126,9 @@ export function PaymentMethods({
 
   const { activeCustomer, refreshCustomers } = usePOSCustomer()
   const { loadCreditData } = useCreditSystem()
+  // Cambiar el límite lo controla el servidor con este permiso: sin él, los atajos solo fallaban.
+  const { hasPermission } = usePermissions()
+  const canEditCreditLimit = hasPermission('crm.customers.manage')
   const [isEnablingCredit, setIsEnablingCredit] = React.useState(false)
   const [customCreditLimit, setCustomCreditLimit] = React.useState('')
   const [showCustomLimitInput, setShowCustomLimitInput] = React.useState(false)
@@ -209,16 +216,17 @@ export function PaymentMethods({
     return Math.round((cartTotal - getTotalPaid()) * 100) / 100
   }, [cartTotal, getTotalPaid])
 
-  // Lógica de auto-completar: si selecciona efectivo y el monto recibido es 0, proponer el total de la venta
+  // Al elegir un medio se propone el monto (el total en efectivo, el restante en
+  // pago mixto), una sola vez. Antes se volvía a completar cada vez que el monto
+  // quedaba en 0: al borrar para escribir otro importe, o con «Limpiar», el campo
+  // saltaba de nuevo al total.
+  const proposedForRef = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (paymentMethod === 'cash' && !isMixedPayment && cashReceived === 0) {
-      setCashReceived(cartTotal)
-    }
-    
-    // En pago mixto, proponer el restante al seleccionar un método si el monto es 0
-    if (isMixedPayment && paymentMethod && splitAmount === 0) {
-      setSplitAmount(getRemainingAmount())
-    }
+    const selection = `${isMixedPayment ? 'mixed' : 'single'}:${paymentMethod}`
+    if (proposedForRef.current === selection) return
+    proposedForRef.current = selection
+    if (paymentMethod === 'cash' && !isMixedPayment && cashReceived === 0) setCashReceived(cartTotal)
+    if (isMixedPayment && paymentMethod && splitAmount === 0) setSplitAmount(getRemainingAmount())
   }, [cashReceived, paymentMethod, isMixedPayment, cartTotal, getRemainingAmount, setCashReceived, setSplitAmount, splitAmount])
 
   // Cálculos para pago en efectivo simple
@@ -249,6 +257,21 @@ export function PaymentMethods({
     installmentCount: creditTerms.count,
     frequency: creditTerms.frequency,
   }), [creditTerms.count, creditTerms.frequency, creditTerms.interestRate, existingCreditPrincipal, splitAmount])
+  // Lo que se financia si va todo a crédito (con interés): es lo que tiene que entrar en el disponible.
+  const fullCreditPlan = React.useMemo(() => buildCreditInstallmentPlan({
+    principalAmount: cartTotal,
+    interestRate: creditTerms.interestRate,
+    installmentCount: creditTerms.count,
+    frequency: creditTerms.frequency,
+  }), [cartTotal, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
+  const hasCreditLine = Boolean(creditSummary && (creditSummary.availableCredit + creditSummary.usedCredit) > 0)
+  const overdueAmount = creditSummary?.overdueAmount ?? 0
+  // El adelanto mínimo para que el resto, con su interés, entre en el crédito disponible.
+  const minimumDownPayment = React.useMemo(
+    () => minimumCreditDownPayment(cartTotal, creditSummary?.availableCredit ?? 0, creditTerms.interestRate),
+    [cartTotal, creditSummary?.availableCredit, creditTerms.interestRate],
+  )
+  const downPaymentTooLow = !canUseCredit && minimumDownPayment !== null && downPaymentAmount > 0 && downPaymentAmount < minimumDownPayment
   const canUseMixedCredit = Boolean(
     creditSummary && creditSummary.availableCredit >= creditSplitPlan.financedTotal
   )
@@ -362,6 +385,13 @@ export function PaymentMethods({
             </button>
           )}
 
+          {paymentMethod === 'credit' && activeCustomer && overdueAmount > 0 && (
+            <div role="alert" className="mt-2 flex flex-col gap-2 rounded-lg border border-red-300/60 bg-red-50/70 px-3 py-2 text-xs text-red-900 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200">
+              <span className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span><strong>{activeCustomer.name} tiene {formatCurrency(overdueAmount)} en cuotas vencidas.</strong> Conviene cobrarlas antes de darle más crédito.</span></span>
+              {setShowCreditHistory && <button type="button" onClick={() => setShowCreditHistory(true)} className="shrink-0 font-semibold underline">Cobrar vencidas</button>}
+            </div>
+          )}
+
           {/* Información adicional para venta a crédito */}
           {paymentMethod === 'credit' && (
             <ProductCreditPlanPicker
@@ -384,17 +414,29 @@ export function PaymentMethods({
                 formatCurrency={formatCurrency}
               />
 
+            </>
+          )}
+
+          {paymentMethod === 'credit' && activeCustomer && hasCreditLine && (canUseCredit || minimumDownPayment !== null) && (
+            <>
               {/* Adelanto manual: cobrar una parte ahora y financiar el resto.
                   Arma el mismo split de Pago Mixto, pero guiado desde el
                   boton de Credito en vez de requerir que el cajero sepa
                   cambiar a Pago Mixto por su cuenta. */}
               <div className="mt-3 rounded-lg border border-dashed border-blue-300/60 bg-blue-50/40 p-3 dark:border-blue-800/60 dark:bg-blue-950/20">
                 <label className="text-xs font-semibold text-blue-800 dark:text-blue-300">
-                  ¿El cliente va a dar un adelanto?
+                  {canUseCredit ? '¿El cliente va a dar un adelanto?' : 'Con un adelanto puede llevarlo a crédito'}
                 </label>
                 <p className="mt-0.5 text-[11px] text-blue-700/80 dark:text-blue-400/80">
-                  Cobrá una parte ahora y financiá el resto a crédito.
+                  {canUseCredit || minimumDownPayment === null
+                    ? 'Cobrá una parte ahora y financiá el resto a crédito.'
+                    : <>Su crédito disponible no cubre todo. Cobrando <strong>{formatCurrency(minimumDownPayment)}</strong> o más ahora, el resto entra en su crédito.</>}
                 </p>
+                {!canUseCredit && minimumDownPayment !== null && (
+                  <Button type="button" size="sm" variant="outline" className="mt-2 h-8 text-xs" onClick={() => setDownPaymentInput(String(minimumDownPayment))}>
+                    Usar el mínimo: {formatCurrency(minimumDownPayment)}
+                  </Button>
+                )}
                 <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_auto_auto]">
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">₲</span>
@@ -420,15 +462,17 @@ export function PaymentMethods({
                     type="button"
                     size="sm"
                     className="col-span-2 sm:col-span-1"
-                    disabled={downPaymentAmount <= 0}
+                    disabled={downPaymentAmount <= 0 || downPaymentTooLow}
                     onClick={handleApplyDownPayment}
                   >
                     Aplicar adelanto
                   </Button>
                 </div>
                 {downPaymentAmount > 0 && (
-                  <p className="mt-2 text-[11px] text-blue-800 dark:text-blue-300">
-                    Financia <strong>{formatCurrency(Math.max(0, cartTotal - downPaymentAmount))}</strong> a crédito.
+                  <p className={`mt-2 text-[11px] ${downPaymentTooLow ? 'font-semibold text-destructive' : 'text-blue-800 dark:text-blue-300'}`}>
+                    {downPaymentTooLow
+                      ? <>Con ese adelanto no alcanza: el mínimo es {formatCurrency(minimumDownPayment ?? 0)}.</>
+                      : <>Financia <strong>{formatCurrency(Math.max(0, cartTotal - downPaymentAmount))}</strong> a crédito.</>}
                   </p>
                 )}
               </div>
@@ -465,14 +509,19 @@ export function PaymentMethods({
                         Crédito insuficiente para esta venta
                       </p>
                       <p className="text-xs text-amber-800 dark:text-amber-300">
-                        Disponible: <strong className="text-emerald-700 dark:text-emerald-400 font-mono">{formatCurrency(creditSummary.availableCredit)}</strong> · Requerido: <strong className="font-mono">{formatCurrency(cartTotal)}</strong>
+                        Disponible: <strong className="text-emerald-700 dark:text-emerald-400 font-mono">{formatCurrency(creditSummary.availableCredit)}</strong> · Requerido: <strong className="font-mono">{formatCurrency(fullCreditPlan.financedTotal)}</strong>{fullCreditPlan.interestAmount > 0 && <> (incluye {formatCurrency(fullCreditPlan.interestAmount)} de interés)</>}
                       </p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {activeCustomer && (
+              {activeCustomer && !canEditCreditLimit && (
+                <p className="border-t border-amber-500/20 pt-2 text-xs text-amber-800 dark:text-amber-300">
+                  Para darle o subirle el crédito, pedile a un administrador que lo cambie en Clientes.
+                </p>
+              )}
+              {activeCustomer && canEditCreditLimit && (
                 <div className="pt-2 border-t border-amber-500/20 space-y-2">
                   <span className="text-xs font-semibold text-amber-900 dark:text-amber-200 block">
                     Opciones rápidas para habilitar crédito:
