@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// Vitest no ejecuta el compilador RSC de Next; conservar las funciones reales
+// y sustituir únicamente el marcador de frontera del servidor en esta prueba.
+vi.mock('server-only', () => ({}))
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 const PAGINA = leer('src/components/saas/landing/saas-business-page-content.tsx')
