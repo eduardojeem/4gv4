@@ -536,8 +536,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
 
   const performCashCount = useCallback(async (count: CashCount) => {
     if (!currentSession || !currentRegisterState.isOpen) {
-      toast.error('Abrí una caja antes de registrar el arqueo')
-      return
+      throw new Error('Abrí una caja antes de registrar el arqueo')
     }
 
     const response = await fetch('/api/pos/cash-counts', {

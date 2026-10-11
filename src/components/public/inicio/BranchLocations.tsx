@@ -1,5 +1,6 @@
-import { MapPin, Phone, MessageCircle, ExternalLink } from 'lucide-react'
+import { Car, MapPin, Phone, MessageCircle, Navigation } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getCompanyMapsHref, getDirectionsHref, getWazeHref } from '@/lib/website/company-maps-url'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 
 export interface BranchLocationData {
@@ -37,6 +38,10 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
         <div className={`grid gap-5 ${branches.length === 2 ? 'sm:grid-cols-2 max-w-3xl mx-auto' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
           {branches.map((branch) => {
             const phoneClean = branch.phone?.replace(/\D/g, '') || ''
+            const fullAddress = [branch.address, branch.city].filter(Boolean).join(', ')
+            const mapsHref = branch.address ? getCompanyMapsHref(null, fullAddress) : null
+            const directionsHref = branch.address ? getDirectionsHref(null, fullAddress) : null
+            const wazeHref = branch.address ? getWazeHref(null, fullAddress) : null
             const whatsappUrl = phoneClean
               ? `https://wa.me/${phoneClean}?text=${encodeURIComponent(`Hola, consulto desde la web por la sucursal ${branch.name}`)}`
               : null
@@ -69,7 +74,7 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
                     <div className="flex items-start gap-2.5 text-sm">
                       <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([branch.address, branch.city].filter(Boolean).join(', '))}`}
+                        href={mapsHref ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-muted-foreground hover:text-foreground transition-colors hover:underline"
@@ -92,23 +97,31 @@ export function BranchLocations({ branches, brand }: BranchLocationsProps) {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-border/50 flex flex-col gap-2">
-                  {branch.address && (
-                    <Button
-                      asChild
-                      variant="secondary"
-                      size="sm"
-                      className="w-full rounded-xl gap-1.5 font-semibold text-xs"
-                    >
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([branch.address, branch.city].filter(Boolean).join(', '))}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                  {directionsHref && wazeHref && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        asChild
+                        variant="secondary"
+                        size="sm"
+                        className="w-full rounded-xl gap-1.5 font-semibold text-xs"
                       >
-                        <MapPin className="h-3.5 w-3.5 text-rose-500" />
-                        <span>Abrir en Google Maps</span>
-                        <ExternalLink className="h-3 w-3 ml-auto opacity-70" />
-                      </a>
-                    </Button>
+                        <a href={directionsHref} target="_blank" rel="noopener noreferrer" aria-label={`Cómo llegar a ${branch.name}`}>
+                          <Navigation className="h-3.5 w-3.5 text-primary" />
+                          <span>Cómo llegar</span>
+                        </a>
+                      </Button>
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="w-full rounded-xl gap-1.5 font-semibold text-xs"
+                      >
+                        <a href={wazeHref} target="_blank" rel="noopener noreferrer" aria-label={`Ir con Waze a ${branch.name}`}>
+                          <Car className="h-3.5 w-3.5 text-sky-500" />
+                          <span>Waze</span>
+                        </a>
+                      </Button>
+                    </div>
                   )}
 
                   {whatsappUrl && (

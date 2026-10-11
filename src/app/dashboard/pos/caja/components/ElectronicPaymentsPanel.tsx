@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
+import { cashDialogLayout, cashDialogBody, cashDialogFooter, focusCashDialog } from '../../components/cash-dialog-layout'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -80,6 +82,7 @@ export function ElectronicPaymentsPanel() {
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<ElectronicPayment | null>(null)
   const [saving, setSaving] = useState(false)
+  const viewportStyle = useMobileDialogViewport(Boolean(editing))
   const [form, setForm] = useState({
     status: 'pending' as ReconciliationStatus,
     feeAmount: '0',
@@ -249,9 +252,9 @@ export function ElectronicPaymentsPanel() {
       )}
 
       <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open && !saving) setEditing(null) }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader><DialogTitle>Conciliar cobro</DialogTitle><DialogDescription>{editing ? `${saleCode(editing)} · ${formatCurrency(editing.amount)}` : ''}</DialogDescription></DialogHeader>
-          <div className="grid gap-4 py-2 sm:grid-cols-2">
+        <DialogContent style={viewportStyle} className={`${cashDialogLayout} sm:max-w-xl`} onOpenAutoFocus={focusCashDialog}>
+          <DialogHeader className="shrink-0 border-b p-4 pr-14 text-left"><DialogTitle>Conciliar cobro</DialogTitle><DialogDescription>{editing ? `${saleCode(editing)} · ${formatCurrency(editing.amount)}` : ''}</DialogDescription></DialogHeader>
+          <div className={`${cashDialogBody} grid gap-4 sm:grid-cols-2 [&_[data-slot=select-trigger]]:min-h-11`}>
             <div className="space-y-2"><Label>Estado</Label><Select value={form.status} onValueChange={(value) => setForm(current => ({ ...current, status: value as ReconciliationStatus }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="electronic-channel">Canal</Label><Select value={form.channel} onValueChange={(value) => setForm(current => ({ ...current, channel: value }))}><SelectTrigger id="electronic-channel"><SelectValue /></SelectTrigger><SelectContent>{editing?.payment_method === 'card' ? <SelectItem value="card_terminal">Terminal POS</SelectItem> : <><SelectItem value="bank_transfer">Transferencia bancaria</SelectItem><SelectItem value="qr">QR</SelectItem></>}<SelectItem value="other">Otro</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="electronic-provider">Proveedor</Label><Input id="electronic-provider" value={form.provider} onChange={(event) => setForm(current => ({ ...current, provider: event.target.value }))} placeholder="Bancard, Pagopar..." /></div>
@@ -261,7 +264,7 @@ export function ElectronicPaymentsPanel() {
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="electronic-settled">Fecha de acreditación</Label><Input id="electronic-settled" type="datetime-local" value={form.settledAt} onChange={(event) => setForm(current => ({ ...current, settledAt: event.target.value }))} /></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="electronic-notes">Observación</Label><Textarea id="electronic-notes" value={form.notes} onChange={(event) => setForm(current => ({ ...current, notes: event.target.value }))} placeholder="Detalle de la conciliación" maxLength={1000} /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button><Button onClick={() => void saveReconciliation()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{saving ? 'Guardando...' : 'Guardar conciliación'}</Button></DialogFooter>
+          <DialogFooter className={cashDialogFooter}><Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button><Button onClick={() => void saveReconciliation()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{saving ? 'Guardando...' : 'Guardar conciliación'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -43,7 +43,7 @@ import { useWebsiteMediaQuota } from '@/hooks/useWebsiteMediaQuota'
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { isValidBrandHexColor } from '@/lib/website/brand-color'
-import { isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
+import { extractMapsCoordinates, isShortMapsLink, isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
 import { cn } from '@/lib/utils'
 import { getPublicationIssues } from '@/lib/website/publication'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -114,6 +114,36 @@ export function CompanyInfoForm() {
   }
 
   const [showMapsGuide, setShowMapsGuide] = useState(false)
+  const [resolvingMaps, setResolvingMaps] = useState(false)
+  const [mapsPinFound, setMapsPinFound] = useState<boolean | null>(null)
+
+  // El enlace corto de la app (maps.app.goo.gl) se cambia por el largo, que trae
+  // el pin exacto: con el corto el mapa de la tienda se ubicaba por la dirección.
+  const resolveMapsLink = async (value: string) => {
+    const link = value.trim()
+    setMapsPinFound(extractMapsCoordinates(link) ? true : null)
+    if (!isShortMapsLink(link)) return
+    setResolvingMaps(true)
+    try {
+      const response = await fetch('/api/admin/website/maps-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: link }),
+      })
+      const body = await response.json().catch(() => null)
+      if (response.ok && body?.resolved && body.url) {
+        handleChange('mapsUrl', body.url)
+        setMapsPinFound(Boolean(body.coordinates))
+        if (body.coordinates) toast.success('Ubicación exacta detectada', { description: 'El mapa de tu página va a marcar el punto del local.' })
+      } else {
+        setMapsPinFound(false)
+      }
+    } catch {
+      setMapsPinFound(false)
+    } finally {
+      setResolvingMaps(false)
+    }
+  }
 
   const handlePasteMapsUrl = async () => {
     try {
@@ -121,6 +151,7 @@ export function CompanyInfoForm() {
       if (text && text.trim()) {
         handleChange('mapsUrl', text.trim())
         toast.success('Enlace de Google Maps pegado')
+        void resolveMapsLink(text)
       } else {
         toast.error('El portapapeles está vacío')
       }
@@ -637,7 +668,8 @@ export function CompanyInfoForm() {
                   type="url"
                   inputMode="url"
                   value={formData.mapsUrl || ''}
-                  onChange={(e) => handleChange('mapsUrl', e.target.value)}
+                  onChange={(e) => { handleChange('mapsUrl', e.target.value); setMapsPinFound(null) }}
+                  onBlur={(e) => void resolveMapsLink(e.target.value)}
                   placeholder="https://maps.app.goo.gl/... o https://www.google.com/maps/place/..."
                   maxLength={1000}
                   aria-invalid={!!errors.mapsUrl}
@@ -646,10 +678,11 @@ export function CompanyInfoForm() {
                     errors.mapsUrl && 'border-destructive'
                   )}
                 />
+                {resolvingMaps && <span className="absolute right-9 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">Buscando el pin…</span>}
                 {formData.mapsUrl && (
                   <button
                     type="button"
-                    onClick={() => handleChange('mapsUrl', '')}
+                    onClick={() => { handleChange('mapsUrl', ''); setMapsPinFound(null) }}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
                     title="Limpiar enlace"
                   >
@@ -685,6 +718,12 @@ export function CompanyInfoForm() {
               )}
             </div>
 
+            {!errors.mapsUrl && mapsPinFound === true && (
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Ubicación exacta detectada: el mapa de tu página marca el punto del local.</p>
+            )}
+            {!errors.mapsUrl && mapsPinFound === false && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">No pudimos leer el pin de ese enlace: el mapa se va a ubicar por la dirección escrita. Revisá que la dirección sea completa.</p>
+            )}
             {errors.mapsUrl && (
               <p className="text-xs text-destructive font-medium">{errors.mapsUrl}</p>
             )}

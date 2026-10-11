@@ -15,6 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
+import { cashDialogLayout, cashDialogBody, cashDialogFooter, focusCashDialog } from '../components/cash-dialog-layout'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
 import { CashCountModal } from '../components/CashCountModal'
 import { useAuth } from '@/contexts/auth-context'
@@ -76,6 +79,7 @@ export default function CashRegisterPage() {
   const [openingAmount, setOpeningAmount] = useState('')
   const [openingNote, setOpeningNote] = useState('')
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
+  const closingViewport = useMobileDialogViewport(isCloseDialogOpen)
   const [activeTab, setActiveTab] = useState('overview')
 
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
@@ -100,6 +104,7 @@ export default function CashRegisterPage() {
   const [closingCountedAmount, setClosingCountedAmount] = useState('')
 
   const parsedClosingAmount = useMemo(() => {
+    if (!closingCountedAmount.trim()) return null
     const n = Number(closingCountedAmount)
     return Number.isFinite(n) && n >= 0 ? n : null
   }, [closingCountedAmount])
@@ -125,6 +130,7 @@ export default function CashRegisterPage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey) return
+      if (isOpenRegisterDialogOpen || isCloseDialogOpen || isMovementDialogOpen || isCashCountModalOpen) return
 
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
@@ -145,7 +151,7 @@ export default function CashRegisterPage() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   // Fix #12: incluir openMovementDialog en deps (ahora estabilizado con useCallback)
-  }, [openMovementDialog])
+  }, [openMovementDialog, isOpenRegisterDialogOpen, isCloseDialogOpen, isMovementDialogOpen, isCashCountModalOpen])
 
   // Reset activeTab to 'overview' when audit access is revoked
   useEffect(() => {
@@ -164,7 +170,7 @@ export default function CashRegisterPage() {
   }, [isAdmin, viewMode])
 
   return (
-    <div className="flex flex-col h-full p-4 md:p-6 space-y-6">
+    <div className="flex min-w-0 flex-col min-h-full p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
       <CashRegisterHeader />
 
 
@@ -189,7 +195,7 @@ export default function CashRegisterPage() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 flex-1 flex flex-col [&_[data-slot=tabs-trigger]]:min-h-11">
         <div className="w-full overflow-x-auto no-scrollbar pb-1 mb-4">
           <TabsList className={`inline-flex w-auto min-w-full sm:min-w-0 sm:grid sm:max-w-3xl ${canAccessAudit ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} p-1 h-auto bg-muted/60 dark:bg-muted/30 rounded-xl border border-border/50`}>
             <TabsTrigger value="overview" className="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg">Resumen</TabsTrigger>
@@ -269,18 +275,19 @@ export default function CashRegisterPage() {
       />
 
       <Dialog open={isCloseDialogOpen} onOpenChange={(open) => {
+        if (isSubmitting) return
         setIsCloseDialogOpen(open)
         if (!open) setClosingCountedAmount('')
       }}>
-        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl bg-card border-border shadow-2xl">
-          <DialogHeader className="p-5 sm:p-6 border-b bg-muted/30 text-left">
+        <DialogContent style={closingViewport} className={`${cashDialogLayout} sm:max-w-md bg-card`} onOpenAutoFocus={focusCashDialog}>
+          <DialogHeader className="shrink-0 p-4 pr-14 sm:p-6 sm:pr-14 border-b bg-muted/30 text-left">
             <DialogTitle className="text-lg font-bold">Cerrar Turno de Caja</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-0.5">
               Registre el monto físico contado en caja para conciliar y calcular diferencias.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="p-5 sm:p-6 space-y-4">
+          <div className={`${cashDialogBody} space-y-4`}>
             {/* Resumen financiero antes de confirmar cierre */}
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-xs">
               <div className="flex justify-between">
@@ -349,7 +356,7 @@ export default function CashRegisterPage() {
                 onChange={(e) => setClosingCountedAmount(e.target.value.replace(/\D/g, ''))}
                 placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(currentRegister.balance)}`}
                 className="h-11 text-base font-bold font-mono tabular-nums rounded-xl"
-                autoFocus
+                disabled={isSubmitting}
               />
               <p className="text-[11px] text-muted-foreground">
                 Cuente el dinero físico real del cajón e ingrese el total aquí.
@@ -357,8 +364,8 @@ export default function CashRegisterPage() {
             </div>
           </div>
 
-          <DialogFooter className="p-4 sm:px-6 bg-muted/20 border-t border-border/50 flex flex-row items-center justify-between sm:justify-end gap-2">
-            <Button variant="outline" onClick={() => {
+          <DialogFooter className={cashDialogFooter}>
+            <Button disabled={isSubmitting} variant="outline" onClick={() => {
               setIsCloseDialogOpen(false)
               setClosingCountedAmount('')
             }} className="h-10 text-xs rounded-xl flex-1 sm:flex-none">
@@ -369,7 +376,7 @@ export default function CashRegisterPage() {
               disabled={parsedClosingAmount === null || isSubmitting}
               className="h-10 text-xs font-bold rounded-xl flex-1 sm:flex-none shadow-md"
               onClick={async () => {
-                if (parsedClosingAmount === null) return
+                if (parsedClosingAmount === null || isSubmitting) return
                 setIsSubmitting(true)
                 try {
                   const closed = await closeRegister(parsedClosingAmount, user?.id)
@@ -377,6 +384,8 @@ export default function CashRegisterPage() {
                     setIsCloseDialogOpen(false)
                     setClosingCountedAmount('')
                   }
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'No se pudo cerrar la caja. Podés reintentar sin perder el conteo.')
                 } finally {
                   setIsSubmitting(false)
                 }

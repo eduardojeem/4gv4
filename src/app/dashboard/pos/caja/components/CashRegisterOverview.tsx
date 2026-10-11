@@ -137,7 +137,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
     return (
       <Card className="bg-muted/30 border-dashed border-2 overflow-hidden relative rounded-2xl shadow-sm">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-primary/5 dark:from-blue-900/10 pointer-events-none" />
-        <CardContent className="flex flex-col items-center justify-center py-20 space-y-6 relative z-10">
+        <CardContent className="flex flex-col items-center justify-center py-10 sm:py-20 space-y-6 relative z-10">
           <div className="p-6 bg-background rounded-2xl shadow-md border border-border/80">
             <Lock className="h-12 w-12 text-primary" />
           </div>
@@ -179,7 +179,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
             </h3>
             <p className="text-xs text-muted-foreground">Acciones frecuentes para registrar movimientos o cuadrar efectivo</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -196,7 +196,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 pt-1 [&>button]:h-auto [&>button]:min-h-16 [&>button]:flex-col [&>button]:gap-2 [&>button]:px-2 [&>button]:py-3 [&>button]:whitespace-normal sm:[&>button]:flex-row sm:[&>button]:justify-start [&>button_span]:text-wrap">
           {/* Ingreso */}
           <Button
             variant="outline"
@@ -474,7 +474,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
                     value={movementSearch}
                     onChange={(e) => setMovementSearch(e.target.value)}
                     placeholder="Buscar movimiento..."
-                    className="h-8 pl-8 text-xs rounded-lg"
+                    className="h-11 pl-8 text-base rounded-lg"
                   />
                 </div>
               </div>

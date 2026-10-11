@@ -51,7 +51,7 @@ describe('la plantilla Servicios es un sitio de servicios, no una tienda', () =>
     expect(screen.getByText('Barra de tienda')).toBeInTheDocument()
   })
 
-  it('encabezado con secciones del negocio y «Reservar turno», sin buscador ni marketplace', async () => {
+  it('encabezado con secciones del negocio, «Reservar turno» y volver al marketplace, sin buscador', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => agenda }))
     pintar(<StorefrontHeader catalogEnabled={false} />, 'services')
 
@@ -60,7 +60,8 @@ describe('la plantilla Servicios es un sitio de servicios, no una tienda', () =>
     expect(within(nav).queryByRole('link', { name: 'Tienda' })).not.toBeInTheDocument()
     expect(await screen.findByRole('link', { name: /Reservar turno/ })).toHaveAttribute('href', '/don-pepe/inicio#reservar')
     expect(screen.queryByRole('search')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Marketplace/)).not.toBeInTheDocument()
+    // Como en las demás plantillas, dentro del marketplace se puede volver a explorar tiendas.
+    expect(screen.getAllByRole('link', { name: /Volver al marketplace/i }).every((link) => link.getAttribute('href') === '/marketplace')).toBe(true)
     expect(screen.queryByRole('button', { name: 'Carrito' })).not.toBeInTheDocument()
   })
 

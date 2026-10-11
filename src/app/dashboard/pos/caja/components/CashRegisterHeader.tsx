@@ -35,14 +35,16 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
   const isRegisterOpen = getCurrentRegister.isOpen
 
   const handleSync = async () => {
+    if (isSyncing) return
     setIsSyncing(true)
-    const success = await syncWithServer()
-    setIsSyncing(false)
-
-    if (success) {
-      toast.success('Datos sincronizados')
-    } else {
+    try {
+      const success = await syncWithServer()
+      if (success) toast.success('Datos sincronizados')
+      else toast.error('Error al sincronizar')
+    } catch {
       toast.error('Error al sincronizar')
+    } finally {
+      setIsSyncing(false)
     }
   }
 
@@ -50,17 +52,17 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
     <>
       <div className="rounded-xl border bg-card p-4 md:p-5 shadow-sm space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <Link href="/dashboard/pos">
-              <Button variant="outline" size="icon" aria-label="Volver a POS">
+          <div className="flex min-w-0 items-start gap-3">
+              <Button asChild variant="outline" size="icon" className="size-11 shrink-0" aria-label="Volver a POS">
+                <Link href="/dashboard/pos">
                 <ArrowLeft className="h-4 w-4" />
+                </Link>
               </Button>
-            </Link>
 
-            <div className="space-y-1">
-              <h1 className="text-xl md:text-2xl font-semibold tracking-tight flex items-center gap-2">
-                <Store className="h-5 w-5 text-primary" />
-                Caja: {registerName}
+            <div className="min-w-0 space-y-1">
+              <h1 className="text-xl md:text-2xl font-semibold tracking-tight flex items-start gap-2">
+                <Store className="mt-1 h-5 w-5 shrink-0 text-primary" />
+                <span className="break-words">Caja: {registerName}</span>
               </h1>
 
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -74,7 +76,7 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
                 </Badge>
 
                 <span className="hidden md:inline">•</span>
-                <span className="capitalize">{new Date().toLocaleDateString('es-PY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                <span className="hidden capitalize md:inline">{new Date().toLocaleDateString('es-PY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
               </div>
 
               <p className="text-xs text-muted-foreground">
@@ -85,19 +87,19 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:flex-wrap sm:items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowGuide(true)}
-              className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 font-semibold rounded-xl"
+              className="order-3 h-11 gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 font-semibold rounded-xl"
             >
               <HelpCircle className="h-4 w-4 text-primary" />
               <span>¿Cómo funciona?</span>
             </Button>
 
             <Select value={activeRegisterId} onValueChange={setActiveRegisterId}>
-              <SelectTrigger className="h-9 w-48 rounded-xl font-medium">
+              <SelectTrigger aria-label="Seleccionar caja" className="order-1 h-11 w-full min-w-0 rounded-xl font-medium sm:w-48">
                 <SelectValue placeholder="Seleccionar caja" />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
@@ -112,18 +114,19 @@ export const CashRegisterHeader = React.memo(function CashRegisterHeader({ audit
               size="icon"
               onClick={handleSync}
               title="Sincronizar datos"
+              aria-label="Sincronizar datos"
               disabled={isSyncing}
-              className="rounded-xl"
+              className="order-2 size-11 rounded-xl"
             >
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
             </Button>
 
-            <Link href={auditPageHref}>
-              <Button variant="default" size="sm" className="rounded-xl font-semibold">
+              <Button asChild variant="outline" size="sm" className="order-4 h-11 rounded-xl font-semibold">
+                <Link href={auditPageHref}>
                 <FileText className="mr-2 h-4 w-4" />
                 Auditoría
+                </Link>
               </Button>
-            </Link>
           </div>
         </div>
       </div>

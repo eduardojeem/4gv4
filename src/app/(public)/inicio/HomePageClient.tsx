@@ -332,6 +332,7 @@ export default function HomePageClient({ initialSettings, branches = [], capabil
           brand={brand}
           phoneClean={phoneClean}
           contactHref={contactHref}
+          showCatalog={capabilities.hasCatalog}
         />
       )}
 
