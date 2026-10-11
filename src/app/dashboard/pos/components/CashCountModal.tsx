@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
+import { cashDialogLayout, cashDialogBody, cashDialogFooter, focusCashDialog } from './cash-dialog-layout'
 import {
   Dialog,
   DialogContent,
@@ -33,7 +35,7 @@ export interface CashCount {
 interface CashCountModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (count: CashCount, note?: string) => void
+  onConfirm: (count: CashCount, note?: string) => void | Promise<void>
   systemBalance: number
   title?: string
   currency?: string
@@ -154,6 +156,10 @@ export function CashCountModal({
   const [billCounts, setBillCounts] = useState<Record<string, number>>({})
   const [coinCounts, setCoinCounts] = useState<Record<string, number>>({})
   const [note, setNote] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const saving = useRef(false)
+  const viewportStyle = useMobileDialogViewport(isOpen)
 
   const [previousOpen, setPreviousOpen] = useState(isOpen)
   if (previousOpen !== isOpen) {
@@ -162,6 +168,7 @@ export function CashCountModal({
       setBillCounts({})
       setCoinCounts({})
       setNote('')
+      setSaveError('')
     }
   }
 
@@ -213,29 +220,40 @@ export function CashCountModal({
     setNote('')
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (saving.current) return
+    saving.current = true
+    setIsSaving(true)
+    setSaveError('')
     const cashCount: CashCount = {
       bills: billCounts,
       coins: coinCounts,
       total: physicalTotal
     }
-    onConfirm(cashCount, note.trim() || undefined)
-    onClose()
-    handleReset()
+    try {
+      await onConfirm(cashCount, note.trim() || undefined)
+      onClose()
+      handleReset()
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar el arqueo. Podés reintentar.')
+    } finally {
+      saving.current = false
+      setIsSaving(false)
+    }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-hidden p-0 gap-0 rounded-2xl bg-card border-border shadow-2xl flex flex-col">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !saving.current && onClose()}>
+      <DialogContent style={viewportStyle} className={`${cashDialogLayout} sm:max-w-2xl bg-card`} onOpenAutoFocus={focusCashDialog}>
         {/* Cabecera estilizada */}
-        <DialogHeader className="p-5 sm:p-6 border-b bg-muted/30 text-left shrink-0">
-          <div className="flex items-center justify-between">
+        <DialogHeader className="p-4 pr-14 sm:p-6 sm:pr-14 border-b bg-muted/30 text-left shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 shrink-0 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
                 <Calculator className="h-5 w-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <DialogTitle className="text-lg font-bold text-foreground">
                     {title}
                   </DialogTitle>
@@ -253,7 +271,8 @@ export function CashCountModal({
                 variant="ghost"
                 size="sm"
                 onClick={handleReset}
-                className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                disabled={isSaving}
+                className="h-11 text-sm text-muted-foreground hover:text-foreground gap-1.5"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Limpiar
@@ -263,7 +282,7 @@ export function CashCountModal({
         </DialogHeader>
 
         {/* Contenido con Scroll */}
-        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
+        <fieldset disabled={isSaving} className={`${cashDialogBody} space-y-5 border-0`}>
           {/* Card Resumen Rápido de Balances */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5">
@@ -345,7 +364,7 @@ export function CashCountModal({
                     )}
                   >
                     <div className="min-w-0 pr-2">
-                      <Label className="text-xs font-bold text-foreground block cursor-pointer">
+                      <Label htmlFor={`cash-bill-${denom.value}`} className="text-sm font-bold text-foreground block cursor-pointer">
                         {denom.label}
                       </Label>
                       <span className="text-[10px] text-muted-foreground tabular-nums">
@@ -357,23 +376,26 @@ export function CashCountModal({
                       <button
                         type="button"
                         onClick={() => handleIncrement('bill', denom.value, -1)}
+                        aria-label={`Quitar un billete de ${denom.label}`}
                         disabled={count <= 0}
-                        className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-xs font-bold flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95"
+                        className="size-11 shrink-0 rounded-lg border border-border bg-background hover:bg-muted text-base font-bold flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
                       >
                         -
                       </button>
                       <Input
+                        id={`cash-bill-${denom.value}`}
                         type="text"
                         inputMode="numeric"
                         value={count > 0 ? formatThousands(count) : ''}
                         onChange={(e) => handleBillCountChange(denom.value, e.target.value)}
-                        className="w-14 h-7 text-center text-xs font-mono font-bold px-1 rounded-lg"
+                        className="w-14 h-11 text-center text-base font-mono font-bold px-1 rounded-lg"
                         placeholder="0"
                       />
                       <button
                         type="button"
                         onClick={() => handleIncrement('bill', denom.value, 1)}
-                        className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-xs font-bold flex items-center justify-center transition-all active:scale-95"
+                        aria-label={`Agregar un billete de ${denom.label}`}
+                        className="size-11 shrink-0 rounded-lg border border-border bg-background hover:bg-muted text-base font-bold flex items-center justify-center"
                       >
                         +
                       </button>
@@ -413,7 +435,7 @@ export function CashCountModal({
                       )}
                     >
                       <div className="min-w-0 pr-2">
-                        <Label className="text-xs font-bold text-foreground block cursor-pointer">
+                        <Label htmlFor={`cash-coin-${denom.value}`} className="text-sm font-bold text-foreground block cursor-pointer">
                           {denom.label}
                         </Label>
                         <span className="text-[10px] text-muted-foreground tabular-nums">
@@ -425,23 +447,26 @@ export function CashCountModal({
                         <button
                           type="button"
                           onClick={() => handleIncrement('coin', denom.value, -1)}
+                          aria-label={`Quitar una moneda de ${denom.label}`}
                           disabled={count <= 0}
-                          className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-xs font-bold flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95"
+                          className="size-11 shrink-0 rounded-lg border border-border bg-background hover:bg-muted text-base font-bold flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
                         >
                           -
                         </button>
                         <Input
+                          id={`cash-coin-${denom.value}`}
                           type="text"
                           inputMode="numeric"
                           value={count > 0 ? formatThousands(count) : ''}
                           onChange={(e) => handleCoinCountChange(denom.value, e.target.value)}
-                          className="w-14 h-7 text-center text-xs font-mono font-bold px-1 rounded-lg"
+                          className="w-14 h-11 text-center text-base font-mono font-bold px-1 rounded-lg"
                           placeholder="0"
                         />
                         <button
                           type="button"
                           onClick={() => handleIncrement('coin', denom.value, 1)}
-                          className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-xs font-bold flex items-center justify-center transition-all active:scale-95"
+                          aria-label={`Agregar una moneda de ${denom.label}`}
+                          className="size-11 shrink-0 rounded-lg border border-border bg-background hover:bg-muted text-base font-bold flex items-center justify-center"
                         >
                           +
                         </button>
@@ -463,26 +488,29 @@ export function CashCountModal({
               value={note}
               onChange={(e) => setNote(e.target.value.slice(0, 200))}
               placeholder="Ej. Arqueo ciego intermedio, diferencia justificada por vale de cambio..."
-              className="h-9 text-xs rounded-xl"
+              className="h-11 text-base rounded-xl"
             />
           </div>
-        </div>
+        </fieldset>
 
         {/* Footer */}
-        <DialogFooter className="p-4 sm:px-6 bg-muted/20 border-t border-border/50 flex flex-row items-center justify-between sm:justify-end gap-2 shrink-0">
+        {saveError && <p role="alert" className="shrink-0 px-4 py-2 text-sm text-destructive">{saveError}</p>}
+        <DialogFooter className={cashDialogFooter}>
           <Button
             variant="outline"
             onClick={onClose}
+            disabled={isSaving}
             className="h-10 text-xs rounded-xl flex-1 sm:flex-none"
           >
             Cancelar
           </Button>
           <Button
             onClick={handleConfirm}
+            disabled={isSaving}
             className="h-10 text-xs font-bold rounded-xl gap-1.5 flex-1 sm:flex-none bg-primary text-primary-foreground shadow-md hover:shadow-lg transition-all"
           >
             <CheckCircle2 className="h-4 w-4" />
-            Confirmar Arqueo ({formatCurrency(physicalTotal, { currency: activeCurrency })})
+            {isSaving ? 'Guardando arqueo...' : `Confirmar Arqueo (${formatCurrency(physicalTotal, { currency: activeCurrency })})`}
           </Button>
         </DialogFooter>
       </DialogContent>

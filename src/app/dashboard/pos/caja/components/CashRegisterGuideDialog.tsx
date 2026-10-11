@@ -239,7 +239,7 @@ export function CashRegisterGuideDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[680px] max-h-[92vh] p-0 overflow-hidden rounded-3xl border-border shadow-2xl flex flex-col">
+      <DialogContent className="sm:max-w-[680px] max-h-[92dvh] p-0 overflow-hidden rounded-xl border-border shadow-sm flex flex-col [&_[data-slot=dialog-close]]:size-11">
         
         {/* Cabecera con degradado */}
         <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 p-5 sm:p-6 text-white text-left relative overflow-hidden shrink-0">
@@ -291,7 +291,7 @@ export function CashRegisterGuideDialog({
         </div>
 
         {/* Contenido Dinámico de la Sección */}
-        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 text-left">
+        <div className="min-h-0 p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 text-left">
           
           <div className="border-b border-border/50 pb-2">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">

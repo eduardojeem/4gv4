@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
+import { cashDialogLayout, cashDialogBody, cashDialogFooter, focusCashDialog } from './cash-dialog-layout'
 import {
   Dialog,
   DialogContent,
@@ -77,6 +79,8 @@ export function POSCashMovementDialog({
   const [selectedReason, setSelectedReason] = useState<string>('')
   const [note, setNote] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
+  const saving = useRef(false)
+  const viewportStyle = useMobileDialogViewport(open)
 
   useEffect(() => {
     if (open) {
@@ -123,6 +127,7 @@ export function POSCashMovementDialog({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
+    if (saving.current) return
     if (parsedAmount <= 0) {
       toast.error('Ingrese un monto válido mayor a 0')
       return
@@ -138,6 +143,7 @@ export function POSCashMovementDialog({
       return
     }
 
+    saving.current = true
     setIsSaving(true)
     try {
       const success = await onAddMovement(
@@ -159,16 +165,17 @@ export function POSCashMovementDialog({
       const message = err instanceof Error ? err.message : (err as { message?: string } | null)?.message || 'Error desconocido'
       toast.error('Error al registrar el movimiento: ' + message)
     } finally {
+      saving.current = false
       setIsSaving(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl bg-card border-border shadow-2xl">
+    <Dialog open={open} onOpenChange={(nextOpen) => !saving.current && onOpenChange(nextOpen)}>
+      <DialogContent style={viewportStyle} className={`${cashDialogLayout} sm:max-w-md bg-card`} onOpenAutoFocus={focusCashDialog}>
         {/* Header Dinámico y Visible */}
         <DialogHeader className={cn(
-          "p-5 sm:p-6 pr-12 border-b text-left transition-colors",
+          "shrink-0 p-4 sm:p-6 pr-14 sm:pr-14 border-b text-left transition-colors",
           isIncome 
             ? "bg-emerald-500/15 border-emerald-500/30" 
             : "bg-rose-500/15 border-rose-500/30"
@@ -206,7 +213,8 @@ export function POSCashMovementDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <fieldset disabled={isSaving} className={`${cashDialogBody} space-y-4 border-0 [&_button]:min-h-11`}>
           {/* Selector de Tipo Segmentado */}
           <div className="grid grid-cols-2 gap-2 bg-muted/40 p-1 rounded-xl border border-border/50">
             <button
@@ -258,7 +266,6 @@ export function POSCashMovementDialog({
                 value={formatThousands(amount)}
                 onChange={(e) => setAmount(parseThousands(e.target.value).toString())}
                 placeholder="0"
-                autoFocus
                 className="h-11 pl-9 pr-4 text-lg font-bold font-mono rounded-xl border-border/80 focus-visible:ring-primary/40 text-foreground"
               />
             </div>
@@ -370,7 +377,7 @@ export function POSCashMovementDialog({
                   ? "Ej. Cambio de turno, reposición de monedas..." 
                   : "Ej. Pago factura distribuidor N° 1248..."
               }
-              className="h-9 text-xs rounded-xl border-border/80"
+              className="h-11 text-base rounded-xl border-border/80"
               required
             />
           </div>
@@ -389,11 +396,13 @@ export function POSCashMovementDialog({
             </div>
           </div>
 
-          <DialogFooter className="pt-2 flex items-center gap-2">
+        </fieldset>
+          <DialogFooter className={cashDialogFooter}>
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isSaving}
               className="h-10 text-xs flex-1 rounded-xl"
             >
               Cancelar

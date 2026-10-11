@@ -18,6 +18,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { useBranch } from '@/contexts/branch-context'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
+import { cashDialogLayout, cashDialogBody, cashDialogFooter, focusCashDialog } from './cash-dialog-layout'
 
 interface OpenCashRegisterDialogProps {
   open: boolean
@@ -43,6 +45,7 @@ export function OpenCashRegisterDialog({
   onSubmit,
 }: OpenCashRegisterDialogProps) {
   const { selectedBranch } = useBranch()
+  const viewportStyle = useMobileDialogViewport(open)
   const { settings } = useSharedSettings()
   const currency = settings.currency || 'PYG'
   const parsedAmount = useMemo(() => Number(amount), [amount])
@@ -71,8 +74,8 @@ export function OpenCashRegisterDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !isSubmitting && onOpenChange(nextOpen)}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto p-0 sm:max-w-[520px]">
-        <form onSubmit={handleSubmit}>
+      <DialogContent style={viewportStyle} className={`${cashDialogLayout} sm:max-w-[520px]`} onOpenAutoFocus={focusCashDialog}>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="border-b bg-muted/30 px-5 py-5 pr-12 text-left sm:px-6">
             <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-md border bg-background text-primary shadow-sm">
               <Banknote className="h-5 w-5" aria-hidden="true" />
@@ -83,7 +86,7 @@ export function OpenCashRegisterDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 px-5 py-5 sm:px-6">
+          <div className={`${cashDialogBody} space-y-5`}>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Contexto de apertura">
               <div className="flex min-w-0 items-center gap-3 rounded-md border bg-background px-3 py-2.5">
                 <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -112,7 +115,6 @@ export function OpenCashRegisterDialog({
                   id="cash-register-opening-amount"
                   type="text"
                   inputMode="numeric"
-                  autoFocus
                   value={formatThousands(amount)}
                   onChange={(event) => onAmountChange(parseThousands(event.target.value).toString())}
                   placeholder="0"
@@ -134,7 +136,7 @@ export function OpenCashRegisterDialog({
                         size="sm"
                         aria-pressed={isSelected}
                         onClick={() => onAmountChange(String(quickAmount))}
-                        className="h-9 px-2 text-xs tabular-nums"
+                        className="h-11 px-2 text-sm tabular-nums"
                       >
                         {formatQuickAmount(quickAmount)}
                       </Button>
@@ -166,7 +168,7 @@ export function OpenCashRegisterDialog({
               <p className="text-right text-xs text-muted-foreground">{note.length}/200</p>
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/30 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-4 py-3">
               <div>
                 <p className="text-xs font-medium uppercase text-muted-foreground">Resumen de apertura</p>
                 <p className="mt-1 text-sm text-muted-foreground">Saldo que quedará registrado</p>
@@ -175,7 +177,7 @@ export function OpenCashRegisterDialog({
             </div>
           </div>
 
-          <DialogFooter className="border-t bg-muted/20 px-5 py-4 sm:px-6">
+          <DialogFooter className={cashDialogFooter}>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>

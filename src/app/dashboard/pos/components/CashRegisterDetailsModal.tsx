@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { useMobileDialogViewport } from '@/hooks/use-mobile-dialog-viewport'
+import { cashDialogLayout, focusCashDialog } from './cash-dialog-layout'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,6 +56,7 @@ export function CashRegisterDetailsModal({
 }: CashRegisterDetailsModalProps) {
   const [reportStart, setReportStart] = useState('')
   const [reportEnd, setReportEnd] = useState('')
+  const viewportStyle = useMobileDialogViewport(isOpen)
 
   // Initial load of report when tab changes or modal opens
   useEffect(() => {
@@ -66,22 +69,23 @@ export function CashRegisterDetailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col dark:bg-zinc-950">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
+      <DialogContent style={viewportStyle} className={`${cashDialogLayout} sm:max-w-4xl dark:bg-zinc-950 p-4 sm:p-6`} onOpenAutoFocus={focusCashDialog}>
+        <DialogHeader className="shrink-0 pr-12 text-left">
+          <DialogTitle className="flex flex-wrap items-center gap-2 text-lg sm:text-xl">
             <FileText className="h-5 w-5 text-primary" />
             Detalles de Caja - {registerName}
             <Badge variant={register.isOpen ? "default" : "secondary"} className="ml-2">
               {register.isOpen ? 'Abierta' : 'Cerrada'}
             </Badge>
           </DialogTitle>
+          <DialogDescription>Movimientos, reporte e historial de esta caja.</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="overview" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="overview">Resumen y Movimientos</TabsTrigger>
-            <TabsTrigger value="report">Reporte Detallado</TabsTrigger>
-            <TabsTrigger value="history">Historial de Cierres</TabsTrigger>
+        <Tabs defaultValue="overview" className="min-h-0 flex-1 overflow-hidden flex flex-col">
+          <TabsList className="grid shrink-0 w-full grid-cols-3 mb-4 h-auto [&>button]:min-h-11 [&>button]:whitespace-normal [&>button]:text-xs">
+            <TabsTrigger value="overview">Movimientos</TabsTrigger>
+            <TabsTrigger value="report">Reporte</TabsTrigger>
+            <TabsTrigger value="history">Cierres</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="flex-1 overflow-y-auto pr-1">
