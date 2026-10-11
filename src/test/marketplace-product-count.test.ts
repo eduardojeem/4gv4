@@ -22,9 +22,9 @@ function createFakeClient() {
               return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
                 Promise.resolve({ data: [{ id: 'org-1' }], count: 1, error: null }).then(onFulfilled, onRejected)
             }
-            // Las columnas opcionales (celular, precio oculto) se preguntan con
+            // Las columnas opcionales (celular, precio oculto, catalogo) se preguntan con
             // un select vacio: se responde que no existen.
-            const probe = calls.find((call) => call.method === 'select' && /device_brand|hide_price/.test(String(call.args[0])))
+            const probe = calls.find((call) => call.method === 'select' && /device_brand|hide_price|search_text/.test(String(call.args[0])))
             if (probe) {
               return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
                 Promise.resolve({ data: null, count: 0, error: { message: 'column does not exist' } }).then(onFulfilled, onRejected)

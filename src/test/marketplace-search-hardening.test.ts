@@ -7,6 +7,8 @@ const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8'
 type QueryCall = { method: string; args: unknown[] }
 
 let calls: Record<string, QueryCall[]> = {}
+/** Si la migración de `search_text` / `public_price` ya está aplicada. */
+let conColumnasDeCatalogo = false
 
 /**
  * Filas mínimas para que el catálogo llegue a armar la búsqueda: sin ninguna
@@ -22,6 +24,8 @@ function createFakeClient() {
   return {
     from(table: string) {
       const recorded = calls[table] ?? (calls[table] = [])
+      // Lo de esta consulta sola: varias preguntas a la misma tabla corren a la vez.
+      const own: QueryCall[] = []
 
       const builder: Record<string | symbol, unknown> = new Proxy({}, {
         get(_target, prop) {
@@ -29,7 +33,7 @@ function createFakeClient() {
             // Las columnas del celular y del precio oculto se preguntan con un
             // `select(...).limit(0)`: se responde que no existen para que la
             // expresión de búsqueda sea siempre la misma en el test.
-            const probe = recorded.find((c) => c.method === 'select' && /device_brand|hide_price/.test(String(c.args[0])))
+            const probe = own.find((c) => c.method === 'select' && (/device_brand|hide_price/.test(String(c.args[0])) || (!conColumnasDeCatalogo && /search_text/.test(String(c.args[0])))))
             const value = probe
               ? { data: null, count: 0, error: { message: 'column does not exist' } }
               : { data: FILAS_POR_TABLA[table] ?? [], count: 0, error: null }
@@ -38,6 +42,7 @@ function createFakeClient() {
           }
           return (...args: unknown[]) => {
             recorded.push({ method: String(prop), args })
+            own.push({ method: String(prop), args })
             return builder
           }
         },
@@ -52,7 +57,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminSupabase: () => createFakeClient(),
 }))
 
-const { getMarketplaceBrands, getMarketplaceOrganizations, getMarketplaceProductsPage } =
+const { forgetCatalogSearchColumnsCheck, getMarketplaceBrands, getMarketplaceOrganizations, getMarketplaceProductsPage } =
   await import('@/lib/public/marketplace')
 const { forgetDeviceColumnsCheck } = await import('@/lib/products/device-columns')
 const { forgetHidePriceColumnCheck } = await import('@/lib/products/price-visibility')
@@ -67,6 +72,8 @@ const UUID = '3f1c9a52-8b7e-4c1d-9a0f-2e5d7b6c4a13'
 
 beforeEach(() => {
   calls = {}
+  conColumnasDeCatalogo = false
+  forgetCatalogSearchColumnsCheck()
   forgetDeviceColumnsCheck()
   forgetHidePriceColumnCheck()
 })
@@ -244,5 +251,31 @@ describe('la barra de filtros', () => {
 
   it('escribir en el buscador no llena el historial', () => {
     expect(cliente).toContain('router.replace(`${pathname}?${params.toString()}`, { scroll: false })')
+  })
+})
+
+describe('con la migracion del catalogo aplicada', () => {
+  it('busca sin tildes en search_text', async () => {
+    conColumnasDeCatalogo = true
+    // «basica» no encontraba «Remera Básica».
+    await getMarketplaceProductsPage(10, { q: 'Básica Remera' })
+
+    const ors = (calls.products ?? []).filter((c) => c.method === 'or').map((c) => String(c.args[0]))
+    expect(ors).toEqual(['search_text.ilike.%basica%', 'search_text.ilike.%remera%'])
+  })
+
+  it('ordena por el precio que se ve y deja «Consultar precio» al final', async () => {
+    conColumnasDeCatalogo = true
+    await getMarketplaceProductsPage(10, { orden: 'price_asc' })
+
+    const orders = (calls.products ?? []).filter((c) => c.method === 'order').map((c) => c.args[0])
+    expect(orders[0]).toBe('public_price')
+  })
+
+  it('sin la migracion sigue ordenando por el precio normal', async () => {
+    await getMarketplaceProductsPage(10, { orden: 'price_asc' })
+
+    const orders = (calls.products ?? []).filter((c) => c.method === 'order').map((c) => c.args[0])
+    expect(orders[0]).toBe('sale_price')
   })
 })

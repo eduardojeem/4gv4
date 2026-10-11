@@ -48,17 +48,46 @@ function isUuid(value: string) {
  * Una condicion por palabra, y todas tienen que cumplirse: «mouse gamer» antes
  * buscaba esa frase literal y no encontraba «Mouse UP GAMER CHROMA».
  */
-function buildProductSearchExpressions(rawQuery: string, conCelular = false): string[] {
+function buildProductSearchExpressions(rawQuery: string, conCelular = false, conTextoBuscable = false): string[] {
   const term = sanitizeFilterTerm(rawQuery)
   if (!term) return []
 
+  const words = term.split(/\s+/).filter(Boolean).slice(0, 6)
+  if (conTextoBuscable) {
+    // `search_text` está en minúsculas y sin tildes: «basica» encuentra «Básica».
+    return words.map((word) => {
+      const plain = removeAccents(word).toLowerCase()
+      return [`search_text.ilike.%${plain}%`, ...(conCelular ? [`device_brand.ilike.%${word}%`] : [])].join(',')
+    })
+  }
+
   const cols = ['name', 'sku', 'brand', 'description']
   if (conCelular) cols.push('device_brand')
-  return term
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 6)
-    .map((word) => cols.map((column) => `${column}.ilike.%${word}%`).join(','))
+  return words.map((word) => cols.map((column) => `${column}.ilike.%${word}%`).join(','))
+}
+
+function removeAccents(value: string) {
+  return value.normalize('NFD').replace(/\p{M}/gu, '')
+}
+
+const REVISAR_COLUMNAS_EN_MS = 60_000
+let columnasDeCatalogo: { valor: boolean; hasta: number } | null = null
+
+/**
+ * `search_text` y `public_price` llegan con una migración que aplica el
+ * dueño de la base; hasta entonces se busca y se ordena como antes. El «sí» se
+ * recuerda para siempre; el «no», un minuto.
+ */
+async function productsHaveCatalogSearchColumns(supabase: ReturnType<typeof createAdminSupabase>): Promise<boolean> {
+  if (columnasDeCatalogo && (columnasDeCatalogo.valor || Date.now() < columnasDeCatalogo.hasta)) return columnasDeCatalogo.valor
+  const { error } = await supabase.from('products').select('search_text, public_price').limit(0)
+  columnasDeCatalogo = { valor: !error, hasta: Date.now() + REVISAR_COLUMNAS_EN_MS }
+  return columnasDeCatalogo.valor
+}
+
+/** Sólo para los tests. */
+export function forgetCatalogSearchColumnsCheck() {
+  columnasDeCatalogo = null
 }
 
 /** `ilike` sin comodines: `?marca=%` no puede traer todas las marcas. */
@@ -695,9 +724,10 @@ async function getMarketplaceProductsPageUncached(
   const showcaseOrganizationIds = await getShowcaseOrganizationIds(supabase)
   if (showcaseOrganizationIds.length === 0) return { products: [], total: 0 }
 
-  const [conCelular, conPrecioOculto] = await Promise.all([
+  const [conCelular, conPrecioOculto, conColumnasDeCatalogo] = await Promise.all([
     productsHaveDeviceColumns(supabase),
     productsHaveHidePriceColumn(supabase),
+    productsHaveCatalogSearchColumns(supabase),
   ])
   const camposExtras = (conCelular ? ', device_brand, device_models' : '') + (conPrecioOculto ? ', hide_price' : '')
 
@@ -739,17 +769,23 @@ async function getMarketplaceProductsPageUncached(
   }
 
   if (options?.q) {
-    for (const searchExpression of buildProductSearchExpressions(options.q, conCelular)) {
+    for (const searchExpression of buildProductSearchExpressions(options.q, conCelular, conColumnasDeCatalogo)) {
       query = query.or(searchExpression)
     }
   }
 
+  // Por el precio que se ve (con la oferta), y los de «Consultar precio» al
+  // final: ordenarlos por su precio oculto dejaba adivinarlo por la posición.
+  const priceColumn = conColumnasDeCatalogo ? 'public_price' : 'sale_price'
+  if ((options?.orden === 'price_asc' || options?.orden === 'price_desc') && conPrecioOculto) {
+    query = query.order('hide_price', { ascending: true, nullsFirst: true })
+  }
   switch (options?.orden) {
     case 'price_asc':
-      query = query.order('sale_price', { ascending: true }).order('created_at', { ascending: false })
+      query = query.order(priceColumn, { ascending: true }).order('created_at', { ascending: false })
       break
     case 'price_desc':
-      query = query.order('sale_price', { ascending: false }).order('created_at', { ascending: false })
+      query = query.order(priceColumn, { ascending: false }).order('created_at', { ascending: false })
       break
     case 'name_asc':
       query = query.order('name', { ascending: true }).order('created_at', { ascending: false })
