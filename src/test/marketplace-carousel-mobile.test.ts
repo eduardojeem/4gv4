@@ -25,7 +25,9 @@ describe('entran dos tarjetas completas en el teléfono', () => {
   it('el ancho se calcula sobre la pista, no sobre la pantalla', () => {
     expect(CARRUSEL).not.toContain('w-[78vw]')
     expect(CARRUSEL).not.toContain('w-[45vw]')
-    expect(CARRUSEL).toContain('w-[calc((100%-0.5rem)/2)] max-w-[280px]')
+    expect(CARRUSEL).toContain('w-[calc((100%-0.5rem)/2)]')
+    expect(CARRUSEL).toContain('auto-cols-[calc((100%-0.5rem)/2)]')
+    expect(CARRUSEL).toContain('max-w-[280px]')
   })
 
   it('el hueco entre tarjetas también baja en el teléfono', () => {

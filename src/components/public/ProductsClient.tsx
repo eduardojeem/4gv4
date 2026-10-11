@@ -109,7 +109,9 @@ export function ProductsClient({
   const [lastInitialQuery, setLastInitialQuery] = useState(initialQuery)
   if (lastInitialQuery !== initialQuery) {
     setLastInitialQuery(initialQuery)
-    setQuery(initialQuery)
+    // Adoptar navegación externa sólo si no hay una edición más reciente.
+    // La respuesta del servidor puede corresponder a una búsqueda anterior.
+    if (query.trim() === lastInitialQuery.trim()) setQuery(initialQuery)
   }
   const onlyOffers = initialOnlyOffers
   const [sort, setSort] = useState<SortKey>(initialSort)

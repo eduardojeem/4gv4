@@ -15,14 +15,24 @@ export function CreditFileDocuments({ customerId, documents, version, disabled, 
     const body = new FormData(); body.set('file', file); body.set('type', type); body.set('version', String(version))
     if (await action('/documents', 'POST', body)) { setFile(null); setMessage('Imagen cargada. Todavía requiere revisión manual.') }
   }
-  return <CreditSection title="Documentos privados">
+  return <CreditSection title="2. Documentos privados">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-medium">Adjuntá los comprobantes del cliente</p>
+      <span className="rounded-md bg-muted px-2 py-1 text-xs">{documents.length} de 10 documentos</span>
+    </div>
     <p className="text-sm text-muted-foreground">JPEG, PNG o WebP · hasta 4 MB · máximo 10 imágenes. PDF no está habilitado. Subir un archivo no lo verifica; no se certifica que esté libre de malware.</p>
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-4 rounded-lg border border-dashed bg-muted/20 p-4 sm:grid-cols-2">
       <label className="grid gap-1.5 text-sm">Tipo de documento<select className={selectClass} value={type} onChange={event => setType(event.target.value as CreditDocumentType)}><option value="identity">Identificación</option><option value="address">Domicilio</option><option value="income">Ingresos</option><option value="other">Otro</option></select></label>
       <CreditField label="Archivo o foto" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setFile(event.target.files?.[0] ?? null)} />
+      <p className="text-sm text-muted-foreground sm:col-span-2">Seleccioná el tipo de comprobante y elegí una imagen de tu dispositivo.</p>
+      {file && <p className="break-all text-sm sm:col-span-2">Seleccionado: <span className="font-medium">{file.name}</span> · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
+      <Button type="button" className="min-h-11 w-full sm:col-span-2 sm:w-auto sm:justify-self-start" disabled={disabled || !file || documents.length >= 10} onClick={() => void upload()}>Subir documento ({documents.length}/10)</Button>
+      {disabled && <p className="text-sm text-muted-foreground sm:col-span-2">Guardá los cambios de la ficha antes de subir o revisar documentos.</p>}
     </div>
-    <Button type="button" disabled={disabled || !file || documents.length >= 10} onClick={() => void upload()}>Subir documento ({documents.length}/10)</Button>
-    <Button type="button" variant="outline" disabled={disabled} onClick={async () => { const result = await action('/documents/cleanup', 'POST', {}); if (result) setMessage(result.cleanupPending ? 'Aún hay limpieza pendiente. Reintentá más tarde.' : 'Limpieza completada.') }}>Reintentar limpieza pendiente</Button>
+    <details className="text-sm"><summary className="min-h-11 cursor-pointer py-3 text-muted-foreground">Opciones de mantenimiento</summary>
+      <p className="mb-2 text-muted-foreground">Usá esta opción si se retiró un documento y su limpieza física quedó pendiente.</p>
+      <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" disabled={disabled} onClick={async () => { const result = await action('/documents/cleanup', 'POST', {}); if (result) setMessage(result.cleanupPending ? 'Aún hay limpieza pendiente. Reintentá más tarde.' : 'Limpieza completada.') }}>Reintentar limpieza pendiente</Button>
+    </details>
     {message && <p role="status" className="text-sm">{message}</p>}
     {!documents.length && <p className="text-sm text-muted-foreground">No hay documentos cargados. Guardá la ficha antes de subir una imagen.</p>}
     {documents.map(document => <DocumentRow key={`${document.id}:${version}`} document={document} customerId={customerId} disabled={disabled} version={version} action={action} onDelete={() => setSelectedDelete(document.id)} draftComment={draftComments?.[document.id]} onCommentChange={onCommentChange} />)}

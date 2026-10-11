@@ -5,7 +5,7 @@ import { CreditField, CreditSection } from './fields'
 export function CreditFileDecision({ file, disabled, onDecide }: { file: CreditFileDTO; disabled: boolean; onDecide: (status: string, reason: string, limit?: number) => Promise<void> }) {
   const [reason, setReason] = useState('')
   const [limit, setLimit] = useState('')
-  return <CreditSection title="Evaluación manual">
+  return <CreditSection title="3. Evaluación manual">
     <p className="text-sm text-muted-foreground">Guardar no aprueba. Aprobar actualiza el límite autorizado sin borrar deuda ni pagos. Los ingresos no generan una evaluación automática.</p>
     <CreditField label="Motivo de la decisión" maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} />
     <CreditField label="Límite autorizado propuesto" type="number" inputMode="decimal" min="0" max="9999999999.99" step="0.01" value={limit} onChange={event => setLimit(event.target.value)} />

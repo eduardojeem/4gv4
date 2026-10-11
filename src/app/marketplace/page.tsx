@@ -194,7 +194,7 @@ export default async function MarketplacePage() {
             </Button>
           </div>
 
-          <MarketplaceProductCarousel products={carouselProducts.slice(0, 16)} autoPlay={false} />
+          <MarketplaceProductCarousel products={carouselProducts.slice(0, 16)} rows={2} autoPlay={false} />
         </section>
       )}
 

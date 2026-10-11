@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-const state = vi.hoisted(() => ({ role: 'owner' }))
+import { getDashboardPermissionsForOrganizationRole } from '@/lib/auth/organization-dashboard-permissions'
+const state = vi.hoisted(() => ({ role: 'owner', permissions: [] as string[] }))
 vi.mock('@/contexts/ActiveOrganizationContext', () => ({ useOptionalActiveOrganization: () => ({ organization: { role: state.role } }) }))
-vi.mock('@/hooks/use-permissions', () => ({ usePermissions: () => ({ hasPermission: () => true }) }))
+vi.mock('@/hooks/use-permissions', () => ({ usePermissions: () => ({ hasPermission: (permission: string) => state.permissions.includes(permission) }) }))
 import { CustomerCreditFile } from '@/components/dashboard/customers/credit-file/CustomerCreditFile'
 import { CreditFileDocuments } from '@/components/dashboard/customers/credit-file/CreditFileDocuments'
 const policy = { version: 0, mode: 'informational', requireIdentity: false, minVerifiedReferences: 0, requiredDocuments: [] }
@@ -10,10 +11,62 @@ const file = { version: 1, status: 'draft', identity: { type: 'ci', number: '' }
 const summary = { status: 'draft', mode: 'informational', missing: ['approval'], limit: 0, outstanding: 0, available: 0, overdueCount: 0, eligible: false }
 beforeEach(() => {
   state.role = 'owner'
+  state.permissions = getDashboardPermissionsForOrganizationRole('owner')
   vi.stubGlobal('fetch', vi.fn(async (url, options) => new Response(JSON.stringify(String(url).endsWith('/summary') ? { summary } : { success: true, file: options?.method ? file : null, policy }), { status: 200 })))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 describe('customer credit file management UI', () => {
+  it('separates customer data from organization-wide requirements without losing drafts', async () => {
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    const identity = await screen.findByLabelText('Número de documento')
+    expect(screen.getByRole('tab', { name: 'Ficha del cliente' })).toHaveAttribute('aria-selected', 'true')
+    expect(identity).toBeVisible()
+    expect(screen.getByLabelText('Modo de control')).not.toBeVisible()
+    fireEvent.change(identity, { target: { value: '12345' } })
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Configuración de créditos' }), { button: 0, ctrlKey: false })
+    expect(screen.getByLabelText('Modo de control')).toBeVisible()
+    expect(identity).not.toBeVisible()
+    expect(screen.getByText('Estos cambios afectan a todos los clientes de esta organización.')).toBeVisible()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Ficha del cliente' }), { button: 0, ctrlKey: false })
+    expect(identity).toBeVisible()
+    expect(identity).toHaveValue('12345')
+  })
+
+  it('shows how to enable documents before the first save and enables uploads after saving', async () => {
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    expect(await screen.findByText('2. Documentos privados')).toBeInTheDocument()
+    expect(screen.getByText('Guardá la ficha para habilitar la carga de documentos.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Archivo o foto')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar ficha' }))
+    expect(await screen.findByLabelText('Archivo o foto')).toBeEnabled()
+    expect(screen.queryByText('Guardá la ficha para habilitar la carga de documentos.')).not.toBeInTheDocument()
+  })
+
+  it('allows an organization admin to read, edit and configure with real dashboard permission names', async () => {
+    state.role = 'admin'
+    state.permissions = getDashboardPermissionsForOrganizationRole('admin')
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    expect(await screen.findByLabelText('Número de documento')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Guardar ficha' })).toBeEnabled()
+    expect(screen.getByLabelText('Modo de control')).toBeInTheDocument()
+  })
+
+  it('keeps private data unavailable to a seller even with customer permissions', () => {
+    state.role = 'seller'
+    state.permissions = getDashboardPermissionsForOrganizationRole('seller')
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    expect(screen.getByText(/Solo propietario/)).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('allows customer read permission without enabling management controls', async () => {
+    state.role = 'admin'
+    state.permissions = ['customers.read']
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    expect(await screen.findByLabelText('Número de documento')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Guardar ficha' })).toBeDisabled()
+    expect(screen.queryByLabelText('Modo de control')).not.toBeInTheDocument()
+  })
   it('keeps an unsaved document comment after a review conflict or failed reload', async () => {
     const current = {...file,documents:[{id:'document',type:'identity',filename:'fixture.jpg',lifecycle:'ready',reviewStatus:'pending',reviewedAt:null,reviewedBy:null,comment:'A'}]}
     let failReload = false
@@ -58,6 +111,7 @@ describe('customer credit file management UI', () => {
     })
     render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
     await screen.findByLabelText('Modo de control')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Configuración de créditos' }), { button: 0, ctrlKey: false })
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/summary'))).toBe(true))
     const before = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/summary')).length
     fireEvent.change(screen.getByLabelText('Modo de control'),{target:{value:'warning'}})
@@ -117,7 +171,9 @@ describe('customer credit file management UI', () => {
   })
   it('requires explicit confirmation before enabling mandatory approval', async () => {
     render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
-    fireEvent.change(await screen.findByLabelText('Modo de control'), { target: { value: 'required' } })
+    await screen.findByLabelText('Modo de control')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Configuración de créditos' }), { button: 0, ctrlKey: false })
+    fireEvent.change(screen.getByLabelText('Modo de control'), { target: { value: 'required' } })
     const save = screen.getByRole('button', { name: 'Guardar requisitos' })
     expect(save).toBeDisabled()
     fireEvent.click(screen.getByLabelText(/Entiendo que se bloquearán/))
@@ -143,6 +199,7 @@ describe('customer credit file management UI', () => {
     const action = vi.fn(async () => ({}))
     render(<CreditFileDocuments customerId="fixture" documents={[]} version={2} disabled={false} action={action} />)
     fireEvent.change(screen.getByLabelText('Archivo o foto'), { target: { files: [new File(['fixture'], 'fixture.jpg', { type: 'image/jpeg' })] } })
+    expect(screen.getByText('fixture.jpg')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Subir documento/ }))
     expect(await screen.findByRole('status')).toHaveTextContent('Todavía requiere revisión manual')
     expect(action).toHaveBeenCalledTimes(1)

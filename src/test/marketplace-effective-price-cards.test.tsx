@@ -12,6 +12,15 @@ const product = { id: 'p1', name: 'Variant fixture', sku: 'SKU', sale_price: 200
 } as MarketplaceProduct
 
 describe('effective starting prices in marketplace cards', () => {
+  it('supports two rows without advertising automatic movement when disabled', () => {
+    const products = Array.from({ length: 5 }, (_, index) => ({ ...product, id: `p${index}`, name: `Product ${index}` }))
+    const { container } = render(<MarketplaceProductCarousel products={products} rows={2} autoPlay={false} />)
+    const track = screen.getByLabelText('Pasarela de productos del marketplace')
+    expect(track).toHaveClass('grid', 'grid-rows-2', 'grid-flow-col')
+    expect(container.querySelectorAll('[data-carousel-card]')).toHaveLength(5)
+    expect(screen.queryByText('Pasarela en movimiento automático')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pausar pasarela' })).not.toBeInTheDocument()
+  })
   it('renders the available starting price and matching discount in a carousel', () => {
     render(<MarketplaceProductCarousel products={[product]} autoPlay={false} />)
     expect(screen.getByText(/Desde/)).toBeInTheDocument()

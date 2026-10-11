@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { loadCustomerSpend } from '@/lib/customers/customer-spend-server'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
+import { customerDirectorySearchFilter } from '@/lib/customers/directory-search'
 import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
 import {
   buildCustomerIdentity,
@@ -180,7 +181,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit') || 50)))
     // Sanitizado: se interpola en un filtro `.or(...)` de PostgREST.
-    const search = sanitizeSearchTerm(searchParams.get('search'))
+    const search = customerDirectorySearchFilter(searchParams.get('search') || '')
     // Busqueda directa por id: el `search` de texto no consulta la columna id,
     // asi que resolver un cliente por UUID requiere su propio parametro.
     const idParam = searchParams.get('id')?.trim()
@@ -231,7 +232,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
 
       if (idParam) query = query.eq('id', idParam)
 
-      if (search) query = query.or(`name.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,company.ilike.%${search}%,company_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
+      if (search) query = query.or(search)
 
       if (status && status !== 'all') query = query.eq('status', statusForDatabase(status))
       if (customerType && customerType !== 'all') query = query.eq('customer_type', customerType)

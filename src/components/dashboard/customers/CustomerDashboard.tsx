@@ -623,9 +623,13 @@ export function CustomerDashboard() {
                     />
                     
                     {filters.search && !loading && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-3">
                       <p className="text-sm text-muted-foreground" role="status">
                         {pagination.totalItems} resultado{pagination.totalItems === 1 ? '' : 's'} para “{filters.search}”
                       </p>
+                      <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => handleFiltersChange({ search: '' })}>Limpiar búsqueda</Button>
+                      {pagination.totalItems === 0 && <p className="w-full text-sm text-muted-foreground">Probá con parte del nombre, teléfono o CI/RUC, o revisá los filtros activos.</p>}
+                      </div>
                     )}
                     
                     {/* Los dos campos manejan la misma busqueda: el de abajo

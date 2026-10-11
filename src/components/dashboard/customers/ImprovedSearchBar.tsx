@@ -41,6 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CustomerPreview } from './CustomerPreview'
 import { cn } from '@/lib/utils'
 import { Customer, mapRawToCustomer } from '@/hooks/use-customer-state'
+import { normalizeText } from '@/lib/customers/search'
 
 interface SearchSuggestion {
   value: string
@@ -107,7 +108,7 @@ export function ImprovedSearchBar({
     if (term.length < 2) return
     const controller = new AbortController()
     const timer = setTimeout(() => {
-      const params = new URLSearchParams({ search: term, page: '1', limit: '8', summary: '0' })
+      const params = new URLSearchParams({ search: term, page: '1', limit: '20', summary: '0' })
       void fetch(`/api/customers?${params.toString()}`, { signal: controller.signal })
         .then((response) => response.json())
         .then((result) => { if (!controller.signal.aborted && result.success) setServerResult({ query: term, customers: (result.data || []).map(mapRawToCustomer) }) })
@@ -148,8 +149,8 @@ export function ImprovedSearchBar({
   const fuzzyMatch = (text: string, query: string): number => {
     if (!text || !query) return 0
     
-    text = text.toLowerCase()
-    query = query.toLowerCase()
+    text = normalizeText(text)
+    query = normalizeText(query)
     
     // Exact match gets highest score
     if (text.includes(query)) return 100
@@ -270,15 +271,20 @@ export function ImprovedSearchBar({
           matchedField: 'ruc'
         })
       }
+      // El servidor ya filtró todo el padrón con reglas normalizadas. No perder
+      // coincidencias válidas por aplicar de nuevo includes sobre datos formateados.
+      if (!results.some(result => result.customer?.id === customer.id)) {
+        results.push({ value: customer.name, type: 'name', icon: <User className="h-4 w-4" />, customer, score: 60 })
+      }
     })
     
     // Remove duplicates and sort by score
     const uniqueResults = results
       .filter((result, index, self) => 
-        index === self.findIndex(r => r.value === result.value && r.type === result.type)
+        index === self.findIndex(r => r.customer?.id === result.customer?.id)
       )
       .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, 8) // Limit to 8 suggestions
+      .slice(0, 20) // Bounded preview; Buscar consults the entire directory.
     
     return uniqueResults
   }, [value, customers, serverCustomers])
@@ -311,16 +317,21 @@ export function ImprovedSearchBar({
 
   // Handle navigation in suggestions
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showSuggestions) return
+    if (!showSuggestions) {
+      if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
+      return
+    }
 
-    const totalSuggestions = suggestions.length + recentSearches.length
+    const totalSuggestions = suggestions.length + (!value ? Math.min(5, recentSearches.length) : 0)
 
     switch (e.key) {
       case 'ArrowDown':
+        if (!totalSuggestions) return
         e.preventDefault()
         setSelectedIndex(prev => (prev + 1) % totalSuggestions)
         break
       case 'ArrowUp':
+        if (!totalSuggestions) return
         e.preventDefault()
         setSelectedIndex(prev => (prev - 1 + totalSuggestions) % totalSuggestions)
         break
@@ -355,6 +366,12 @@ export function ImprovedSearchBar({
         break
     }
   }
+
+  useEffect(() => {
+    if (selectedIndex < 0 || !showSuggestions) return
+    suggestionsRef.current?.querySelector<HTMLElement>(`[data-search-index="${selectedIndex}"]`)
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }, [selectedIndex, showSuggestions])
 
   const handleSelectSuggestion = (suggestion: SearchSuggestion) => {
     // Si la sugerencia tiene un cliente asociado, mostrar su detalle
@@ -420,7 +437,7 @@ export function ImprovedSearchBar({
   const highlightMatch = (text: string, query: string) => {
     if (!query) return text
     
-    const regex = new RegExp(`(${query})`, 'gi')
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
     const parts = text.split(regex)
     
     return parts.map((part, index) => 
@@ -459,6 +476,7 @@ export function ImprovedSearchBar({
         <Input
           ref={inputRef}
           type="text"
+          aria-label="Buscar clientes"
           value={value}
           onChange={(e) => {
             onChange(e.target.value)
@@ -481,7 +499,7 @@ export function ImprovedSearchBar({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="border-0 bg-transparent text-base focus-visible:ring-0 focus-visible:ring-offset-0 py-6"
+          className="min-w-0 min-h-11 border-0 bg-transparent text-base focus-visible:ring-0 focus-visible:ring-offset-0 py-6"
         />
 
         {/* Quick Filters Button */}
@@ -490,7 +508,7 @@ export function ImprovedSearchBar({
           size="sm"
           onClick={() => setShowQuickFilters(!showQuickFilters)}
           className={cn(
-            "p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors",
+            "hidden sm:inline-flex p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors",
             showQuickFilters && "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
           )}
           aria-label="Filtros rápidos"
@@ -506,7 +524,7 @@ export function ImprovedSearchBar({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={handleClear}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="min-h-11 min-w-11 shrink-0 p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
               aria-label="Limpiar búsqueda"
             >
               <X className="h-4 w-4 text-gray-400" />
@@ -516,11 +534,15 @@ export function ImprovedSearchBar({
 
         {/* Keyboard Shortcut Hint */}
         {!isFocused && !value && (
-          <div className="pr-4 flex items-center gap-1 text-xs text-gray-400">
+          <div className="hidden lg:flex pr-4 items-center gap-1 text-xs text-gray-400">
             <Command className="h-3 w-3" />
             <span>K</span>
           </div>
         )}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">Nombre, teléfono, correo, CI/RUC o código. Enter o Buscar confirma la búsqueda.</p>
+        <Button type="button" className="min-h-11 w-full sm:w-auto" onClick={handleSearch} disabled={isSearching}>Buscar</Button>
       </div>
 
       {/* Quick Filters Dropdown */}
@@ -565,10 +587,13 @@ export function ImprovedSearchBar({
         {showSuggestions && !showQuickFilters && (suggestions.length > 0 || recentSearches.length > 0) && (
           <motion.div
             ref={suggestionsRef}
+            role="region"
+            aria-label="Clientes encontrados"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-900 border-2 border-gray-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-96 overflow-y-auto"
+            className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-900 border-2 border-gray-200 dark:border-slate-700 rounded-xl shadow-xl overflow-y-scroll overscroll-contain touch-pan-y"
+            style={{ maxHeight: 'min(24rem, 50dvh)', scrollbarGutter: 'stable' }}
           >
             {/* Recent Searches */}
             {recentSearches.length > 0 && !value && (
@@ -588,6 +613,7 @@ export function ImprovedSearchBar({
                 {recentSearches.slice(0, 5).map((search, index) => (
                   <button
                     key={`recent-${index}`}
+                    data-search-index={suggestions.length + index}
                     onClick={() => handleSelectRecentSearch(search)}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors",
@@ -606,18 +632,20 @@ export function ImprovedSearchBar({
             {/* Intelligent Suggestions */}
             {suggestions.length > 0 && (
               <div className="p-2">
-                <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 bg-white px-3 py-2 text-xs font-medium text-gray-500 dark:bg-slate-900 dark:text-gray-400">
                   <TrendingUp className="h-3 w-3" />
-                  <span>Sugerencias inteligentes</span>
+                  <span>Clientes encontrados</span>
                   <Badge variant="secondary" className="text-xs">{suggestions.length}</Badge>
                 </div>
                 {suggestions.map((suggestion, index) => {
                   const SuggestionButton = (
                     <button
                       key={`suggestion-${index}`}
+                      type="button"
+                      data-search-index={index}
                       onClick={() => handleSelectSuggestion(suggestion)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors group",
+                        "min-h-11 w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors group",
                         selectedIndex === index
                           ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
                           : "hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-300"
@@ -639,7 +667,8 @@ export function ImprovedSearchBar({
                           )}
                         </div>
                         {suggestion.customer && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
+                          <div className="text-xs text-muted-foreground mt-1">
+                            <p className="break-words">{[suggestion.customer.phone, suggestion.customer.ruc && `CI/RUC: ${suggestion.customer.ruc}`, suggestion.customer.customerCode].filter(Boolean).join(' · ')}</p>
                             <div className="flex items-center gap-2">
                               <User className="h-3 w-3" />
                               <span>{suggestion.customer.name}</span>
@@ -657,8 +686,8 @@ export function ImprovedSearchBar({
                               )}
                             </div>
                             {onCustomerSelect && (
-                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                👆 Clic para ver detalles del cliente
+                              <div className="text-xs text-primary mt-1">
+                                Abrir ficha del cliente
                               </div>
                             )}
                           </div>
