@@ -190,3 +190,59 @@ describe('la busqueda global consulta la base', () => {
     expect(pagina).toContain('hiddenProducts')
   })
 })
+
+/** Los filtros de /marketplace/productos con datos reales (auditoría 2026-10). */
+describe('los filtros del catalogo', () => {
+  const llamadas = (table: string, method: string) => (calls[table] ?? []).filter((c) => c.method === method)
+
+  it('cada palabra de la busqueda tiene que aparecer, en cualquier orden', async () => {
+    // «mouse gamer» buscaba la frase literal y no encontraba «Mouse UP GAMER CHROMA».
+    await getMarketplaceProductsPage(10, { q: 'mouse  gamer' })
+
+    const ors = llamadas('products', 'or').map((c) => String(c.args[0]))
+    expect(ors).toHaveLength(2)
+    expect(ors[0]).toContain('name.ilike.%mouse%')
+    expect(ors[1]).toContain('name.ilike.%gamer%')
+  })
+
+  it('la subcategoria se resuelve como la categoria: incluye las de cada tienda', async () => {
+    // Era `eq('category_id', …)` y una subcategoría general daba 0 productos.
+    await getMarketplaceProductsPage(10, { categoria: UUID, subcategoria: UUID })
+
+    expect(llamadas('products', 'eq').some((c) => c.args[0] === 'category_id')).toBe(false)
+    expect(llamadas('products', 'in').some((c) => c.args[0] === 'category_id')).toBe(true)
+    // Y mira las hijas de la categoría general.
+    expect(llamadas('global_categories', 'eq')).toContainEqual({ method: 'eq', args: ['parent_id', UUID] })
+  })
+
+  it('una subcategoria que no es UUID no consulta nada', async () => {
+    await expect(getMarketplaceProductsPage(10, { subcategoria: 'x,parent_id.not.is.null' })).resolves.toEqual({ products: [], total: 0 })
+  })
+
+  it('la marca no acepta comodines y tambien busca por el nombre oficial', async () => {
+    await getMarketplaceProductsPage(10, { marca: 'Sam_sung' })
+
+    // El guion bajo va escapado: en LIKE es un comodin.
+    const escapado = String.raw`Sam\_sung`
+    expect(llamadas('brands', 'ilike')).toContainEqual({ method: 'ilike', args: ['name', escapado] })
+    expect(llamadas('global_brands', 'ilike')).toContainEqual({ method: 'ilike', args: ['name', escapado] })
+    // Sin marcas de catálogo que coincidan, queda el texto escrito.
+    expect(llamadas('products', 'ilike')).toContainEqual({ method: 'ilike', args: ['brand', escapado] })
+  })
+})
+
+describe('la barra de filtros', () => {
+  const cliente = leer('src/components/public/ProductsClient.tsx')
+
+  it('ofrece todas las marcas, no solo las de la pagina visible', () => {
+    expect(cliente).toContain('if (serverPaginated && brands.length > 0)')
+  })
+
+  it('las subcategorias van en «Ramas», no en la franja principal', () => {
+    expect(cliente).toContain('{topCategories.map((cat) => {')
+  })
+
+  it('escribir en el buscador no llena el historial', () => {
+    expect(cliente).toContain('router.replace(`${pathname}?${params.toString()}`, { scroll: false })')
+  })
+})

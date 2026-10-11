@@ -44,15 +44,46 @@ function isUuid(value: string) {
  * punto y el guion bajo, que son parte de nombres y codigos reales: un SKU como
  * `ABC-1.5L` tiene que seguir encontrandose.
  */
-function buildProductSearchExpression(rawQuery: string, conCelular = false) {
+/**
+ * Una condicion por palabra, y todas tienen que cumplirse: «mouse gamer» antes
+ * buscaba esa frase literal y no encontraba «Mouse UP GAMER CHROMA».
+ */
+function buildProductSearchExpressions(rawQuery: string, conCelular = false): string[] {
   const term = sanitizeFilterTerm(rawQuery)
-  if (!term) return null
+  if (!term) return []
 
   const cols = ['name', 'sku', 'brand', 'description']
   if (conCelular) cols.push('device_brand')
-  return cols
-    .map((column) => `${column}.ilike.%${term}%`)
-    .join(',')
+  return term
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((word) => cols.map((column) => `${column}.ilike.%${word}%`).join(','))
+}
+
+/** `ilike` sin comodines: `?marca=%` no puede traer todas las marcas. */
+function escapeLikeValue(value: string) {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+/**
+ * Productos de una marca: por el texto cargado o por la marca del catalogo
+ * (propia u oficial). La lista de marcas muestra el nombre oficial, que en
+ * algunos productos no coincide con lo que se escribio a mano.
+ */
+async function resolveBrandIds(supabase: ReturnType<typeof createAdminSupabase>, marca: string): Promise<string[]> {
+  const pattern = escapeLikeValue(marca)
+  const [{ data: own }, { data: official }] = await Promise.all([
+    supabase.from('brands').select('id').ilike('name', pattern).limit(500),
+    supabase.from('global_brands').select('id').ilike('name', pattern).limit(20),
+  ])
+  const ids = new Set((own ?? []).map((row) => String(row.id)))
+  const officialIds = (official ?? []).map((row) => String(row.id))
+  if (officialIds.length > 0) {
+    const { data: linked } = await supabase.from('brands').select('id').in('global_brand_id', officialIds).limit(500)
+    ;(linked ?? []).forEach((row) => ids.add(String(row.id)))
+  }
+  return [...ids].filter(isUuid)
 }
 
 /**
@@ -67,13 +98,28 @@ async function resolveCategoryIds(
   if (!isUuid(categoria)) return null
 
   const id = categoria.trim()
-  const { data } = await supabase
-    .from('categories')
-    .select('id')
-    .or(`id.eq.${id},parent_id.eq.${id},global_category_id.eq.${id}`)
+  const [{ data }, { data: globalChildren }] = await Promise.all([
+    supabase
+      .from('categories')
+      .select('id')
+      .or(`id.eq.${id},parent_id.eq.${id},global_category_id.eq.${id}`),
+    supabase.from('global_categories').select('id').eq('parent_id', id),
+  ])
 
-  const ids = (data ?? []).map((row) => String(row.id))
-  return ids.length > 0 ? ids : [id]
+  const ids = new Set((data ?? []).map((row) => String(row.id)))
+  // Una categoria general incluye las de cada tienda que apuntan a sus hijas
+  // («Accesorios de Celular» → «Cargadores y Cables»).
+  const childGlobalIds = (globalChildren ?? []).map((row) => String(row.id))
+  if (childGlobalIds.length > 0) {
+    const { data: mapped } = await supabase.from('categories').select('id').in('global_category_id', childGlobalIds)
+    ;(mapped ?? []).forEach((row) => ids.add(String(row.id)))
+  }
+  // Y las hijas propias de esas categorias de tienda.
+  if (ids.size > 0) {
+    const { data: children } = await supabase.from('categories').select('id').in('parent_id', [...ids])
+    ;(children ?? []).forEach((row) => ids.add(String(row.id)))
+  }
+  return ids.size > 0 ? [...ids] : [id]
 }
 
 /**
@@ -667,15 +713,24 @@ async function getMarketplaceProductsPageUncached(
 
   // Filtro por marca
   if (options?.marca) {
-    const marcaClean = options.marca.trim()
+    const marcaClean = sanitizeFilterTerm(options.marca, 100)
     if (marcaClean) {
-      query = query.ilike('brand', marcaClean)
+      const brandIds = await resolveBrandIds(supabase, marcaClean)
+      // Entre comillas la barra invertida la consume PostgREST; sin % ni * el valor ya no ensancha nada.
+      const byText = `brand.ilike."${marcaClean}"`
+      query = brandIds.length > 0
+        ? query.or(`${byText},brand_id.in.(${brandIds.join(',')})`)
+        : query.ilike('brand', escapeLikeValue(marcaClean))
     }
   }
 
-  // Filtro por subcategoría específica
+  // Filtro por subcategoría específica. Puede ser una categoría general (del
+  // catálogo compartido): antes se comparaba directo contra la de cada
+  // producto y «Cargadores y Cables (3)» mostraba 0 resultados.
   if (options?.subcategoria) {
-    query = query.eq('category_id', options.subcategoria)
+    const categoryIds = await resolveCategoryIds(supabase, options.subcategoria)
+    if (!categoryIds) return { products: [], total: 0 }
+    query = query.in('category_id', categoryIds)
   } else if (options?.categoria) {
     // Si se pasa una categoría padre, buscar todos los hijos/subcategorías para incluir sus productos
     const categoryIds = await resolveCategoryIds(supabase, options.categoria)
@@ -684,8 +739,7 @@ async function getMarketplaceProductsPageUncached(
   }
 
   if (options?.q) {
-    const searchExpression = buildProductSearchExpression(options.q, conCelular)
-    if (searchExpression) {
+    for (const searchExpression of buildProductSearchExpressions(options.q, conCelular)) {
       query = query.or(searchExpression)
     }
   }

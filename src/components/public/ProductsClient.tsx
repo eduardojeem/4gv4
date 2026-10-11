@@ -157,7 +157,9 @@ export function ProductsClient({
       }
       params.delete('pagina')
       setPage(1)
-      router.push(`${pathname}?${params.toString()}`, { scroll: false })
+      // replace: cada pausa al escribir sumaba un paso al historial y «atrás»
+      // volvía letra por letra.
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
     }, 400)
 
     return () => clearTimeout(handler)
@@ -197,8 +199,34 @@ export function ProductsClient({
     return categories.filter((c) => c.parent_id === initialCategory && c.id !== initialCategory)
   }, [categories, initialCategory])
 
+  // La franja muestra las categorías principales; sus hijas van en «Ramas» al
+  // elegirla. Antes «MOUSE» quedaba al lado de «Electrónica». Una hija cuyo
+  // padre no tiene productos propios sigue arriba para no perderse.
+  const topCategories = useMemo(() => {
+    const ids = new Set(categories.map((c) => c.id))
+    const childCount = new Map<string, number>()
+    categories.forEach((c) => {
+      if (c.parent_id && ids.has(c.parent_id)) childCount.set(c.parent_id, (childCount.get(c.parent_id) ?? 0) + c.product_count)
+    })
+    return categories
+      .filter((c) => !c.parent_id || !ids.has(c.parent_id) || c.id === initialCategory)
+      .map((c) => ({ ...c, product_count: c.product_count + (childCount.get(c.id) ?? 0) }))
+  }, [categories, initialCategory])
+
   // ─── Marcas contextuales (Marcas presentes en los productos actuales) ────────
   const contextBrands = useMemo(() => {
+    // Con paginación en el servidor, `products` es solo la página visible: la
+    // lista salía con 4 marcas de 36 y, elegida una, no se podía cambiar a otra.
+    if (serverPaginated && brands.length > 0) {
+      const list = brands
+        .filter((b) => b.product_count > 0)
+        .map((b) => ({ name: b.name, count: b.product_count, logo_url: b.logo_url }))
+      if (initialBrand && !list.some((b) => b.name.toLowerCase() === initialBrand.toLowerCase())) {
+        list.unshift({ name: initialBrand, count: totalProducts, logo_url: null })
+      }
+      return list
+    }
+
     const map = new Map<string, number>()
     products.forEach((p) => {
       const b = p.brand?.trim()
@@ -223,7 +251,7 @@ export function ProductsClient({
     return brands
       .filter((b) => b.product_count > 0)
       .map((b) => ({ name: b.name, count: b.product_count, logo_url: b.logo_url }))
-  }, [products, brands])
+  }, [products, brands, serverPaginated, initialBrand, totalProducts])
 
   // ─── Filtrado y Ordenamiento Local ──────────────────────────────────────────
   const offersCount = useMemo(
@@ -422,7 +450,7 @@ export function ProductsClient({
             <div className="relative shrink-0">
               <select
                 suppressHydrationWarning
-                value={initialBrand}
+                value={contextBrands.find((b) => b.name.toLowerCase() === initialBrand.toLowerCase())?.name ?? initialBrand}
                 onChange={(e) => updateUrlParam('marca', e.target.value)}
                 className="h-8 sm:h-9 max-w-[90px] xs:max-w-[120px] sm:max-w-none rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
                 aria-label="Filtrar por marca"
@@ -554,7 +582,7 @@ export function ProductsClient({
               </button>
 
               {/* Categorías individuales */}
-              {categories.map((cat) => {
+              {topCategories.map((cat) => {
                 const isActive = initialCategory === cat.id
                 const Icon = getCategoryIcon(cat.name)
                 return (
