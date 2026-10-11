@@ -14,13 +14,15 @@ import {
   MapPin,
   MessageCircle,
   Navigation,
-  Phone, Sparkles,
+  Phone,
+  Share2,
+  Sparkles,
   Store
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
-import { getCompanyMapsHref, isValidGoogleMapsUrl, getCompanyMapsEmbedSrc } from '@/lib/website/company-maps-url'
+import { getCompanyMapsHref, getCompanyMapsEmbedSrc, getDirectionsHref, getWazeHref } from '@/lib/website/company-maps-url'
 import { getSocialLinks } from '@/lib/public/social-links'
 import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
 
@@ -29,9 +31,11 @@ interface ContactCTAProps {
   brand: BrandTheme
   phoneClean: string
   contactHref: string
+  /** La tienda vende productos: sin catálogo, «Explorar catálogo» llevaba a una página vacía. */
+  showCatalog?: boolean
 }
 
-export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref }: ContactCTAProps) {
+export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref, showCatalog = true }: ContactCTAProps) {
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
@@ -40,12 +44,28 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
   const mapEmbedSrc = getCompanyMapsEmbedSrc(exactMapsUrl, companyInfo.address)
   const [copied, setCopied] = useState(false)
 
-  // Priorizar siempre el enlace exacto configurado en /admin/website para evitar direcciones ambiguas
-  const directionsHref = (exactMapsUrl && isValidGoogleMapsUrl(exactMapsUrl))
-    ? exactMapsUrl
-    : companyInfo.address?.trim()
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(companyInfo.address.trim())}`
-      : mapsHref
+  // «Cómo llegar» abre la ruta hasta el local (al pin exacto si el enlace lo
+  // trae); antes «Iniciar GPS» abría el mismo mapa que «Google Maps».
+  const directionsHref = getDirectionsHref(exactMapsUrl, companyInfo.address)
+  const wazeHref = getWazeHref(exactMapsUrl, companyInfo.address)
+  const storeName = companyInfo.name?.trim() || 'Nuestra tienda'
+
+  const shareLocation = async () => {
+    const url = mapsHref || directionsHref
+    if (!url) return
+    const text = [storeName, companyInfo.address?.trim()].filter(Boolean).join(' · ')
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: storeName, text, url })
+        return
+      }
+      await navigator.clipboard.writeText(`${text}\n${url}`)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Cerrar el menú de compartir no es un error.
+    }
+  }
 
   const copyAddress = () => {
     if (!companyInfo.address) return
@@ -84,7 +104,6 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
   const cleanHourValue = (value: string) =>
     value.replace(/^(lun(?:es)?\s*-?\s*vie(?:rnes)?|s[aá]b(?:ado)?|dom(?:ingo)?)\s*:\s*/i, '').trim()
 
-  const mapQuery = companyInfo.address ? encodeURIComponent(companyInfo.address) : null
   // Quien llega hasta «Contacto» ya esta buscando como seguir a la tienda.
   const hasSocials = getSocialLinks(companyInfo).length > 0
 
@@ -126,17 +145,19 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
                 </a>
               </Button>
 
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto rounded-xl border-border bg-background font-bold text-foreground hover:bg-muted shadow-xs gap-2"
-              >
-                <Link href={`${tenantPrefix}/productos`}>
-                  <Store className="h-4 w-4 text-primary" />
-                  <span>Explorar Catálogo</span>
-                </Link>
-              </Button>
+              {showCatalog && (
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto rounded-xl border-border bg-background font-bold text-foreground hover:bg-muted shadow-xs gap-2"
+                >
+                  <Link href={`${tenantPrefix}/productos`}>
+                    <Store className="h-4 w-4 text-primary" />
+                    <span>Explorar Catálogo</span>
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -225,10 +246,11 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
               <div className="relative min-h-[300px] sm:min-h-[360px] lg:col-span-7 bg-muted/40 overflow-hidden">
                 {mapEmbedSrc ? (
                   <iframe
-                    title="Ubicación en Google Maps"
+                    title={`Mapa: cómo llegar a ${storeName}`}
                     src={mapEmbedSrc}
                     className="h-full w-full border-0 min-h-[300px] lg:min-h-[400px]"
                     loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
                     allowFullScreen
                   />
                 ) : (
@@ -246,8 +268,8 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
                 {/* Badge flotante sobre el mapa */}
                 <div className="absolute left-3 top-3 z-10 pointer-events-none">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-background/95 px-3 py-1 text-xs font-bold text-foreground shadow-md backdrop-blur-md border border-border/80">
-                    <MapPin className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
-                    <span>Ubicación en vivo</span>
+                    <MapPin className="h-3.5 w-3.5 text-rose-500" />
+                    <span>Cómo llegar</span>
                   </span>
                 </div>
               </div>
@@ -304,31 +326,41 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
                 {/* Botones de Acción del Mapa */}
                 <div className="pt-6 space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {mapsHref && (
+                    {directionsHref && (
                       <Button
                         asChild
                         className="rounded-xl font-bold gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md h-11"
                       >
-                        <a href={mapsHref} target="_blank" rel="noopener noreferrer">
-                          <MapPin className="h-4 w-4 text-rose-300" />
-                          <span>Google Maps</span>
-                          <ExternalLink className="h-3.5 w-3.5 ml-auto opacity-70" />
+                        <a href={directionsHref} target="_blank" rel="noopener noreferrer">
+                          <Navigation className="h-4 w-4" />
+                          <span>Cómo llegar</span>
                         </a>
                       </Button>
                     )}
 
-                    {directionsHref && (
+                    {wazeHref && (
                       <Button
                         asChild
                         variant="outline"
                         className="rounded-xl font-bold gap-2 border-border bg-background hover:bg-muted h-11"
                       >
-                        <a href={directionsHref} target="_blank" rel="noopener noreferrer">
-                          <Navigation className="h-4 w-4 text-primary" />
-                          <span>Iniciar GPS</span>
+                        <a href={wazeHref} target="_blank" rel="noopener noreferrer">
+                          <Car className="h-4 w-4 text-sky-500" />
+                          <span>Ir con Waze</span>
                         </a>
                       </Button>
                     )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs">
+                    {mapsHref && (
+                      <a href={mapsHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-muted-foreground hover:text-foreground">
+                        <ExternalLink className="h-3.5 w-3.5" />Ver en Google Maps
+                      </a>
+                    )}
+                    <button type="button" onClick={() => void shareLocation()} className="inline-flex items-center gap-1 font-semibold text-muted-foreground hover:text-foreground">
+                      <Share2 className="h-3.5 w-3.5" />Compartir ubicación
+                    </button>
                   </div>
 
                   {companyInfo.address && (
