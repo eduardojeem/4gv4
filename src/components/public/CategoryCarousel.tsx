@@ -3,68 +3,18 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import {
-  Armchair, Bike, BookOpen, Briefcase, Camera, Car, ChevronLeft, ChevronRight,
-  Coffee, Cpu, Dumbbell, FileText, Gamepad2, GraduationCap, Grid3X3, HardHat,
-  Heart, Home, Laptop, Leaf, Map, Monitor, Mountain, Music, Package,
-  PawPrint, Plane, Scissors, Shirt, ShoppingBasket, ShoppingCart,
-  Smartphone, Sparkles, Trophy, Tv, Utensils, Wrench, Zap
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Grid3X3 } from 'lucide-react'
 import { motion, AnimatePresence } from '@/components/ui/motion'
 import { useReducedMotion } from 'framer-motion'
 import type { MarketplaceCategory } from '@/lib/public/marketplace'
 import { displayCategoryName } from '@/lib/public/display-names'
+import { categoryVisual } from '@/lib/public/category-taxonomy'
 
-// ─── Icon map ──────────────────────────────────────────────────────────────
-const ICON_MAP: Record<string, React.ElementType> = {
-  // Tech / electronics
-  electrónica: Cpu, electronica: Cpu,
-  tecnología: Monitor, tecnologia: Monitor,
-  computación: Laptop, computacion: Laptop,
-  celulares: Smartphone, smartphones: Smartphone,
-  tablets: Tablet2, televisores: Tv, tv: Tv,
-  // Fashion
-  ropa: Shirt, indumentaria: Shirt, moda: Sparkles,
-  calzado: ShoppingBasket, zapatillas: ShoppingBasket,
-  accesorios: Zap, joyería: Sparkles, joyeria: Sparkles,
-  belleza: Sparkles, cosméticos: Sparkles, cosmeticos: Sparkles,
-  peluquería: Scissors, peluqueria: Scissors,
-  // Home
-  hogar: Home, muebles: Armchair, decoración: Sparkles, decoracion: Sparkles,
-  jardín: Leaf, jardin: Leaf, construcción: HardHat, construccion: HardHat,
-  herramientas: Wrench,
-  // Food
-  alimentos: ShoppingBasket, comida: Utensils, bebidas: Coffee,
-  supermercado: ShoppingCart, restaurante: Utensils,
-  // Sports / outdoors
-  deportes: Trophy, fitness: Dumbbell, outdoor: Mountain, bicicletas: Bike,
-  // Entertainment
-  juguetes: Gamepad2, videojuegos: Gamepad2, música: Music, musica: Music,
-  libros: BookOpen, fotografía: Camera, fotografia: Camera,
-  // Health
-  salud: Heart, farmacia: Heart, mascotas: PawPrint,
-  // Transport
-  autos: Car, automotor: Car, motos: Bike,
-  // Travel / services
-  viajes: Plane, turismo: Map, servicios: Briefcase,
-  oficina: Briefcase, papelería: FileText, papeleria: FileText,
-  educación: GraduationCap, educacion: GraduationCap,
-}
-
-// Tablet2 might not exist — fallback to Smartphone
-function Tablet2(props: React.SVGProps<SVGSVGElement>) {
-  return <Smartphone {...(props as React.ComponentProps<typeof Smartphone>)} />
-}
-
+// ─── Icono ────────────────────────────────────────────────────────────────
+// Una sola lista para el catálogo, la portada y /marketplace/categorias: antes
+// cada página tenía la suya y la misma categoría salía con iconos distintos.
 export function getCategoryIcon(name: string): React.ElementType {
-  const key = name.toLowerCase().trim()
-  // exact match
-  if (ICON_MAP[key]) return ICON_MAP[key]
-  // partial match
-  for (const [k, Icon] of Object.entries(ICON_MAP)) {
-    if (key.includes(k) || k.includes(key)) return Icon
-  }
-  return Package
+  return categoryVisual(name).icon
 }
 
 // ─── Color palette (12 themes, light + dark) ────────────────────────────────
