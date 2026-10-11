@@ -15,6 +15,7 @@ import { useCreditSystem } from '@/hooks/use-credit-system'
 import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from 'sonner'
 import { CreditStatusPanel } from './CreditStatusPanel'
+import { CreditFilePaymentSummary } from './CustomerCreditFileSummary'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { formatThousands, parseThousands } from '@/lib/currency'
 import { ProductCreditPlanPicker } from './ProductCreditPlanPicker'
@@ -292,6 +293,7 @@ export function PaymentMethods({
 
   return (
     <div className="space-y-4">
+      <CreditFilePaymentSummary customerId={activeCustomer ? String(activeCustomer.id) : undefined} mixed={isMixedPayment} method={paymentMethod} splits={paymentSplit} formatAmount={formatCurrency} />
       {/* Toggle entre pago simple y mixto */}
       <div className="flex items-center justify-between gap-3">
         <div>

@@ -1,0 +1,51 @@
+-- Local-only fictitious records. All POS/repair writes roll back.
+begin;
+set local session_replication_role=replica;
+insert into auth.users(id) values('cf060000-0000-4000-8000-000000000001');
+insert into public.profiles(id) values('cf060000-0000-4000-8000-000000000001');
+insert into public.organizations(id,name,slug) values('cf160000-0000-4000-8000-000000000001','Financial consumer fixture','credit-financial-consumer-fixture');
+insert into public.organization_members(organization_id,user_id,role,status) values('cf160000-0000-4000-8000-000000000001','cf060000-0000-4000-8000-000000000001','owner','active');
+insert into public.branches(id,organization_id,code,name,slug) values('cf360000-0000-4000-8000-000000000001','cf160000-0000-4000-8000-000000000001','CFF','Fixture','credit-financial-fixture');
+insert into public.cash_closures(id,organization_id,branch_id,type,register_id,date,status) values('cf560000-0000-4000-8000-000000000001','cf160000-0000-4000-8000-000000000001','cf360000-0000-4000-8000-000000000001','opening','fixture',null,'abierta');
+insert into public.customers(id,organization_id,name,status,credit_limit) values('cf260000-0000-4000-8000-000000000001','cf160000-0000-4000-8000-000000000001','Financial fixture','activo',1000);
+insert into public.products(id,organization_id,sku,name,sale_price,stock_quantity) values('cf460000-0000-4000-8000-000000000001','cf160000-0000-4000-8000-000000000001','CREDIT-FIXTURE','Fixture product',120,10);
+insert into public.branch_inventory(branch_id,product_id,stock_quantity) values('cf360000-0000-4000-8000-000000000001','cf460000-0000-4000-8000-000000000001',10);
+insert into public.repairs(id,organization_id,branch_id,customer_id,device_brand,device_model,problem_description,status,pricing_mode,final_cost,paid_amount,payment_status) values('cf660000-0000-4000-8000-000000000001','cf160000-0000-4000-8000-000000000001','cf360000-0000-4000-8000-000000000001','cf260000-0000-4000-8000-000000000001','Fixture','Fixture','Fixture','listo','manual',100,0,'pendiente');
+set local session_replication_role=origin;
+set local role service_role;
+do $$
+declare
+ o uuid:='cf160000-0000-4000-8000-000000000001'; a uuid:='cf060000-0000-4000-8000-000000000001'; c uuid:='cf260000-0000-4000-8000-000000000001';
+ b uuid:='cf360000-0000-4000-8000-000000000001'; s uuid:='cf560000-0000-4000-8000-000000000001';
+ items jsonb:='[{"product_id":"cf460000-0000-4000-8000-000000000001","quantity":1}]';
+ tenders jsonb:='[{"payment_method":"credit","amount":120}]';
+ result jsonb; rejected boolean; policy jsonb; credit uuid;
+begin
+ policy:=public.save_customer_credit_file_policy(o,a,0,'{"mode":"required","requireIdentity":false,"minVerifiedReferences":0,"requiredDocuments":[]}');
+ rejected:=false;
+ begin perform public.process_pos_sale_atomic_v4(o,b,a,s,'credit-fixture-v4','CF-V4',c,items,tenders,p_credit=>'{}');
+ exception when check_violation then rejected:=sqlerrm like '%CREDIT_FILE%'; end;
+ assert rejected,'v4 must enforce required file before granting credit';
+ rejected:=false;
+ begin perform public.process_pos_sale_atomic_v5(o,b,a,s,'credit-fixture-v5','CF-V5',c,items,tenders,p_credit=>'{}');
+ exception when check_violation then rejected:=sqlerrm like '%CREDIT_FILE%'; end;
+ assert rejected,'v5 must enforce required file before granting credit';
+ rejected:=false;
+ begin perform public.close_repair_and_register_payment_v2(p_repair_id=>'cf660000-0000-4000-8000-000000000001',p_organization_id=>o,p_branch_id=>b,p_actor_id=>a,p_payment_method=>'credit',p_payment_amount=>100,p_idempotency_key=>'credit-repair-fixture',p_credit_interest_rate=>0,p_credit_installment_count=>1,p_credit_frequency=>'monthly');
+ exception when check_violation then rejected:=sqlerrm like '%CREDIT_FILE%'; end;
+ assert rejected,'repair financing must enforce the same required file';
+ assert not exists(select 1 from public.customer_credits where organization_id=o),'failed concessions roll back';
+ result:=public.process_pos_sale_atomic_v5(o,b,a,s,'cash-fixture-v5','CF-CASH',c,items,'[{"payment_method":"cash","amount":120}]');
+ assert result->>'sale_id' is not null,'cash sale remains available without file';
+ policy:=public.save_customer_credit_file_policy(o,a,1,'{"mode":"warning","requireIdentity":false,"minVerifiedReferences":0,"requiredDocuments":[]}');
+ result:=public.process_pos_sale_atomic_v5(o,b,a,s,'warn-fixture-v5','CF-WARN',c,items,tenders,p_credit=>'{}');
+ credit:=(result->>'credit_id')::uuid;
+ assert credit is not null,'warning does not replace existing financial limits';
+ set constraints all immediate;
+ set constraints all deferred;
+ perform public.save_customer_credit_file_policy(o,a,2,'{"mode":"required","requireIdentity":false,"minVerifiedReferences":0,"requiredDocuments":[]}');
+ update public.credit_installments set amount_paid=10 where credit_id=credit;
+ assert (select amount_paid=10 from public.credit_installments where credit_id=credit),'payment of an existing installment remains available';
+ assert (select count(*)=1 from public.customer_credits where organization_id=o),'reading existing credit remains available';
+end $$;
+rollback;

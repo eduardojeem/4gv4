@@ -29,6 +29,65 @@ function psql(sql: string, onOutput?: (text: string) => void) {
 
 // Deliberately opt-in: never connects to linked/remote Supabase or mutates real customers.
 describe.skipIf(process.env.CREDIT_FILE_LOCAL_SQL !== '1')('customer credit file — real local Postgres', () => {
+  it('makes a first-time policy change wait for an in-flight POS concession, then enforces it', async () => {
+    const o = 'cf160000-0000-4000-8000-000000000001', c = 'cf260000-0000-4000-8000-000000000001', a = 'cf060000-0000-4000-8000-000000000001'
+    const source = await readFile('supabase/tests/customer_credit_financial_consumers.test.sql', 'utf8')
+    const seed = await psql(source.split('set local role service_role;')[0] + 'commit;').done
+    expect(seed.code, seed.output).toBe(0)
+    const sale = (version: number) => `select public.process_pos_sale_atomic_v${version}('${o}','cf360000-0000-4000-8000-000000000001','${a}','cf560000-0000-4000-8000-000000000001','policy-race-v${version}','POLICY-V${version}','${c}','[{"product_id":"cf460000-0000-4000-8000-000000000001","quantity":1}]','[{"payment_method":"credit","amount":120}]',p_credit=>'{}');`
+    try {
+      let held!: () => void
+      const ready = new Promise<void>(resolve => { held = resolve })
+      const first = psql(`begin; set local role service_role; ${sale(5)} select 'POLICY_LOCK_HELD'; select pg_sleep(3); commit;`, output => { if (output.includes('POLICY_LOCK_HELD')) held() })
+      await Promise.race([ready, first.done.then(result => { throw new Error(result.output) })])
+      const policy = psql(`set application_name='credit-file-policy-race'; begin; set local role service_role; select public.save_customer_credit_file_policy('${o}','${a}',0,'{"mode":"required","requireIdentity":false,"minVerifiedReferences":0,"requiredDocuments":[]}'); commit;`)
+      const waiting = await psql(`do $$ begin for i in 1..40 loop
+        if exists(select 1 from pg_stat_activity where application_name='credit-file-policy-race' and wait_event_type='Lock') then return; end if;
+        perform pg_sleep(0.05); end loop; raise exception 'Policy did not wait for active concession'; end $$;`).done
+      expect(waiting.code, waiting.output).toBe(0)
+      const [one, changed] = await Promise.all([first.done, policy.done])
+      expect(one.code, one.output).toBe(0)
+      expect(changed.code, changed.output).toBe(0)
+      const next = await psql(`begin; set local role service_role; ${sale(4)} commit;`).done
+      expect(next.code, next.output).not.toBe(0)
+      expect(next.output).toContain('CREDIT_FILE_REQUIRED')
+    } finally {
+      const removed = await psql(await readFile('supabase/tests/customer_credit_financial_fixture_cleanup.sql', 'utf8')).done
+      expect(removed.code, removed.output).toBe(0)
+    }
+  }, 30_000)
+  it('serializes actual POS v5 and fallback v4 and counts existing repair debt at commit', async () => {
+    const o = 'cf160000-0000-4000-8000-000000000001', c = 'cf260000-0000-4000-8000-000000000001', a = 'cf060000-0000-4000-8000-000000000001'
+    const source = await readFile('supabase/tests/customer_credit_financial_consumers.test.sql', 'utf8')
+    const seedSql = source.split('set local role service_role;')[0].replace("'activo',1000", "'activo',250") + 'commit;'
+    const seed = await psql(seedSql).done
+    expect(seed.code, seed.output).toBe(0)
+    const sale = (version: number) => `select public.process_pos_sale_atomic_v${version}('${o}','cf360000-0000-4000-8000-000000000001','${a}','cf560000-0000-4000-8000-000000000001','race-pos-v${version}','RACE-V${version}','${c}','[{"product_id":"cf460000-0000-4000-8000-000000000001","quantity":1}]','[{"payment_method":"credit","amount":120}]',p_credit=>'{}');`
+    try {
+      let held!: () => void
+      const ready = new Promise<void>(resolve => { held = resolve })
+      const first = psql(`begin; set local role service_role; ${sale(5)} select 'POS_HELD'; select pg_sleep(1); commit;`, output => { if (output.includes('POS_HELD')) held() })
+      await Promise.race([ready, first.done.then(result => { throw new Error(result.output) })])
+      const second = psql(`begin; set local role service_role; ${sale(4)} commit;`)
+      const [one, two] = await Promise.all([first.done, second.done])
+      expect(one.code, one.output).toBe(0)
+      expect(two.code, two.output).not.toBe(0)
+      expect(two.output).toContain('CREDIT_LIMIT_EXCEEDED')
+      const balance = await psql(`select public.customer_credit_outstanding('${o}','${c}'); select count(*) from public.sales where organization_id='${o}';`).done
+      expect(balance.output).toMatch(/\b220\b/)
+      expect(balance.output).toMatch(/\b1\b/)
+    } finally {
+      // Verify the exact, disposable fixture marker before any cleanup.
+      // All financial transactions above use normal constraints and triggers.
+      const removed = await psql(await readFile('supabase/tests/customer_credit_financial_fixture_cleanup.sql', 'utf8')).done
+      expect(removed.code, removed.output).toBe(0)
+    }
+  }, 30_000)
+  it('enforces required files in actual POS v4/v5 and repair transactions while keeping cash and payments available', async () => {
+    const result = await psql(await readFile('supabase/tests/customer_credit_financial_consumers.test.sql', 'utf8')).done
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('ROLLBACK')
+  }, 30_000)
   it('serializes competing tenth-document reservations without exceeding the quota', async () => {
     const o = 'cf150000-0000-4000-8000-000000000001', c = 'cf250000-0000-4000-8000-000000000001', a = 'cf050000-0000-4000-8000-000000000001'
     const reserve = (version: number) => `select public.reserve_customer_credit_document('${o}','${c}','${a}',${version},'other','fixture.jpg','image/jpeg',8,'jpg');`
