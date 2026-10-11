@@ -82,3 +82,26 @@ export async function printPdfDocument(doc: PrintablePdf): Promise<void> {
 export function downloadPdfDocument(doc: PrintablePdf, filename: string): void {
   doc.save(filename.endsWith('.pdf') ? filename : `${filename}.pdf`)
 }
+
+export type ShareResult = 'shared' | 'cancelled' | 'downloaded'
+
+/**
+ * Compartir el PDF (WhatsApp, mail…) desde el menú del teléfono o la compu. Si
+ * el dispositivo no comparte archivos, se descarga para mandarlo a mano.
+ * Cerrar el menú sin elegir no es un error.
+ */
+export async function sharePdfDocument(doc: PrintablePdf, filename: string, text: string): Promise<ShareResult> {
+  const name = filename.endsWith('.pdf') ? filename : `${filename}.pdf`
+  const file = new File([doc.output('blob')], name, { type: 'application/pdf' })
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: name, text })
+      return 'shared'
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled'
+      // Sin el gesto del usuario a mano (tardó en armarse) algunos navegadores lo niegan: se descarga.
+    }
+  }
+  downloadPdfDocument(doc, name)
+  return 'downloaded'
+}

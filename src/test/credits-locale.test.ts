@@ -13,7 +13,7 @@ const archivos = [
   'src/lib/date-only.ts',
   'src/components/dashboard/credits/CreditDetailDialog.tsx',
   'src/components/dashboard/credits/CreditPaymentDialog.tsx',
-  'src/components/dashboard/credits/PaymentReceiptDialog.tsx',
+  'src/lib/credits/installment-payment-receipt.ts',
   'src/components/dashboard/credits/PaymentsTimeline.tsx',
 ]
 

@@ -19,11 +19,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState } from 'react'
-import { CreditCard, User, DollarSign, FileText, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
+import { CreditCard, User, DollarSign, FileText, AlertCircle, CheckCircle2, Printer, Share2 } from 'lucide-react'
 import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf, projectPaidInstallments } from '@/lib/credits/payment-receipt'
-import { downloadPdfDocument, printPdfDocument } from '@/lib/credits/print-receipt'
+import { downloadPdfDocument, printPdfDocument, sharePdfDocument } from '@/lib/credits/print-receipt'
 import { useCreditPrinting } from '@/hooks/use-credit-printing'
 import { CreditPaperPicker } from './CreditPaperPicker'
 import { toast } from 'sonner'
@@ -224,7 +224,7 @@ function CreditPaymentDialogContent({
     // El pago ya esta guardado cuando se llega aca, asi que un fallo al generar
     // el comprobante no puede quedar en silencio: el usuario tiene que saber que
     // el cobro se registro y lo que fallo fue el papel.
-    const notifyReceiptFailure = (error: unknown, action: 'imprimir' | 'descargar') => {
+    const notifyReceiptFailure = (error: unknown, action: 'imprimir' | 'descargar' | 'compartir') => {
         toast.error(`No se pudo ${action} el comprobante`, {
             description: `El pago quedó registrado. ${error instanceof Error ? error.message : 'Podés reintentar desde el historial de pagos.'}`,
         })
@@ -238,6 +238,17 @@ function CreditPaymentDialogContent({
             }
         } catch (error) {
             notifyReceiptFailure(error, 'descargar')
+        }
+    }
+
+    const shareReceipt = async () => {
+        try {
+            const result = await generateReceiptDoc()
+            if (!result) return
+            const outcome = await sharePdfDocument(result.doc, `comprobante_${result.receiptNum}`, `Comprobante de pago ${result.receiptNum}`)
+            if (outcome === 'downloaded') toast.info('Comprobante descargado', { description: 'Este dispositivo no comparte archivos: adjuntalo desde la descarga.' })
+        } catch (error) {
+            notifyReceiptFailure(error, 'compartir')
         }
     }
 
@@ -337,7 +348,7 @@ function CreditPaymentDialogContent({
                                 un paso de mas en la operacion mas repetida del dia. */}
                             <CreditPaperPicker value={format} onChange={changeFormat} />
                         </div>
-                        <div className="px-6 pb-6 pt-3 shrink-0 grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="px-6 pb-6 pt-3 shrink-0 grid grid-cols-3 lg:grid-cols-4 gap-3">
                             <Button
                                 variant="outline"
                                 className="border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400"
@@ -354,7 +365,15 @@ function CreditPaymentDialogContent({
                                 <FileText className="h-4 w-4 mr-2" />
                                 Descargar
                             </Button>
-                            <Button className="col-span-2 lg:col-span-1" onClick={() => { onOpenChange(false) }}>
+                            <Button
+                                variant="outline"
+                                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400"
+                                onClick={shareReceipt}
+                            >
+                                <Share2 className="h-4 w-4 mr-2" />
+                                Compartir
+                            </Button>
+                            <Button className="col-span-3 lg:col-span-1" onClick={() => { onOpenChange(false) }}>
                                 Cerrar
                             </Button>
                         </div>
