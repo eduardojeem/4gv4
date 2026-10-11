@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Eye,
   Flame,
   FolderTree,
   LayoutGrid,
@@ -26,7 +25,6 @@ import {
   MessageCircle,
   X
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
@@ -34,6 +32,9 @@ import type { MarketplaceProduct, MarketplaceCategory, MarketplaceBrand } from '
 import { MarketplaceProductModal } from './MarketplaceProductModal'
 import { HorizontalScroller } from './HorizontalScroller'
 import { CategoryPicker } from './CategoryPicker'
+import { BrandPicker } from './BrandPicker'
+import { BackToTopButton } from './BackToTopButton'
+import { displayCategoryName } from '@/lib/public/display-names'
 import { FavoriteButton } from './Favorites'
 import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
@@ -90,7 +91,7 @@ export function ProductsClient({
   currentPage = 1,
   currentPageSize = PAGE_SIZE,
   serverPaginated = false,
-  categories = [],
+  categories: rawCategories = [],
   brands = [],
   initialQuery = '',
   initialCategory = '',
@@ -124,6 +125,12 @@ export function ProductsClient({
   const activePageSize = serverPaginated ? currentPageSize : pageSize
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   
+  // Los nombres tal como se muestran: cada tienda escribe «HOGAR» o «audio» a su manera.
+  const categories = useMemo(
+    () => rawCategories.map((category) => ({ ...category, name: displayCategoryName(category.name) })),
+    [rawCategories]
+  )
+
   const sortRef = useRef<HTMLDivElement>(null)
   const gridTopRef = useRef<HTMLDivElement>(null)
   const filterKey = JSON.stringify([initialQuery, initialCategory, initialSubcategory, initialBrand, onlyOffers, sort])
@@ -251,7 +258,9 @@ export function ProductsClient({
   const contextBrands = useMemo(() => {
     // Con paginación en el servidor, `products` es solo la página visible: la
     // lista salía con 4 marcas de 36 y, elegida una, no se podía cambiar a otra.
-    if (serverPaginated && brands.length > 0) {
+    // Con una marca elegida el selector se muestra aunque no haya resultados:
+    // si no, no había cómo cambiarla.
+    if (serverPaginated && (brands.length > 0 || initialBrand)) {
       const list = brands
         .filter((b) => b.product_count > 0)
         .map((b) => ({ name: b.name, count: b.product_count, logo_url: b.logo_url }))
@@ -416,6 +425,16 @@ export function ProductsClient({
     sort !== 'default'
   )
 
+  // Sin resultados: qué filtro quitar, uno por uno.
+  const activeSubcategoryName = categories.find((c) => c.id === initialSubcategory)?.name
+  const emptyStateSuggestions = [
+    query.trim() && { key: 'q', label: `Búsqueda «${query.trim()}»`, remove: () => setQuery('') },
+    initialBrand && { key: 'marca', label: `Marca ${initialBrand}`, remove: () => updateUrlParam('marca', '') },
+    initialSubcategory && { key: 'sub', label: activeSubcategoryName ?? 'Rama', remove: () => updateUrlParam('subcategoria', '') },
+    initialCategory && { key: 'cat', label: activeCategory?.name ?? 'Categoría', remove: () => updateUrlParam('categoria', '') },
+    onlyOffers && { key: 'ofertas', label: 'Solo ofertas', remove: () => updateUrlParam('ofertas', '') },
+  ].filter((suggestion): suggestion is { key: string; label: string; remove: () => void } => Boolean(suggestion))
+
   const gridClass =
     view === 'grid'
       // Sin `grid-cols` propio, el telefono caia en una sola columna: una
@@ -500,20 +519,11 @@ export function ProductsClient({
           {/* Selector de Marca (Dropdown) */}
           {contextBrands.length > 0 && (
             <div className="relative min-w-0 flex-1 sm:flex-none">
-              <select
-                suppressHydrationWarning
-                value={contextBrands.find((b) => b.name.toLowerCase() === initialBrand.toLowerCase())?.name ?? initialBrand}
-                onChange={(e) => updateUrlParam('marca', e.target.value)}
-                className="h-8 sm:h-9 w-full sm:w-auto rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
-                aria-label="Filtrar por marca"
-              >
-                <option value="">Marcas</option>
-                {contextBrands.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name} ({b.count})
-                  </option>
-                ))}
-              </select>
+              <BrandPicker
+                options={contextBrands}
+                active={initialBrand}
+                onSelect={(brand) => updateUrlParam('marca', brand)}
+              />
             </div>
           )}
 
@@ -838,9 +848,15 @@ export function ProductsClient({
             return (
               <div
                 key={`${product.organization_slug}-${product.id}`}
+                // Toda la tarjeta abre el detalle; los enlaces y botones de
+                // adentro (tienda, favorito, precio, WhatsApp) siguen a lo suyo.
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest('a, button, [role="dialog"]')) return
+                  setSelected(product)
+                }}
                 className={cn(
-                  'group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg shadow-2xs',
-                  isCompact ? 'p-3' : 'p-4'
+                  'group relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg shadow-2xs',
+                  isCompact ? 'p-3' : 'p-3 sm:p-4'
                 )}
               >
                 {/* Imagen (clic abre modal de detalle) */}
@@ -889,7 +905,7 @@ export function ProductsClient({
                 </div>
 
                 {/* Contenido */}
-                <div className="mt-3 flex flex-1 flex-col justify-between">
+                <div className="mt-2 flex flex-1 flex-col justify-between sm:mt-3">
                   <div>
                     {/* Tienda */}
                     <Link
@@ -910,7 +926,7 @@ export function ProductsClient({
                         <span className="min-w-0 shrink-0 truncate font-medium text-foreground">{product.brand}</span>
                       )}
                       {product.category && (
-                        <span className="min-w-0 truncate">{product.category.name}</span>
+                        <span className="min-w-0 truncate">{displayCategoryName(product.category.name)}</span>
                       )}
                     </div>
 
@@ -938,7 +954,7 @@ export function ProductsClient({
                   </div>
 
                   {/* Precios y Botones */}
-                  <div className="mt-3 space-y-2.5 border-t border-border/60 pt-2">
+                  <div className="mt-2 space-y-2 border-t border-border/60 pt-2 sm:mt-3 sm:space-y-2.5">
                     {precioOculto ? (
                       <div
                         className="min-w-0"
@@ -970,49 +986,33 @@ export function ProductsClient({
                       </div>
                     )}
 
-                    {/* Acciones directas: Detalle + Ir a tienda */}
-                    <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
-                      {precioOculto && whatsappHref ? (
-                        <a
-                          href={whatsappHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          suppressHydrationWarning
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-1.5 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs dark:text-[#4ADE80]"
-                        >
-                          <MessageCircle className="h-3 w-3" />
-                          <span>Preguntar</span>
-                        </a>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setSelected(product)}
-                          className="h-7 gap-1 rounded-lg px-1.5 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
-                        >
-                          <Eye className="h-3 w-3" />
-                          <span>Detalle</span>
-                        </Button>
-                      )}
-
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1 rounded-lg border-border/80 px-1.5 text-[11px] font-semibold transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
+                    {/* Una sola acción. Antes «Detalle» + «Ir a tienda» en cada
+                        tarjeta: repetido, desparejo en el celular (el botón
+                        medía 44px y el enlace 28) y «Ir a tienda» abría el
+                        producto, no la tienda. El detalle ahora se abre tocando
+                        la tarjeta. */}
+                    {precioOculto && whatsappHref ? (
+                      <a
+                        href={whatsappHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        suppressHydrationWarning
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#25D366]/10 px-2 text-xs font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:rounded-xl dark:text-[#4ADE80]"
                       >
-                        <Link href={`/${product.organization_slug}/productos/${product.id}`}>
-                          {/* «Ir a tienda» pide 68px y en dos columnas hay 61:
-                              desbordaba. En el telefono se acorta y la flecha,
-                              que no aporta, se va. */}
-                          <span className="sm:hidden">Tienda</span>
-                          <span className="hidden sm:inline">Ir a tienda</span>
-                          <ArrowRight className="hidden h-3 w-3 sm:inline" />
-                        </Link>
-                      </Button>
-                    </div>
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        <span>Preguntar precio</span>
+                      </a>
+                    ) : (
+                      <Link
+                        href={`/${product.organization_slug}/productos/${product.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-border/80 px-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:rounded-xl"
+                      >
+                        <span>Ver en la tienda</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1029,8 +1029,27 @@ export function ProductsClient({
             No se encontraron productos
           </h3>
           <p className="mt-1.5 text-xs text-muted-foreground max-w-xs leading-relaxed">
-            No hay productos que coincidan con los filtros aplicados.
+            {emptyStateSuggestions.length > 0
+              ? 'Probá quitando uno de estos filtros:'
+              : 'No hay productos que coincidan con los filtros aplicados.'}
           </p>
+          {/* Antes solo «Limpiar todo»: con búsqueda, marca y categoría a la
+              vez, se perdían los tres para destrabar uno. */}
+          {emptyStateSuggestions.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {emptyStateSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.key}
+                  type="button"
+                  onClick={suggestion.remove}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                >
+                  <X className="h-3 w-3" />
+                  {suggestion.label}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             onClick={clearAllFilters}
@@ -1040,6 +1059,8 @@ export function ProductsClient({
           </button>
         </div>
       )}
+
+      {serverPaginated && <BackToTopButton targetId="catalogo" />}
 
       {/* ── PAGINACIÓN ─────────────────────────────────────────────────────── */}
       {(totalPages > 1 || effectiveTotal > 12) && (

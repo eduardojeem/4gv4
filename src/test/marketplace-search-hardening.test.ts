@@ -245,7 +245,7 @@ describe('la barra de filtros', () => {
   const cliente = leer('src/components/public/ProductsClient.tsx')
 
   it('ofrece todas las marcas, no solo las de la pagina visible', () => {
-    expect(cliente).toContain('if (serverPaginated && brands.length > 0)')
+    expect(cliente).toContain('if (serverPaginated && (brands.length > 0 || initialBrand))')
   })
 
   it('las subcategorias van en «Ramas», no en la franja principal', () => {
