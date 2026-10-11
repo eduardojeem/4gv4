@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getCategoryIcon } from './CategoryCarousel'
 import type { MarketplaceCategory } from '@/lib/public/marketplace'
+import { displayCategoryName } from '@/lib/public/display-names'
 
 type Props = {
   categories: MarketplaceCategory[]
@@ -127,7 +128,7 @@ export function CompactCategoryBar({
                     />
 
                     {/* Nombre */}
-                    <span className="max-w-[110px] truncate">{cat.name}</span>
+                    <span className="max-w-[110px] truncate">{displayCategoryName(cat.name)}</span>
 
                     {/* Conteo */}
                     {showCount && cat.product_count > 0 && (

@@ -25,3 +25,20 @@ describe('las cifras de /saas/negocios', () => {
     expect(logos.map((store: { id: string }) => store.id)).toEqual(['a', 'c', 'd', 'e', 'f', 'g'])
   })
 })
+
+describe('las cifras del marketplace', () => {
+  const leer = (ruta: string) => require('node:fs').readFileSync(require('node:path').resolve(process.cwd(), ruta), 'utf8') as string
+
+  it('la portada usa el mismo criterio y cuenta todas las tiendas, no las 24 que trae', () => {
+    const portada = leer('src/app/marketplace/page.tsx')
+    expect(portada).toContain('getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES)')
+    expect(portada).toContain('visibleDirectoryStats({ stores: storeCount, cities: 0, products: totalProducts })')
+    expect(portada).toContain("{shownStats.has('stores') && (")
+  })
+
+  it('el directorio nombra la cantidad recién cuando suma', () => {
+    const directorio = leer('src/app/marketplace/empresas/page.tsx')
+    expect(directorio).toContain('organizations.length >= DIRECTORY_STAT_MINIMUMS.stores')
+    expect(directorio).toContain("'Tiendas verificadas con catálogo público'")
+  })
+})

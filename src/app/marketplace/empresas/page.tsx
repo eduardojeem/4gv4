@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { DIRECTORY_STAT_MINIMUMS } from '@/lib/public/business-directory'
 import { Building2, ChevronRight, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getMarketplaceOrganizations } from '@/lib/public/marketplace'
@@ -51,7 +52,11 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
                   Directorio de Empresas
                 </h1>
                 <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-                  {organizations.length} tienda{organizations.length !== 1 ? 's' : ''} verificadas con catálogo público · Filtrá por ciudad y rubro comercial
+                  {/* La cantidad, recién cuando suma (mismo mínimo que /saas/negocios). */}
+                  {organizations.length >= DIRECTORY_STAT_MINIMUMS.stores
+                    ? `${organizations.length} tiendas verificadas con catálogo público`
+                    : 'Tiendas verificadas con catálogo público'}{' '}
+                  · Filtrá por ciudad y rubro comercial
                 </p>
               </div>
             </div>

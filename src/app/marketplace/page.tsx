@@ -15,6 +15,7 @@ import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { MarketplaceBusinessPromoShowcase } from '@/components/public/MarketplaceBusinessPromoShowcase'
+import { BUSINESS_DIRECTORY_MAX_STORES, visibleDirectoryStats } from '@/lib/public/business-directory'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)
@@ -35,8 +36,11 @@ const MARKETPLACE_HOME_PRODUCT_LIMIT = 24
 const MARKETPLACE_HOME_OFFER_LIMIT = 48
 
 export default async function MarketplacePage() {
-  const [organizations, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
+  const [organizations, directory, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
     getMarketplaceOrganizations().catch(() => []),
+    // Solo para contar: la lista de la portada trae 24 y la cifra se quedaba en
+    // 24. Es la misma lista cacheada de /marketplace/empresas y /saas/negocios.
+    getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES).catch(() => []),
     getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT),
     getMarketplaceBrands(30),
     getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT),
@@ -73,6 +77,10 @@ export default async function MarketplacePage() {
     .sort((a, b) => b.products.length - a.products.length)
 
   const totalProducts = marketplacePage.total
+  // Mismo criterio que /saas/negocios: «10 tiendas» resta más de lo que suma.
+  // Cada cifra aparece sola al llegar a su mínimo.
+  const storeCount = Math.max(organizations.length, directory.length)
+  const shownStats = new Set(visibleDirectoryStats({ stores: storeCount, cities: 0, products: totalProducts }).map((stat) => stat.key))
 
   return (
     <div>
@@ -95,22 +103,28 @@ export default async function MarketplacePage() {
               Buscá por nombre, marca o código. Compará productos y consultá directamente con la tienda que los publica.
             </p>
 
-            {/* Stats */}
+            {/* Stats, cuando ya pesan */}
+            {shownStats.size > 0 && (
             <div className="mt-7 flex flex-wrap items-center justify-center gap-5 text-sm">
+              {shownStats.has('stores') && (
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-950/50">
                   <Building2 className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                 </span>
-                <strong className="font-semibold text-slate-900 dark:text-slate-100">{organizations.length}</strong> tiendas para explorar
+                <strong className="font-semibold text-slate-900 dark:text-slate-100">{storeCount}</strong> tiendas para explorar
               </div>
-              <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+              )}
+              {shownStats.size > 1 && <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />}
+              {shownStats.has('products') && (
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-950/50">
                   <Package className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                 </span>
-                <strong className="font-semibold text-slate-900 dark:text-slate-100">{totalProducts}</strong> productos
+                <strong className="font-semibold text-slate-900 dark:text-slate-100">{totalProducts.toLocaleString('es-PY')}</strong> productos
               </div>
+              )}
             </div>
+            )}
 
             <MarketplaceSearchBox className="mx-auto mt-7 max-w-xl" />
             <div className="mt-4 flex flex-wrap justify-center gap-3">

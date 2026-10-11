@@ -13,6 +13,7 @@ import {
 import { motion, AnimatePresence } from '@/components/ui/motion'
 import { useReducedMotion } from 'framer-motion'
 import type { MarketplaceCategory } from '@/lib/public/marketplace'
+import { displayCategoryName } from '@/lib/public/display-names'
 
 // ─── Icon map ──────────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -266,7 +267,7 @@ export function CategoryCarousel({
                         <Link
                           href={href}
                           onClick={() => router.prefetch(href)}
-                          aria-label={`${cat.name}${showCount ? ` — ${cat.product_count} productos` : ''}`}
+                          aria-label={`${displayCategoryName(cat.name)}${showCount ? ` — ${cat.product_count} productos` : ''}`}
                           aria-current={isActive ? 'page' : undefined}
                           className={[
                             'group flex flex-col items-center gap-2.5 outline-none',
@@ -301,7 +302,7 @@ export function CategoryCarousel({
 
                           {/* Name */}
                           <span className={`line-clamp-1 ${labelWidth} text-center text-xs font-semibold ${isActive ? palette.text : 'text-slate-700 dark:text-slate-200'}`}>
-                            {cat.name}
+                            {displayCategoryName(cat.name)}
                           </span>
 
                           {/* Count pill */}
