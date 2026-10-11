@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
-import { getCompanyMapsHref, isValidGoogleMapsUrl } from '@/lib/website/company-maps-url'
+import { getCompanyMapsHref, isValidGoogleMapsUrl, getCompanyMapsEmbedSrc } from '@/lib/website/company-maps-url'
 import { getSocialLinks } from '@/lib/public/social-links'
 import { StoreSocialLinks } from '@/components/public/StoreSocialLinks'
 
@@ -37,6 +37,7 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
   const exactMapsUrl = companyInfo.mapsUrl?.trim()
   const mapsHref = getCompanyMapsHref(exactMapsUrl, companyInfo.address)
+  const mapEmbedSrc = getCompanyMapsEmbedSrc(exactMapsUrl, companyInfo.address)
   const [copied, setCopied] = useState(false)
 
   // Priorizar siempre el enlace exacto configurado en /admin/website para evitar direcciones ambiguas
@@ -221,17 +222,17 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
             <div className="grid lg:grid-cols-12">
 
               {/* Mapa embebido */}
-              <div className="relative min-h-[260px] sm:min-h-[320px] lg:col-span-7 bg-muted/40 overflow-hidden">
-                {mapQuery ? (
+              <div className="relative min-h-[300px] sm:min-h-[360px] lg:col-span-7 bg-muted/40 overflow-hidden">
+                {mapEmbedSrc ? (
                   <iframe
                     title="Ubicación en Google Maps"
-                    src={`https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
-                    className="h-full w-full border-0 min-h-[280px] lg:min-h-[360px]"
+                    src={mapEmbedSrc}
+                    className="h-full w-full border-0 min-h-[300px] lg:min-h-[400px]"
                     loading="lazy"
                     allowFullScreen
                   />
                 ) : (
-                  <div className="flex h-full min-h-[280px] flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-primary/5 via-muted/40 to-background">
+                  <div className="flex h-full min-h-[300px] flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-primary/5 via-muted/40 to-background">
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
                       <MapPin className="h-7 w-7" />
                     </div>
@@ -244,9 +245,9 @@ export function ContactCTA({ companyInfo, brand: _brand, phoneClean, contactHref
 
                 {/* Badge flotante sobre el mapa */}
                 <div className="absolute left-3 top-3 z-10 pointer-events-none">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1 text-xs font-bold text-foreground shadow-md backdrop-blur-md border border-border/60">
-                    <MapPin className="h-3.5 w-3.5 text-rose-500" />
-                    <span>Ubicación del Local</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-background/95 px-3 py-1 text-xs font-bold text-foreground shadow-md backdrop-blur-md border border-border/80">
+                    <MapPin className="h-3.5 w-3.5 text-rose-500 animate-pulse" />
+                    <span>Ubicación en vivo</span>
                   </span>
                 </div>
               </div>
