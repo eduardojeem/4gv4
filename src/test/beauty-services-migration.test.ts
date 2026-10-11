@@ -10,7 +10,7 @@ describe('beauty profile migration SQL behavior', () => {
       await db.exec(`create table organizations(id int primary key, business_vertical text);
         create table global_categories(verticals text[]);
         insert into organizations values(1,'barbershop'),(2,'cosmetics');`)
-      const sql = readFileSync('supabase/migrations/20261009225451_beauty_services_profile.sql', 'utf8')
+      const sql = readFileSync('supabase/migrations/20261014120005_beauty_services_profile.sql', 'utf8')
       await db.exec(sql)
       await db.exec(sql)
       const { rows } = await db.query('select business_vertical, service_specialties, attention_mode, appointment_mode from organizations order by id')

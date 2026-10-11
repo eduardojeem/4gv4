@@ -16,6 +16,7 @@ import {
   toOnboardingAdminSettings,
 } from '@/lib/organization/admin-settings'
 import { BusinessProfileInputSchema, getSuggestedModules } from '@/lib/organization/business-profile'
+import { ServiceBusinessDetailsSchema, serviceBusinessDetailsPatch } from '@/lib/organization/service-specialties'
 import { applyWebsiteSettingsDefaults, getWebsiteDefaultsForVertical, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { applyCheckoutChoices, checkoutChoicesError } from '@/lib/onboarding/checkout-choices'
 import type { CheckoutSettings } from '@/types/website-settings'
@@ -57,6 +58,7 @@ const onboardingSchema = z.object({
   businessType: z.string().trim().max(50).optional().or(z.literal('')),
   businessVertical: BusinessProfileInputSchema.shape.businessVertical.default('general'),
   operatingModel: BusinessProfileInputSchema.shape.operatingModel.default('retail'),
+  ...ServiceBusinessDetailsSchema.shape,
   instagram: z.string().trim().max(100).optional().or(z.literal('')),
   facebook: z.string().trim().max(100).optional().or(z.literal('')),
   tiktok: z.string().trim().max(100).optional().or(z.literal('')),
@@ -423,6 +425,7 @@ export async function POST(request: Request) {
   // eligio a mano en /admin/organization-profile —con validacion de plan y
   // auditoria— manda sobre la sugerencia del rubro.
   const organizationUpdate: Record<string, unknown> = {
+    ...serviceBusinessDetailsPatch(input),
     business_vertical: input.businessVertical,
     operating_model: input.operatingModel,
     updated_at: now,

@@ -14,6 +14,15 @@ export const ServiceBusinessDetailsSchema = z.object({
 })
 export type ServiceBusinessDetails = z.infer<typeof ServiceBusinessDetailsSchema>
 
+export function serviceBusinessDetailsPatch(input: ServiceBusinessDetails) {
+  const parsed = ServiceBusinessDetailsSchema.parse(input)
+  return {
+    ...(parsed.serviceSpecialties !== undefined ? { service_specialties: parsed.serviceSpecialties } : {}),
+    ...(parsed.attentionMode !== undefined ? { attention_mode: parsed.attentionMode } : {}),
+    ...(parsed.appointmentMode !== undefined ? { appointment_mode: parsed.appointmentMode } : {}),
+  }
+}
+
 /** Defaults are for reads/new accounts, never for partial updates. */
 export function readServiceBusinessDetails(input: unknown): Required<ServiceBusinessDetails> {
   const parsed = ServiceBusinessDetailsSchema.safeParse(input)

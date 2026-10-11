@@ -40,12 +40,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import {
   ORGANIZATION_MODULES,
+  defaultOperatingModelFor,
   getSuggestedModules,
   type BusinessVertical,
   type OperatingModel,
   type OrganizationModule,
 } from '@/lib/organization/business-profile'
 import { cn } from '@/lib/utils'
+import { ServiceBusinessFields } from './ServiceBusinessFields'
+import { readServiceBusinessDetails } from '@/lib/organization/service-specialties'
+import { ServiceWebsitePreparationDialog } from '@/components/admin/website/ServiceWebsitePreparationDialog'
 
 const verticalLabels: Record<BusinessVertical, string> = {
   general: 'Comercio general',
@@ -77,7 +81,7 @@ const modelHints: Record<OperatingModel, string> = {
 }
 
 /** Rubros que trabajan con turnos: al elegirlos se propone «Prestación de servicios». */
-const SERVICE_FIRST_VERTICALS = new Set<BusinessVertical>(['barbershop'])
+const SERVICE_FIRST_VERTICALS = new Set<BusinessVertical>(['barbershop', 'beauty_services'])
 
 // Los mismos nombres que el cliente ve en su plan (catálogo de planes).
 const moduleLabels = Object.fromEntries(
@@ -112,9 +116,12 @@ export function BusinessProfileCard() {
     profile.enabledModules ?? profile.effectiveModules,
   )
   const [saving, setSaving] = useState(false)
+  const [serviceDetails, setServiceDetails] = useState(() => readServiceBusinessDetails(profile))
   // Lo que cambió al elegir el rubro, para mostrarlo y poder deshacerlo.
   const [autoChange, setAutoChange] = useState<{ label: string; added: OrganizationModule[]; removed: OrganizationModule[]; previous: OrganizationModule[] } | null>(null)
   const [prepareWebsite, setPrepareWebsite] = useState(false)
+  const [serviceWebsiteOpen, setServiceWebsiteOpen] = useState(false)
+  const isServiceBusiness = SERVICE_FIRST_VERTICALS.has(vertical)
   const entitled = useMemo(
     () => new Set([...profile.entitledModules, ...profile.moduleTrials.map(trial => trial.module)]),
     [profile.entitledModules, profile.moduleTrials],
@@ -167,16 +174,19 @@ export function BusinessProfileCard() {
     if (SERVICE_FIRST_VERTICALS.has(next) && model !== 'service' && model !== 'mixed') {
       nextModel = 'service'
       toast.info('Te propusimos «Prestación de servicios»: es como trabaja este rubro. Podés cambiarla.')
+    } else if (!SERVICE_FIRST_VERTICALS.has(next) && model === 'service') {
+      nextModel = defaultOperatingModelFor(next)
     }
     setVertical(next)
     setModel(nextModel)
     applyRecommendationFor(next, nextModel)
     // Cambiar de rubro propone preparar la página para el nuevo; volver al guardado, no.
-    setPrepareWebsite(next !== profile.businessVertical)
+    setPrepareWebsite(next !== profile.businessVertical && !SERVICE_FIRST_VERTICALS.has(next))
   }
 
   const changeModel = (next: OperatingModel) => {
     setModel(next)
+    if (next === 'service' || next === 'mixed') setPrepareWebsite(false)
     applyRecommendationFor(vertical, next)
   }
 
@@ -186,6 +196,7 @@ export function BusinessProfileCard() {
     setAutoChange(null)
   }
   const dirty = vertical !== profile.businessVertical
+    || (isServiceBusiness && JSON.stringify(serviceDetails) !== JSON.stringify(readServiceBusinessDetails(profile)))
     || model !== profile.operatingModel
     || prepareWebsite
     || JSON.stringify([...enabled].sort()) !== JSON.stringify([...(profile.enabledModules ?? profile.effectiveModules)].sort())
@@ -223,9 +234,10 @@ export function BusinessProfileCard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           businessVertical: vertical,
+          ...serviceDetails,
           operatingModel: model,
           enabledModules: enabled,
-          prepareWebsite,
+          prepareWebsite: prepareWebsite && !isServiceBusiness,
         }),
       })
       const body = await response.json().catch(() => null)
@@ -234,7 +246,7 @@ export function BusinessProfileCard() {
         toast.success('Perfil guardado y página web preparada.', {
           description: (body.website.summary as string[]).join(' · '),
         })
-      } else if (prepareWebsite) {
+      } else if (prepareWebsite && !isServiceBusiness) {
         toast.warning('Perfil guardado, pero no se pudo preparar la página web.', {
           description: 'Podés ajustarla desde Sitio web.',
         })
@@ -327,9 +339,14 @@ export function BusinessProfileCard() {
         {/* Selectores de Rubro y Forma de trabajo */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="business-vertical" className="text-xs font-medium text-foreground">
-              Rubro
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="business-vertical" className="text-xs font-medium text-foreground">
+                Rubro
+              </Label>
+              <span className="flex items-center gap-1 text-[11px] font-medium text-primary">
+                <Sparkles className="h-3 w-3" /> Define lo recomendado
+              </span>
+            </div>
             <Select value={vertical} onValueChange={value => changeVertical(value as BusinessVertical)}>
               <SelectTrigger id="business-vertical" aria-label="Rubro" className="h-10 border-border/80 bg-background transition-colors hover:border-border">
                 <SelectValue />
@@ -340,7 +357,7 @@ export function BusinessProfileCard() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-muted-foreground">Especializa el catálogo, categorías y sugerencias.</p>
+            <p className="text-[11px] text-muted-foreground">Especializa el catálogo, categorías y sugerencias del sistema.</p>
           </div>
 
           <div className="space-y-2">
@@ -352,14 +369,34 @@ export function BusinessProfileCard() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(modelLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
+                {Object.entries(modelLabels).map(([value, label]) => {
+                  const isRecommendedModel = defaultOperatingModelFor(vertical) === value
+                  return (
+                    <SelectItem key={value} value={value}>
+                      <span className="flex items-center gap-2">
+                        <span>{label}</span>
+                        {isRecommendedModel ? (
+                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            Recomendado
+                          </span>
+                        ) : null}
+                      </span>
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">{modelHints[model]}</p>
           </div>
         </div>
+
+        {SERVICE_FIRST_VERTICALS.has(vertical) && (
+          <ServiceBusinessFields
+            value={serviceDetails}
+            onChange={value => setServiceDetails(readServiceBusinessDetails(value))}
+            disabled={saving}
+          />
+        )}
 
         {autoChange && (
           <div role="status" className="flex flex-col gap-2 rounded-xl border border-primary/25 bg-primary/5 p-3.5 text-xs sm:flex-row sm:items-start sm:justify-between">
@@ -386,7 +423,12 @@ export function BusinessProfileCard() {
         )}
 
         {/* La página pública lista para el rubro, como al terminar el alta. */}
-        <label
+        {isServiceBusiness ? <section className="space-y-3 rounded-lg border p-4">
+          <h3 className="text-sm font-semibold">Tu página de servicios</h3>
+          <p className="text-xs text-muted-foreground">Guardá el perfil primero; después elegí el estilo, editá los textos y confirmá la propuesta. Cambiar de estilo no borra servicios ni reservas.</p>
+          <Button type="button" variant="outline" disabled={saving || dirty} onClick={() => setServiceWebsiteOpen(true)}>Preparar mi página de servicios</Button>
+          {serviceWebsiteOpen && <ServiceWebsitePreparationDialog open onOpenChange={setServiceWebsiteOpen} onApplied={() => { toast.success('Página de servicios actualizada.'); router.refresh() }} />}
+        </section> : <label
           htmlFor="prepare-website"
           className={cn(
             'flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors',
@@ -409,12 +451,12 @@ export function BusinessProfileCard() {
               Reemplaza esos textos; no toca tu nombre, logo, contacto, productos ni cuentas bancarias.
             </span>
           </span>
-        </label>
+        </label>}
 
         {/* Recomendaciones y Planes Superiores */}
         <div className="grid gap-4 lg:grid-cols-2">
           <section
-            className="flex flex-col justify-between rounded-xl border border-primary/25 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-sm"
+            className="flex flex-col justify-between rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-sm ring-1 ring-primary/15"
             aria-labelledby="recommended-modules-title"
           >
             <div>
@@ -423,9 +465,14 @@ export function BusinessProfileCard() {
                   <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                 </div>
                 <div>
-                  <h3 id="recommended-modules-title" className="text-sm font-semibold text-foreground">
-                    Recomendado para {verticalLabels[vertical]}
-                  </h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 id="recommended-modules-title" className="text-sm font-semibold text-foreground">
+                      Recomendado para {verticalLabels[vertical]}
+                    </h3>
+                    <Badge variant="secondary" className="border-primary/30 bg-primary/15 text-[10px] font-semibold text-primary">
+                      Recomendado
+                    </Badge>
+                  </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Basado también en “{modelLabels[model]}”. Solo se activan herramientas incluidas en tu plan.
                   </p>
@@ -444,6 +491,7 @@ export function BusinessProfileCard() {
                         : 'border-dashed text-muted-foreground'
                     )}
                   >
+                    <Sparkles className="mr-1 h-2.5 w-2.5 opacity-70" />
                     {moduleLabels[module]}{entitled.has(module) ? '' : ' · requiere otro plan'}
                   </Badge>
                 ))}
@@ -555,6 +603,7 @@ export function BusinessProfileCard() {
             {ORGANIZATION_MODULES.map(module => {
               const isEntitled = entitled.has(module)
               const checked = enabled.includes(module) && isEntitled
+              const isRecommended = suggestedModules.includes(module)
               const trial = trialByModule.get(module)
               const availablePlans = profile.modulePlanAvailability?.[module] ?? []
               const activePlanNames = availablePlans.filter(plan => plan.isActive).map(plan => plan.name)
@@ -580,8 +629,12 @@ export function BusinessProfileCard() {
                     'group relative flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all select-none',
                     isEntitled
                       ? checked
-                        ? 'border-primary/50 bg-primary/[0.04] shadow-xs hover:border-primary'
-                        : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
+                        ? isRecommended
+                          ? 'border-primary/60 bg-primary/[0.05] shadow-xs hover:border-primary ring-1 ring-primary/25'
+                          : 'border-primary/50 bg-primary/[0.04] shadow-xs hover:border-primary'
+                        : isRecommended
+                          ? 'border-primary/30 bg-card hover:border-primary/60 hover:bg-muted/30 ring-1 ring-primary/10'
+                          : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
                       : 'cursor-not-allowed border-dashed border-border/60 bg-muted/20 opacity-75'
                   )}
                 >
@@ -599,9 +652,18 @@ export function BusinessProfileCard() {
                   </div>
 
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                    <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">
                       <IconComponent className={cn('h-4 w-4 shrink-0', checked ? 'text-primary' : 'text-muted-foreground')} />
-                      {moduleLabels[module]}
+                      <span>{moduleLabels[module]}</span>
+                      {isRecommended && (
+                        <Badge
+                          variant="secondary"
+                          className="h-4 gap-1 border-primary/30 bg-primary/15 px-1.5 text-[10px] font-semibold text-primary dark:bg-primary/25"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" />
+                          Recomendado
+                        </Badge>
+                      )}
                     </span>
                     {moduleDisplayHint(module) && (
                       <span className="mt-1 block text-xs leading-snug text-foreground/80">{moduleDisplayHint(module)}</span>

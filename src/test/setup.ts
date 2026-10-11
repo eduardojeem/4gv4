@@ -12,6 +12,9 @@ import { server } from './mocks/server'
 beforeAll(() => {
   // Iniciar MSW server para mocks de API
   server.listen({ onUnhandledRequest: 'error' })
+  // SQL/server tests use Node. Keep browser-only mocks out of that runtime,
+  // including performance (PGlite needs the real Node API).
+  if (typeof window === 'undefined') return
   
   // Mock de Next.js router
   vi.mock('next/navigation', () => ({

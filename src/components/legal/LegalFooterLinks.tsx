@@ -20,7 +20,7 @@ export function LegalFooterLinks({ className }: { className?: string }) {
           </Link>
         </li>
         <li>
-          <button type="button" onClick={openCookiePreferences} className="hover:text-foreground hover:underline">
+          <button type="button" suppressHydrationWarning onClick={openCookiePreferences} className="hover:text-foreground hover:underline">
             Preferencias de cookies
           </button>
         </li>

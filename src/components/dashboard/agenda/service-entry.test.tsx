@@ -10,6 +10,21 @@ beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserv
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('guided service entry', () => {
+  it('lets a business explore other specialties without saving or inventing prices', () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+    render(<NewServiceDialog open onOpenChange={vi.fn()} existingNames={['Pedicura']} currency="PYG" onCreated={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Tipo de servicio'), { target: { value: 'brows' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Usar Diseño de cejas' }))
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Diseño de cejas')
+    expect(screen.getByLabelText('Precio')).toHaveValue('')
+    expect(screen.getByLabelText('Duración')).toHaveValue(null)
+    fireEvent.change(screen.getByLabelText('Tipo de servicio'), { target: { value: 'nails' } })
+    expect(screen.queryByRole('button', { name: 'Usar Pedicura' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tipo de servicio'), { target: { value: 'other' } })
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Diseño de cejas')
+    expect(screen.queryByRole('button', { name: /^Usar / })).not.toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('requires actual prices and durations even for legacy barber suggestions', () => {
     render(<SuggestedServicesCard suggestions={[{ name: 'Corte clásico', pricePyg: 50000, durationMinutes: 30 }]} currency="PYG" rubroLabel="barbería" onAdded={vi.fn()} />)
     expect(screen.getByLabelText('Precio de Corte clásico')).toHaveValue(null)

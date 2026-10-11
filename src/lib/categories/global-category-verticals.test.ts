@@ -39,7 +39,8 @@ describe('rubros en las categorías globales', () => {
     const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261006130000_global_category_verticals.sql'), 'utf8')
     // Los rubros que se suman después amplían la restricción en su propia migración.
     const latest = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261010120000_barbershop_vertical.sql'), 'utf8')
-    for (const vertical of BUSINESS_VERTICALS) expect(sql + latest).toContain(`'${vertical}'`)
+    const beauty = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261014120005_beauty_services_profile.sql'), 'utf8')
+    for (const vertical of BUSINESS_VERTICALS) expect(sql + latest + beauty).toContain(`'${vertical}'`)
     const covered = (vertical: 'clothing' | 'cosmetics' | 'food' | 'hardware') =>
       STARTER_CATEGORIES[vertical].filter((name) => !new RegExp(`[{,]${name}[,}]|'${name}'`).test(sql))
     expect(covered('clothing')).toEqual([])

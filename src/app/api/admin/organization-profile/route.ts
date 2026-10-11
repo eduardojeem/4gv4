@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withTenantAuth, type TenantAuthContext } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { BusinessProfileInputSchema } from '@/lib/organization/business-profile'
+import { serviceBusinessDetailsPatch } from '@/lib/organization/service-specialties'
 import { validateEnabledModules } from '@/lib/saas/effective-modules'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { revalidatePath, revalidateTag } from 'next/cache'
@@ -59,6 +60,9 @@ async function prepareWebsite(
 
 function profileResponse(planInfo: Awaited<ReturnType<typeof getOrganizationPlanInfo>>) {
   return {
+    serviceSpecialties: planInfo.serviceSpecialties,
+    attentionMode: planInfo.attentionMode,
+    appointmentMode: planInfo.appointmentMode,
     businessVertical: planInfo.businessVertical,
     operatingModel: planInfo.operatingModel,
     enabledModules: planInfo.enabledModules,
@@ -103,6 +107,9 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
 
   const supabase = createAdminSupabase()
   const previous = {
+    serviceSpecialties: currentPlan.serviceSpecialties,
+    attentionMode: currentPlan.attentionMode,
+    appointmentMode: currentPlan.appointmentMode,
     businessVertical: currentPlan.businessVertical,
     operatingModel: currentPlan.operatingModel,
     enabledModules: currentPlan.enabledModules,
@@ -112,6 +119,7 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
   const { error: updateError } = await supabase
     .from('organizations')
     .update({
+      ...serviceBusinessDetailsPatch(next),
       business_vertical: next.businessVertical,
       operating_model: next.operatingModel,
       enabled_modules: next.enabledModules,
@@ -136,6 +144,7 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
     await supabase
       .from('organizations')
       .update({
+        ...serviceBusinessDetailsPatch(previous),
         business_vertical: previous.businessVertical,
         operating_model: previous.operatingModel,
         enabled_modules: previous.enabledModules,
@@ -152,6 +161,10 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
   // El perfil ya quedó guardado: si la página no se pudo preparar se avisa,
   // pero no se deshace el cambio de rubro.
   const website = wantsWebsite
+    && updatedPlan.operatingModel !== 'service'
+    && updatedPlan.operatingModel !== 'mixed'
+    && updatedPlan.businessVertical !== 'barbershop'
+    && updatedPlan.businessVertical !== 'beauty_services'
     ? await prepareWebsite(supabase, context.organization.id, context.user.id, updatedPlan)
     : null
 

@@ -15,6 +15,8 @@ import type { AgendaProfessional, AgendaProfessionalRate, AgendaService } from '
 import { ProfessionalPhotoButton } from '@/components/dashboard/agenda/ProfessionalPhotoButton'
 import { ProfessionalScheduleEditor } from '@/components/dashboard/agenda/ProfessionalScheduleEditor'
 import { ProfessionalRatesEditor } from '@/components/dashboard/agenda/ProfessionalRatesEditor'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { SERVICE_SPECIALTY_LABELS } from '@/lib/organization/service-specialties'
 
 export const PROFESSIONAL_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9', '#8b5cf6', '#ef4444', '#14b8a6']
 
@@ -140,6 +142,7 @@ function ProfileForm({
   const [active, setActive] = useState(professional.is_active)
   const [visible, setVisible] = useState(professional.online_visible !== false)
   const [saving, setSaving] = useState(false)
+  const { serviceSpecialties = [] } = useSubscriptionStatus()
 
   const trimmed = name.trim()
   const duplicate = otherNames.some((other) => other.trim().toLowerCase() === trimmed.toLowerCase())
@@ -164,6 +167,13 @@ function ProfileForm({
 
   return (
     <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); if (dirty) void save() }}>
+      <section aria-label="Vista previa del perfil público" className="rounded-lg border bg-muted/30 p-3">
+        <p className="mb-2 text-xs font-medium text-muted-foreground">Presentación para tus clientes</p>
+        <p className="font-semibold">{trimmed || 'Nombre del profesional'}</p>
+        <p className="text-sm text-muted-foreground">{specialty.trim() || 'Completá su especialidad'}</p>
+        <p className="mt-2 text-xs text-muted-foreground">La visibilidad depende de que esté activo y habilitado para reservas online.</p>
+      </section>
+      <p className="text-xs text-muted-foreground">Este perfil no crea una cuenta de acceso al sistema. Los usuarios y permisos se administran por separado.</p>
       <div className="space-y-1.5">
         <Label htmlFor="professional-name">Nombre</Label>
         <Input id="professional-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} aria-invalid={!trimmed || duplicate} />
@@ -173,12 +183,13 @@ function ProfileForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="professional-specialty">Especialidad</Label>
-        <Input id="professional-specialty" value={specialty} maxLength={80} placeholder="Ej.: Barbero · fades y diseños" onChange={(event) => setSpecialty(event.target.value)} />
+        <Input id="professional-specialty" value={specialty} maxLength={80} placeholder="Ej.: Manicurista · nail art" onChange={(event) => setSpecialty(event.target.value)} />
+        {serviceSpecialties.length > 0 && <div className="flex flex-wrap gap-2">{serviceSpecialties.map((item) => <Button key={item} type="button" variant="outline" size="sm" className="min-h-10" disabled={saving} aria-label={`Usar especialidad ${SERVICE_SPECIALTY_LABELS[item]}`} onClick={() => setSpecialty(SERVICE_SPECIALTY_LABELS[item])}>{SERVICE_SPECIALTY_LABELS[item]}</Button>)}</div>}
         <p className="text-xs text-muted-foreground">Se muestra en tu tienda debajo del nombre.</p>
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Color en la agenda</legend>
+        <legend className="text-sm font-medium">Organización interna: color en la agenda</legend>
         <div className="flex flex-wrap items-center gap-2">
           {PROFESSIONAL_COLORS.map((swatch) => (
             <button

@@ -3,11 +3,13 @@
  * Se cargan como productos con unidad «servicio» (lo que la agenda reserva) y
  * el dueño ajusta precio y duración antes de agregarlos.
  */
+import type { ServiceSpecialty } from '@/lib/organization/service-specialties'
+import { getServiceSpecialtySuggestions } from '@/lib/website/service-specialty-suggestions'
 export interface SuggestedService {
   name: string
-  durationMinutes: number
+  durationMinutes?: number
   /** Precio orientativo en guaraníes; en otra moneda el dueño lo completa. */
-  pricePyg: number
+  pricePyg?: number
 }
 
 const SUGGESTIONS: Record<string, SuggestedService[]> = {
@@ -26,18 +28,19 @@ export function suggestedServicesFor(vertical: string | null | undefined): Sugge
   return (vertical && SUGGESTIONS[vertical]) || []
 }
 
-const normalize = (value: string) =>
-  value.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+export const normalizeServiceName = (value: string) =>
+  value.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().replace(/\s+/g, ' ').toLowerCase()
 
 /** Los sugeridos que todavía no están cargados (comparando nombres sin acentos ni mayúsculas). */
-export function missingSuggestedServices(vertical: string | null | undefined, existingNames: string[]): SuggestedService[] {
-  const existing = new Set(existingNames.map(normalize))
-  return suggestedServicesFor(vertical).filter((service) => !existing.has(normalize(service.name)))
+export function missingSuggestedServices(vertical: string | null | undefined, existingNames: string[], specialties: readonly ServiceSpecialty[] = []): SuggestedService[] {
+  const existing = new Set(existingNames.map(normalizeServiceName))
+  const selected = specialties.length ? getServiceSpecialtySuggestions(specialties).map(item => ({ name: item.title })) : suggestedServicesFor(vertical)
+  return selected.filter((service) => !existing.has(normalizeServiceName(service.name)))
 }
 
 /** SKU legible y casi único para un servicio creado desde la agenda. */
 export function serviceSku(name: string, random: () => number = Math.random): string {
-  const slug = normalize(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').toUpperCase().slice(0, 30)
+  const slug = normalizeServiceName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').toUpperCase().slice(0, 30)
   const suffix = Math.floor(random() * 36 ** 4).toString(36).toUpperCase().padStart(4, '0')
   return `SRV-${slug || 'SERVICIO'}-${suffix}`
 }
