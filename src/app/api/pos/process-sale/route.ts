@@ -181,6 +181,9 @@ async function getTaxRate(
 }
 
 function errorResponse(error: { message?: string; details?: string; hint?: string; code?: string } | null) {
+  if ([error?.message, error?.details, error?.hint].some(value => value?.includes('CREDIT_FILE_REQUIRED'))) {
+    return NextResponse.json({ success: false, code: 'CREDIT_FILE_REQUIRED', error: 'Completá y aprobá la ficha para crédito del cliente antes de confirmar esta venta.' }, { status: 409 })
+  }
   const rawMessage = error?.message || ''
   const details = error?.details || ''
   const hint = error?.hint || ''

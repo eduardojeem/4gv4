@@ -14,6 +14,56 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 describe('customer credit file management UI', () => {
+  it('keeps an unsaved document comment after a review conflict or failed reload', async () => {
+    const current = {...file,documents:[{id:'document',type:'identity',filename:'fixture.jpg',lifecycle:'ready',reviewStatus:'pending',reviewedAt:null,reviewedBy:null,comment:'A'}]}
+    let failReload = false
+    vi.mocked(fetch).mockImplementation(async (url, options) => new Response(JSON.stringify(String(url).endsWith('/summary') ? {summary} : options?.method ? {error:'La ficha cambió',code:'CREDIT_FILE_VERSION_CONFLICT'} : failReload ? {error:'No disponible'} : {file:current,policy}),{status:options?.method ? 409 : failReload ? 503 : 200}))
+    const confirm = vi.spyOn(window,'confirm').mockReturnValue(true)
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    fireEvent.change(await screen.findByLabelText('Comentario para fixture.jpg'),{target:{value:'Mi revisión pendiente'}})
+    fireEvent.click(screen.getByRole('button',{name:'Verificar documento'}))
+    expect(await screen.findByRole('alert')).toHaveTextContent('La ficha cambió')
+    expect(screen.getByLabelText('Comentario para fixture.jpg')).toHaveValue('Mi revisión pendiente')
+    failReload = true
+    fireEvent.click(screen.getByRole('button',{name:'Recargar ficha'}))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('No disponible'))
+    expect(screen.getByLabelText('Comentario para fixture.jpg')).toHaveValue('Mi revisión pendiente')
+    confirm.mockRestore()
+  })
+  it('confirms discarding document drafts, reloads the accepted comment and preserves it in review', async () => {
+    let current = {...file, documents:[{id:'document',type:'identity',filename:'fixture.jpg',lifecycle:'ready',reviewStatus:'pending',reviewedAt:null,reviewedBy:null,comment:'A'}]}
+    const confirm = vi.spyOn(window,'confirm').mockReturnValue(false)
+    vi.mocked(fetch).mockImplementation(async url => new Response(JSON.stringify(String(url).endsWith('/summary') ? {summary} : {file:current,policy})))
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    const comment = await screen.findByLabelText('Comentario para fixture.jpg')
+    fireEvent.change(comment,{target:{value:'Borrador local'}})
+    current = {...current,version:2,documents:[{...current.documents[0],comment:'B'}]}
+    fireEvent.click(screen.getByRole('button',{name:'Recargar ficha'}))
+    expect(confirm).toHaveBeenCalled()
+    expect(comment).toHaveValue('Borrador local')
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button',{name:'Recargar ficha'}))
+    await waitFor(() => expect(screen.getByLabelText('Comentario para fixture.jpg')).toHaveValue('B'))
+    fireEvent.click(screen.getByRole('button',{name:'Verificar documento'}))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([,options]) => options?.method === 'PATCH')).toBe(true))
+    const call = vi.mocked(fetch).mock.calls.find(([,options]) => options?.method === 'PATCH')!
+    expect(JSON.parse(String(call[1]?.body))).toMatchObject({version:2,comment:'B'})
+    confirm.mockRestore()
+  })
+  it('refreshes the operational summary after changing organization requirements', async () => {
+    let currentPolicy = policy
+    vi.mocked(fetch).mockImplementation(async (url,options) => {
+      if (options?.method === 'PUT') currentPolicy = {...policy,version:1,mode:'warning'}
+      return new Response(JSON.stringify(String(url).endsWith('/summary') ? {summary:{...summary,mode:currentPolicy.mode}} : {file,policy:currentPolicy}))
+    })
+    render(<CustomerCreditFile customerId="customer" onCustomerUpdated={() => {}} />)
+    await screen.findByLabelText('Modo de control')
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/summary'))).toBe(true))
+    const before = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/summary')).length
+    fireEvent.change(screen.getByLabelText('Modo de control'),{target:{value:'warning'}})
+    fireEvent.click(screen.getByRole('button',{name:'Guardar requisitos'}))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/summary')).length).toBeGreaterThan(before))
+  })
   it('ignores a save result after switching customer instead of refreshing the previous detail', async () => {
     let resolveSave!: (response: Response) => void
     const updated = vi.fn()

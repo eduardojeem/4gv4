@@ -5,6 +5,13 @@ import {
 } from './financial-closure-rpc'
 
 describe('repair financial closure RPC adapter', () => {
+  it.each(['CREDIT_FILE_REQUIRED', 'CREDIT_LIMIT_EXCEEDED'])('translates shared database rejection %s without a generic 500', async code => {
+    const rpc = vi.fn().mockResolvedValue({data:null,error:{message:code}})
+    await expect(closeRepairAndRegisterPayment({rpc}, {
+      repairId:'repair',organizationId:'org',branchId:'branch',actorId:'actor',deliver:false,
+      allowOutstandingBalance:false,payment:{method:'credit',amount:100,idempotencyKey:'fixture-key'},
+    })).rejects.toMatchObject({code,status:409,message:expect.stringMatching(code === 'CREDIT_FILE_REQUIRED' ? /aprob.*ficha|ficha.*aprob/i : /disponible/i)})
+  })
   it('passes server-resolved scope and the canonical closure contract', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: { repair_id: 'repair-1', payment_id: 'payment-1', idempotent: false },

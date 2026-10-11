@@ -50,6 +50,8 @@ type RpcClient = {
 }
 
 const ERROR_STATUS: Record<string, number> = {
+  CREDIT_FILE_REQUIRED: 409,
+  CREDIT_LIMIT_EXCEEDED: 409,
   REPAIR_FINANCIAL_PERMISSION_DENIED: 403,
   REPAIR_NOT_FOUND: 404,
   REPAIR_ALREADY_DELIVERED: 409,
@@ -82,12 +84,12 @@ export class FinancialClosureRpcError extends Error {
 
 function extractStableCode(error: RpcError) {
   const message = error.message || 'REPAIR_FINANCIAL_OPERATION_FAILED'
-  return Object.keys(ERROR_STATUS).find((code) => message.includes(code))
+  return Object.keys(ERROR_STATUS).sort((a, b) => b.length - a.length).find((code) => message.includes(code))
     || 'REPAIR_FINANCIAL_OPERATION_FAILED'
 }
 
 function getFinancialErrorMessage(code: string, rawMessage: string) {
-  if (code === 'REPAIR_CREDIT_LIMIT_EXCEEDED') {
+  if (code === 'REPAIR_CREDIT_LIMIT_EXCEEDED' || code === 'CREDIT_LIMIT_EXCEEDED') {
     const available = rawMessage.split('|')[1]
     return available
       ? `El cliente no tiene crédito disponible suficiente. Disponible: ${available}.`
@@ -95,6 +97,7 @@ function getFinancialErrorMessage(code: string, rawMessage: string) {
   }
 
   const messages: Record<string, string> = {
+    CREDIT_FILE_REQUIRED: 'Completá y aprobá la ficha para crédito del cliente antes de cobrar esta reparación a crédito.',
     REPAIR_DELIVERY_INVALID_STATE: 'Solo se puede entregar como reparada una orden que esté en estado "Listo para entrega". Cambiá el estado a Listo primero o elegí retirado sin reparar.',
     REPAIR_PAYMENT_INVALID_STATE: 'No se puede procesar cobros en una reparación cancelada.',
     REPAIR_DELIVERY_OUTCOME_INVALID: 'El resultado de entrega no es válido.',

@@ -13,15 +13,17 @@ export function useCustomerCreditFile(customerId: string) {
   const base = `/api/customers/${encodeURIComponent(customerId)}/credit-file`
   const reload = useCallback(async (signal?: AbortSignal) => {
     const ticket = generation.current
+    let accepted = false
     setLoading(true); setError(null)
     try {
       const response = await fetch(base, { cache: 'no-store', signal })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'No se pudo cargar la ficha.')
-      if (ticket === generation.current && !signal?.aborted) { setFile(result.file); setPolicy(result.policy) }
+      if (ticket === generation.current && !signal?.aborted) { setFile(result.file); setPolicy(result.policy); accepted = true }
     } catch (cause) {
       if (ticket === generation.current && !signal?.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo cargar la ficha.')
     } finally { if (ticket === generation.current && !signal?.aborted) setLoading(false) }
+    return accepted
   }, [base])
   useEffect(() => {
     const ticket = ++generation.current

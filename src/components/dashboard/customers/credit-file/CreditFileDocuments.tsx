@@ -4,7 +4,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import type { CreditDocumentType, CreditFileDocument } from '@/lib/credits/credit-file-contract'
 import { CreditField, CreditSection, selectClass } from './fields'
 type Action = (suffix: string, method: string, body: unknown) => Promise<{ cleanupPending?: boolean } | null>
-export function CreditFileDocuments({ customerId, documents, version, disabled, action }: { customerId: string; documents: CreditFileDocument[]; version: number; disabled: boolean; action: Action }) {
+export function CreditFileDocuments({ customerId, documents, version, disabled, action, draftComments, onCommentChange }: { customerId: string; documents: CreditFileDocument[]; version: number; disabled: boolean; action: Action; draftComments?: Record<string, string>; onCommentChange?: (id: string, comment: string) => void }) {
   const [type, setType] = useState<CreditDocumentType>('identity')
   const [file, setFile] = useState<File | null>(null)
   const [selectedDelete, setSelectedDelete] = useState<string | null>(null)
@@ -25,19 +25,20 @@ export function CreditFileDocuments({ customerId, documents, version, disabled, 
     <Button type="button" variant="outline" disabled={disabled} onClick={async () => { const result = await action('/documents/cleanup', 'POST', {}); if (result) setMessage(result.cleanupPending ? 'Aún hay limpieza pendiente. Reintentá más tarde.' : 'Limpieza completada.') }}>Reintentar limpieza pendiente</Button>
     {message && <p role="status" className="text-sm">{message}</p>}
     {!documents.length && <p className="text-sm text-muted-foreground">No hay documentos cargados. Guardá la ficha antes de subir una imagen.</p>}
-    {documents.map(document => <DocumentRow key={document.id} document={document} customerId={customerId} disabled={disabled} version={version} action={action} onDelete={() => setSelectedDelete(document.id)} />)}
+    {documents.map(document => <DocumentRow key={`${document.id}:${version}`} document={document} customerId={customerId} disabled={disabled} version={version} action={action} onDelete={() => setSelectedDelete(document.id)} draftComment={draftComments?.[document.id]} onCommentChange={onCommentChange} />)}
     <AlertDialog open={selectedDelete !== null} onOpenChange={open => { if (!open) setSelectedDelete(null) }}>
       <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Retirar este documento?</AlertDialogTitle><AlertDialogDescription>Se retirará el acceso y dejará de contar para los requisitos. Si la ficha estaba aprobada, volverá a revisión pendiente. La deuda no cambia.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { if (!selectedDelete) return; const result = await action(`/documents/${selectedDelete}`, 'DELETE', { version }); if (result?.cleanupPending) setMessage('Documento retirado. La limpieza física requiere reintento.') }}>Retirar documento</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
     </AlertDialog>
   </CreditSection>
 }
-function DocumentRow({ document, customerId, disabled, version, action, onDelete }: { document: CreditFileDocument; customerId: string; disabled: boolean; version: number; action: Action; onDelete: () => void }) {
-  const [comment, setComment] = useState(document.comment)
+function DocumentRow({ document, customerId, disabled, version, action, onDelete, draftComment, onCommentChange }: { document: CreditFileDocument; customerId: string; disabled: boolean; version: number; action: Action; onDelete: () => void; draftComment?: string; onCommentChange?: (id: string, comment: string) => void }) {
+  const [localComment, setLocalComment] = useState(document.comment)
+  const comment = onCommentChange ? draftComment ?? document.comment : localComment
   return <div className="space-y-3 rounded-md border p-3">
     <p className="break-words font-medium">{document.filename}</p>
     <p className="text-sm">{document.lifecycle === 'pending' ? 'Carga incompleta: retirala y volvé a subirla.' : document.reviewStatus === 'verified' ? 'Verificado manualmente' : document.reviewStatus === 'rejected' ? 'Rechazado' : 'Pendiente de revisión'}</p>
     {document.reviewedAt && <p className="text-xs text-muted-foreground">Revisado: {new Date(document.reviewedAt).toLocaleString('es-PY')}</p>}
-    <CreditField label={`Comentario para ${document.filename}`} value={comment} maxLength={1000} onChange={event => setComment(event.target.value)} />
+    <CreditField label={`Comentario para ${document.filename}`} value={comment} maxLength={1000} onChange={event => { setLocalComment(event.target.value); onCommentChange?.(document.id, event.target.value) }} />
     <div className="flex flex-wrap gap-2">
       {document.lifecycle === 'ready' && <Button asChild variant="outline"><a href={`/api/customers/${encodeURIComponent(customerId)}/credit-file/documents/${document.id}`} download>Descargar</a></Button>}
       <Button type="button" variant="outline" disabled={disabled || document.lifecycle !== 'ready'} onClick={() => void action(`/documents/${document.id}`, 'PATCH', { version, reviewStatus: 'verified', comment })}>Verificar documento</Button>

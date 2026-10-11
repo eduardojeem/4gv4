@@ -29,6 +29,7 @@ function CreditFileEditor({ customerId, onCustomerUpdated, existingRuc, canManag
   const [validation, setValidation] = useState('')
   const [notice, setNotice] = useState('')
   const [loadedFile, setLoadedFile] = useState(file)
+  const [documentComments, setDocumentComments] = useState<Record<string, string>>({})
   if (file !== loadedFile) {
     setLoadedFile(file)
     setInput(editable(file))
@@ -42,14 +43,15 @@ function CreditFileEditor({ customerId, onCustomerUpdated, existingRuc, canManag
     setValidation('')
     if (await action('', 'PUT', parsed.data)) { setNotice('Ficha guardada. Esto no aprueba el crédito.'); onCustomerUpdated() }
   }
-  const reloadExplicit = () => { if (!dirty || window.confirm('¿Descartar los cambios sin guardar y recargar la ficha?')) void reload() }
+  const documentsDirty = file?.documents.some(document => documentComments[document.id] !== undefined && documentComments[document.id] !== document.comment) ?? false
+  const reloadExplicit = async () => { if ((!dirty && !documentsDirty) || window.confirm('¿Descartar los cambios sin guardar y recargar la ficha?')) { if (await reload()) setDocumentComments({}) } }
   if (loading && !policy) return <div role="status" className="rounded-lg border p-4">Cargando ficha para crédito…</div>
   return <div className="min-w-0 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Ficha para crédito</h2><Button type="button" variant="outline" disabled={busy} onClick={reloadExplicit}>Recargar ficha</Button></div>
     {(error || validation) && <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm">{error || validation}</p>}
     {notice && <p role="status" className="rounded-md border p-3 text-sm">{notice}</p>}
     {!policy ? <p className="text-sm text-muted-foreground">La ficha no está disponible. Revisá permisos o migraciones y reintentá.</p> : <>
-      <CustomerCreditFileSummary key={`summary:${file?.version ?? 0}`} customerId={customerId} />
+      <CustomerCreditFileSummary key={`summary:${file?.version ?? 0}:${policy.version}`} customerId={customerId} />
       <CreditSection title="Estado de evaluación"><p>{file ? statusLabel[file.status] : 'Sin ficha: no significa crédito aprobado.'}</p><p className="text-sm text-muted-foreground">Control actual: {policy.mode === 'required' ? 'Exigir' : policy.mode === 'warning' ? 'Advertir' : 'Informativo'}. {evaluateCreditFile(file, policy).eligible ? 'Requisitos completos.' : 'Hay requisitos o aprobación pendientes.'}</p></CreditSection>
       <fieldset disabled={busy || !canManage} className="min-w-0 space-y-4">
         <CreditSection title="Identificación y trabajo">
@@ -69,7 +71,14 @@ function CreditFileEditor({ customerId, onCustomerUpdated, existingRuc, canManag
         <Button type="button" className="min-h-11 w-full sm:w-auto" onClick={() => void save()}>Guardar ficha</Button>
         {dirty && <p className="text-sm text-muted-foreground">Guardá los cambios antes de revisar documentos o tomar una decisión.</p>}
         {file && <>
-          <CreditFileDocuments customerId={customerId} documents={file.documents} version={file.version} disabled={busy || dirty} action={action} />
+          <CreditFileDocuments customerId={customerId} documents={file.documents} version={file.version} disabled={busy || dirty} action={async (suffix, method, body) => {
+            const result = await action(suffix, method, body)
+            if (result && ['PATCH', 'DELETE'].includes(method)) {
+              const id = suffix.split('/').pop()!
+              setDocumentComments(value => { const next = { ...value }; delete next[id]; return next })
+            }
+            return result
+          }} draftComments={documentComments} onCommentChange={(id, comment) => setDocumentComments(value => ({ ...value, [id]: comment }))} />
           <CreditFileDecision file={file} disabled={busy || dirty} onDecide={async (status, reason, limit) => { if (await action('/decision', 'POST', { version: file.version, status, reason, ...(limit !== undefined ? { limit } : {}) })) { setNotice('Decisión registrada. La deuda existente no cambia.'); onCustomerUpdated() } }} />
         </>}
       </fieldset>

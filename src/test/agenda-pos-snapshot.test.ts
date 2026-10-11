@@ -11,6 +11,12 @@ const id='11111111-1111-4111-8111-111111111111'
 const request=()=>new NextRequest('http://x/api/pos/process-sale',{method:'POST',headers:{'x-idempotency-key':'attempt'},body:JSON.stringify({p_appointment_id:id,p_session_id:id,p_items:[{product_id:id,quantity:1}],p_payments:[]})})
 describe('appointment checkout transport',()=>{
   beforeEach(()=>{m.rpc.mockReset();m.enabled.mockResolvedValue(true)})
+  it('returns an actionable conflict when the database requires a credit file', async () => {
+    m.rpc.mockResolvedValue({data:null,error:{message:'CREDIT_FILE_REQUIRED'}})
+    const response = await POST(request())
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({code:'CREDIT_FILE_REQUIRED',error:expect.stringMatching(/aprob.*ficha|ficha.*aprob/i)})
+  })
   it('uses the atomic snapshot RPC even when a service is free',async()=>{
     m.rpc.mockResolvedValue({data:{sale_id:id,total:0},error:null})
     const response=await POST(request())
