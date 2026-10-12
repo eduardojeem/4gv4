@@ -1,0 +1,187 @@
+// @vitest-environment node
+import { execFile, spawn } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { promisify } from 'node:util'
+import { describe, expect, it } from 'vitest'
+
+const exec = promisify(execFile)
+const dockerArgs = ['--context', 'desktop-linux', 'exec', '-i', 'supabase_db_4gv4', 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1']
+const org = 'cf110000-0000-4000-8000-000000000001'
+const customer = 'cf210000-0000-4000-8000-000000000001'
+const actor = 'cf010000-0000-4000-8000-000000000001'
+const concede = `select public.create_customer_credit_account_atomic('${org}','${customer}','${actor}',
+ '{"principal":120,"interest_rate":0,"term_months":1,"credit_type":"manual","origin_type":"manual","label":"Concurrency fixture","metadata":{}}',
+ '[{"installment_number":1,"due_date":"2030-01-01T00:00:00Z","amount":120,"principal_component":120,"interest_component":0}]');`
+
+function psql(sql: string, onOutput?: (text: string) => void) {
+  const child = spawn('docker', dockerArgs, { windowsHide: true })
+  const timeout = setTimeout(() => child.kill(), 20_000)
+  const done = new Promise<{ code: number | null; output: string }>((resolve, reject) => {
+    let output = ''
+    child.stdout.on('data', data => { output += String(data); onOutput?.(String(data)) })
+    child.stderr.on('data', data => { output += String(data) })
+    child.on('error', reject)
+    child.on('close', code => { clearTimeout(timeout); resolve({ code, output }) })
+  })
+  child.stdin.end(sql)
+  return { done, child }
+}
+
+// Deliberately opt-in: never connects to linked/remote Supabase or mutates real customers.
+describe.skipIf(process.env.CREDIT_FILE_LOCAL_SQL !== '1')('customer credit file — real local Postgres', () => {
+  it('makes a first-time policy change wait for an in-flight POS concession, then enforces it', async () => {
+    const o = 'cf160000-0000-4000-8000-000000000001', c = 'cf260000-0000-4000-8000-000000000001', a = 'cf060000-0000-4000-8000-000000000001'
+    const source = await readFile('supabase/tests/customer_credit_financial_consumers.test.sql', 'utf8')
+    const seed = await psql(source.split('set local role service_role;')[0] + 'commit;').done
+    expect(seed.code, seed.output).toBe(0)
+    const sale = (version: number) => `select public.process_pos_sale_atomic_v${version}('${o}','cf360000-0000-4000-8000-000000000001','${a}','cf560000-0000-4000-8000-000000000001','policy-race-v${version}','POLICY-V${version}','${c}','[{"product_id":"cf460000-0000-4000-8000-000000000001","quantity":1}]','[{"payment_method":"credit","amount":120}]',p_credit=>'{}');`
+    try {
+      let held!: () => void
+      const ready = new Promise<void>(resolve => { held = resolve })
+      const first = psql(`begin; set local role service_role; ${sale(5)} select 'POLICY_LOCK_HELD'; select pg_sleep(3); commit;`, output => { if (output.includes('POLICY_LOCK_HELD')) held() })
+      await Promise.race([ready, first.done.then(result => { throw new Error(result.output) })])
+      const policy = psql(`set application_name='credit-file-policy-race'; begin; set local role service_role; select public.save_customer_credit_file_policy('${o}','${a}',0,'{"mode":"required","requireIdentity":false,"minVerifiedReferences":0,"requiredDocuments":[]}'); commit;`)
+      const waiting = await psql(`do $$ begin for i in 1..40 loop
+        if exists(select 1 from pg_stat_activity where application_name='credit-file-policy-race' and wait_event_type='Lock') then return; end if;
+        perform pg_sleep(0.05); end loop; raise exception 'Policy did not wait for active concession'; end $$;`).done
+      expect(waiting.code, waiting.output).toBe(0)
+      const [one, changed] = await Promise.all([first.done, policy.done])
+      expect(one.code, one.output).toBe(0)
+      expect(changed.code, changed.output).toBe(0)
+      const next = await psql(`begin; set local role service_role; ${sale(4)} commit;`).done
+      expect(next.code, next.output).not.toBe(0)
+      expect(next.output).toContain('CREDIT_FILE_REQUIRED')
+    } finally {
+      const removed = await psql(await readFile('supabase/tests/customer_credit_financial_fixture_cleanup.sql', 'utf8')).done
+      expect(removed.code, removed.output).toBe(0)
+    }
+  }, 30_000)
+  it('serializes actual POS v5 and fallback v4 and counts existing repair debt at commit', async () => {
+    const o = 'cf160000-0000-4000-8000-000000000001', c = 'cf260000-0000-4000-8000-000000000001', a = 'cf060000-0000-4000-8000-000000000001'
+    const source = await readFile('supabase/tests/customer_credit_financial_consumers.test.sql', 'utf8')
+    const seedSql = source.split('set local role service_role;')[0].replace("'activo',1000", "'activo',250") + 'commit;'
+    const seed = await psql(seedSql).done
+    expect(seed.code, seed.output).toBe(0)
+    const sale = (version: number) => `select public.process_pos_sale_atomic_v${version}('${o}','cf360000-0000-4000-8000-000000000001','${a}','cf560000-0000-4000-8000-000000000001','race-pos-v${version}','RACE-V${version}','${c}','[{"product_id":"cf460000-0000-4000-8000-000000000001","quantity":1}]','[{"payment_method":"credit","amount":120}]',p_credit=>'{}');`
+    try {
+      let held!: () => void
+      const ready = new Promise<void>(resolve => { held = resolve })
+      const first = psql(`begin; set local role service_role; ${sale(5)} select 'POS_HELD'; select pg_sleep(1); commit;`, output => { if (output.includes('POS_HELD')) held() })
+      await Promise.race([ready, first.done.then(result => { throw new Error(result.output) })])
+      const second = psql(`begin; set local role service_role; ${sale(4)} commit;`)
+      const [one, two] = await Promise.all([first.done, second.done])
+      expect(one.code, one.output).toBe(0)
+      expect(two.code, two.output).not.toBe(0)
+      expect(two.output).toContain('CREDIT_LIMIT_EXCEEDED')
+      const balance = await psql(`select public.customer_credit_outstanding('${o}','${c}'); select count(*) from public.sales where organization_id='${o}';`).done
+      expect(balance.output).toMatch(/\b220\b/)
+      expect(balance.output).toMatch(/\b1\b/)
+    } finally {
+      // Verify the exact, disposable fixture marker before any cleanup.
+      // All financial transactions above use normal constraints and triggers.
+      const removed = await psql(await readFile('supabase/tests/customer_credit_financial_fixture_cleanup.sql', 'utf8')).done
+      expect(removed.code, removed.output).toBe(0)
+    }
+  }, 30_000)
+  it('enforces required files in actual POS v4/v5 and repair transactions while keeping cash and payments available', async () => {
+    const result = await psql(await readFile('supabase/tests/customer_credit_financial_consumers.test.sql', 'utf8')).done
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('ROLLBACK')
+  }, 30_000)
+  it('serializes competing tenth-document reservations without exceeding the quota', async () => {
+    const o = 'cf150000-0000-4000-8000-000000000001', c = 'cf250000-0000-4000-8000-000000000001', a = 'cf050000-0000-4000-8000-000000000001'
+    const reserve = (version: number) => `select public.reserve_customer_credit_document('${o}','${c}','${a}',${version},'other','fixture.jpg','image/jpeg',8,'jpg');`
+    const seed = await psql(`begin; set local session_replication_role=replica;
+      insert into auth.users(id) values('${a}');
+      insert into public.organizations(id,name,slug) values('${o}','Reservation concurrency fixture','reservation-concurrency-fixture');
+      insert into public.organization_members(organization_id,user_id,role) values('${o}','${a}','owner');
+      insert into public.customers(id,organization_id,name,status) values('${c}','${o}','Reservation concurrency fixture','activo');
+      insert into public.customer_credit_files(organization_id,customer_id) values('${o}','${c}');
+      set local session_replication_role=origin; set local role service_role;
+      ${Array.from({ length: 9 }, (_, version) => reserve(version)).join('\n')} commit;`).done
+    expect(seed.code, seed.output).toBe(0)
+    try {
+      let held!: () => void
+      const ready = new Promise<void>(resolve => { held = resolve })
+      const first = psql(`begin; set local role service_role; ${reserve(9)} select 'RESERVATION_HELD'; select pg_sleep(1); commit;`, output => { if (output.includes('RESERVATION_HELD')) held() })
+      await Promise.race([ready, first.done.then(result => { throw new Error(result.output) })])
+      const second = psql(`begin; set local role service_role; ${reserve(9)} commit;`)
+      const [one, two] = await Promise.all([first.done, second.done])
+      expect(one.code, one.output).toBe(0)
+      expect(two.output).toContain('CREDIT_FILE_VERSION_CONFLICT')
+      const count = await psql(`select count(*) from public.customer_credit_documents where organization_id='${o}' and lifecycle<>'deleted';`).done
+      expect(count.output).toMatch(/\b10\b/)
+      const retry = await psql(`begin; set local role service_role; ${reserve(10)} rollback;`).done
+      expect(retry.output).toContain('CREDIT_DOCUMENT_LIMIT')
+    } finally {
+      const removed = await psql(`begin; set local session_replication_role=replica;
+        delete from public.customer_credit_file_events where organization_id='${o}';
+        delete from public.customer_credit_documents where organization_id='${o}';
+        delete from public.customer_credit_files where organization_id='${o}';
+        delete from public.customers where organization_id='${o}' and id='${c}';
+        delete from public.organization_members where organization_id='${o}' and user_id='${a}';
+        delete from public.organizations where id='${o}' and slug='reservation-concurrency-fixture';
+        delete from auth.users where id='${a}'; commit;`).done
+      expect(removed.code, removed.output).toBe(0)
+    }
+  }, 30_000)
+  it('reserves, finalizes, reviews and retires documents transactionally', async () => {
+    const fixture = await readFile('supabase/tests/customer_credit_document_lifecycle.test.sql', 'utf8')
+    const result = await psql(fixture).done
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('ROLLBACK')
+  }, 30_000)
+  it('limits new documents to 4 MiB without deleting older metadata and blocks broad Storage policies', async () => {
+    const fixture = await readFile('supabase/tests/customer_credit_document_limits.test.sql', 'utf8')
+    const result = await psql(fixture).done
+    expect(result.code, result.output).toBe(0)
+    expect(result.output).toContain('ROLLBACK')
+  }, 30_000)
+  it('enforces permissions, tenant FK, versions, atomic decisions and current requirements', async () => {
+    const fixture = await readFile('supabase/tests/customer_credit_file.test.sql', 'utf8')
+    const result = await psql(fixture).done
+    expect(result.output).toContain('ROLLBACK')
+    expect(result.code, result.output).toBe(0)
+  }, 30_000)
+
+  it('serializes two connections so the second cannot exceed the customer limit', async () => {
+    const inventory = await exec('docker', ['--context', 'desktop-linux', 'ps', '--filter', 'name=^supabase_db_4gv4$', '--format', '{{.Names}}'])
+    expect(inventory.stdout.trim()).toBe('supabase_db_4gv4')
+    const seed = await psql(`begin;
+      -- Only the fake membership seed omits unrelated immutable payroll auditing.
+      -- Real concession transactions below use normal triggers and FK checks.
+      set local session_replication_role=replica;
+      insert into auth.users(id) values('${actor}');
+      insert into public.organizations(id,name,slug) values('${org}','Credit concurrency fixture','credit-concurrency-fixture');
+      insert into public.organization_members(organization_id,user_id,role) values('${org}','${actor}','owner');
+      insert into public.customers(id,organization_id,name,status,credit_limit) values('${customer}','${org}','Concurrency fixture','activo',200);
+      commit;`).done
+    expect(seed.code, seed.output).toBe(0)
+    try {
+      let releaseLockHeld!: () => void
+      const lockHeld = new Promise<void>(resolve => { releaseLockHeld = resolve })
+      const first = psql(`begin; set local role service_role; ${concede}
+        select 'LOCK_HELD'; select pg_sleep(2); commit;`, text => { if (text.includes('LOCK_HELD')) releaseLockHeld() })
+      await Promise.race([lockHeld, first.done.then(result => { throw new Error(`First transaction ended before lock signal: ${result.output}`) })])
+      const second = psql(`begin; set local role service_role; ${concede} commit;`)
+      const [firstResult, secondResult] = await Promise.all([first.done, second.done])
+      expect(firstResult.code, firstResult.output).toBe(0)
+      expect(secondResult.code, secondResult.output).not.toBe(0)
+      expect(secondResult.output).toContain('CREDIT_LIMIT_EXCEEDED')
+      const balance = await psql(`select public.customer_credit_outstanding('${org}','${customer}');
+        select count(*) from public.customer_credits where organization_id='${org}';`).done
+      expect(balance.output).toMatch(/\b120\b/)
+      expect(balance.output).toMatch(/\b1\b/)
+    } finally {
+      // Exact, reserved fixture IDs only, and only after our successful seed.
+      const cleanup = await psql(`begin;
+        delete from public.credit_installments where credit_id in(select id from public.customer_credits where organization_id='${org}' and customer_id='${customer}');
+        delete from public.customer_credits where organization_id='${org}' and customer_id='${customer}';
+        delete from public.customers where id='${customer}' and organization_id='${org}' and name='Concurrency fixture';
+        delete from public.organization_members where organization_id='${org}' and user_id='${actor}';
+        delete from public.organizations where id='${org}' and slug='credit-concurrency-fixture';
+        delete from auth.users where id='${actor}'; commit;`).done
+      expect(cleanup.code, cleanup.output).toBe(0)
+    }
+  }, 30_000)
+})

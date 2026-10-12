@@ -23,6 +23,7 @@ type Props = {
   variant?: 'default' | 'offers' | 'featured'
   autoPlay?: boolean
   autoPlayInterval?: number
+  rows?: 1 | 2
 }
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
@@ -36,6 +37,12 @@ function subscribeReducedMotion(onChange: () => void) {
 
 function getReducedMotion() {
   return typeof window !== 'undefined' && Boolean(window.matchMedia?.(REDUCED_MOTION_QUERY).matches)
+}
+
+function getScrollStep(track: HTMLDivElement) {
+  const card = track.querySelector<HTMLElement>('[data-carousel-card]')
+  const gap = Number.parseFloat(window.getComputedStyle(track).columnGap) || 0
+  return (card?.offsetWidth ?? 256) + gap
 }
 
 function ProductImage({ product }: { product: MarketplaceProduct }) {
@@ -59,6 +66,7 @@ export function MarketplaceProductCarousel({
   variant = 'default',
   autoPlay,
   autoPlayInterval = 3500,
+  rows = 1,
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -70,6 +78,8 @@ export function MarketplaceProductCarousel({
   const isOffers = variant === 'offers'
   const isFeatured = variant === 'featured'
   const normalizedProducts = useMemo(() => products.slice(0, 30), [products])
+  const columnCount = Math.ceil(normalizedProducts.length / rows)
+
   // Las ofertas quedan quietas: con precio tachado y descuento, que la tarjeta
   // se vaya mientras se compara no ayuda. Nunca se mueve si el sistema pide
   // reducir el movimiento.
@@ -82,11 +92,10 @@ export function MarketplaceProductCarousel({
   function scroll(direction: 'left' | 'right') {
     const track = trackRef.current
     if (!track) return
-    const card = track.querySelector<HTMLElement>('[data-carousel-card]')
-    const step = (card?.offsetWidth ?? 256) + 16
+    const step = getScrollStep(track)
     const nextIndex =
       direction === 'right'
-        ? Math.min(activeIndex + 1, normalizedProducts.length - 1)
+        ? Math.min(activeIndex + 1, columnCount - 1)
         : Math.max(activeIndex - 1, 0)
     setActiveIndex(nextIndex)
     track.scrollBy({ left: direction === 'right' ? step : -step, behavior: 'smooth' })
@@ -100,8 +109,7 @@ export function MarketplaceProductCarousel({
       const track = trackRef.current
       if (!track) return
 
-      const card = track.querySelector<HTMLElement>('[data-carousel-card]')
-      const step = (card?.offsetWidth ?? 256) + 16
+      const step = getScrollStep(track)
       const maxScroll = track.scrollWidth - track.clientWidth
 
       // Si llegó al final, vuelve suavemente al inicio (efecto bucle infinito de pasarela)
@@ -110,12 +118,12 @@ export function MarketplaceProductCarousel({
         setActiveIndex(0)
       } else {
         track.scrollBy({ left: step, behavior: 'smooth' })
-        setActiveIndex((prev) => (prev >= normalizedProducts.length - 1 ? 0 : prev + 1))
+        setActiveIndex((prev) => (prev >= columnCount - 1 ? 0 : prev + 1))
       }
     }, autoPlayInterval)
 
     return () => clearInterval(timer)
-  }, [enableAutoPlay, isPaused, normalizedProducts.length, autoPlayInterval])
+  }, [enableAutoPlay, isPaused, normalizedProducts.length, columnCount, autoPlayInterval])
 
   // Listener para actualizar el índice activo cuando el usuario hace scroll manual
   useEffect(() => {
@@ -123,17 +131,16 @@ export function MarketplaceProductCarousel({
     if (!track) return
 
     const handleScroll = () => {
-      const card = track.querySelector<HTMLElement>('[data-carousel-card]')
-      const step = (card?.offsetWidth ?? 256) + 16
+      const step = getScrollStep(track)
       if (step > 0) {
         const calculated = Math.round(track.scrollLeft / step)
-        setActiveIndex(Math.min(Math.max(calculated, 0), normalizedProducts.length - 1))
+        setActiveIndex(Math.min(Math.max(calculated, 0), columnCount - 1))
       }
     }
 
     track.addEventListener('scroll', handleScroll, { passive: true })
     return () => track.removeEventListener('scroll', handleScroll)
-  }, [normalizedProducts.length])
+  }, [columnCount])
 
   if (!normalizedProducts.length) return null
 
@@ -169,13 +176,18 @@ export function MarketplaceProductCarousel({
                 ? 'from-amber-50/80 dark:from-slate-950'
                 : 'from-white dark:from-slate-950'
           )}
-          style={{ opacity: activeIndex < normalizedProducts.length - 1 ? 1 : 0 }}
+          style={{ opacity: activeIndex < columnCount - 1 ? 1 : 0 }}
         />
 
         {/* ── Track de la Pasarela ──────────────────────────────────────── */}
         <div
           ref={trackRef}
-          className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-4 pt-1 scrollbar-hide scroll-smooth sm:gap-4"
+          className={cn(
+            'snap-x snap-mandatory gap-2 overflow-x-auto pb-4 pt-1 scrollbar-hide scroll-smooth sm:gap-4',
+            rows === 2
+              ? 'grid grid-rows-2 grid-flow-col auto-cols-[calc((100%-0.5rem)/2)] sm:auto-cols-[16rem]'
+              : 'flex'
+          )}
           aria-label="Pasarela de productos del marketplace"
         >
           {normalizedProducts.map((product, _idx) => {
@@ -210,7 +222,8 @@ export function MarketplaceProductCarousel({
                 key={`${product.organization_slug}-${product.id}`}
                 data-carousel-card
                 className={cn(
-                  'group relative flex w-[calc((100%-0.5rem)/2)] max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 sm:w-64 bg-card shadow-2xs',
+                  'group relative flex max-w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 bg-card shadow-2xs',
+                  rows === 2 ? 'w-full min-w-0' : 'w-[calc((100%-0.5rem)/2)] sm:w-64',
                   isOffers
                     ? 'border-border/80 hover:border-rose-400/60 hover:shadow-lg'
                     : isFeatured
@@ -341,7 +354,7 @@ export function MarketplaceProductCarousel({
                                   : 'text-foreground'
                             )}
                           >
-                            {formatPrice(displayPrice)}
+                            {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
                           </p>
                           {hasOffer && (
                             <p className="text-xs text-muted-foreground line-through">
@@ -405,7 +418,7 @@ export function MarketplaceProductCarousel({
         </div>
 
         {/* ── Botones de navegación ──────────────────────────────────────── */}
-        {normalizedProducts.length > 1 && (
+        {columnCount > 1 && (
           <>
             <Button
               type="button"
@@ -427,7 +440,7 @@ export function MarketplaceProductCarousel({
               variant="outline"
               size="icon"
               onClick={() => scroll('right')}
-              disabled={activeIndex >= normalizedProducts.length - 1}
+              disabled={activeIndex >= columnCount - 1}
               className={cn(
                 'absolute -right-3.5 top-1/2 z-20 hidden h-9 w-9 -translate-y-1/2 rounded-full shadow-md disabled:opacity-0 sm:inline-flex bg-background border-border hover:bg-muted',
                 isFeatured && 'hover:border-amber-400 hover:text-amber-600',
@@ -441,7 +454,7 @@ export function MarketplaceProductCarousel({
         )}
 
         {/* ── Indicador inferior de pasarela con botón de pausa opcional ── */}
-        {normalizedProducts.length > 4 && (
+        {normalizedProducts.length > 4 && (autoPlay ?? (isFeatured || !isOffers)) && !prefersReducedMotion && (
           <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <span className={cn(

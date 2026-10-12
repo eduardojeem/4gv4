@@ -3,6 +3,11 @@ import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { config } from '@/lib/config'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
+import { awardPosSaleLoyaltyPoints, pointsBaseForPosSale } from '@/lib/loyalty/pos-sale-points'
+import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points'
+import { isLoyaltyModuleMissing } from '@/lib/loyalty/module-status'
+import { logger } from '@/lib/logger'
 import { isOrganizationModuleEnabled } from '@/lib/saas/organization-module-check'
 import { creditBusinessDate } from '@/lib/credits/installments'
 import { getCurrencyFractionDigits } from '@/lib/currency'
@@ -181,6 +186,9 @@ async function getTaxRate(
 }
 
 function errorResponse(error: { message?: string; details?: string; hint?: string; code?: string } | null) {
+  if ([error?.message, error?.details, error?.hint].some(value => value?.includes('CREDIT_FILE_REQUIRED'))) {
+    return NextResponse.json({ success: false, code: 'CREDIT_FILE_REQUIRED', error: 'Completá y aprobá la ficha para crédito del cliente antes de confirmar esta venta.' }, { status: 409 })
+  }
   const rawMessage = error?.message || ''
   const details = error?.details || ''
   const hint = error?.hint || ''
@@ -516,6 +524,44 @@ export const POST = withTenantAuth(
     const saleId = typeof result.sale_id === 'string' ? result.sale_id : null
     if (!saleId) return errorResponse({ message: 'INVALID_ATOMIC_SALE_RESPONSE' })
 
+    // Puntos de fidelidad. Fuera del camino crítico: la venta ya está hecha y
+    // no se revierte por los puntos; las claves por venta y por reparación
+    // hacen seguro el reintento. Va con la sesión del cajero porque la función
+    // comprueba su permiso (con el cliente admin no hay usuario y la rechaza).
+    let loyaltyPoints = 0
+    if (customerId) {
+      try {
+        const { data: repairRows } = repairIds.length > 0
+          ? await supabase.from('repairs').select('id, final_cost').eq('organization_id', organization.id).in('id', repairIds)
+          : { data: [] as Array<{ id: string; final_cost: number | null }> }
+        const loyalty = await awardPosSaleLoyaltyPoints(await createClient(), {
+          organizationId: organization.id,
+          customerId,
+          saleId,
+          pointsBase: pointsBaseForPosSale({ total: finiteNumber(result.total) ?? 0, payments, storeCreditAmount }),
+          repairs: (repairRows ?? []).map((row) => ({ id: String(row.id), amount: Number(row.final_cost) || 0 })),
+        })
+        loyaltyPoints = loyalty.points
+
+        // Venta a crédito con la primera cuota paga en el momento: esa cuota suma
+        // ya (va aparte de los pagos, en credit.first_payment).
+        const creditId = typeof result.credit_id === 'string' ? result.credit_id : null
+        if (creditId && credit?.first_payment) {
+          const { data: firstInstallment } = await supabase.from('credit_installments').select('id, amount_paid').eq('credit_id', creditId).eq('installment_number', 1).maybeSingle()
+          const firstPaid = Number(firstInstallment?.amount_paid ?? 0)
+          if (firstInstallment?.id && firstPaid > 0) {
+            const firstLoyalty = await awardCreditInstallmentLoyaltyPoints(await createClient() as never, { organizationId: organization.id, installmentId: String(firstInstallment.id), paidAmount: firstPaid })
+            loyaltyPoints += firstLoyalty.points
+            if (firstLoyalty.error) loyalty.errors.push(firstLoyalty.error)
+          }
+        }
+        const realErrors = loyalty.errors.filter((loyaltyError) => !isLoyaltyModuleMissing(loyaltyError))
+        if (realErrors.length > 0) logger.warn('No se pudieron acreditar los puntos de la venta POS', { saleId, error: realErrors[0]?.message })
+      } catch (loyaltyError) {
+        logger.warn('No se pudieron acreditar los puntos de la venta POS', { saleId, error: loyaltyError instanceof Error ? loyaltyError.message : String(loyaltyError) })
+      }
+    }
+
     return NextResponse.json({
       success: true,
       saleId,
@@ -527,6 +573,7 @@ export const POST = withTenantAuth(
         paymentMethod: result.payment_method,
         creditId: result.credit_id,
         creditSchedule: result.credit_schedule,
+        loyaltyPoints,
       },
       idempotent: result.idempotent === true,
     })

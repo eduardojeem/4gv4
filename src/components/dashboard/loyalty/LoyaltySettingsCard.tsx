@@ -57,6 +57,14 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
 
   const regla = explainEarning(draft)
 
+  // Lo que la tienda devuelve de cada compra si el cliente canjea todo: es el
+  // costo real del programa y lo que más fácil se calcula mal.
+  const valorDelPunto = Number(draft.redemption_value) || 0
+  const porcentajeDevuelto = valorDelPunto > 0 && Number(draft.currency_per_point) > 0
+    ? (valorDelPunto * (Number(draft.points_per_unit) || 1) * 100) / Number(draft.currency_per_point)
+    : 0
+  const puntosDeEjemploCanje = Math.max(Number(draft.min_redemption_points) || 0, 100)
+
   const handleSave = async () => {
     setSaving(true)
     await onSave({
@@ -70,6 +78,8 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
       points_expiration_months: draft.points_expiration_months
         ? Number(draft.points_expiration_months)
         : null,
+      redemption_value: draft.redemption_value ? Number(draft.redemption_value) : null,
+      min_redemption_points: draft.min_redemption_points ? Number(draft.min_redemption_points) : null,
     })
     setSaving(false)
   }
@@ -140,6 +150,51 @@ export function LoyaltySettingsCard({ settings, onSave, canManage }: LoyaltySett
             </strong>
             .
           </p>
+        </div>
+
+        {/* Para qué sirven: canje por saldo a favor, que el POS acepta como pago. */}
+        <div className="space-y-2 rounded-xl border border-emerald-200/70 bg-emerald-50/50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Canje por saldo a favor</p>
+          <p className="text-xs text-muted-foreground">
+            El cliente cambia sus puntos por saldo a favor y lo usa para pagar en la próxima compra. Dejalo vacío para no ofrecer canje.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="redemption-value" className="text-xs font-semibold">Cada punto vale (Gs.)</Label>
+              <Input
+                id="redemption-value"
+                type="number"
+                min={1}
+                placeholder="Sin canje"
+                value={draft.redemption_value ?? ''}
+                disabled={!canManage}
+                onChange={(e) => setDraft((d) => ({ ...d, redemption_value: e.target.value ? Number(e.target.value) : null }))}
+                className="h-9.5 rounded-xl bg-white text-xs tabular-nums dark:bg-slate-950"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="min-redemption" className="text-xs font-semibold">Mínimo para canjear (puntos)</Label>
+              <Input
+                id="min-redemption"
+                type="number"
+                min={1}
+                placeholder="Sin mínimo"
+                value={draft.min_redemption_points ?? ''}
+                disabled={!canManage || !valorDelPunto}
+                onChange={(e) => setDraft((d) => ({ ...d, min_redemption_points: e.target.value ? Number(e.target.value) : null }))}
+                className="h-9.5 rounded-xl bg-white text-xs tabular-nums dark:bg-slate-950"
+              />
+            </div>
+          </div>
+          {valorDelPunto > 0 && (
+            <p className="text-xs text-slate-700 tabular-nums dark:text-slate-300">
+              {puntosDeEjemploCanje} puntos = <strong className="font-semibold">{formatCurrency(puntosDeEjemploCanje * valorDelPunto)}</strong> de saldo a favor.
+              {' '}Equivale a devolver el <strong className="font-semibold">{porcentajeDevuelto.toLocaleString('es-PY', { maximumFractionDigits: 1 })}%</strong> de cada compra.
+              {porcentajeDevuelto > 10 && (
+                <span className="mt-1 block text-amber-700 dark:text-amber-400">Es un porcentaje alto: revisá que el margen lo aguante.</span>
+              )}
+            </p>
+          )}
         </div>
 
         {/* Todo lo que casi nadie toca, y que anda con el valor por defecto. */}

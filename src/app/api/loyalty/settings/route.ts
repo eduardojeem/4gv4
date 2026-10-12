@@ -13,6 +13,10 @@ const settingsSchema = z.object({
   rounding: z.enum(['floor', 'round']),
   max_points_per_customer_per_day: z.number().int().positive().nullable().optional(),
   points_expiration_months: z.number().int().positive().nullable().optional(),
+  // Canje por saldo a favor: cuánto vale un punto y desde cuántos se puede canjear.
+  // Sin valor, el canje está apagado.
+  redemption_value: z.number().positive('El valor del punto debe ser mayor a 0').nullable().optional(),
+  min_redemption_points: z.number().int().positive().nullable().optional(),
 })
 
 export const GET = withTenantAuth({ permission: ['promotions.read', 'pos.sales.create'], module: 'promotions' }, async (_request, { organization }) => {
@@ -58,21 +62,26 @@ export const PUT = withTenantAuth({ permission: 'promotions.manage', module: 'pr
 
   const supabase = await createOrgScopedClient(organization.id)
 
-  const { data, error } = await supabase
-    .from('loyalty_settings')
-    .upsert(
-      {
-        organization_id: organization.id,
-        ...parsed.data,
-        max_points_per_customer_per_day: parsed.data.max_points_per_customer_per_day ?? null,
-        points_expiration_months: parsed.data.points_expiration_months ?? null,
-        updated_at: new Date().toISOString(),
-        updated_by: user.id,
-      },
-      { onConflict: 'organization_id' }
-    )
-    .select()
-    .single()
+  const row = {
+    organization_id: organization.id,
+    ...parsed.data,
+    max_points_per_customer_per_day: parsed.data.max_points_per_customer_per_day ?? null,
+    points_expiration_months: parsed.data.points_expiration_months ?? null,
+    redemption_value: parsed.data.redemption_value ?? null,
+    min_redemption_points: parsed.data.min_redemption_points ?? null,
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  }
+  const save = (values: Record<string, unknown>) =>
+    supabase.from('loyalty_settings').upsert(values, { onConflict: 'organization_id' }).select().single()
+
+  let { data, error } = await save(row)
+  // Sin la migración del canje todavía no existen esas columnas: se guarda el
+  // resto para que la tienda no se quede sin poder cambiar su configuración.
+  if (error && /redemption_value|min_redemption_points/.test(error.message ?? '')) {
+    const { redemption_value: _value, min_redemption_points: _min, ...withoutRedemption } = row
+    ;({ data, error } = await save(withoutRedemption))
+  }
 
   if (error) {
     return loyaltyErrorResponse(error, 'guardar la configuración de puntos', {

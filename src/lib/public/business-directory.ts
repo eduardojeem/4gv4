@@ -94,3 +94,27 @@ export function pageDirectory(stores: Array<DirectoryStore | MarketplaceOrganiza
     summary: summarizeDirectory(all),
   }
 }
+
+/**
+ * Desde cuánto una cifra suma en vez de restar. La página busca que un comercio
+ * se sume: «10 negocios» o «2 ciudades» dicen «esto recién empieza». Cada cifra
+ * aparece sola cuando llega a su mínimo; mientras tanto la portada muestra los
+ * negocios reales.
+ */
+export const DIRECTORY_STAT_MINIMUMS = { stores: 30, cities: 5, products: 1000 } as const
+
+export type DirectoryStat = { key: keyof typeof DIRECTORY_STAT_MINIMUMS; value: number; label: string }
+
+export function visibleDirectoryStats(summary: Pick<BusinessDirectorySummary, 'stores' | 'cities' | 'products'>): DirectoryStat[] {
+  const stats: DirectoryStat[] = [
+    { key: 'stores', value: summary.stores, label: summary.stores === 1 ? 'negocio publicado' : 'negocios publicados' },
+    { key: 'cities', value: summary.cities, label: summary.cities === 1 ? 'ciudad' : 'ciudades' },
+    { key: 'products', value: summary.products, label: summary.products === 1 ? 'producto publicado' : 'productos publicados' },
+  ]
+  return stats.filter((stat) => stat.value >= DIRECTORY_STAT_MINIMUMS[stat.key])
+}
+
+/** Hasta seis negocios con logo, para la portada mientras no haya cifras que mostrar. */
+export function showcaseLogos(stores: DirectoryStore[], limit = 6): DirectoryStore[] {
+  return stores.filter((store) => Boolean(store.logo_url)).slice(0, limit)
+}

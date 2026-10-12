@@ -1,9 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('server-only', () => ({}))
 
 type QueryCall = { method: string; args: unknown[] }
 
 let productRows: Record<string, unknown>[] = []
 let productCalls: QueryCall[] = []
+let selectionFilters: Record<string, unknown> = {}
+vi.mock('@/lib/public/effective-catalog', () => ({
+  MarketplaceCatalogUnavailableError: class extends Error {},
+  readEffectiveCatalog: async (filters: Record<string, unknown>) => {
+    selectionFilters = filters
+    const offset = Number(filters.offset ?? 0)
+    return { total: productRows.length, brands: [], categories: [],
+      rows: productRows.slice(offset, offset + Number(filters.limit)).map((product) => ({
+        product_id: product.id,
+        summary: { stockQuantity: 5, price: 100000, originalPrice: null, priceFrom: false, hasOffer: false, representativeVariantId: null, promotionName: null },
+        pricing: { has_offer: false, offer_price: null, promotion_name: null },
+      })) }
+  },
+}))
 
 function createFakeClient() {
   return {
@@ -22,9 +37,9 @@ function createFakeClient() {
               return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
                 Promise.resolve({ data: [{ id: 'org-1' }], count: 1, error: null }).then(onFulfilled, onRejected)
             }
-            // Las columnas opcionales (celular, precio oculto) se preguntan con
+            // Las columnas opcionales (celular, precio oculto, catalogo) se preguntan con
             // un select vacio: se responde que no existen.
-            const probe = calls.find((call) => call.method === 'select' && /device_brand|hide_price/.test(String(call.args[0])))
+            const probe = calls.find((call) => call.method === 'select' && /device_brand|hide_price|search_text/.test(String(call.args[0])))
             if (probe) {
               return (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
                 Promise.resolve({ data: null, count: 0, error: { message: 'column does not exist' } }).then(onFulfilled, onRejected)
@@ -109,13 +124,10 @@ describe('getMarketplaceProductsPage', () => {
   it('aplica los filtros al mismo query que obtiene el conteo', async () => {
     await getMarketplaceProductsPage(2, { q: 'funda', marca: 'Acme' })
 
-    expect(productCalls).toContainEqual({ method: 'ilike', args: ['brand', 'Acme'] })
+    expect(selectionFilters).toMatchObject({ brand: 'Acme', q: 'funda' })
     // La busqueda cubre tambien SKU y descripcion: antes solo nombre y marca, y el
     // mismo termino daba resultados distintos que /marketplace/buscar.
-    expect(productCalls).toContainEqual({
-      method: 'or',
-      args: ['name.ilike.%funda%,sku.ilike.%funda%,brand.ilike.%funda%,description.ilike.%funda%'],
-    })
+    expect(productCalls.some((call) => call.method === 'or')).toBe(false)
   })
 
   it('consulta el rango real de la pagina sin perder el total filtrado', async () => {
@@ -123,6 +135,6 @@ describe('getMarketplaceProductsPage', () => {
 
     expect(result.products.map((product) => product.id)).toEqual(['3'])
     expect(result.total).toBe(3)
-    expect(productCalls).toContainEqual({ method: 'range', args: [2, 3] })
+    expect(selectionFilters).toMatchObject({ offset: 2, limit: 2 })
   })
 })

@@ -20,9 +20,12 @@ describe('entorno de compilación de CI', () => {
   it('el marketplace usa fallbacks públicos cuando la configuración privada no está disponible', () => {
     expect(marketplacePage).toContain('getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)')
     expect(marketplacePage).toContain('getMarketplaceOrganizations().catch(() => [])')
-    expect(marketplacePage).toContain("getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT).catch(() => ({ products: [], total: 0 }))")
-    expect(marketplacePage).toContain('getMarketplaceBrands(30).catch(() => [])')
-    expect(marketplacePage).toContain('getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT).catch(() => [])')
+    // El catálogo solo tiene respaldo durante `next build`: en producción un fallo
+    // va a error.tsx («Reintentar») y no a un marketplace vacío.
+    expect(marketplacePage).toContain("process.env.NEXT_PHASE === 'phase-production-build' ? promise.catch(() => fallback) : promise")
+    expect(marketplacePage).toContain('duringBuild(getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT), { products: [], total: 0 })')
+    expect(marketplacePage).toContain('duringBuild(getMarketplaceBrands(30), [])')
+    expect(marketplacePage).toContain('duringBuild(getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT), [])')
     expect(marketplacePage).toContain('getPlatformAnnouncements().catch(() => [])')
     expect(categoryCarousel).toContain('getMarketplaceCategories().catch(() => [])')
   })

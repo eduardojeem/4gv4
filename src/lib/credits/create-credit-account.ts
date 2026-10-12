@@ -1,39 +1,24 @@
 import type { createAdminSupabase } from '@/lib/supabase/admin'
 import {
-  sumInstallmentsOutstanding,
-  sumRepairsOutstanding,
-  type OutstandingRepair,
-} from './customer-outstanding'
-import {
   buildCreditInstallmentPlan,
   type CreditFrequency,
   type FirstInstallmentTiming,
   creditBusinessDate,
 } from '@/lib/credits/installments'
 
-type AdminSupabase = ReturnType<typeof createAdminSupabase>
-
-type InstallmentRow = {
-  installment_number: number
-  amount?: number | string | null
-  status?: string | null
-  amount_paid?: number | string | null
-}
-
 export type CreateCreditAccountInput = {
-  supabase: AdminSupabase
+  supabase: ReturnType<typeof createAdminSupabase>
   organizationId: string
   customerId: string
-  /** Límite de crédito del cliente, ya validado por el caller. */
+  actorId: string
+  /** Kept for caller compatibility; the database's current limit is authoritative. */
   creditLimit: number
-  /** Capital a financiar (sin interés). */
   amount: number
   interestRate: number
   installmentCount: number
   frequency: CreditFrequency
   dueDate?: Date | null
   firstInstallmentTiming?: FirstInstallmentTiming
-  /** Venta asociada, o null para crédito manual (p.ej. reparación). */
   saleId?: string | null
   label: string
   creditType: string
@@ -47,171 +32,71 @@ export type CreateCreditAccountResult = {
   installmentCount: number
 }
 
-/** Error de creación de crédito con el status HTTP apropiado para la respuesta. */
 export class CreditAccountError extends Error {
-  status: number
-  constructor(message: string, status: number) {
+  constructor(message: string, public status: number) {
     super(message)
     this.name = 'CreditAccountError'
-    this.status = status
   }
 }
 
-function buildCreditCode() {
-  return `CR-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`
-}
-
-/**
- * Núcleo de creación de una cuenta de crédito: valida el cupo disponible del
- * cliente, inserta la cabecera en `customer_credits` y su plan de cuotas en
- * `credit_installments`, con rollback de la cabecera si las cuotas fallan.
- *
- * Fuente única compartida entre la venta a crédito del POS (`/api/credits/sale`)
- * y el cobro a crédito de reparaciones (`/api/repairs/[id]/payment`), para que
- * ambos flujos apliquen exactamente las mismas reglas de cupo y estructura.
- */
-/**
- * Lanza {@link CreditAccountError} (con su status HTTP) ante cualquier fallo, y
- * devuelve los datos del crédito creado en el caso exitoso.
- */
-export async function createCreditAccount(
-  input: CreateCreditAccountInput
-): Promise<CreateCreditAccountResult> {
-  const {
-    supabase,
-    organizationId,
-    customerId,
-    creditLimit,
-    amount,
-    interestRate,
-    installmentCount,
-    frequency,
-    dueDate = null,
-    saleId = null,
-    label,
-    creditType,
-    originType,
-  } = input
-
-  // Saldo pendiente actual del cliente (para no exceder su cupo).
-  const { data: existingCredits, error: existingCreditsError } = await supabase
-    .from('customer_credits')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('customer_id', customerId)
-
-  if (existingCreditsError) {
-    console.error('[createCreditAccount] Error fetching customer credits:', existingCreditsError)
-    throw new CreditAccountError('No se pudo validar el historial de créditos del cliente.', 500)
+/** Header, installments and final cupo validation belong to one database transaction. */
+export async function createCreditAccount(input: CreateCreditAccountInput): Promise<CreateCreditAccountResult> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.actorId ?? '')) {
+    throw new CreditAccountError('No se pudo validar quién concede el crédito.', 403)
   }
-
-  const existingCreditIds = (existingCredits ?? []).map((row) => row.id as string).filter(Boolean)
-  const { data: existingInstallments, error: existingInstallmentsError } = existingCreditIds.length > 0
-    ? await supabase
-        .from('credit_installments')
-        .select('installment_number, amount, status, amount_paid')
-        .in('credit_id', existingCreditIds)
-    : { data: [], error: null }
-
-  if (existingInstallmentsError) {
-    console.error('[createCreditAccount] Error fetching credit installments:', existingInstallmentsError)
-    throw new CreditAccountError('No se pudo preparar el plan de crédito del cliente.', 500)
-  }
-
-  const creditStartedAt = new Date()
-  const creditPlan = buildCreditInstallmentPlan({
-    principalAmount: amount,
-    interestRate,
-    installmentCount,
-    frequency,
-    firstDueDate: dueDate,
+  const startedAt = new Date()
+  const plan = buildCreditInstallmentPlan({
+    principalAmount: input.amount,
+    interestRate: input.interestRate,
+    installmentCount: input.installmentCount,
+    frequency: input.frequency,
+    firstDueDate: input.dueDate ?? null,
     firstInstallmentTiming: input.firstInstallmentTiming,
-    now: new Date(`${creditBusinessDate(creditStartedAt)}T12:00:00Z`),
+    now: new Date(`${creditBusinessDate(startedAt)}T12:00:00Z`),
     startInstallmentNumber: 1,
   })
-
-  const installmentsBalance = sumInstallmentsOutstanding(
-    (existingInstallments as InstallmentRow[] | null) ?? []
-  )
-
-  // La deuda de reparaciones tambien consume la linea de credito: cualquier
-  // saldo abierto del cliente ocupa cupo, no solo las ventas financiadas. Antes
-  // el servidor solo miraba las cuotas y la ficha del cliente ya descontaba las
-  // reparaciones, asi que la pantalla y la caja no coincidian.
-  const { data: customerRepairs, error: customerRepairsError } = await supabase
-    .from('repairs')
-    .select('status, payment_status, final_cost, estimated_cost, paid_amount')
-    .eq('organization_id', organizationId)
-    .eq('customer_id', customerId)
-
-  if (customerRepairsError) {
-    console.error('[createCreditAccount] Error fetching customer repairs:', customerRepairsError)
-    throw new CreditAccountError('No se pudo validar la deuda de reparaciones del cliente.', 500)
+  const { data, error } = await input.supabase.rpc('create_customer_credit_account_atomic', {
+    p_organization_id: input.organizationId,
+    p_customer_id: input.customerId,
+    p_actor_id: input.actorId,
+    p_header: {
+      sale_id: input.saleId ?? null,
+      principal: plan.financedTotal,
+      interest_rate: input.interestRate,
+      term_months: input.installmentCount,
+      credit_type: input.creditType,
+      origin_type: input.originType,
+      label: input.label,
+      metadata: { frequency: input.frequency, first_installment_timing: input.dueDate ? 'custom' : input.firstInstallmentTiming ?? 'at_start' },
+    },
+    p_installments: plan.installments.map(installment => ({
+      installment_number: installment.installmentNumber,
+      due_date: installment.dueDate.toISOString(),
+      amount: installment.amount,
+      principal_component: installment.principalComponent,
+      interest_component: installment.interestComponent,
+    })),
+  })
+  if (error) {
+    // Do not log RPC payloads or raw database errors: this flow handles private customer data.
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      throw new CreditAccountError('La creación de crédito requiere actualizar la base de datos.', 503)
+    }
+    if (error.message?.includes('CREDIT_FILE_REQUIRED')) {
+      throw new CreditAccountError('La ficha del cliente necesita aprobación y los requisitos vigentes antes de conceder crédito.', 409)
+    }
+    if (error.message?.includes('CREDIT_LIMIT_EXCEEDED')) {
+      throw new CreditAccountError('El cliente no tiene crédito disponible suficiente. Revisá su saldo y límite actuales.', 400)
+    }
+    if (error.code === '42501' || error.message?.includes('CREDIT_FILE_FORBIDDEN')) {
+      throw new CreditAccountError('No tenés permisos para conceder este crédito.', 403)
+    }
+    if (error.code === '23505') {
+      throw new CreditAccountError('La venta ya tiene un crédito asociado.', 409)
+    }
+    throw new CreditAccountError('No se pudo crear el crédito y sus cuotas. No se guardó ningún cambio.', 500)
   }
-
-  const repairsBalance = sumRepairsOutstanding((customerRepairs ?? []) as OutstandingRepair[])
-  const currentBalance = installmentsBalance + repairsBalance
-
-  const availableCredit = creditLimit - currentBalance
-  if (availableCredit < creditPlan.financedTotal) {
-    throw new CreditAccountError(
-      `El cliente no tiene crédito disponible suficiente. Disponible: ${availableCredit.toFixed(2)}.`,
-      400
-    )
-  }
-
-  const { data: creditRow, error: createCreditError } = await supabase
-    .from('customer_credits')
-    .insert({
-      customer_id: customerId,
-      organization_id: organizationId,
-      sale_id: saleId,
-      principal: creditPlan.financedTotal,
-      interest_rate: interestRate,
-      term_months: installmentCount,
-      start_date: creditStartedAt.toISOString(),
-      metadata: { frequency, first_installment_timing: dueDate ? 'custom' : input.firstInstallmentTiming ?? 'at_start' },
-      status: 'active',
-      credit_code: buildCreditCode(),
-      credit_type: creditType,
-      origin_type: originType,
-      label,
-    })
-    .select('id')
-    .single()
-
-  if (createCreditError || !creditRow?.id) {
-    console.error('[createCreditAccount] Error creating credit header:', createCreditError)
-    throw new CreditAccountError('No se pudo crear la cuenta de crédito del cliente.', 500)
-  }
-
-  const creditId = creditRow.id as string
-
-  const installmentsToInsert = creditPlan.installments.map((installment) => ({
-    credit_id: creditId,
-    sale_id: saleId,
-    installment_number: installment.installmentNumber,
-    due_date: installment.dueDate.toISOString(),
-    amount: installment.amount,
-    principal_component: installment.principalComponent,
-    interest_component: installment.interestComponent,
-    status: 'pending',
-  }))
-
-  const { error: installmentsError } = await supabase
-    .from('credit_installments')
-    .insert(installmentsToInsert)
-
-  if (installmentsError) {
-    console.error('[createCreditAccount] Error creating installments:', installmentsError)
-    await supabase.from('customer_credits').delete().eq('id', creditId).eq('organization_id', organizationId)
-    throw new CreditAccountError('No se pudieron generar las cuotas del crédito.', 500)
-  }
-
-  return {
-    creditId,
-    financedTotal: creditPlan.financedTotal,
-    interestAmount: creditPlan.interestAmount,
-    installmentCount,
-  }
+  const result = data as CreateCreditAccountResult | null
+  if (!result?.creditId) throw new CreditAccountError('No se pudo confirmar el crédito creado.', 500)
+  return result
 }

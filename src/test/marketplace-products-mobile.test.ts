@@ -36,22 +36,15 @@ describe('la grilla de productos entra de a dos en el teléfono', () => {
 })
 
 /**
- * A 166px de ancho, el contenido de la tarjeta no entraba: la fila de botones
- * pedía 138px sobre 132 disponibles, y «Ir a tienda» 68px sobre 61.
+ * A 166px de ancho, dos botones por fila no entraban (138px sobre 132) y en el
+ * celular quedaban desparejos: el botón medía 44px y el enlace 28. Ahora la
+ * tarjeta abre el detalle y queda una sola acción a lo ancho.
  */
 describe('el contenido de la tarjeta entra en el ancho nuevo', () => {
-  it('«Ir a tienda» se acorta en el teléfono', () => {
-    expect(CLIENTE).toContain('<span className="sm:hidden">Tienda</span>')
-    expect(CLIENTE).toContain('<span className="hidden sm:inline">Ir a tienda</span>')
-  })
-
-  it('la flecha se va donde no hay lugar', () => {
-    expect(CLIENTE).toContain('<ArrowRight className="hidden h-3 w-3 sm:inline" />')
-  })
-
-  it('los botones bajan de alto y de relleno', () => {
-    expect(CLIENTE).toContain('h-7 gap-1 rounded-lg px-1.5 text-[11px] font-semibold')
-    expect(CLIENTE).toContain('sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs')
+  it('una sola acción a todo el ancho', () => {
+    expect(CLIENTE).toContain('<span>Ver en la tienda</span>')
+    expect(CLIENTE).toContain('flex h-9 w-full items-center justify-center')
+    expect(CLIENTE).not.toContain('<span>Detalle</span>')
   })
 })
 
@@ -64,7 +57,7 @@ describe('marca y categoría se recortan en vez de desbordar', () => {
   it('el recorte va en cada hijo, no en el contenedor flex', () => {
     expect(CLIENTE).not.toContain('flex items-center gap-2 text-[10px] text-muted-foreground truncate')
     expect(CLIENTE).toContain('min-w-0 shrink-0 truncate font-medium text-foreground')
-    expect(CLIENTE).toContain('<span className="min-w-0 truncate">{product.category.name}</span>')
+    expect(CLIENTE).toContain('<span className="min-w-0 truncate">{displayCategoryName(product.category.name)}</span>')
   })
 
   it('la marca se recorta última, porque es la que identifica', () => {

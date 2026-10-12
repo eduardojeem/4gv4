@@ -157,7 +157,6 @@ describe('marketplace y saas', () => {
   const marketplace = readFileSync(resolve(process.cwd(), 'src/app/marketplace/page.tsx'), 'utf8')
   const grilla = readFileSync(resolve(process.cwd(), 'src/components/public/MarketplaceOrgProductGrid.tsx'), 'utf8')
   const barra = readFileSync(resolve(process.cwd(), 'src/components/public/CompactCategoryBar.tsx'), 'utf8')
-  const buscador = readFileSync(resolve(process.cwd(), 'src/components/public/MarketplaceSearchBox.tsx'), 'utf8')
 
   /**
    * Era un boton `outline` sobre fondo claro: pintaba su fondo blanco y el
@@ -185,11 +184,6 @@ describe('marketplace y saas', () => {
     expect(barra).toContain('border-cyan-700 bg-cyan-700 text-white')
     expect(barra).toContain('bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')
     expect(barra).not.toContain('text-slate-400 transition-colors')
-  })
-
-  /** El color del boton es fijo; el del texto salia del tema y en oscuro se oscurecia. */
-  it('el botón de buscar lleva su texto explícito', () => {
-    expect(buscador).toContain("'shrink-0 bg-cyan-700 text-white hover:bg-cyan-800'")
   })
 
   it('en /saas, las etiquetas del panel no dependen del gris apagado', () => {

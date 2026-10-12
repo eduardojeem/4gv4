@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES, blockedShowcaseOrganizationIds } from './marketplace'
@@ -32,9 +32,25 @@ describe('qué tiendas entran en la vitrina pública', () => {
   })
 
   it('la misma regla se aplica al catálogo, las marcas, las categorías y las ofertas', () => {
-    // Cada consulta pública acota por las organizaciones que sí pueden mostrarse.
-    const usos = FUENTE.match(/await getShowcaseOrganizationIds\(supabase\)/g) ?? []
-    expect(usos.length).toBeGreaterThanOrEqual(4)
+    // Desde 2fd85f79 los cuatro salen de la función del catálogo efectivo; antes
+    // cada consulta llamaba a getShowcaseOrganizationIds por su cuenta.
+    expect(FUENTE).toContain('return (await readEffectiveCatalog({ limit: 1 })).categories')
+    expect(FUENTE).toContain('category_ids: categoryIds ?? undefined })).brands')
+    expect(FUENTE).toContain('getMarketplaceProductsPageUncached(limit, { onlyOffers: true })')
+    // Y los productos que se completan después también se acotan.
     expect(FUENTE).toContain(".in('organization_id', showcaseOrganizationIds)")
+  })
+
+  it('la función del catálogo saca los mismos estados que el código', () => {
+    // La lista ahora vive en dos lugares: si se agrega un estado en uno y no en
+    // el otro, la tienda desaparece del directorio pero sigue vendiendo.
+    const ultima = readdirSync('supabase/migrations')
+      .filter((archivo: string) => archivo.endsWith('.sql'))
+      .sort()
+      .map((archivo: string) => readFileSync(resolve(process.cwd(), 'supabase/migrations', archivo), 'utf8'))
+      .filter((sql: string) => sql.includes('function public.get_marketplace_effective_catalog'))
+      .at(-1) ?? ''
+    const enSql = ultima.match(/s\.status::text in \(([^)]*)\)/)?.[1].match(/'([^']+)'/g)?.map((s: string) => s.slice(1, -1)).sort()
+    expect(enSql).toEqual([...SHOWCASE_BLOCKED_SUBSCRIPTION_STATUSES].sort())
   })
 })

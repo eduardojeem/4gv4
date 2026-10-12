@@ -135,3 +135,14 @@ describe('las sucursales', () => {
     )
   })
 })
+
+describe('la política de seguridad del sitio', () => {
+  it('deja mostrar el mapa de Google embebido', async () => {
+    const { readFileSync } = await import('node:fs')
+    const config = readFileSync(`${process.cwd()}/next.config.ts`, 'utf8')
+    const frameSrc = config.split('\n').find((line) => line.includes('frame-src')) ?? ''
+    // Sin esto el navegador muestra «Este contenido está bloqueado» en lugar del mapa.
+    expect(frameSrc).toContain('https://maps.google.com')
+    expect(frameSrc).toContain('https://www.google.com')
+  })
+})

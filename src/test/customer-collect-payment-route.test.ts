@@ -105,8 +105,14 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     from: (tabla: string) => {
       if (tabla !== 'cash_closures') {
-        estado.escriturasDirectas.push(tabla)
-        return { update: () => ({ eq: async () => ({ error: null }) }) }
+        return {
+          // Leer no es escribir: los puntos consultan la cuota para saber de quién es.
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+          update: () => {
+            estado.escriturasDirectas.push(tabla)
+            return { eq: async () => ({ error: null }) }
+          },
+        }
       }
       const builder: { select: () => typeof builder; eq: () => typeof builder; is: () => typeof builder; order: () => Promise<{ data: { id: string; register_id: string }[]; error: null }> } = {
         select: () => builder,

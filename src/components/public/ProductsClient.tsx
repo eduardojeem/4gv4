@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Eye,
   Flame,
   FolderTree,
   LayoutGrid,
@@ -26,12 +25,16 @@ import {
   MessageCircle,
   X
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import type { MarketplaceProduct, MarketplaceCategory, MarketplaceBrand } from '@/lib/public/marketplace'
 import { MarketplaceProductModal } from './MarketplaceProductModal'
+import { HorizontalScroller } from './HorizontalScroller'
+import { CategoryPicker } from './CategoryPicker'
+import { BrandPicker } from './BrandPicker'
+import { BackToTopButton } from './BackToTopButton'
+import { displayCategoryName } from '@/lib/public/display-names'
 import { FavoriteButton } from './Favorites'
 import { getCategoryIcon } from './CategoryCarousel'
 import { cn } from '@/lib/utils'
@@ -88,7 +91,7 @@ export function ProductsClient({
   currentPage = 1,
   currentPageSize = PAGE_SIZE,
   serverPaginated = false,
-  categories = [],
+  categories: rawCategories = [],
   brands = [],
   initialQuery = '',
   initialCategory = '',
@@ -103,6 +106,13 @@ export function ProductsClient({
   const searchParams = useSearchParams()
 
   const [query, setQuery] = useState(initialQuery)
+  const [lastInitialQuery, setLastInitialQuery] = useState(initialQuery)
+  if (lastInitialQuery !== initialQuery) {
+    setLastInitialQuery(initialQuery)
+    // Adoptar navegación externa sólo si no hay una edición más reciente.
+    // La respuesta del servidor puede corresponder a una búsqueda anterior.
+    if (query.trim() === lastInitialQuery.trim()) setQuery(initialQuery)
+  }
   const onlyOffers = initialOnlyOffers
   const [sort, setSort] = useState<SortKey>(initialSort)
   const [lastInitialSort, setLastInitialSort] = useState(initialSort)
@@ -117,6 +127,12 @@ export function ProductsClient({
   const activePageSize = serverPaginated ? currentPageSize : pageSize
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   
+  // Los nombres tal como se muestran: cada tienda escribe «HOGAR» o «audio» a su manera.
+  const categories = useMemo(
+    () => rawCategories.map((category) => ({ ...category, name: displayCategoryName(category.name) })),
+    [rawCategories]
+  )
+
   const sortRef = useRef<HTMLDivElement>(null)
   const gridTopRef = useRef<HTMLDivElement>(null)
   const filterKey = JSON.stringify([initialQuery, initialCategory, initialSubcategory, initialBrand, onlyOffers, sort])
@@ -157,7 +173,9 @@ export function ProductsClient({
       }
       params.delete('pagina')
       setPage(1)
-      router.push(`${pathname}?${params.toString()}`, { scroll: false })
+      // replace: cada pausa al escribir sumaba un paso al historial y «atrás»
+      // volvía letra por letra.
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
     }, 400)
 
     return () => clearTimeout(handler)
@@ -171,9 +189,22 @@ export function ProductsClient({
     } else {
       params.delete(key)
     }
-    if (key === 'categoria' && !value) {
+    if (key === 'categoria') {
       params.delete('subcategoria')
     }
+    params.delete('pagina')
+    setPage(1)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  // Categoría y rama juntas: elegir una rama desde el selector deja marcada
+  // también su categoría, como al tocarla en «Ramas».
+  const selectCategory = (categoryId: string, subcategoryId = '') => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (categoryId) params.set('categoria', categoryId)
+    else params.delete('categoria')
+    if (subcategoryId) params.set('subcategoria', subcategoryId)
+    else params.delete('subcategoria')
     params.delete('pagina')
     setPage(1)
     router.push(`${pathname}?${params.toString()}`, { scroll: false })
@@ -197,8 +228,50 @@ export function ProductsClient({
     return categories.filter((c) => c.parent_id === initialCategory && c.id !== initialCategory)
   }, [categories, initialCategory])
 
+  // La franja muestra las categorías principales; sus hijas van en «Ramas» al
+  // elegirla. Antes «MOUSE» quedaba al lado de «Electrónica». Una hija cuyo
+  // padre no tiene productos propios sigue arriba para no perderse.
+  const topCategories = useMemo(() => {
+    const ids = new Set(categories.map((c) => c.id))
+    const childCount = new Map<string, number>()
+    categories.forEach((c) => {
+      if (c.parent_id && ids.has(c.parent_id)) childCount.set(c.parent_id, (childCount.get(c.parent_id) ?? 0) + c.product_count)
+    })
+    return categories
+      .filter((c) => !c.parent_id || !ids.has(c.parent_id) || c.id === initialCategory)
+      .map((c) => ({ ...c, product_count: c.product_count + (childCount.get(c.id) ?? 0) }))
+  }, [categories, initialCategory])
+
+  // Para el selector: cada categoría principal con sus ramas, por nombre.
+  const categoryOptions = useMemo(() => {
+    const ids = new Set(categories.map((c) => c.id))
+    return topCategories
+      .filter((c) => !c.parent_id || !ids.has(c.parent_id))
+      .map((category) => ({
+        category,
+        children: categories
+          .filter((c) => c.parent_id === category.id && c.id !== category.id)
+          .sort((a, b) => a.name.localeCompare(b.name, 'es')),
+      }))
+      .sort((a, b) => a.category.name.localeCompare(b.category.name, 'es'))
+  }, [categories, topCategories])
+
   // ─── Marcas contextuales (Marcas presentes en los productos actuales) ────────
   const contextBrands = useMemo(() => {
+    // Con paginación en el servidor, `products` es solo la página visible: la
+    // lista salía con 4 marcas de 36 y, elegida una, no se podía cambiar a otra.
+    // Con una marca elegida el selector se muestra aunque no haya resultados:
+    // si no, no había cómo cambiarla.
+    if (serverPaginated && (brands.length > 0 || initialBrand)) {
+      const list = brands
+        .filter((b) => b.product_count > 0)
+        .map((b) => ({ name: b.name, count: b.product_count, logo_url: b.logo_url }))
+      if (initialBrand && !list.some((b) => b.name.toLowerCase() === initialBrand.toLowerCase())) {
+        list.unshift({ name: initialBrand, count: totalProducts, logo_url: null })
+      }
+      return list
+    }
+
     const map = new Map<string, number>()
     products.forEach((p) => {
       const b = p.brand?.trim()
@@ -223,7 +296,7 @@ export function ProductsClient({
     return brands
       .filter((b) => b.product_count > 0)
       .map((b) => ({ name: b.name, count: b.product_count, logo_url: b.logo_url }))
-  }, [products, brands])
+  }, [products, brands, serverPaginated, initialBrand, totalProducts])
 
   // ─── Filtrado y Ordenamiento Local ──────────────────────────────────────────
   const offersCount = useMemo(
@@ -236,6 +309,7 @@ export function ProductsClient({
   }, [sort])
 
   const filtered = useMemo(() => {
+    if (serverPaginated) return products
     let result = products
 
     // Filtro por ofertas localmente
@@ -249,7 +323,6 @@ export function ProductsClient({
 
     // La pagina de catalogo ya llega ordenada desde el servidor. Mantener el
     // orden local solo para usos embebidos que entregan el conjunto completo.
-    if (serverPaginated) return result
 
     // Ordenar localmente
     switch (effectiveSort) {
@@ -296,9 +369,9 @@ export function ProductsClient({
   }, [products, onlyOffers, sort, serverPaginated])
 
   // ─── Paginación ─────────────────────────────────────────────────────────────
-  const effectiveTotal = serverPaginated && !onlyOffers ? totalProducts : filtered.length
+  const effectiveTotal = serverPaginated ? totalProducts : filtered.length
   const totalPages = Math.max(1, Math.ceil(effectiveTotal / activePageSize))
-  const safePage = serverPaginated && !onlyOffers ? currentPage : Math.min(page, totalPages)
+  const safePage = serverPaginated ? currentPage : Math.min(page, totalPages)
   const pageStart = (safePage - 1) * activePageSize
   const paginated = serverPaginated ? filtered : filtered.slice(pageStart, pageStart + activePageSize)
 
@@ -308,6 +381,9 @@ export function ProductsClient({
       if (p > 1) params.set('pagina', String(p))
       else params.delete('pagina')
       router.push(`${pathname}?${params.toString()}#catalogo`, { scroll: false })
+      // Con `scroll: false` la pantalla quedaba abajo de todo y se veía el
+      // final de la página nueva.
+      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
     setPage(p)
@@ -320,6 +396,7 @@ export function ProductsClient({
       params.set('porPagina', String(size))
       params.delete('pagina')
       router.push(`${pathname}?${params.toString()}#catalogo`, { scroll: false })
+      gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
     setPageSize(size)
@@ -350,6 +427,16 @@ export function ProductsClient({
     sort !== 'default'
   )
 
+  // Sin resultados: qué filtro quitar, uno por uno.
+  const activeSubcategoryName = categories.find((c) => c.id === initialSubcategory)?.name
+  const emptyStateSuggestions = [
+    query.trim() && { key: 'q', label: `Búsqueda «${query.trim()}»`, remove: () => setQuery('') },
+    initialBrand && { key: 'marca', label: `Marca ${initialBrand}`, remove: () => updateUrlParam('marca', '') },
+    initialSubcategory && { key: 'sub', label: activeSubcategoryName ?? 'Rama', remove: () => updateUrlParam('subcategoria', '') },
+    initialCategory && { key: 'cat', label: activeCategory?.name ?? 'Categoría', remove: () => updateUrlParam('categoria', '') },
+    onlyOffers && { key: 'ofertas', label: 'Solo ofertas', remove: () => updateUrlParam('ofertas', '') },
+  ].filter((suggestion): suggestion is { key: string; label: string; remove: () => void } => Boolean(suggestion))
+
   const gridClass =
     view === 'grid'
       // Sin `grid-cols` propio, el telefono caia en una sola columna: una
@@ -362,21 +449,22 @@ export function ProductsClient({
   return (
     <>
       {/* ── TOOLBAR DE BÚSQUEDA Y FILTROS EN 1 SOLA LÍNEA ULTRA COMPACTA (STICKY) ── */}
-      <div suppressHydrationWarning className="sticky top-16 z-30 mb-3 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
+      <div suppressHydrationWarning className="relative z-30 mb-3 sm:sticky sm:top-16 sm:mb-5 space-y-1.5 rounded-xl sm:rounded-2xl border border-border/80 bg-background/95 p-1.5 sm:p-2.5 shadow-sm backdrop-blur-xl transition-all">
         
         {/* ── FILA ÚNICA: Buscador + Ofertas + Marca + Orden + Vista ── */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-2">
           {/* Input de Búsqueda */}
           {hideSearch ? (
             <div className="flex-1 min-w-0" />
           ) : (
-            <div className="relative flex-1 min-w-0">
+            <div className="relative min-w-0 basis-full sm:basis-auto sm:flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar productos..."
-                className="h-8 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-xs bg-background border-border/80 focus-visible:ring-primary"
+                aria-label="Buscar productos"
+                className="h-11 sm:h-9 rounded-lg sm:rounded-xl pl-8 pr-7 text-base sm:text-xs bg-background border-border/80 focus-visible:ring-primary"
               />
               {query && (
                 <button
@@ -417,23 +505,27 @@ export function ProductsClient({
             </button>
           )}
 
+          {/* Selector de Categoría: la franja de abajo sirve para mirar; el
+              selector, para ir directo a una que ya se conoce. */}
+          {categoryOptions.length > 0 && (
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <CategoryPicker
+                options={categoryOptions}
+                activeCategory={initialCategory}
+                activeSubcategory={initialSubcategory}
+                onSelect={selectCategory}
+              />
+            </div>
+          )}
+
           {/* Selector de Marca (Dropdown) */}
           {contextBrands.length > 0 && (
-            <div className="relative shrink-0">
-              <select
-                suppressHydrationWarning
-                value={initialBrand}
-                onChange={(e) => updateUrlParam('marca', e.target.value)}
-                className="h-8 sm:h-9 max-w-[90px] xs:max-w-[120px] sm:max-w-none rounded-lg sm:rounded-xl border border-border/80 bg-background px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary/50"
-                aria-label="Filtrar por marca"
-              >
-                <option value="">Marcas</option>
-                {contextBrands.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name} ({b.count})
-                  </option>
-                ))}
-              </select>
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <BrandPicker
+                options={contextBrands}
+                active={initialBrand}
+                onSelect={(brand) => updateUrlParam('marca', brand)}
+              />
             </div>
           )}
 
@@ -538,10 +630,11 @@ export function ProductsClient({
         {/* ── Franja de Categorías Compacta Directo Abajo del Buscador ── */}
         {categories.length > 0 && (
           <div className="pt-1 border-t border-border/50">
-            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+            <HorizontalScroller label="categorías" activeKey={initialCategory} className="flex items-center gap-1 sm:gap-1.5 pb-0.5 text-xs">
               {/* Pill "Todas" */}
               <button
                 type="button"
+                data-active={!initialCategory ? 'true' : undefined}
                 onClick={() => updateUrlParam('categoria', '')}
                 className={cn(
                   'shrink-0 flex items-center gap-1 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
@@ -554,13 +647,15 @@ export function ProductsClient({
               </button>
 
               {/* Categorías individuales */}
-              {categories.map((cat) => {
+              {topCategories.map((cat) => {
                 const isActive = initialCategory === cat.id
                 const Icon = getCategoryIcon(cat.name)
                 return (
                   <button
                     key={cat.id}
                     type="button"
+                    data-active={isActive ? 'true' : undefined}
+                    aria-pressed={isActive}
                     onClick={() => updateUrlParam('categoria', isActive ? '' : cat.id)}
                     className={cn(
                       'shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg border px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold transition-all shadow-2xs select-none',
@@ -582,14 +677,14 @@ export function ProductsClient({
                   </button>
                 )
               })}
-            </div>
+            </HorizontalScroller>
           </div>
         )}
 
         {/* ── Subcategorías / Ramas Hijas (si la categoría seleccionada tiene hijos) ── */}
         {initialCategory && childSubcategories.length > 0 && (
           <div className="pt-1 border-t border-border/60">
-            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide text-xs">
+            <HorizontalScroller label="ramas" activeKey={initialSubcategory} className="flex items-center gap-1 sm:gap-1.5 pb-0.5 text-xs">
               <span className="shrink-0 flex items-center gap-1 font-bold text-muted-foreground mr-1 text-[11px] sm:text-xs">
                 <FolderTree className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-primary" />
                 <span>Ramas:</span>
@@ -614,6 +709,8 @@ export function ProductsClient({
                   <button
                     key={sub.id}
                     type="button"
+                    data-active={isSubActive ? 'true' : undefined}
+                    aria-pressed={isSubActive}
                     onClick={() => updateUrlParam('subcategoria', isSubActive ? '' : sub.id)}
                     className={cn(
                       'shrink-0 flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold transition-all border shadow-2xs',
@@ -632,11 +729,9 @@ export function ProductsClient({
                   </button>
                 )
               })}
-            </div>
+            </HorizontalScroller>
           </div>
         )}
-
-
 
         {/* ── Chips de Filtros Activos (Mostrados juntos al lado) ── */}
         {hasAnyFilter && (
@@ -719,7 +814,7 @@ export function ProductsClient({
       </div>
 
       {/* ── GRID DE PRODUCTOS ───────────────────────────────────────────────── */}
-      <div ref={gridTopRef} className="-mt-4 pt-4" />
+      <div ref={gridTopRef} className="-mt-4 pt-4 scroll-mt-20 sm:scroll-mt-40" />
 
       {filtered.length > 0 ? (
         <div className={gridClass}>
@@ -755,13 +850,19 @@ export function ProductsClient({
             return (
               <div
                 key={`${product.organization_slug}-${product.id}`}
+                // Toda la tarjeta abre el detalle; los enlaces y botones de
+                // adentro (tienda, favorito, precio, WhatsApp) siguen a lo suyo.
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest('a, button, [role="dialog"]')) return
+                  setSelected(product)
+                }}
                 className={cn(
-                  'group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg shadow-2xs',
-                  isCompact ? 'p-3' : 'p-4'
+                  'group relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-card text-left transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg shadow-2xs',
+                  isCompact ? 'p-3' : 'p-3 sm:p-4'
                 )}
               >
                 {/* Imagen (clic abre modal de detalle) */}
-                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: displayPrice }} /></div>
+                <div className="absolute right-2 top-2 z-20"><FavoriteButton item={{ productId: product.id, slug: product.organization_slug, name: product.name, store: product.organization_name, image: product.image, price: precioOculto ? null : displayPrice }} /></div>
                 <div
                   suppressHydrationWarning
                   onClick={() => setSelected(product)}
@@ -806,7 +907,7 @@ export function ProductsClient({
                 </div>
 
                 {/* Contenido */}
-                <div className="mt-3 flex flex-1 flex-col justify-between">
+                <div className="mt-2 flex flex-1 flex-col justify-between sm:mt-3">
                   <div>
                     {/* Tienda */}
                     <Link
@@ -827,7 +928,7 @@ export function ProductsClient({
                         <span className="min-w-0 shrink-0 truncate font-medium text-foreground">{product.brand}</span>
                       )}
                       {product.category && (
-                        <span className="min-w-0 truncate">{product.category.name}</span>
+                        <span className="min-w-0 truncate">{displayCategoryName(product.category.name)}</span>
                       )}
                     </div>
 
@@ -855,7 +956,7 @@ export function ProductsClient({
                   </div>
 
                   {/* Precios y Botones */}
-                  <div className="mt-3 space-y-2.5 border-t border-border/60 pt-2">
+                  <div className="mt-2 space-y-2 border-t border-border/60 pt-2 sm:mt-3 sm:space-y-2.5">
                     {precioOculto ? (
                       <div
                         className="min-w-0"
@@ -876,7 +977,7 @@ export function ProductsClient({
                     ) : (
                       <div>
                         <p className={cn('text-base font-bold tabular-nums', hasOffer ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>
-                          {formatPrice(displayPrice)}
+                          {offer.priceFrom ? 'Desde ' : ''}{formatPrice(displayPrice)}
                         </p>
                         {hasOffer && (
                           <p className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] tabular-nums">
@@ -887,49 +988,33 @@ export function ProductsClient({
                       </div>
                     )}
 
-                    {/* Acciones directas: Detalle + Ir a tienda */}
-                    <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
-                      {precioOculto && whatsappHref ? (
-                        <a
-                          href={whatsappHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          suppressHydrationWarning
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex h-7 items-center justify-center gap-1 rounded-lg bg-[#25D366]/10 px-1.5 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs dark:text-[#4ADE80]"
-                        >
-                          <MessageCircle className="h-3 w-3" />
-                          <span>Preguntar</span>
-                        </a>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setSelected(product)}
-                          className="h-7 gap-1 rounded-lg px-1.5 text-[11px] font-semibold transition-colors hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
-                        >
-                          <Eye className="h-3 w-3" />
-                          <span>Detalle</span>
-                        </Button>
-                      )}
-
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1 rounded-lg border-border/80 px-1.5 text-[11px] font-semibold transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:h-8 sm:rounded-xl sm:px-2 sm:text-xs"
+                    {/* Una sola acción. Antes «Detalle» + «Ir a tienda» en cada
+                        tarjeta: repetido, desparejo en el celular (el botón
+                        medía 44px y el enlace 28) y «Ir a tienda» abría el
+                        producto, no la tienda. El detalle ahora se abre tocando
+                        la tarjeta. */}
+                    {precioOculto && whatsappHref ? (
+                      <a
+                        href={whatsappHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        suppressHydrationWarning
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#25D366]/10 px-2 text-xs font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366] hover:text-white sm:rounded-xl dark:text-[#4ADE80]"
                       >
-                        <Link href={`/${product.organization_slug}/productos/${product.id}`}>
-                          {/* «Ir a tienda» pide 68px y en dos columnas hay 61:
-                              desbordaba. En el telefono se acorta y la flecha,
-                              que no aporta, se va. */}
-                          <span className="sm:hidden">Tienda</span>
-                          <span className="hidden sm:inline">Ir a tienda</span>
-                          <ArrowRight className="hidden h-3 w-3 sm:inline" />
-                        </Link>
-                      </Button>
-                    </div>
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        <span>Preguntar precio</span>
+                      </a>
+                    ) : (
+                      <Link
+                        href={`/${product.organization_slug}/productos/${product.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-border/80 px-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary sm:rounded-xl"
+                      >
+                        <span>Ver en la tienda</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
@@ -946,8 +1031,27 @@ export function ProductsClient({
             No se encontraron productos
           </h3>
           <p className="mt-1.5 text-xs text-muted-foreground max-w-xs leading-relaxed">
-            No hay productos que coincidan con los filtros aplicados.
+            {emptyStateSuggestions.length > 0
+              ? 'Probá quitando uno de estos filtros:'
+              : 'No hay productos que coincidan con los filtros aplicados.'}
           </p>
+          {/* Antes solo «Limpiar todo»: con búsqueda, marca y categoría a la
+              vez, se perdían los tres para destrabar uno. */}
+          {emptyStateSuggestions.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {emptyStateSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.key}
+                  type="button"
+                  onClick={suggestion.remove}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                >
+                  <X className="h-3 w-3" />
+                  {suggestion.label}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             onClick={clearAllFilters}
@@ -957,6 +1061,8 @@ export function ProductsClient({
           </button>
         </div>
       )}
+
+      {serverPaginated && <BackToTopButton targetId="catalogo" />}
 
       {/* ── PAGINACIÓN ─────────────────────────────────────────────────────── */}
       {(totalPages > 1 || effectiveTotal > 12) && (

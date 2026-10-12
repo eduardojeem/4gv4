@@ -27,6 +27,8 @@ import { PublicStoreCredit } from '@/components/public/store-credit/PublicStoreC
 import { ProfileSettingsPanel } from '@/components/profile/profile-settings-panel'
 import { ProfileAppointments } from '@/components/profile/profile-appointments'
 import type { CustomerAppointments } from '@/lib/agenda/customer-appointments'
+import { ProfilePoints } from '@/components/profile/profile-points'
+import type { CustomerPoints } from '@/lib/loyalty/customer-points'
 
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -49,6 +51,7 @@ interface ProfileClientProps {
   storeFeatures?: { services: boolean; orders: boolean; credits: boolean; catalog: boolean }
   /** Turnos del cliente en esta tienda (solo si toma turnos). */
   appointments?: CustomerAppointments
+  loyaltyPoints?: CustomerPoints | null
   initialData: ProfileData
   userId: string
   /** Tienda de la ruta. Vacio fuera de una: decide el alcance de los datos. */
@@ -102,6 +105,7 @@ export function ProfileClient({
   repairsAvailable = true,
   storeFeatures = { services: false, orders: true, credits: true, catalog: true },
   appointments,
+  loyaltyPoints = null,
 }: ProfileClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -331,6 +335,8 @@ export function ProfileClient({
               showCredits={storeFeatures.credits}
               bookingHref={storeFeatures.services ? `${linkPrefix}/turnos` : undefined}
             />
+            {loyaltyPoints && <ProfilePoints points={loyaltyPoints} />}
+
             {storeFeatures.services && appointments && (
               <ProfileAppointments appointments={appointments} bookingHref={`${linkPrefix}/turnos`} />
             )}

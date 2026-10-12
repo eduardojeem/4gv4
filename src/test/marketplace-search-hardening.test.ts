@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('server-only', () => ({}))
 
 const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
 type QueryCall = { method: string; args: unknown[] }
 
 let calls: Record<string, QueryCall[]> = {}
+/** Si la migración de `search_text` / `public_price` ya está aplicada. */
 
 /**
  * Filas mínimas para que el catálogo llegue a armar la búsqueda: sin ninguna
@@ -14,14 +16,20 @@ let calls: Record<string, QueryCall[]> = {}
  * consultar productos y el `.or(...)` nunca se arma.
  */
 const FILAS_POR_TABLA: Record<string, unknown[]> = {
-  organizations: [{ id: 'org-1', name: 'Tienda', slug: 'tienda' }],
+  organizations: [{ id: '11000000-0000-4000-8000-000000000001', name: 'Tienda', slug: 'tienda' }],
   subscriptions: [],
 }
 
 function createFakeClient() {
   return {
+    rpc(name: string, args: unknown) {
+      ;(calls.rpc ??= []).push({ method: name, args: [args] })
+      return Promise.resolve({ data: { rows: [], total: 0, brands: [], categories: [] }, error: null })
+    },
     from(table: string) {
       const recorded = calls[table] ?? (calls[table] = [])
+      // Lo de esta consulta sola: varias preguntas a la misma tabla corren a la vez.
+      const own: QueryCall[] = []
 
       const builder: Record<string | symbol, unknown> = new Proxy({}, {
         get(_target, prop) {
@@ -29,7 +37,7 @@ function createFakeClient() {
             // Las columnas del celular y del precio oculto se preguntan con un
             // `select(...).limit(0)`: se responde que no existen para que la
             // expresión de búsqueda sea siempre la misma en el test.
-            const probe = recorded.find((c) => c.method === 'select' && /device_brand|hide_price/.test(String(c.args[0])))
+            const probe = own.find((c) => c.method === 'select' && /device_brand|hide_price/.test(String(c.args[0])))
             const value = probe
               ? { data: null, count: 0, error: { message: 'column does not exist' } }
               : { data: FILAS_POR_TABLA[table] ?? [], count: 0, error: null }
@@ -38,6 +46,7 @@ function createFakeClient() {
           }
           return (...args: unknown[]) => {
             recorded.push({ method: String(prop), args })
+            own.push({ method: String(prop), args })
             return builder
           }
         },
@@ -61,6 +70,9 @@ const { forgetHidePriceColumnCheck } = await import('@/lib/products/price-visibi
 function orArg(table: string) {
   const call = (calls[table] ?? []).find((c) => c.method === 'or')
   return call ? String(call.args[0]) : null
+}
+function catalogFilters() {
+  return (calls.rpc?.[0]?.args[0] as { p_filters: Record<string, unknown> }).p_filters
 }
 
 const UUID = '3f1c9a52-8b7e-4c1d-9a0f-2e5d7b6c4a13'
@@ -100,9 +112,9 @@ describe('el termino de busqueda no puede agregar condiciones propias', () => {
   it('lo sanitiza en el catalogo de productos', async () => {
     await getMarketplaceProductsPage(10, { q: inyeccion })
 
-    condiciones(orArg('products'), ['name', 'sku', 'brand', 'description'])
+    expect(orArg('products')).toBeNull()
     // El `cost_price.gt.500000` sobrevive como texto a buscar, no como filtro.
-    expect(orArg('products')).not.toContain('%,cost_price')
+    expect(catalogFilters().q).toBe(inyeccion)
   })
 
   it('lo sanitiza en el directorio de empresas', async () => {
@@ -115,7 +127,7 @@ describe('el termino de busqueda no puede agregar condiciones propias', () => {
     // Sanitizar de mas rompe la busqueda: un SKU `ABC-1.5L` tiene que encontrarse.
     await getMarketplaceProductsPage(10, { q: 'ABC-1.5L_max' })
 
-    expect(orArg('products')).toContain('name.ilike.%ABC-1.5L_max%')
+    expect(catalogFilters().q).toBe('ABC-1.5L_max')
   })
 
   it('busca en nombre, SKU, marca y descripcion', async () => {
@@ -123,10 +135,8 @@ describe('el termino de busqueda no puede agregar condiciones propias', () => {
     // distintos segun si lo escribias en /buscar o en /productos.
     await getMarketplaceProductsPage(10, { q: 'funda' })
 
-    const filtro = orArg('products')
-    for (const columna of ['name', 'sku', 'brand', 'description']) {
-      expect(filtro, columna).toContain(`${columna}.ilike.%funda%`)
-    }
+    expect(catalogFilters().q).toBe('funda')
+    expect(orArg('products')).toBeNull()
   })
 })
 
@@ -168,7 +178,7 @@ describe('la busqueda global consulta la base', () => {
   const pagina = leer('src/app/marketplace/buscar/page.tsx')
 
   it('le pasa el termino a las dos consultas', () => {
-    expect(pagina).toContain('getMarketplaceProductsPage(PRODUCT_RESULTS, { q: query || undefined })')
+    expect(pagina).toContain('getMarketplaceProductsPage(pageSize, { q: query || undefined, categoria, subcategoria, marca, offset, orden: sort, onlyOffers })')
     expect(pagina).toContain('getMarketplaceOrganizations(ORGANIZATION_RESULTS, { q: query || undefined })')
   })
 
@@ -187,6 +197,89 @@ describe('la busqueda global consulta la base', () => {
 
   it('cuenta sobre el total del rango, no sobre lo que alcanzo a traer', () => {
     expect(pagina).toContain('productPage.total')
-    expect(pagina).toContain('hiddenProducts')
+    expect(pagina).toContain('totalProducts={productPage.total}')
+    expect(pagina).toContain('serverPaginated hideSearch')
+  })
+})
+
+/** Los filtros de /marketplace/productos con datos reales (auditoría 2026-10). */
+describe('los filtros del catalogo', () => {
+  const llamadas = (table: string, method: string) => (calls[table] ?? []).filter((c) => c.method === method)
+
+  it('cada palabra de la busqueda tiene que aparecer, en cualquier orden', async () => {
+    // «mouse gamer» buscaba la frase literal y no encontraba «Mouse UP GAMER CHROMA».
+    await getMarketplaceProductsPage(10, { q: 'mouse  gamer' })
+
+    const ors = llamadas('products', 'or').map((c) => String(c.args[0]))
+    expect(ors).toHaveLength(0)
+    expect(catalogFilters().q).toBe('mouse  gamer')
+  })
+
+  it('la subcategoria se resuelve como la categoria: incluye las de cada tienda', async () => {
+    // Era `eq('category_id', …)` y una subcategoría general daba 0 productos.
+    await getMarketplaceProductsPage(10, { categoria: UUID, subcategoria: UUID })
+
+    expect(llamadas('products', 'eq').some((c) => c.args[0] === 'category_id')).toBe(false)
+    expect(catalogFilters().category_ids).toContain(UUID)
+    // Y mira las hijas de la categoría general.
+    expect(llamadas('global_categories', 'eq')).toContainEqual({ method: 'eq', args: ['parent_id', UUID] })
+  })
+
+  it('una subcategoria que no es UUID no consulta nada', async () => {
+    await expect(getMarketplaceProductsPage(10, { subcategoria: 'x,parent_id.not.is.null' })).resolves.toEqual({ products: [], total: 0 })
+  })
+
+  it('la marca no acepta comodines y tambien busca por el nombre oficial', async () => {
+    await getMarketplaceProductsPage(10, { marca: 'Sam_sung' })
+
+    // El guion bajo va escapado: en LIKE es un comodin.
+    const escapado = String.raw`Sam\_sung`
+    expect(llamadas('brands', 'ilike')).toContainEqual({ method: 'ilike', args: ['name', escapado] })
+    expect(llamadas('global_brands', 'ilike')).toContainEqual({ method: 'ilike', args: ['name', escapado] })
+    // Sin marcas de catálogo que coincidan, queda el texto escrito.
+    expect(catalogFilters().brand).toBe('Sam_sung')
+  })
+})
+
+describe('la barra de filtros', () => {
+  const cliente = leer('src/components/public/ProductsClient.tsx')
+
+  it('ofrece todas las marcas, no solo las de la pagina visible', () => {
+    expect(cliente).toContain('if (serverPaginated && (brands.length > 0 || initialBrand))')
+  })
+
+  it('las subcategorias van en «Ramas», no en la franja principal', () => {
+    expect(cliente).toContain('{topCategories.map((cat) => {')
+  })
+
+  it('escribir en el buscador no llena el historial', () => {
+    expect(cliente).toContain('router.replace(`${pathname}?${params.toString()}`, { scroll: false })')
+  })
+})
+
+describe('con la migracion del catalogo aplicada', () => {
+  it('busca sin tildes en search_text', async () => {
+    // «basica» no encontraba «Remera Básica».
+    await getMarketplaceProductsPage(10, { q: 'Básica Remera' })
+
+    const ors = (calls.products ?? []).filter((c) => c.method === 'or').map((c) => String(c.args[0]))
+    expect(ors).toEqual([])
+    expect(catalogFilters().q).toBe('Básica Remera')
+  })
+
+  it('ordena por el precio que se ve y deja «Consultar precio» al final', async () => {
+    await getMarketplaceProductsPage(10, { orden: 'price_asc' })
+
+    const orders = (calls.products ?? []).filter((c) => c.method === 'order').map((c) => c.args[0])
+    expect(orders).toEqual([])
+    expect(catalogFilters().sort).toBe('price_asc')
+  })
+
+  it('no vuelve a ordenar por el precio del padre cuando faltan las columnas antiguas', async () => {
+    await getMarketplaceProductsPage(10, { orden: 'price_asc' })
+
+    const orders = (calls.products ?? []).filter((c) => c.method === 'order').map((c) => c.args[0])
+    expect(orders).toEqual([])
+    expect(catalogFilters().sort).toBe('price_asc')
   })
 })

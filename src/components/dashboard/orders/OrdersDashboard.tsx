@@ -871,21 +871,17 @@ function OrderDetailDialog({
     if (!productIds.length) return
 
     const controller = new AbortController()
-    fetch('/api/public/favorites/metadata', {
+    // Con sesión: el endpoint público de favoritos ya no responde productos
+    // pausados ni privados, y el pedido tiene que mostrar su foto igual.
+    fetch('/api/orders/item-images', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productIds }),
       signal: controller.signal,
     })
       .then((res) => res.json())
-      .then((data) => {
-        if (data?.metadata) {
-          const map: Record<string, string | null> = {}
-          for (const [id, meta] of Object.entries(data.metadata as Record<string, { image: string | null }>)) {
-            map[id] = meta.image ?? null
-          }
-          setItemImages((prev) => ({ ...prev, ...map }))
-        }
+      .then((data: { images?: Record<string, string | null> }) => {
+        if (data?.images) setItemImages((prev) => ({ ...prev, ...data.images }))
       })
       .catch(() => {})
 

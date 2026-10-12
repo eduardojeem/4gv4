@@ -13,9 +13,9 @@ import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/b
 import { getPlatformAnnouncements } from '@/lib/platform/announcement'
 import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
-import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
-import { MarketplaceOrgMarquee } from '@/components/public/MarketplaceOrgMarquee'
+import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { MarketplaceBusinessPromoShowcase } from '@/components/public/MarketplaceBusinessPromoShowcase'
+import { BUSINESS_DIRECTORY_MAX_STORES, visibleDirectoryStats } from '@/lib/public/business-directory'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)
@@ -35,12 +35,26 @@ export const revalidate = 30
 const MARKETPLACE_HOME_PRODUCT_LIMIT = 24
 const MARKETPLACE_HOME_OFFER_LIMIT = 48
 
+/**
+ * Respaldo solo para `next build`. En CI se compila con un Supabase de prueba y
+ * la portada se prerenderiza: sin respaldo el build fallaba. En producción un
+ * fallo del catálogo tiene que llegar a error.tsx («No pudimos cargar el
+ * marketplace» con «Reintentar»), no mostrar un marketplace vacío que parece
+ * no tener productos. Lo prerenderizado vacío se regenera a los 30 s.
+ */
+function duringBuild<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return process.env.NEXT_PHASE === 'phase-production-build' ? promise.catch(() => fallback) : promise
+}
+
 export default async function MarketplacePage() {
-  const [organizations, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
+  const [organizations, directory, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
     getMarketplaceOrganizations().catch(() => []),
-    getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT).catch(() => ({ products: [], total: 0 })),
-    getMarketplaceBrands(30).catch(() => []),
-    getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT).catch(() => []),
+    // Solo para contar: la lista de la portada trae 24 y la cifra se quedaba en
+    // 24. Es la misma lista cacheada de /marketplace/empresas y /saas/negocios.
+    getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES).catch(() => []),
+    duringBuild(getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT), { products: [], total: 0 }),
+    duringBuild(getMarketplaceBrands(30), []),
+    duringBuild(getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT), []),
     getPlatformAnnouncements().catch(() => []),
   ])
   const marketplaceProducts = marketplacePage.products
@@ -74,6 +88,10 @@ export default async function MarketplacePage() {
     .sort((a, b) => b.products.length - a.products.length)
 
   const totalProducts = marketplacePage.total
+  // Mismo criterio que /saas/negocios: «10 tiendas» resta más de lo que suma.
+  // Cada cifra aparece sola al llegar a su mínimo.
+  const storeCount = Math.max(organizations.length, directory.length)
+  const shownStats = new Set(visibleDirectoryStats({ stores: storeCount, cities: 0, products: totalProducts }).map((stat) => stat.key))
 
   return (
     <div>
@@ -82,7 +100,7 @@ export default async function MarketplacePage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_-5%,rgba(6,182,212,0.13),transparent)] dark:bg-[radial-gradient(ellipse_80%_55%_at_50%_-5%,rgba(6,182,212,0.07),transparent)]" />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-4 py-1.5 text-sm font-medium text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
               <Store className="h-3.5 w-3.5" />
@@ -93,34 +111,42 @@ export default async function MarketplacePage() {
               <span className="block text-cyan-600 dark:text-cyan-400">en un solo lugar</span>
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base text-slate-600 dark:text-slate-400">
-              Catálogos públicos de organizaciones reales. Cada tienda es independiente y mantiene sus datos aislados.
+              Buscá por nombre, marca o código. Compará productos y consultá directamente con la tienda que los publica.
             </p>
 
-            {/* Stats */}
+            {/* Stats, cuando ya pesan */}
+            {shownStats.size > 0 && (
             <div className="mt-7 flex flex-wrap items-center justify-center gap-5 text-sm">
+              {shownStats.has('stores') && (
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-950/50">
                   <Building2 className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                 </span>
-                <strong className="font-semibold text-slate-900 dark:text-slate-100">{organizations.length}</strong> empresas
+                <strong className="font-semibold text-slate-900 dark:text-slate-100">{storeCount}</strong> tiendas para explorar
               </div>
-              <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+              )}
+              {shownStats.size > 1 && <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />}
+              {shownStats.has('products') && (
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-950/50">
                   <Package className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
                 </span>
-                <strong className="font-semibold text-slate-900 dark:text-slate-100">{totalProducts}</strong> productos
+                <strong className="font-semibold text-slate-900 dark:text-slate-100">{totalProducts.toLocaleString('es-PY')}</strong> productos
               </div>
+              )}
             </div>
+            )}
 
             <MarketplaceSearchBox className="mx-auto mt-7 max-w-xl" />
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              <Button asChild><Link href="/marketplace/productos">Ver todos los productos</Link></Button>
+              <Button asChild variant="outline"><Link href="/marketplace/empresas">Explorar tiendas</Link></Button>
+            </div>
           </div>
         </div>
       </section>
 
       {/* ── Carrusel de categorías ── */}
-      {offerGroups.length > 0 && <MarketplaceOffersSection groups={offerGroups} />}
-
       <section className="border-b border-slate-100 py-4 dark:border-slate-800/60">
         <CategoryCarouselSection
           showViewAll
@@ -128,14 +154,16 @@ export default async function MarketplacePage() {
         />
       </section>
 
+      {offerGroups.length > 0 && <MarketplaceOffersSection groups={offerGroups.slice(0, 6)} />}
+
       {/* ── Marcas ── */}
       {brands.length > 0 && (
-        <section className="border-b border-slate-100 py-10 dark:border-slate-800/60">
+        <section className="border-b border-slate-100 py-8 dark:border-slate-800/60">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <MarketplaceBrandsSection
               brands={brands}
               variant="carousel"
-              maxItems={20}
+              maxItems={12}
               showViewAll={true}
               viewAllHref="/marketplace/categorias#marcas"
             />
@@ -146,19 +174,19 @@ export default async function MarketplacePage() {
       {/* ── Carrusel de productos ── */}
       {carouselProducts.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                 <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                  Productos destacados
+                  Descubrí productos
                 </h2>
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Catálogo público de todas las empresas
               </p>
             </div>
-            <Button asChild variant="outline" size="sm" className="hidden gap-2 sm:flex">
+            <Button asChild variant="outline" size="sm" className="gap-2 shrink-0">
               <Link href="/marketplace/productos">
                 Ver todos
                 <ArrowRight className="h-4 w-4" />
@@ -166,11 +194,11 @@ export default async function MarketplacePage() {
             </Button>
           </div>
 
-          <MarketplaceProductCarousel products={carouselProducts} />
+          <MarketplaceProductCarousel products={carouselProducts.slice(0, 16)} rows={2} autoPlay={false} />
         </section>
       )}
 
-      {/* ── Vitrina Publicitaria de Negocios Registrados (Estilo umarket) ── */}
+      {/* Vitrina visual original: navegación manual, sin repetir otra grilla de productos por tienda. */}
       {organizations.length > 0 && (
         <MarketplaceBusinessPromoShowcase organizations={organizations} />
       )}
@@ -187,7 +215,7 @@ export default async function MarketplacePage() {
             {/* Texto y Beneficios */}
             <div className="text-center lg:text-left space-y-4 max-w-2xl">
               <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3.5 py-1 text-xs font-bold text-cyan-300 shadow-xs backdrop-blur-md">
-                <Rocket className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+                <Rocket className="h-3.5 w-3.5 text-cyan-400" />
                 <span>Especial para Comercios y Servicios Técnicos</span>
               </div>
 
@@ -265,17 +293,14 @@ export default async function MarketplacePage() {
             </Button>
           </div>
 
-          {/* Carrusel en movimiento de empresas asociadas */}
-          <MarketplaceOrgMarquee organizations={organizations} className="mt-2" />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {organizations.slice(0, 8).map((organization) => (
+              <OrganizationDirectoryCard key={organization.id} organization={organization} />
+            ))}
+          </div>
         </section>
       )}
 
-      {/* ── Productos por empresa ── */}
-      {organizations.filter((o) => o.featured_products.length > 0).slice(0, 8).length > 0 && (
-        <MarketplaceOrgProductGrid
-          organizations={organizations.filter((o) => o.featured_products.length > 0).slice(0, 8)}
-        />
-      )}
     </div>
   )
 }

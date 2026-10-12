@@ -48,6 +48,7 @@ import type { RepairDeliveryEligibility } from '../lib/repair-charge'
 import type { CartProductCreditPlan } from '../lib/cart-credit-plans'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 import { firstPaymentError } from '@/lib/credits/first-payment'
+import { pointsPreviewText, useLoyaltyPreview } from '../hooks/useLoyaltyPreview'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -231,6 +232,17 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     ? mixedImmediateAmount
     : paymentMethod === 'credit' ? 0 : amountDue
   const confirmationTotal = cartCalculations.total + (confirmationHasCredit ? confirmationCreditSummary.interestAmount : 0)
+  // Puntos que va a sumar: solo lo que se paga ahora, como acredita el servidor.
+  const loyaltyPreview = useLoyaltyPreview(isCheckoutOpen && Boolean(selectedCustomer))
+  const [redeemVersion, setRedeemVersion] = React.useState(0)
+  const pointsPreview = selectedCustomer
+    ? pointsPreviewText({
+        ...loyaltyPreview,
+        pointsBase: confirmationHasCredit ? Math.max(0, amountDue - confirmationCreditPrincipal) : amountDue,
+        onCredit: confirmationHasCredit,
+      })
+    : null
+
   const initialPaymentError = confirmationHasCredit ? firstPaymentError(creditTerms.firstPayment, confirmationCreditSummary.installmentAmount, confirmationCreditSummary.firstInstallmentTiming) : null
   const paymentLabel = isMixedPayment
     ? confirmationHasCredit ? 'Pago mixto con crédito' : 'Pago mixto'
@@ -342,6 +354,9 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               selectedRepairIds={selectedRepairIds}
               supabaseStatusToLabel={supabaseStatusToLabel}
               paymentStatus={paymentStatus}
+              pointsPreview={pointsPreview}
+              redemption={loyaltyPreview.redemption}
+              onPointsRedeemed={() => setRedeemVersion((version) => version + 1)}
             />
 
             {/* Selector de reparacion vinculada (Multiple) */}
@@ -560,7 +575,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             )}
 
             <StoreCreditPanel
-              key={selectedCustomer || 'sin-cliente'}
+              // Tras un canje de puntos el saldo a favor cambió: se recarga.
+              key={`${selectedCustomer || 'sin-cliente'}:${redeemVersion}`}
               customerId={selectedCustomer}
               cartTotal={cartCalculations.total}
               formatCurrency={formatCurrency}

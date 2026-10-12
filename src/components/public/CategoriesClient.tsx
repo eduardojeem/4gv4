@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { createElement, useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight, Briefcase, ChevronDown,
@@ -12,6 +12,8 @@ import {
 import { Input } from '@/components/ui/input'
 import type { MarketplaceCategory } from '@/lib/public/marketplace'
 import { cn } from '@/lib/utils'
+import { categoryVisual, type CategoryBranchId } from '@/lib/public/category-taxonomy'
+import { displayCategoryName } from '@/lib/public/display-names'
 
 type Props = {
   categories: MarketplaceCategory[]
@@ -22,11 +24,10 @@ type ViewMode = 'branches' | 'grid'
 
 // ─── Estructura de Ramas Principales de la Taxonomía ─────────────────────────────
 type BranchDefinition = {
-  id: string
+  id: CategoryBranchId
   name: string
   description: string
   icon: React.ElementType
-  keywords: string[]
   theme: {
     iconBg: string
     badge: string
@@ -41,7 +42,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Tecnología & Electrónica',
     description: 'Celulares, computadoras, repuestos, gaming, audio y accesorios tecnológicos',
     icon: Cpu,
-    keywords: ['electrónica', 'electronica', 'tecnología', 'tecnologia', 'computación', 'computacion', 'computadoras', 'celulares', 'smartphone', 'tablets', 'tv', 'televisores', 'repuestos', 'audio', 'video', 'redes', 'impresoras', 'gaming', 'almacenamiento', 'accesorios', 'pantallas', 'baterias', 'cargadores', 'discos', 'pendrives'],
     theme: {
       iconBg: 'bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400',
       badge: 'border-cyan-200/60 bg-cyan-50 text-cyan-700 dark:border-cyan-900/40 dark:bg-cyan-950/40 dark:text-cyan-300',
@@ -54,7 +54,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Moda, Ropa & Calzados',
     description: 'Indumentaria masculina, femenina, calzados, zapatillas y accesorios de vestir',
     icon: Shirt,
-    keywords: ['ropa', 'indumentaria', 'moda', 'calzado', 'zapatillas', 'zapatos', 'vestidos', 'remeras', 'pantalones', 'camisas', 'joyería', 'joyeria', 'relojes', 'bolsos', 'carteras', 'moda'],
     theme: {
       iconBg: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400',
       badge: 'border-violet-200/60 bg-violet-50 text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/40 dark:text-violet-300',
@@ -67,7 +66,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Hogar, Muebles & Decoración',
     description: 'Mobiliario, electrodomésticos, jardín, bazar, iluminación y confort',
     icon: Home,
-    keywords: ['hogar', 'muebles', 'decoración', 'decoracion', 'jardín', 'jardin', 'bazar', 'cocina', 'electrodomésticos', 'electrodomesticos', 'colchones', 'living', 'comedor', 'iluminación', 'iluminacion'],
     theme: {
       iconBg: 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400',
       badge: 'border-amber-200/60 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300',
@@ -80,7 +78,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Alimentos, Bebidas & Supermercado',
     description: 'Productos de despensa, bebidas, confitería, gastronomía y almacén',
     icon: ShoppingBasket,
-    keywords: ['alimentos', 'comida', 'bebidas', 'supermercado', 'restaurante', 'café', 'cafe', 'golosinas', 'vinos', 'cervezas', 'lácteos', 'lacteos', 'carnes', 'panadería', 'panaderia', 'gourmet', 'despensa'],
     theme: {
       iconBg: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400',
       badge: 'border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300',
@@ -93,7 +90,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Ferretería, Herramientas & Obras',
     description: 'Herramientas eléctricas y manuales, repuestos mecánicos, construcción y automotor',
     icon: Wrench,
-    keywords: ['herramientas', 'ferretería', 'ferreteria', 'construcción', 'construccion', 'pinturas', 'repuestos', 'automotor', 'autos', 'motos', 'plomería', 'plomeria', 'electricidad', 'tornillos', 'materiales'],
     theme: {
       iconBg: 'bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400',
       badge: 'border-orange-200/60 bg-orange-50 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/40 dark:text-orange-300',
@@ -106,7 +102,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Belleza, Salud & Cosmética',
     description: 'Cuidado de la piel, perfumería, cosméticos, farmacia, estética y mascotas',
     icon: Sparkles,
-    keywords: ['belleza', 'cosméticos', 'cosmeticos', 'perfumería', 'perfumeria', 'peluquería', 'peluqueria', 'salud', 'farmacia', 'cuidado', 'skincare', 'maquillaje', 'mascotas', 'veterinaria'],
     theme: {
       iconBg: 'bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400',
       badge: 'border-rose-200/60 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300',
@@ -119,7 +114,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Deportes, Ocio & Hobbies',
     description: 'Equipamiento deportivo, fitness, aire libre, bicicletas, música y juguetes',
     icon: Trophy,
-    keywords: ['deportes', 'fitness', 'gimnasio', 'pesas', 'bicicletas', 'outdoor', 'camping', 'pesca', 'juguetes', 'videojuegos', 'música', 'musica', 'instrumentos', 'libros', 'fotografía', 'fotografia'],
     theme: {
       iconBg: 'bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400',
       badge: 'border-teal-200/60 bg-teal-50 text-teal-700 dark:border-teal-900/40 dark:bg-teal-950/40 dark:text-teal-300',
@@ -132,7 +126,6 @@ const MAIN_BRANCHES: BranchDefinition[] = [
     name: 'Servicios, Librería & Otros',
     description: 'Papelería comercial, insumos de oficina, servicios profesionales y otros rubros',
     icon: Briefcase,
-    keywords: ['servicios', 'oficina', 'papelería', 'papeleria', 'librería', 'libreria', 'educación', 'educacion', 'impresiones', 'capacitacion', 'varios', 'otros', 'insumos'],
     theme: {
       iconBg: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400',
       badge: 'border-indigo-200/60 bg-indigo-50 text-indigo-700 dark:border-indigo-900/40 dark:bg-indigo-950/40 dark:text-indigo-300',
@@ -142,21 +135,21 @@ const MAIN_BRANCHES: BranchDefinition[] = [
   },
 ]
 
-function classifyCategoryIntoBranch(categoryName: string): string {
-  const normalized = categoryName.toLowerCase().trim()
-
-  for (const branch of MAIN_BRANCHES) {
-    for (const kw of branch.keywords) {
-      if (normalized.includes(kw) || kw.includes(normalized)) {
-        return branch.id
-      }
-    }
-  }
-
-  return 'servicios' // Default branch
+/**
+ * La rama sale de la misma lista que el icono (category-taxonomy). Antes cada
+ * rama tenía sus palabras y se buscaban como texto suelto: «LAVARROPA» caía en
+ * Moda por «ropa» y «Accesorios de belleza» en Tecnología por «accesorios».
+ */
+function classifyCategoryIntoBranch(categoryName: string): CategoryBranchId {
+  return categoryVisual(categoryName).branch
 }
 
-export function CategoriesClient({ categories }: Props) {
+export function CategoriesClient({ categories: rawCategories }: Props) {
+  // Los nombres como se muestran en todo el marketplace: «HOGAR» → «Hogar».
+  const categories = useMemo(
+    () => rawCategories.map((category) => ({ ...category, name: displayCategoryName(category.name) })),
+    [rawCategories]
+  )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   // Cuadricula por defecto: es la que muestra todas las categorias de una,
@@ -409,7 +402,7 @@ export function CategoriesClient({ categories }: Props) {
                           className="group flex items-center justify-between gap-2 rounded-xl border border-border/80 bg-background p-3.5 text-xs font-medium text-foreground transition-all hover:border-primary/50 hover:bg-primary/[0.03] hover:shadow-xs"
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="h-2 w-2 rounded-full bg-primary/60 group-hover:bg-primary group-hover:scale-125 transition-all" />
+                            {createElement(categoryVisual(sub.name).icon, { className: 'h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary', 'aria-hidden': true })}
                             <span className="truncate font-semibold text-foreground group-hover:text-primary transition-colors">
                               {sub.name}
                             </span>
@@ -438,7 +431,6 @@ export function CategoriesClient({ categories }: Props) {
           {filteredCategories.map((cat, _i) => {
             const branchId = classifyCategoryIntoBranch(cat.name)
             const branch = MAIN_BRANCHES.find((b) => b.id === branchId) ?? MAIN_BRANCHES[0]
-            const Icon = branch.icon
             const href = `/marketplace/productos?categoria=${cat.id}`
 
             return (
@@ -457,7 +449,7 @@ export function CategoriesClient({ categories }: Props) {
                       'flex h-11 w-11 items-center justify-center rounded-xl shadow-xs transition-transform group-hover:scale-105',
                       branch.theme.iconBg
                     )}>
-                      <Icon className="h-5 w-5" />
+                      {createElement(categoryVisual(cat.name).icon, { className: 'h-5 w-5', 'aria-hidden': true })}
                     </div>
 
                     <span className={cn(

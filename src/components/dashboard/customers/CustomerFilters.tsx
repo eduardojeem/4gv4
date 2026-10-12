@@ -366,7 +366,7 @@ export function CustomerFilters({
 
   return (
     <>
-    <Card className="border border-slate-200/80 dark:border-white/10 shadow-sm bg-white dark:bg-[#0d1117] rounded-2xl overflow-hidden transition-all">
+    <Card className="relative z-20 border border-slate-200/80 dark:border-white/10 shadow-sm bg-white dark:bg-[#0d1117] rounded-2xl overflow-visible transition-all">
       <CardHeader className={cn('px-4 pb-2 pt-4 sm:px-5', compact && 'pt-3')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white sm:text-base">

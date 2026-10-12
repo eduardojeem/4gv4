@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { CustomerCreditInfo } from './CustomerCreditInfo'
+import { CustomerCreditFile } from './credit-file/CustomerCreditFile'
 import { CustomerGlobalPaymentModal } from './CustomerGlobalPaymentModal'
 import { CustomerHistoryList } from './CustomerHistoryList'
 import { SaleDetailsModal } from '@/app/dashboard/pos/components/SaleDetailsModal'
@@ -491,6 +492,9 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               <Coins className="mr-2 h-4 w-4" />
               Puntos
             </TabsTrigger>
+            <TabsTrigger value="credit-file" className={TAB_TRIGGER}>
+              <ShieldCheck className="mr-2 h-4 w-4" />Ficha para crédito
+            </TabsTrigger>
             <TabsTrigger
               value="authorized"
               className={TAB_TRIGGER}
@@ -770,6 +774,9 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
         </TabsContent>
 
         {/* ── Créditos y pagos ────────────────────────────────────────────── */}
+        <TabsContent value="credit-file" className="mt-0">
+          <CustomerCreditFile customerId={String(currentCustomer.id)} existingRuc={currentCustomer.ruc || undefined} onCustomerUpdated={() => { void refreshCredits(); void refreshCustomer() }} />
+        </TabsContent>
         <TabsContent value="credits" className="mt-0 space-y-6">
           <CustomerCreditInfo
             customer={currentCustomer}

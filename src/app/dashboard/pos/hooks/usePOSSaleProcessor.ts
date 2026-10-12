@@ -42,6 +42,8 @@ export interface ProcessSaleResult {
     tax?: number
     discount?: number
     creditSchedule?: unknown
+    /** Puntos de fidelidad que sumó la venta, para el comprobante. */
+    loyaltyPoints?: number
     [key: string]: unknown
   }
   error?: string
@@ -367,6 +369,8 @@ export function usePOSSaleProcessor() {
 
           const persistedReceipt = {
             ...receiptData,
+            // «¡Ganaste X puntos!»: el comprobante lo tenía armado pero nadie le pasaba el número.
+            loyaltyPoints: Number(saleResult?.data?.loyaltyPoints) || 0,
             total: Number.isFinite(Number(saleResult?.data?.total))
               ? Number(saleResult.data.total)
               : receiptData.total,
@@ -594,6 +598,8 @@ export function usePOSSaleProcessor() {
 
         const persistedReceipt = {
           ...receiptData,
+          // «¡Ganaste X puntos!»: el comprobante lo tenía armado pero nadie le pasaba el número.
+          loyaltyPoints: Number(saleResult?.data?.loyaltyPoints) || 0,
           total: Number.isFinite(Number(saleResult?.data?.total))
             ? Number(saleResult.data.total)
             : receiptData.total,

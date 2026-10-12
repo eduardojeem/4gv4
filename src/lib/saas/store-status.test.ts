@@ -87,8 +87,9 @@ describe('cada tienda trae sus propios destacados', () => {
   const marketplace = readFileSync(resolve(process.cwd(), 'src/lib/public/marketplace.ts'), 'utf8')
 
   it('se piden por tienda, con su propio tope', () => {
-    expect(marketplace).toContain('organizationIds.map((organizationId) =>')
-    expect(marketplace).toContain('.limit(FEATURED_PRODUCTS_PER_ORGANIZATION)')
+    // Desde 2fd85f79 cada tienda pide su página al catálogo efectivo, con su tope.
+    expect(marketplace).toContain('organizationIds.map(async (organizationId) =>')
+    expect(marketplace).toContain('getMarketplaceProductsPageUncached(FEATURED_PRODUCTS_PER_ORGANIZATION, { organizationId })')
   })
 
   it('ya no hay un pozo compartido entre todas las tiendas', () => {

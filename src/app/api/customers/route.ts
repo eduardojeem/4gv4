@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server'
 import { customerIdsWithOutstandingDebt } from '@/lib/credits/customers-with-debt'
+import { CreditFileError, creditFileErrorResponse, validateGenericCreditLimitUpdate } from '@/lib/credits/credit-file-server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { loadCustomerSpend } from '@/lib/customers/customer-spend-server'
+import { customerIdsWithAtLeastPoints, loadRealLoyaltyBalances, withRealLoyaltyPoints } from '@/lib/loyalty/customer-balances'
 import { sanitizeSearchTerm } from '@/lib/api/sanitize-search'
+import { customerDirectorySearchFilter } from '@/lib/customers/directory-search'
 import { duplicatesMessage, findCustomerDuplicates } from '@/lib/customers/duplicate-check'
 import {
   buildCustomerIdentity,
@@ -179,7 +182,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit') || 50)))
     // Sanitizado: se interpola en un filtro `.or(...)` de PostgREST.
-    const search = sanitizeSearchTerm(searchParams.get('search'))
+    const search = customerDirectorySearchFilter(searchParams.get('search') || '')
     // Busqueda directa por id: el `search` de texto no consulta la columna id,
     // asi que resolver un cliente por UUID requiere su propio parametro.
     const idParam = searchParams.get('id')?.trim()
@@ -225,12 +228,17 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       }
     }
 
+    // «Con al menos N puntos» contra el saldo real, no contra la columna vieja.
+    const conPuntos = Number.isFinite(minLoyaltyPoints) && minLoyaltyPoints > 0
+      ? await customerIdsWithAtLeastPoints(organization.id, minLoyaltyPoints)
+      : null
+
     const buildQuery = () => {
       let query = supabase.from('customers').select('*', { count: 'exact' }).eq('organization_id', organization.id)
 
       if (idParam) query = query.eq('id', idParam)
 
-      if (search) query = query.or(`name.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,company.ilike.%${search}%,company_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,customer_code.ilike.%${search}%,ruc.ilike.%${search}%`)
+      if (search) query = query.or(search)
 
       if (status && status !== 'all') query = query.eq('status', statusForDatabase(status))
       if (customerType && customerType !== 'all') query = query.eq('customer_type', customerType)
@@ -239,7 +247,10 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       if (salesperson && salesperson !== 'all') query = query.ilike('assigned_salesperson', sanitizeSearchTerm(salesperson) || salesperson)
       if (Number.isFinite(minCreditScore) && minCreditScore > 0) query = query.gte('credit_score', minCreditScore)
       if (Number.isFinite(maxCreditScore) && maxCreditScore < 10) query = query.lte('credit_score', maxCreditScore)
-      if (Number.isFinite(minLoyaltyPoints) && minLoyaltyPoints > 0) query = query.gte('loyalty_points', minLoyaltyPoints)
+      if (Number.isFinite(minLoyaltyPoints) && minLoyaltyPoints > 0) {
+        if (conPuntos) query = query.in('id', conPuntos.length > 0 ? conPuntos : ['00000000-0000-0000-0000-000000000000'])
+        else query = query.gte('loyalty_points', minLoyaltyPoints)
+      }
       if (Number.isFinite(minCreditLimit) && minCreditLimit > 0) query = query.gt('credit_limit', 0)
       if (hasDebt) query = query.in('id', deudores.length > 0 ? deudores : ['00000000-0000-0000-0000-000000000000'])
       if (tags.length > 0) query = query.overlaps('tags', tags)
@@ -298,6 +309,9 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       if (activeResult.error) throw activeResult.error
       summary = { total: totalResult.count ?? 0, active: activeResult.count ?? 0 }
     }
+
+    const balances = await loadRealLoyaltyBalances(organization.id, (data ?? []).map((row) => String(row.id)))
+    data = withRealLoyaltyPoints(data ?? [], balances)
 
     return NextResponse.json({
       success: true,
@@ -386,6 +400,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
     }
 
     const { id, ...updates } = validation.data
+    await validateGenericCreditLimitUpdate(organization.id, id, updates.credit_limit)
     const supabase = await createClient()
 
     const { data: current, error: currentError } = await supabase
@@ -438,6 +453,7 @@ export const PUT = withTenantAuth({ permission: 'crm.customers.manage', module: 
 
     return NextResponse.json({ success: true, data: normalizeCustomerResponse(data) })
   } catch (error) {
+    if (error instanceof CreditFileError) return creditFileErrorResponse(error)
     logger.error('Customers API PUT error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo actualizar el cliente.' }, { status: 500 })
   }

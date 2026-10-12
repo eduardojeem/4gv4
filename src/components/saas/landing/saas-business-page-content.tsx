@@ -18,7 +18,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { BusinessDirectoryPage } from '@/lib/public/business-directory'
+import { showcaseLogos, visibleDirectoryStats, type BusinessDirectoryPage } from '@/lib/public/business-directory'
 import { describeCatalogState } from '@/lib/public/catalog-state'
 import { rubroLabel } from '@/lib/public/organization-rubro'
 import { organizationAccentColor } from '@/lib/public/organization-brand'
@@ -109,11 +109,9 @@ export function SaaSBusinessPageContent({ initialPage }: Props) {
   const firstShown = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
   const lastShown = Math.min(result.page * result.pageSize, result.total)
 
-  const stats = [
-    { value: summary.stores, label: summary.stores === 1 ? 'negocio publicado' : 'negocios publicados' },
-    { value: summary.cities, label: summary.cities === 1 ? 'ciudad' : 'ciudades' },
-    { value: summary.products, label: summary.products === 1 ? 'producto publicado' : 'productos publicados' },
-  ].filter((stat) => stat.value > 0)
+  // Solo las cifras que ya convencen; mientras tanto, los negocios reales.
+  const stats = visibleDirectoryStats(summary)
+  const logos = stats.length === 0 ? showcaseLogos(initialPage.items) : []
 
   return (
     <div className="overflow-hidden">
@@ -138,8 +136,8 @@ export function SaaSBusinessPageContent({ initialPage }: Props) {
             Tiendas, comercios y talleres que venden, controlan su stock y publican su catálogo con nosotros. Entrá a cualquiera y mirá cómo atiende.
           </p>
 
-          {/* Cifras reales de lo que se muestra abajo. */}
-          {stats.length > 0 && (
+          {/* Cifras reales de lo que se muestra abajo, cuando ya pesan. */}
+          {stats.length > 0 ? (
             <dl className="mx-auto mt-7 flex max-w-xl flex-wrap items-center justify-center gap-x-8 gap-y-3">
               {stats.map((stat) => (
                 <div key={stat.label} className="flex flex-col items-center">
@@ -148,6 +146,28 @@ export function SaaSBusinessPageContent({ initialPage }: Props) {
                 </div>
               ))}
             </dl>
+          ) : hasStores && (
+            <div className="mx-auto mt-7 flex max-w-xl flex-col items-center gap-3">
+              {logos.length >= 3 && (
+                <ul aria-label="Algunos negocios publicados" className="flex flex-wrap items-center justify-center gap-2.5">
+                  {logos.map((store) => (
+                    <li key={store.id}>
+                      <Link
+                        href={`/${store.slug}/inicio`}
+                        title={store.name}
+                        className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-transform hover:-translate-y-0.5 dark:border-slate-700 dark:bg-slate-900"
+                      >
+                        {/* Arriba de todo: sin carga diferida. */}
+                        <AppImage src={store.logo_url} alt={`Logo de ${store.name}`} className="h-full w-full object-contain p-1.5" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Tiendas, importadoras y talleres de Paraguay ya venden con nosotros.
+              </p>
+            </div>
           )}
 
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
