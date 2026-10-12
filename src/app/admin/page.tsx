@@ -44,6 +44,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isRouteAvailable } from '@/lib/navigation/route-modules'
 
 type MetricTone = 'neutral' | 'urgent' | 'positive' | 'warning' | 'info'
 
@@ -187,7 +188,12 @@ export default function AdminHome() {
   }, [moduleFilter, sections])
 
   // El resumen financiero se consulta contra la organización activa
-  const canSeeFinances = isAdmin || hasPermission('finances.read')
+  // Los accesos directos piden lo mismo que el menú: el permiso y el módulo de
+  // la sección (ROUTE_MODULES). Antes Finanzas e Inventario aparecían siempre y
+  // llevaban a una pantalla bloqueada.
+  const canSeeFinances = (isAdmin || hasPermission('finances.read')) && isRouteAvailable('/admin/finances', effectiveModules)
+  const canSeeInventory = isRouteAvailable('/admin/inventory', effectiveModules)
+  const canSeeCashMonitor = isRouteAvailable('/admin/cash-monitor', effectiveModules)
   const branchScope = selectedBranch?.name ?? 'Todas las sucursales'
   const cashAlertsCount = navBadges['cash-alerts'] ?? 0
 
@@ -252,6 +258,7 @@ export default function AdminHome() {
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1 shrink-0">
             Accesos Rápidos:
           </span>
+          {canSeeCashMonitor ? (
           <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
             <Link href="/admin/cash-monitor">
               <Monitor className="h-3.5 w-3.5" />
@@ -263,6 +270,7 @@ export default function AdminHome() {
               ) : null}
             </Link>
           </Button>
+          ) : null}
           {canSeeFinances ? (
             <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
               <Link href="/admin/finances">
@@ -271,6 +279,7 @@ export default function AdminHome() {
               </Link>
             </Button>
           ) : null}
+          {canSeeInventory ? (
           <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
             <Link href="/admin/inventory">
               <Package className="h-3.5 w-3.5" />
@@ -282,6 +291,7 @@ export default function AdminHome() {
               ) : null}
             </Link>
           </Button>
+          ) : null}
           <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-medium shrink-0 rounded-full">
             <Link href="/admin/users">
               <Users className="h-3.5 w-3.5" />
@@ -330,14 +340,14 @@ export default function AdminHome() {
               </div>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-center">
-              {cashAlertsCount > 0 ? (
+              {canSeeCashMonitor && cashAlertsCount > 0 ? (
                 <Button asChild size="sm" variant="default" className="gap-1">
                   <Link href="/admin/cash-monitor">
                     Resolver Cajas
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </Button>
-              ) : overviewMetrics.lowStockCount > 0 ? (
+              ) : canSeeInventory && overviewMetrics.lowStockCount > 0 ? (
                 <Button asChild size="sm" variant="outline" className="gap-1">
                   <Link href="/admin/inventory">
                     Revisar Stock
@@ -395,7 +405,7 @@ export default function AdminHome() {
             href="/admin/analytics"
           />
 
-          <StatCard
+          {canSeeCashMonitor ? <StatCard
             label="Monitor de Cajas"
             value={`${overviewMetrics.openCashRegisters} abiertas`}
             secondary={cashAlertsCount > 0 ? `${cashAlertsCount} alertas pendientes` : 'Arqueos en regla'}
@@ -403,7 +413,7 @@ export default function AdminHome() {
             tone={cashAlertsCount > 0 ? 'urgent' : 'neutral'}
             badgeText={cashAlertsCount > 0 ? 'Atención requerida' : undefined}
             href="/admin/cash-monitor"
-          />
+          /> : null}
 
           {hasRepairs ? (
             <StatCard

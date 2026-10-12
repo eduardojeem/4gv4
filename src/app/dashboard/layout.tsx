@@ -12,6 +12,7 @@ import { SessionTrackingProvider } from '@/components/providers/session-tracking
 import { DashboardGuard } from '@/components/dashboard/DashboardGuard'
 import { ActiveOrganizationProvider } from '@/contexts/ActiveOrganizationContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { RouteModuleGate } from '@/components/admin/RouteModuleGate'
 
 export default function DashboardLayout({
   children,
@@ -37,7 +38,7 @@ export default function DashboardLayout({
                       >
                         <div className="min-h-full">
                           <DemoBanner />
-                          {children}
+                          <RouteModuleGate>{children}</RouteModuleGate>
                         </div>
                       </main>
                       <MobileNav />
