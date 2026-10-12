@@ -1,4 +1,5 @@
-import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
+const formatCurrency = (amount: number) => formatCurrencyBase(amount, { maximumFractionDigits: 2 })
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId, formatCustomerId } from '@/lib/utils'
 import { CREDIT_PAPER_WIDTH_MM, type CreditPaperFormat } from './paper'

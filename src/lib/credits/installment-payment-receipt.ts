@@ -1,8 +1,10 @@
-import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
+const formatCurrency = (amount: number) => formatCurrencyBase(amount, { maximumFractionDigits: 2 })
 import { whatsappNumber } from '@/lib/receipt-utils'
 
 /** Lo que se registró al cobrar una cuota desde la caja. */
 export interface InstallmentPaymentReceipt {
+  receiptNumber?: string
   storeName: string
   customerName: string
   customerPhone?: string | null
@@ -25,6 +27,7 @@ export function buildInstallmentPaymentText(receipt: InstallmentPaymentReceipt) 
   return [
     `*${receipt.storeName}*`,
     'Comprobante de pago de crédito',
+    ...(receipt.receiptNumber ? ['Nº: ' + receipt.receiptNumber] : []),
     '',
     `Cliente: ${receipt.customerName}`,
     `Fecha: ${when(receipt.paidAt)}`,
@@ -53,6 +56,7 @@ export function installmentPaymentHtml(receipt: InstallmentPaymentReceipt) {
 h1{font-size:15px;text-align:center;margin:0 0 2px}p{margin:0;text-align:center;color:#555}.row{display:flex;justify-content:space-between;gap:8px;margin:4px 0}
 .strong{font-weight:700;font-size:14px}hr{border:0;border-top:1px dashed #999;margin:8px 0}.foot{margin-top:10px;text-align:center;font-size:11px;color:#555}</style></head>
 <body><h1>${escapeHtml(receipt.storeName)}</h1><p>Comprobante de pago de crédito</p><hr>
+${receipt.receiptNumber ? row('Comprobante', receipt.receiptNumber) : ''}
 ${row('Cliente', receipt.customerName)}${row('Fecha', when(receipt.paidAt))}<hr>
 ${row('Pagó', formatCurrency(receipt.amount), true)}${row('Medio', `${METHOD_LABELS[receipt.method] ?? receipt.method}${receipt.reference ? ` · ${receipt.reference}` : ''}`)}
 ${row('Saldo pendiente', formatCurrency(Math.max(0, receipt.balanceAfter)))}<hr>

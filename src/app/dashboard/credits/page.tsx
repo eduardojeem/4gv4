@@ -53,6 +53,7 @@ function CreditsDashboardContent() {
     setFilterValues,
     markInstallmentPaid,
     hasPendingCreditPayment,
+    pendingCreditPayments = [],
     creditById,
     remainingByCredit,
     paidByCredit,
@@ -411,6 +412,13 @@ function CreditsDashboardContent() {
           </div>
         </div>
 
+        {pendingCreditPayments.length > 0 && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p>Hay cobros pendientes de confirmar. Recuperá el comprobante; no vuelvas a recibir el dinero.</p>
+          {pendingCreditPayments.map(attempt => <Button key={attempt.creditId} type="button" variant="outline" className="min-h-11 w-full" onClick={() => {
+            const original = installments.find(row => row.id === attempt.installmentId)
+            if (original) openPaymentDialogForInstallment(original, 'credit')
+          }}>Recuperar comprobante · {attempt.customerName}</Button>)}
+        </div>}
         {/* Acciones principales de 1-Clic */}
         <div className="flex flex-wrap items-center gap-2">
           <Button

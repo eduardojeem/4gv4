@@ -10,7 +10,23 @@ vi.mock('@/contexts/branch-context', () => ({ useOptionalBranch: () => undefined
 vi.mock('@/lib/config', () => ({ config: { supabase: { isConfigured: false } } }))
 import { useCredits, isInstallmentLate } from '@/hooks/use-credits'
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); context.organizationId = 'org-a' })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); sessionStorage.clear(); context.organizationId = 'org-a' })
+
+it('exposes recovery for a completed credit with no pending installment', async () => {
+  sessionStorage.setItem('collection-attempt:v1:org-a:user:customer-a', JSON.stringify({
+    endpoint: '/api/credits', fingerprint: 'frozen', payload: { installmentId: 'paid-installment', amount: 100, idempotencyKey: 'saved-key' },
+  }))
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: {
+    credits: [{ id: 'credit-a', customer_id: 'customer-a', status: 'completed' }],
+    installments: [{ id: 'paid-installment', credit_id: 'credit-a', status: 'paid', amount: 100, amount_paid: 100 }],
+    payments: [], summary: [{credit_id:'credit-a',saldo_pendiente:25}], installmentsProgress: [], customers: [], sales: [], saleItems: [],
+    globalSummary: { outstanding: 0 }, pagination: { complete: true },
+  } }))))
+  const { result } = renderHook(() => useCredits())
+  await waitFor(() => expect(result.current.loading).toBe(false))
+  expect(result.current.pendingCreditPayments).toEqual([expect.objectContaining({ creditId: 'credit-a', installmentId: 'paid-installment' })])
+  expect(result.current.remainingByCredit['credit-a']).toBe(0)
+})
 
 it('uses the organization calendar when deciding whether an installment is overdue', () => {
   vi.useFakeTimers()

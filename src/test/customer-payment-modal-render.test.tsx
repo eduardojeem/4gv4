@@ -4,6 +4,8 @@ import { CustomerGlobalPaymentModal } from '@/components/dashboard/customers/Cus
 import type { Customer } from '@/hooks/use-customer-state'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }))
+vi.mock('@/hooks/use-auth', () => ({ useAuth: () => ({ user: { id: 'fixture-actor' } }) }))
+vi.mock('@/contexts/ActiveOrganizationContext', () => ({ useOptionalActiveOrganization: () => ({ organization: { id: 'fixture-org' } }) }))
 
 const cliente = { id: '44444444-4444-4444-8444-444444444444', name: 'Ana', phone: '0981000000' } as Customer
 
@@ -26,13 +28,18 @@ const deudas = {
   storeBalance: 0,
 }
 
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear() })
 
 async function abrir() {
   const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
     ok: true,
     status: 200,
-    json: async () => (init?.method === 'POST' ? { success: true, receiptNumber: 'REC-1', totalAmount: 100000, appliedAllocations: [] } : deudas),
+    json: async () => (init?.method === 'POST' ? { success: true, collection: {
+      receiptId: '77777777-7777-4777-8777-777777777777', receiptNumber: 'COL-1', appliedAmount: 100000,
+      excessToStoreCredit: 50000, recordedAt: '2026-10-12T12:00:00Z', paymentMethod: 'cash', reference: null, notes: null,
+      allocations: [{ debtId: '66666666-6666-4666-8666-666666666666', type: 'installment',
+        paymentId: '88888888-8888-4888-8888-888888888888', appliedAmount: 100000, remainingBalance: 0 }],
+    } } : deudas),
   }))
   vi.stubGlobal('fetch', fetchMock)
   render(<CustomerGlobalPaymentModal customer={cliente} open onClose={() => {}} />)
@@ -58,7 +65,7 @@ describe('el modal de cobro, en pantalla', () => {
     const monto = screen.getByPlaceholderText('0')
     fireEvent.change(monto, { target: { value: '150000' } })
 
-    const confirmar = screen.getByRole('button', { name: /Confirmar Abono/ })
+    const confirmar = screen.getByRole('button', { name: /Confirmar abono/i })
     expect(confirmar).toBeDisabled()
 
     fireEvent.click(screen.getByRole('checkbox'))
@@ -69,6 +76,6 @@ describe('el modal de cobro, en pantalla', () => {
     const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')!
     const body = JSON.parse(String((post[1] as RequestInit).body))
     expect(body).toMatchObject({ amount: 150000, paymentMethod: 'cash', creditExcessToStoreCredit: true })
-    expect(body.idempotencyKey).toMatch(/^cobro-/)
+    expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i)
   })
 })

@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { collectPaymentRequestSchema } from '@/lib/customers/collect-payment'
 
 export const collectionRequestSchema = collectPaymentRequestSchema.safeExtend({
+  amount: z.number().finite().positive().max(1_000_000_000).multipleOf(0.01),
+  allocations: z.array(z.object({ id: z.string().uuid(), type: z.enum(['repair', 'installment']),
+    amount: z.number().finite().nonnegative().multipleOf(0.01) })).max(200).optional(),
   scope: z.object({
     creditId: z.string().uuid().optional(),
     installmentId: z.string().uuid().optional(),

@@ -1,4 +1,10 @@
 export const DEFAULT_CREDIT_TIMEZONE = 'America/Asuncion'
+export function creditInstallmentIsOverdue(dueDate: string | null | undefined, status: string,
+ timeZone = DEFAULT_CREDIT_TIMEZONE, now = new Date()): boolean {
+  if (status === 'paid') return false
+  const days = daysUntilCreditDue(dueDate, timeZone, now)
+  return days === null ? status === 'late' : days < 0
+}
 export function creditCalendarDate(value: string | Date, timeZone = DEFAULT_CREDIT_TIMEZONE): string | null {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const parsed=new Date(value+'T12:00:00Z')

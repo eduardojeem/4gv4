@@ -17,6 +17,9 @@ const result = {
 const input = { organizationId: org, customerId: customer, actorId: actor, branchId: branch, request }
 
 describe('customer collection transaction boundary', () => {
+  it('accepts existing fractional installment balances without rounding debt', () => {
+    expect(collectionRequestSchema.safeParse({ ...request, amount: 33333.33 }).success).toBe(true)
+  })
   it('rejects invalid money and an actor supplied by the browser', () => {
     expect(collectionRequestSchema.safeParse({ ...request, amount: -1 }).success).toBe(false)
     expect(collectionRequestSchema.safeParse({ ...request, actorId: actor }).success).toBe(false)

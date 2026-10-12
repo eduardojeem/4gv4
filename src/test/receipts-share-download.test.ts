@@ -76,10 +76,14 @@ describe('comprobante de pago de cuota', () => {
   it('el ticket para imprimir escapa los datos del cliente', () => {
     expect(installmentPaymentHtml({ ...payment, customerName: '<b>Juan</b>' })).toContain('&lt;b&gt;Juan&lt;/b&gt;')
   })
+  it('el ticket de un cobro confirmado conserva su identificador persistido', () => {
+    expect(installmentPaymentHtml({ ...payment, receiptNumber: 'COL-PERSISTIDO' })).toContain('COL-PERSISTIDO')
+  })
 
   it('en la caja el monto se lee en guaraníes («100.000» no es 100) y deja el comprobante', () => {
     const source = readFileSync('src/components/pos/CustomerCreditHistory.tsx', 'utf8')
-    expect(source).toContain('const amount = parseThousands(paymentAmount)')
+    expect(source).toContain('parseThousands(paymentAmount)')
+    expect(source).toContain('amount: success.appliedAmount')
     expect(source).not.toContain('parseFloat(paymentAmount)')
     expect(source).toContain('setLastPayment({')
   })

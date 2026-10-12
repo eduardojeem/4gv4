@@ -9,7 +9,7 @@ import { runCollectionAttempt, retryCollectionAttempt, pendingCollectionAttempt,
 import type { CollectionResult } from '@/lib/credits/collection-contract'
 import type { CreditPortfolioSummary } from '@/lib/credits/portfolio'
 import { config } from '@/lib/config'
-import { daysUntilCreditDue, creditCalendarDate } from '@/lib/credits/calendar'
+import { creditInstallmentIsOverdue, creditCalendarDate } from '@/lib/credits/calendar'
 
 export type CreditRow = {
     id: string
@@ -83,7 +83,7 @@ type InstallmentFilters = {
 
 /** Retorna true si la cuota está vencida aunque su status sea 'pending' */
 export const isInstallmentLate = (i: InstallmentRow, timeZone = 'America/Asuncion'): boolean =>
-  i.status === 'late' || (i.status === 'pending' && (daysUntilCreditDue(i.due_date, timeZone) ?? 0) < 0)
+  creditInstallmentIsOverdue(i.due_date, i.status, timeZone)
 
 const fetchTenantCreditsData = async () => {
   const response = await fetch('/api/credits', { cache: 'no-store' })
@@ -339,6 +339,19 @@ export function useCredits(enabled = true) {
         if (!organizationId || !user?.id || !credit) return false
         try { return !!pendingCollectionAttempt(organizationId + ':' + user.id + ':' + credit.customer_id) } catch { return true }
     }, [credits, organizationId, user?.id])
+    const pendingCreditPayments: Array<{ creditId: string; installmentId: string; customerName: string }> = []
+    if (hasCurrentData && organizationId && user?.id) {
+        for (const credit of credits) {
+            try {
+                const attempt = pendingCollectionAttempt(organizationId + ':' + user.id + ':' + credit.customer_id)
+                if (attempt?.endpoint !== '/api/credits') continue
+                const original = installments.find(row => row.id === attempt.payload.installmentId)
+                if (original?.credit_id !== credit.id) continue
+                pendingCreditPayments.push({ creditId: credit.id, installmentId: original.id,
+                    customerName: credit.customer_name || credit.customer_code || 'Cliente' })
+            } catch { /* Corrupt attempts fail closed; never replace their key. */ }
+        }
+    }
 
     const creditById = useMemo(() => {
         const map: Record<string, CreditRow> = {}
@@ -349,11 +362,12 @@ export function useCredits(enabled = true) {
     const remainingByCredit = useMemo(() => {
         const map: Record<string, number> = {}
         if (Object.keys(summary).length > 0) {
-            for (const key of Object.keys(summary)) { map[key] = Number(summary[key].saldo_pendiente || 0) }
+            for (const key of Object.keys(summary)) { map[key] = ['completed', 'cancelled'].includes(creditById[key]?.status) ? 0 : Number(summary[key].saldo_pendiente || 0) }
             return map
         }
         // Fallback calculation
         for (const i of installments) {
+            if (['completed', 'cancelled'].includes(creditById[i.credit_id]?.status)) continue
             if (i.status === 'pending' || i.status === 'late') {
                 const installmentAmount = Number(i.amount || 0)
                 const paidAmount = Math.max(0, Number(i.amount_paid || 0))
@@ -361,7 +375,7 @@ export function useCredits(enabled = true) {
             }
         }
         return map
-    }, [installments, summary])
+    }, [installments, summary, creditById])
 
     const paidByCredit = useMemo(() => {
         const map: Record<string, number> = {}
@@ -422,6 +436,7 @@ export function useCredits(enabled = true) {
         setFilterValues,
         markInstallmentPaid,
         hasPendingCreditPayment,
+        pendingCreditPayments,
         creditById: hasCurrentData ? creditById : {},
         remainingByCredit: hasCurrentData ? remainingByCredit : {},
         paidByCredit: hasCurrentData ? paidByCredit : {},

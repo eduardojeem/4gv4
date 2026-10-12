@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { resolveRepairCollectionPricing } from '@/lib/repairs/collection-pricing'
 import type { RepairPricingMode } from '@/lib/repairs/pricing'
 import { readAllCreditRows } from '@/lib/credits/portfolio'
-import { daysUntilCreditDue, DEFAULT_CREDIT_TIMEZONE } from '@/lib/credits/calendar'
+import { creditInstallmentIsOverdue, DEFAULT_CREDIT_TIMEZONE } from '@/lib/credits/calendar'
 
 /**
  * Cobro unificado a un cliente: sus reparaciones y cuotas pendientes en un solo
@@ -250,7 +250,7 @@ export async function loadCustomerDebts(
   // Un crédito cancelado no se cobra. Se filtra acá y no con `neq` en la
   // consulta, que dejaría afuera los créditos sin estado.
   const credits = ((creditsResult.data ?? []) as Row[])
-    .filter((c) => !CANCELLED_CREDIT.has(String(c.status ?? '').toLowerCase()))
+    .filter((c) => !CANCELLED_CREDIT.has(String(c.status ?? '').toLowerCase()) && c.status !== 'completed')
 
   if (credits.length > 0) {
     const installmentsResult = await completeQuery(() => query(supabase, 'credit_installments')
@@ -267,8 +267,7 @@ export async function loadCustomerDebts(
       if (inst.status === 'paid' || pending <= 0 || amount <= 0) continue
 
       const due = inst.due_date ? new Date(String(inst.due_date)) : null
-      const days = daysUntilCreditDue(inst.due_date as string, input.timeZone ?? DEFAULT_CREDIT_TIMEZONE, input.now)
-      const late = inst.status === 'late' || (days !== null && days < 0)
+      const late = creditInstallmentIsOverdue(inst.due_date as string, String(inst.status), input.timeZone ?? DEFAULT_CREDIT_TIMEZONE, input.now)
 
       debts.push({
         id: String(inst.id),

@@ -86,5 +86,6 @@ describe('el contexto de auth no se mueve al volver a la pestaña', () => {
     recorrer('src')
 
     expect(consumidores, `leen session: ${consumidores.join(', ')}`).toEqual([])
-  }, 30_000)
+  // This scans the whole source tree; slow Windows disks must not turn a valid assertion into a timeout.
+  }, 120_000)
 })

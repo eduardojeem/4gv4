@@ -1,4 +1,4 @@
-import { daysUntilCreditDue } from './calendar'
+import { daysUntilCreditDue, creditInstallmentIsOverdue } from './calendar'
 export async function readAllCreditRows<T>(page: (from:number,to:number)=>PromiseLike<{data:T[]|null;error:unknown}>):Promise<T[]> {
   const rows:T[]=[]
   const pageSize=500
@@ -28,7 +28,7 @@ export function summarizeCreditPortfolio(credits:Credit[],installments:Installme
     if (open<=0) {paidCount++;continue}
     pendingCount++
     const days=daysUntilCreditDue(row.due_date,timeZone,now)
-    if (row.status==='late' || (days!==null && days<0)) {overdue+=open;overdueCount++}
+    if (creditInstallmentIsOverdue(row.due_date,row.status,timeZone,now)) {overdue+=open;overdueCount++}
     if (days===0) dueToday+=open
   }
   const totalFinanced=paid+outstanding,currentOnTime=Math.max(0,outstanding-overdue)

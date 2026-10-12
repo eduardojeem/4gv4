@@ -33,7 +33,7 @@ describe('transactional customer collection API',()=>{
  })
  it('rejects another tenant customer',async()=>{state.found=false;expect((await collect()).status).toBe(404);expect(state.calls).toHaveLength(0)})
  it('rejects unauthorized branch',async()=>{state.branchError=true;expect((await collect()).status).toBe(403);expect(state.calls).toHaveLength(0)})
- it.each([0,-1,1.5,1_000_000_001])('rejects invalid money %s',async amount=>{expect((await collect({amount})).status).toBe(400);expect(state.calls).toHaveLength(0)})
+ it.each([0,-1,1.001,1_000_000_001])('rejects invalid money %s',async amount=>{expect((await collect({amount})).status).toBe(400);expect(state.calls).toHaveLength(0)})
  it('requires transfer reference',async()=>{expect((await collect({paymentMethod:'transfer'})).status).toBe(400)})
  it('rejects a caller actor',async()=>{expect((await collect({actorId:ACTOR})).status).toBe(400);expect(state.calls).toHaveLength(0)})
  it.each([['COLLECTION_BALANCE_CHANGED',409],['COLLECTION_CASH_CLOSED',409],['COLLECTION_EXCESS_CONFIRMATION',422],['COLLECTION_IDEMPOTENCY_CONFLICT',409]])('reports %s without partial success',async(message,status)=>{

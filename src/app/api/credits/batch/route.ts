@@ -14,11 +14,11 @@ export const POST=withTenantAuth({permission:'crm.customers.read',module:'crm'},
     const admin=createAdminSupabase()
     const [credits,repairs,settings]=await Promise.all([
       Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>admin.from('customer_credits')
-        .select('id,customer_id,principal,interest_rate,term_months,start_date,status').eq('organization_id',organization.id)
+        .select('id,customer_id,principal,interest_rate,term_months,start_date,status').eq('organization_id', organization.id)
         .in('customer_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
       Promise.all(chunkIds(customerIds,200).map(ids=>readAllCreditRows((from,to)=>admin.from('repairs')
         .select('id,customer_id,status,delivered_at,pricing_mode,labor_cost,final_cost,estimated_cost,discount_amount,paid_amount,parts:repair_parts(unit_price,unit_cost,quantity,line_type)')
-        .eq('organization_id',organization.id).in('customer_id',ids).is('deleted_at',null).order('id').range(from,to)))).then(rows => rows.flat()),
+        .eq('organization_id', organization.id).in('customer_id',ids).is('deleted_at',null).order('id').range(from,to)))).then(rows => rows.flat()),
       admin.from('organization_settings').select('timezone').eq('organization_id',organization.id).maybeSingle(),
     ])
     if (settings.error) throw settings.error
@@ -30,7 +30,7 @@ export const POST=withTenantAuth({permission:'crm.customers.read',module:'crm'},
         .select('id,credit_id,installment_id,amount,payment_method,created_at').in('credit_id',ids).order('id').range(from,to)))).then(rows => rows.flat()),
     ])
     return NextResponse.json({credits,installments,payments:payments.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))),
-      repairDebts:summarizeRepairDebts(repairs),timeZone:settings.data?.timezone||'America/Asuncion'})
+      repairDebts: summarizeRepairDebts(repairs),timeZone:settings.data?.timezone||'America/Asuncion'})
   } catch {
     return NextResponse.json({error:'No se pudo cargar la situación crediticia completa.'},{status:500})
   }

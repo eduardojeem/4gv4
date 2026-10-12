@@ -5,6 +5,13 @@ vi.mock('@/hooks/use-credit-printing',()=>({useCreditPrinting:()=>({format:'80mm
 import { CreditPaymentDialog } from '@/components/dashboard/credits/CreditPaymentDialog'
 afterEach(cleanup)
 describe('credit collection confirmation',()=>{
+ it('preserves an existing fractional installment in the amount input and confirmation',async()=>{
+  const confirm=vi.fn().mockResolvedValue({success:false,error:'Fixture rejection'})
+  render(<CreditPaymentDialog open onOpenChange={()=>{}} onConfirm={confirm} initialAmount={33333.33} maxPaymentAmount={33333.33}/>)
+  expect(screen.getByLabelText(/Monto a Pagar/)).toHaveValue('33.333,33')
+  fireEvent.click(screen.getByRole('button',{name:'Confirmar Pago'}))
+  expect(confirm).toHaveBeenCalledWith('cash',33333.33,undefined,undefined,false)
+ })
  it('shows the amount actually recorded rather than the requested amount',async()=>{
   const confirm=vi.fn().mockResolvedValue({success:true,appliedAmount:60,collection:{
     receiptId:'77777777-7777-4777-8777-777777777777',receiptNumber:'COL-FIXTURE',appliedAmount:60,excessToStoreCredit:0,

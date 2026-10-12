@@ -2,6 +2,12 @@
 import { describe, expect, it } from 'vitest'
 import { readAllCreditRows, summarizeCreditPortfolio } from './portfolio'
 describe('complete credit portfolio',()=>{
+ it('does not accept the legacy late flag as mora during the organization due day',()=>{
+  const summary=summarizeCreditPortfolio([{id:'a',customer_id:'one',status:'active'}],
+   [{credit_id:'a',status:'late',amount:100,amount_paid:25,due_date:'2026-10-11'}],
+   'America/Asuncion',new Date('2026-10-11T12:00:00Z'))
+  expect(summary.overdue).toBe(0)
+ })
  it('keeps completed credits out of active debt even with stale installment status',()=>{
   const result=summarizeCreditPortfolio([{id:'done',customer_id:'one',status:'completed'}],
    [{credit_id:'done',status:'pending',amount:100,amount_paid:75,due_date:'2026-10-10'}])

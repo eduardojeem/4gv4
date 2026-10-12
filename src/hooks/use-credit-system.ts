@@ -5,16 +5,18 @@
  * SINCRONIZADO CON useCustomerCredits - Usa datos reales de Supabase
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { isCreditInstallmentOverdue } from '@/lib/credits/installments'
 import { sumInstallmentsOutstanding } from '@/lib/credits/customer-outstanding'
 import { Customer } from './use-customer-state'
-import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useBranch } from '@/contexts/branch-context'
-import { branchHeaders } from '@/lib/branches/client'
+import type { CollectionResult } from '@/lib/credits/collection-contract'
+import { pendingCollectionAttempt, retryCollectionAttempt, runCollectionAttempt } from '@/lib/credits/collection-attempt'
+import { useAuth } from '@/hooks/use-auth'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 
 // Interfaces sincronizadas con Supabase
 export interface CreditInfo {
@@ -131,7 +133,9 @@ export interface UseCreditSystemReturn {
     dueDate?: string
     firstInstallmentTiming?: 'at_start' | 'next_cycle'
   }) => Promise<boolean>
-  recordPayment: (customerId: string, amount: number, paymentMethod: string, reference?: string) => Promise<boolean>
+  recordPayment: (customerId: string, amount: number, paymentMethod: string, reference?: string) => Promise<CollectionResult | false>
+  hasPendingPayment: (customerId: string) => boolean
+  hasVerifiedCustomer: (customerId: string) => boolean
   
   // Consultas
   getCreditSummary: (customer: Customer) => CreditSummary
@@ -154,7 +158,11 @@ export interface UseCreditSystemReturn {
 
 export function useCreditSystem(): UseCreditSystemReturn {
   const { selectedBranchId } = useBranch()
+  const { user } = useAuth()
+  const organizationId = useOptionalActiveOrganization()?.organization?.id
   const [loading, setLoading] = useState(false)
+  const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null)
+  const dataSequence = useRef(0)
   const [error, setError] = useState<string | null>(null)
   
   // Datos reales de Supabase
@@ -171,24 +179,13 @@ export function useCreditSystem(): UseCreditSystemReturn {
   // Cargar datos de créditos desde Supabase
   const loadCreditData = useCallback(async (customerId?: string) => {
     if (!customerId) return
+    const requestId = ++dataSequence.current
 
     setLoading(true)
     setError(null)
 
     try {
-      if (!config.supabase.isConfigured) {
-        console.warn('Supabase not configured, using mock data')
-        // Usar datos mock si Supabase no está configurado
-        const mockCustomerCredits = credits.filter(c => c.customer_id === customerId)
-        const mockCustomerInstallments = installments.filter(i => 
-          mockCustomerCredits.map(c => c.id).includes(i.credit_id)
-        )
-        setCredits(mockCustomerCredits)
-        setInstallments(mockCustomerInstallments)
-        setPayments([])
-        setLoading(false)
-        return
-      }
+      if (!config.supabase.isConfigured) throw new Error('La consulta requiere conexión con la base de datos.')
 
       // Usar API para bypass RLS
       const response = await fetch('/api/credits/batch', {
@@ -201,11 +198,14 @@ export function useCreditSystem(): UseCreditSystemReturn {
 
       const { credits: creditsData, installments: installmentsData, payments: paymentsData } = await response.json()
       
+      if (requestId !== dataSequence.current) return
       setCredits(creditsData || [])
       setInstallments(installmentsData || [])
       setPayments(paymentsData || [])
+      setLoadedIdentity((organizationId ?? '') + ':' + customerId)
 
     } catch (error) {
+      if (requestId !== dataSequence.current) return
       const message = error instanceof Error ? error.message : 'Error al cargar datos de créditos'
       setError(message)
       console.error('Error loading credit data:', error)
@@ -214,9 +214,9 @@ export function useCreditSystem(): UseCreditSystemReturn {
       setInstallments([])
       setPayments([])
     } finally {
-      setLoading(false)
+      if (requestId === dataSequence.current) setLoading(false)
     }
-  }, [credits, installments])
+  }, [organizationId])
 
   // Verificar si un cliente puede comprar a crédito (SINCRONIZADO)
   const canSellOnCredit = useCallback((customer: Customer, amount: number): boolean => {
@@ -302,109 +302,56 @@ export function useCreditSystem(): UseCreditSystemReturn {
     }
   }, [canSellOnCredit, loadCreditData])
 
-  // Registrar un pago (Implementación REAL con Supabase)
-  const recordPayment = useCallback(async (
-    customerId: string, 
-    amount: number, 
-    paymentMethod: string, 
-    reference?: string
-  ): Promise<boolean> => {
-    try {
-      // 1. Obtener cuotas pendientes del cliente (FIFO)
-      const customerCreditIds = credits
-        .filter(c => c.customer_id === customerId)
-        .map(c => c.id)
-      
-      const pendingInstallments = installments
-        .filter(i => 
-          customerCreditIds.includes(i.credit_id) && 
-          (i.status === 'pending' || i.status === 'late')
-        )
-        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+  // The legacy POS consumer shares the same atomic, recoverable customer transaction.
+  const hasPendingPayment = useCallback((customerId: string) => {
+    if (!organizationId || !user?.id) return false
+    try { return !!pendingCollectionAttempt(organizationId + ':' + user.id + ':' + customerId) }
+    catch { return true }
+  }, [organizationId, user?.id])
+  const hasVerifiedCustomer = useCallback((customerId: string) => !loading && !error &&
+    loadedIdentity === (organizationId ?? '') + ':' + customerId, [loading, error, loadedIdentity, organizationId])
 
-      if (pendingInstallments.length === 0) {
-        toast.error('El cliente no tiene deuda pendiente')
-        return false
-      }
-
-      let remainingPayment = amount
-      const paymentsToInsert = []
-
-      for (const installment of pendingInstallments) {
-        if (remainingPayment <= 0) break
-
-        const currentBalance = installment.amount - (installment.amount_paid || 0)
-        const paymentAmount = Math.min(remainingPayment, currentBalance)
-
-        if (paymentAmount > 0) {
-          paymentsToInsert.push({
-            credit_id: installment.credit_id,
-            installment_id: installment.id,
-            amount: paymentAmount,
-            payment_method: paymentMethod,
-            notes: reference ? `Referencia: ${reference}` : undefined
-          })
-          remainingPayment -= paymentAmount
-        }
-      }
-
-      if (paymentsToInsert.length === 0) {
-        toast.error('No se pudo aplicar el pago a ninguna cuota')
-        return false
-      }
-
-      // Cada cuota se registra mediante el endpoint transaccional. La base
-      // bloquea la cuota y asocia el efectivo a la caja de la sucursal activa.
-      let appliedTotal = 0
-      for (const payment of paymentsToInsert) {
-        const response = await fetch('/api/credits', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...branchHeaders(selectedBranchId),
-          },
-          body: JSON.stringify({
-            installmentId: payment.installment_id,
-            amount: payment.amount,
-            method: payment.payment_method,
-            notes: payment.notes,
-            branchId: selectedBranchId,
-          }),
-        })
-        const payload = await response.json() as {
-          success?: boolean
-          error?: string
-          data?: { appliedAmount?: number }
-        }
-
-        if (!response.ok || !payload.success) {
-          await loadCreditData(customerId)
-          const partial = appliedTotal > 0
-            ? ` Se aplicaron ${formatCurrency(appliedTotal)} antes del error.`
-            : ''
-          throw new Error((payload.error || 'Error al registrar el pago.') + partial)
-        }
-
-        appliedTotal += Number(payload.data?.appliedAmount || 0)
-      }
-
-      if (remainingPayment > 0) {
-        toast.success(`Pago registrado parcialmente. Sobraron ${formatCurrency(remainingPayment)}`)
-      } else {
-        toast.success(`Pago registrado: ${formatCurrency(amount)}`)
-      }
-
-      // Recargar datos
-      await loadCreditData(customerId)
-      
-      return true
-    } catch (error) {
-      console.error('Error recording payment:', error)
-      const message = error instanceof Error ? error.message : 'Error al registrar el pago'
-      toast.error(message)
+  const recordPayment = useCallback(async (customerId: string, amount: number, paymentMethod: string,
+    reference?: string): Promise<CollectionResult | false> => {
+    if (!organizationId || !user?.id || !config.supabase.isConfigured) {
+      toast.error('El cobro requiere una organización y sesión verificadas.')
       return false
     }
-  }, [credits, installments, loadCreditData, selectedBranchId])
+    const scope = organizationId + ':' + user.id + ':' + customerId
+    try {
+      let outcome
+      if (pendingCollectionAttempt(scope)) {
+        outcome = await retryCollectionAttempt(scope)
+      } else {
+        const creditIds = new Set(credits.filter(row => row.customer_id === customerId &&
+          row.status !== 'completed' && row.status !== 'cancelled').map(row => row.id))
+        let remaining = amount
+        const allocations = installments.filter(row => creditIds.has(row.credit_id) && row.status !== 'paid')
+          .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date))).flatMap(row => {
+            const applied = Math.min(remaining, Math.max(0, Number(row.amount) - Number(row.amount_paid || 0)))
+            if (applied <= 0) return []
+            remaining = Math.round((remaining - applied) * 100) / 100
+            return [{ id: row.id, type: 'installment', amount: applied }]
+          })
+        if (!Number.isFinite(amount) || amount <= 0 || !allocations.length || remaining > 0) {
+          toast.error('Revisá el importe y actualizá la deuda antes de cobrar.')
+          return false
+        }
+        outcome = await runCollectionAttempt(scope, '/api/customers/' + customerId + '/collect-payment', {
+          amount, paymentMethod, mode: 'manual', allocations, branchId: selectedBranchId,
+          referenceNumber: paymentMethod === 'transfer' ? reference : undefined,
+          voucherNumber: paymentMethod === 'card' ? reference : undefined,
+          creditExcessToStoreCredit: false,
+        })
+      }
+      void loadCreditData(customerId)
+      toast.success('Cobro confirmado: ' + outcome.collection.receiptNumber)
+      return outcome.collection
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'No se pudo confirmar el cobro.')
+      return false
+    }
+  }, [credits, installments, loadCreditData, selectedBranchId, organizationId, user?.id])
 
   // Obtener resumen de crédito del cliente (SINCRONIZADO)
   const getCreditSummary = useCallback((customer: Customer): CreditSummary => {
@@ -541,6 +488,8 @@ export function useCreditSystem(): UseCreditSystemReturn {
     canSellOnCredit,
     createCreditSale,
     recordPayment,
+    hasPendingPayment,
+    hasVerifiedCustomer,
     getCreditSummary,
     getCustomerTransactions,
     getCustomerSales,

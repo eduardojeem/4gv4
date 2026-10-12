@@ -20,7 +20,8 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useState } from 'react'
 import { CreditCard, User, DollarSign, FileText, AlertCircle, CheckCircle2, Printer, Share2 } from 'lucide-react'
-import { formatCurrency, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, formatThousands, parseThousands, getDisplayLocale } from '@/lib/currency'
+const formatCurrency = (amount: number) => formatCurrencyBase(amount, { maximumFractionDigits: 2 })
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 import type { CollectionResult } from '@/lib/credits/collection-contract'
@@ -100,8 +101,9 @@ function CreditPaymentDialogContent({
 
 
     const handleAmountChange = (value: string) => {
-        const rawNumber = parseThousands(value)
-        setAmount(rawNumber ? String(rawNumber) : '')
+        const normalized = value.replace(/\./g, '').replace(',', '.')
+        if (!/^\d*(?:\.\d{0,2})?$/.test(normalized)) return
+        setAmount(normalized)
         setError('')
     }
 
@@ -113,7 +115,7 @@ function CreditPaymentDialogContent({
     const handleQuickAmount = (percentage: number) => {
         const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
         if (!effectiveMaxAmount) return
-        const calculatedAmount = Math.round(effectiveMaxAmount * percentage)
+        const calculatedAmount = Math.round(effectiveMaxAmount * percentage * 100) / 100
         setAmount(String(calculatedAmount))
         setError('')
     }
@@ -476,13 +478,13 @@ function CreditPaymentDialogContent({
 
                             {/* Payment Details */}
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label htmlFor="method" className="text-sm font-medium">
                                             Método de Pago *
                                         </Label>
                                         <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
-                                            <SelectTrigger id="method">
+                                            <SelectTrigger id="method" className="min-h-11 w-full text-base md:text-sm">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -509,9 +511,9 @@ function CreditPaymentDialogContent({
                                             <Input
                                                 id="amount"
                                                 type="text"
-                                                inputMode="numeric"
-                                                className={`pl-7 font-mono font-bold ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                                                value={formatThousands(amount)}
+                                                inputMode="decimal"
+                                                className={`min-h-11 pl-7 font-mono font-bold ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                                                value={formatThousands(amount.split('.')[0]) + (amount.includes('.') ? ',' + amount.split('.')[1] : '')}
                                                 placeholder="0"
                                                 onChange={(e) => handleAmountChange(e.target.value)}
                                             />
@@ -609,7 +611,7 @@ function CreditPaymentDialogContent({
                                         Número de Referencia
                                         <span className="text-muted-foreground font-normal ml-1">(opcional)</span>
                                     </Label>
-                                    <Input id="reference" className="font-mono" value={reference} placeholder="Ej: #TRX-12345" onChange={(e) => setReference(e.target.value)} maxLength={50} />
+                                    <Input id="reference" className="min-h-11 font-mono" value={reference} placeholder="Ej: #TRX-12345" onChange={(e) => setReference(e.target.value)} maxLength={50} />
                                     <p className="text-xs text-muted-foreground">Número de transacción, comprobante o referencia del pago</p>
                                 </div>
 
@@ -636,7 +638,7 @@ function CreditPaymentDialogContent({
                                             <p className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300">{formatCurrency(parseFloat(amount))}</p>
                                             {creditInfo && (
                                                 <p className="text-xs text-emerald-700/80 dark:text-emerald-400 mt-0.5">
-                                                    Nuevo saldo: <strong>{formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}</strong>
+                                                    Saldo estimado: <strong>{formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}</strong>
                                                 </p>
                                             )}
                                         </div>

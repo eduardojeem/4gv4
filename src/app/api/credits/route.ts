@@ -1,6 +1,6 @@
 import { readAllCreditRows, summarizeCreditPortfolio } from '@/lib/credits/portfolio'
 import { chunkIds } from '@/lib/customers/batch'
-import { daysUntilCreditDue, creditCalendarDate } from '@/lib/credits/calendar'
+import { creditInstallmentIsOverdue, creditCalendarDate } from '@/lib/credits/calendar'
 import { z } from 'zod'
 import { collectCustomerPayment, CollectionError } from '@/lib/credits/collection-rpc'
 import { awardCreditInstallmentLoyaltyPoints } from '@/lib/loyalty/credit-points'
@@ -65,7 +65,10 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     ])
     const saleItems = (await Promise.all(chunkIds(sales.map(row=>String(row.id)),200).map(ids=>readAllCreditRows((from,to)=>
       supabase.from('sale_items').select('id,sale_id,quantity,unit_price,subtotal,product:products(id,name)').in('sale_id',ids).order('id').range(from,to))))).flat()
-    const orderedInstallments = [...installments].sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)) || Number(a.installment_number)-Number(b.installment_number))
+    const orderedInstallments = installments.map((row): Record<string, unknown> => ({...row, status: row.status === 'paid' ? 'paid' :
+      creditInstallmentIsOverdue(String(row.due_date), String(row.status), timeZone) ? 'late' : 'pending'}))
+      .sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)) || Number(a.installment_number)-Number(b.installment_number))
+    const statuses = new Map(orderedInstallments.map(row => [String(row.id), row.status]))
     const orderedPayments = [...payments].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)) || String(b.id).localeCompare(String(a.id)))
     const globalSummary = summarizeCreditPortfolio(
       creditRows as unknown as Parameters<typeof summarizeCreditPortfolio>[0],
@@ -73,9 +76,9 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
     const filtered = orderedInstallments.filter(row=>{
       const credit=creditRows.find(c=>String(c.id)===String(row.credit_id))
       if (['cancelled','cancelado','canceled'].includes(String(credit?.status))) return false
-      const days=daysUntilCreditDue(String(row.due_date),timeZone)
+      if (credit?.status === 'completed' && row.status !== 'paid') return false
       const status=params.get('status')
-      if (status && (status==='late' ? !(row.status==='late' || (row.status==='pending' && days!==null && days<0)) : row.status!==status)) return false
+      if (status && row.status !== status) return false
       if (params.get('creditId') && !String(row.credit_id).toLowerCase().includes(params.get('creditId')!.toLowerCase())) return false
       if (params.get('customerName') && !String(credit?.customer_name || '').toLowerCase().includes(params.get('customerName')!.toLowerCase())) return false
       const date=creditCalendarDate(String(row.due_date),timeZone)
@@ -89,7 +92,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
       filtered as unknown as Parameters<typeof summarizeCreditPortfolio>[1], timeZone)
     return NextResponse.json({ success:true,data:{
       credits:creditRows,installments:page===null?orderedInstallments:filtered.slice((page-1)*perPage,page*perPage),
-      payments:orderedPayments,summary,installmentsProgress,customers,sales,saleItems,
+      payments:orderedPayments,summary,installmentsProgress:installmentsProgress.map(row => ({...row,status_effective:statuses.get(String(row.id)) ?? row.status_effective})),customers,sales,saleItems,
       globalSummary,filteredSummary,timeZone,asOf:new Date().toISOString(),
       pagination:{page:page??1,perPage:page===null?orderedInstallments.length:perPage,total:filtered.length,complete:page===null},
     } })
@@ -101,7 +104,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
 
 const creditPaymentSchema = z.object({
   installmentId: z.string().uuid(), creditId: z.string().uuid().optional(),
-  method: z.enum(['cash', 'card', 'transfer']), amount: z.number().int().positive().max(1_000_000_000),
+  method: z.enum(['cash', 'card', 'transfer']), amount: z.number().finite().positive().max(1_000_000_000).multipleOf(0.01),
   notes: z.string().max(500).optional(), reference: z.string().max(120).optional(),
   idempotencyKey: z.string().min(8).max(120), branchId: z.string().uuid().optional(),
 }).strict()

@@ -4,7 +4,7 @@ import { config } from '@/lib/config'
 import { Customer } from './use-customer-state'
 import { chunkIds } from '@/lib/customers/batch'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
-import { DEFAULT_CREDIT_TIMEZONE, paymentCalendarStatus, daysUntilCreditDue } from '@/lib/credits/calendar'
+import { DEFAULT_CREDIT_TIMEZONE, paymentCalendarStatus, daysUntilCreditDue, creditInstallmentIsOverdue } from '@/lib/credits/calendar'
 
 export interface CreditInfo {
   id: string
@@ -372,6 +372,9 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
   const organizationId = useOptionalActiveOrganization()?.organization?.id
   const [creditSummaries, setCreditSummaries] = useState<Record<string, CustomerCreditSummary>>({})
   const [loading, setLoading] = useState(false)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
+  const [refreshIndex, setRefreshIndex] = useState(0)
   const supabase = useMemo(() => createClient(), [])
 
   // El efecto depende del contenido (id y límite de crédito, lo único que usa
@@ -396,11 +399,10 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
 
     const loadCreditSummaries = async () => {
       setLoading(true)
+      setFailure(null)
       try {
         if (!config.supabase.isConfigured) {
-             console.warn('Supabase not configured, returning empty credits')
-             setCreditSummaries({})
-             return
+             throw new Error('La consulta de créditos requiere conexión con la base de datos.')
         }
 
         // Real Data from Supabase via API (bypassing RLS issues on client)
@@ -441,7 +443,8 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                 
                 // Calculate paid/pending from installments
                 const paidInstallments = customerInstallments.filter(i => i.status === 'paid')
-                const pendingInstallments = customerInstallments.filter(i => i.status === 'pending' || i.status === 'late')
+                const collectibleIds = new Set(customerCredits.filter(c => c.status !== 'completed' && c.status !== 'cancelled').map(c => c.id))
+                const pendingInstallments = customerInstallments.filter(i => collectibleIds.has(i.credit_id) && (i.status === 'pending' || i.status === 'late'))
                 
                 const totalPaid = customerInstallments.reduce((sum, i) => sum + Math.min(Number(i.amount || 0), Math.max(0, Number(i.amount_paid || 0))), 0)
                 // Lo adeudado de una cuota es lo que falta pagar, no su importe
@@ -507,7 +510,10 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                     credit_utilization: creditUtilization,
                     store_balance: Number((customer as { store_credit?: number | null } | null)?.store_credit || 0),
                     store_reserved: 0,
-                    overdue_debt: (nextPayment?.is_overdue ? (nextPayment.amount || 0) : 0) + repairOverdue,
+                    overdue_debt: pendingInstallments.reduce((sum, row) => {
+                      if (!creditInstallmentIsOverdue(row.due_date, row.status, batchTimeZone)) return sum
+                      return sum + Math.max(0, Number(row.amount || 0) - Number(row.amount_paid || 0))
+                    }, 0) + repairOverdue,
                     debts: [],
                     payment_history: {
                         on_time_payments: paidInstallments.length - latePayments.length,
@@ -527,7 +533,11 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
         
         if (cancelled) return
         setCreditSummaries(summaries)
+        setLoadedKey(customersKey)
       } catch (error) {
+        if (cancelled) return
+        setCreditSummaries({})
+        setFailure({ key: customersKey, message: 'No se pudieron verificar los créditos de clientes.' })
         console.error('Error loading credit summaries:', error)
       } finally {
         if (!cancelled) setLoading(false)
@@ -537,11 +547,13 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
     loadCreditSummaries()
 
     return () => { cancelled = true }
-  }, [customersKey, enabled, supabase])
+  }, [customersKey, enabled, supabase, refreshIndex])
 
   return {
-    creditSummaries,
-    loading,
-    getCustomerCreditSummary: (customerId: string) => creditSummaries[customerId] || null
+    creditSummaries: enabled && loadedKey === customersKey && !loading && failure?.key !== customersKey ? creditSummaries : {},
+    loading: enabled && customers.length > 0 && (loading || (loadedKey !== customersKey && failure?.key !== customersKey)),
+    error: failure?.key === customersKey ? failure.message : null,
+    refresh: () => setRefreshIndex(index => index + 1),
+    getCustomerCreditSummary: (customerId: string) => enabled && loadedKey === customersKey && !loading && failure?.key !== customersKey ? creditSummaries[customerId] || null : null
   }
 }

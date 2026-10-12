@@ -23,6 +23,7 @@ declare
  request_identity jsonb;
  key text:=trim(p_request->>'idempotencyKey');
  method text:=p_request->>'paymentMethod';
+ organization_timezone text;
  amount numeric;
  remaining numeric;
  allocated numeric;
@@ -55,12 +56,16 @@ begin
    raise exception 'COLLECTION_INVALID_REQUEST';
  end if;
  amount:=(p_request->>'amount')::numeric;
- if amount<=0 or amount>1000000000 or amount<>trunc(amount)
+ if amount<=0 or amount>1000000000 or amount<>round(amount,2)
    or coalesce(p_request->>'mode','auto') not in ('auto','manual')
    or (method='transfer' and nullif(trim(p_request->>'referenceNumber'),'') is null)
    or (method='card' and nullif(trim(p_request->>'voucherNumber'),'') is null) then
    raise exception 'COLLECTION_INVALID_REQUEST';
  end if;
+ select coalesce(nullif(s.timezone,''),'America/Asuncion') into organization_timezone
+  from public.organization_settings s where s.organization_id=p_organization_id;
+ organization_timezone:=coalesce(organization_timezone,'America/Asuncion');
+ if not exists(select 1 from pg_catalog.pg_timezone_names where name=organization_timezone) then organization_timezone:='America/Asuncion'; end if;
  request_identity:=jsonb_build_object('customer',p_customer_id,'branch',p_branch_id,'actor',p_actor_id,'payload',p_request);
  -- Serialize identical keys even when the customer differs; a retry returns exact persisted result.
  perform pg_advisory_xact_lock(hashtextextended(p_organization_id::text||':'||key,0));
@@ -138,6 +143,11 @@ begin
        values(installment.credit_id,installment.id,allocated,method,coalesce(p_request->>'notes','')||
          case when method='transfer' then ' Ref: '||coalesce(p_request->>'referenceNumber','') when method='card' then ' Cupón: '||coalesce(p_request->>'voucherNumber','') else '' end)
        returning id into payment_id;
+     -- The legacy trigger compares instants; retain calendar-day semantics for this transaction.
+     update public.credit_installments i set status=case
+       when coalesce(i.amount_paid,0)>=i.amount then 'paid'
+       when (i.due_date at time zone organization_timezone)::date < (now() at time zone organization_timezone)::date then 'late'
+       else 'pending' end where i.id=installment.id;
      if method='cash' then
        insert into public.cash_movements(session_id,type,amount,reason,payment_method,created_by,organization_id,branch_id)
          values(session_id,'cash_in',allocated,'Cobro crédito · '||receipt_id,method,p_actor_id,p_organization_id,p_branch_id);
@@ -168,11 +178,11 @@ begin
  end if;
  select coalesce(jsonb_object_agg(q.id,jsonb_build_object('remainingBalance',q.balance,'paidInstallments',q.paid_count,
    'pendingInstallments',q.pending_count,'nextDueDate',q.next_due,'nextDueAmount',q.next_amount)),'{}') into credit_balances from (
-   select c.id,coalesce(sum(greatest(0,i.amount-coalesce(i.amount_paid,0))),0) as balance,
+   select c.id,coalesce(sum(case when c.status='completed' then 0 else greatest(0,i.amount-coalesce(i.amount_paid,0)) end),0) as balance,
      count(i.id) filter(where i.amount<=coalesce(i.amount_paid,0)) as paid_count,
-     count(i.id) filter(where i.amount>coalesce(i.amount_paid,0)) as pending_count,
-     (select j.due_date from public.credit_installments j where j.credit_id=c.id and j.amount>coalesce(j.amount_paid,0) order by j.due_date,j.id limit 1) as next_due,
-     (select greatest(0,j.amount-coalesce(j.amount_paid,0)) from public.credit_installments j where j.credit_id=c.id and j.amount>coalesce(j.amount_paid,0) order by j.due_date,j.id limit 1) as next_amount
+     count(i.id) filter(where c.status<>'completed' and i.amount>coalesce(i.amount_paid,0)) as pending_count,
+     (select j.due_date from public.credit_installments j where c.status<>'completed' and j.credit_id=c.id and j.amount>coalesce(j.amount_paid,0) order by j.due_date,j.id limit 1) as next_due,
+     (select greatest(0,j.amount-coalesce(j.amount_paid,0)) from public.credit_installments j where c.status<>'completed' and j.credit_id=c.id and j.amount>coalesce(j.amount_paid,0) order by j.due_date,j.id limit 1) as next_amount
    from public.customer_credits c left join public.credit_installments i on i.credit_id=c.id
    where c.organization_id=p_organization_id and c.customer_id=p_customer_id and c.status<>'cancelled' group by c.id
  ) q;

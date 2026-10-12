@@ -22,7 +22,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({
         const rows = table === 'credit_details' ? [{ id: 'credit-a', customer_id: 'customer-a', customer_name: 'Ana', status: 'active' }] :
           table === 'credit_installments' ? Array.from({ length: 1201 }, (_, index) => ({
             id: String(index), credit_id: 'credit-a', installment_number: index + 1, amount: 100, amount_paid: 25,
-            status: 'pending', due_date: '2026-10-10',
+            status: 'pending', due_date: '2099-10-10',
           })) : []
         return Promise.resolve(resolve({ data: rows.slice(from, to + 1), error: null }))
       },

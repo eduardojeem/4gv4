@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T05:54:30.203Z",
+  "generatedAt": "2026-10-12T13:29:00.230Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
@@ -2368,7 +2368,7 @@
           "turnstile": false,
           "superAdminGuard": false,
           "authGuard": true,
-          "serviceRole": false
+          "serviceRole": true
         }
       ],
       "rateLimited": false,
@@ -2397,6 +2397,36 @@
       "superAdminGuard": false,
       "authGuard": true,
       "serviceRole": true
+    },
+    {
+      "route": "/api/credits/file-policy",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
     },
     {
       "route": "/api/credits/sale",
@@ -2619,6 +2649,159 @@
       "superAdminGuard": false,
       "authGuard": true,
       "serviceRole": true
+    },
+    {
+      "route": "/api/customers/[id]/credit-file",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PUT",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/customers/[id]/credit-file/decision",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/customers/[id]/credit-file/documents",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/customers/[id]/credit-file/documents/[documentId]",
+      "methods": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "DELETE",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/customers/[id]/credit-file/documents/cleanup",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/customers/[id]/credit-file/summary",
+      "methods": [
+        "GET"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
     },
     {
       "route": "/api/customers/[id]/credits",
@@ -3189,6 +3372,27 @@
         },
         {
           "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
+      "route": "/api/loyalty/customers/[customerId]/redeem",
+      "methods": [
+        "POST"
+      ],
+      "methodSecurity": [
+        {
+          "method": "POST",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -6857,6 +7061,11 @@
     "20261010120000",
     "20261011050300",
     "20261011120000",
+    "20261011161845",
+    "20261011161852",
+    "20261011180518",
+    "20261011181644",
+    "20261012010454",
     "20261012120000",
     "20261013120000",
     "20261014120000",
@@ -6869,7 +7078,11 @@
     "20261014120007",
     "20261014130000",
     "20261014140000",
-    "20261015090000"
+    "20261015090000",
+    "20261016090000",
+    "20261016120000",
+    "20261016150000",
+    "20261016180000"
   ],
   "paymentProviders": [
     {

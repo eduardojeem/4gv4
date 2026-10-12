@@ -1,5 +1,8 @@
 "use client"
 
+import { createContext, useContext } from 'react'
+export const CustomerCreditDataStatus = createContext<'ready' | 'loading' | 'error'>('ready')
+
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -26,6 +29,8 @@ export function CustomerCreditBadge({
   variant = 'default',
   showTooltip = true 
 }: CustomerCreditBadgeProps) {
+  const dataStatus = useContext(CustomerCreditDataStatus)
+  if (dataStatus !== 'ready') return <Badge variant="outline" className="gap-1 text-muted-foreground">{dataStatus === 'loading' ? 'Consultando créditos…' : 'Créditos no disponibles'}</Badge>
   if (!creditSummary) {
     return (
       <Badge variant="outline" className="gap-1 text-gray-500">
