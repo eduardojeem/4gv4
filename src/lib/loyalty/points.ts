@@ -24,7 +24,7 @@ export interface LoyaltySettings {
   maxPointsPerCustomerPerDay?: number | null
 }
 
-export type PointRuleKind = 'multiplier' | 'bonus_per_purchase'
+export type PointRuleKind = 'multiplier' | 'bonus_per_purchase' | 'visit_milestone'
 
 export interface PointRule {
   id: string
@@ -32,6 +32,8 @@ export interface PointRule {
   kind: PointRuleKind
   multiplier: number
   bonusPoints: number
+  /** En «cada N visitas»: cada cuántas compras se regalan los puntos. */
+  visitInterval?: number | null
   startsAt: string | Date
   endsAt: string | Date
   isActive: boolean
@@ -46,6 +48,12 @@ export interface PointsContext {
   earnedToday?: number
   /** Bonificación que este cliente ya consumió de esta promoción. */
   customerBonusUsedForRule?: number
+  /**
+   * Qué número de visita es esta compra para el cliente (desde que empezó la
+   * promoción por visitas). Sin el dato, esas promociones no se cuentan: la
+   * vista previa no promete puntos que quizás no dé.
+   */
+  visitNumber?: number
   now?: Date
 }
 
@@ -116,7 +124,12 @@ export function activeRulesFor(
 }
 
 /** Bonificación bruta de una regla, antes de aplicarle sus topes. */
-function rawBonusFor(rule: PointRule, basePoints: number): number {
+function rawBonusFor(rule: PointRule, basePoints: number, visitNumber?: number): number {
+  if (rule.kind === 'visit_milestone') {
+    const every = Math.floor(toNumber(rule.visitInterval))
+    if (!visitNumber || every < 2 || visitNumber % every !== 0) return 0
+    return Math.max(0, Math.floor(toNumber(rule.bonusPoints)))
+  }
   if (rule.kind === 'multiplier') {
     const factor = toNumber(rule.multiplier)
     return Math.max(0, Math.floor(basePoints * (factor - 1)))
@@ -152,11 +165,14 @@ export function estimatePointsForSale(
 
   if (candidates.length > 0) {
     // La que más suma para el cliente.
-    appliedRule = candidates.reduce((best, rule) =>
-      rawBonusFor(rule, basePoints) > rawBonusFor(best, basePoints) ? rule : best,
+    // Como en la base: las de visitas compiten después y solo ganan si dan más;
+    // en un empate queda la promoción común.
+    const ordered = [...candidates].sort((a, b) => Number(a.kind === 'visit_milestone') - Number(b.kind === 'visit_milestone'))
+    appliedRule = ordered.reduce((best, rule) =>
+      rawBonusFor(rule, basePoints, context.visitNumber) > rawBonusFor(best, basePoints, context.visitNumber) ? rule : best,
     )
 
-    const raw = rawBonusFor(appliedRule, basePoints)
+    const raw = rawBonusFor(appliedRule, basePoints, context.visitNumber)
     bonusPoints = raw
 
     const perCustomer = appliedRule.maxBonusPointsPerCustomer

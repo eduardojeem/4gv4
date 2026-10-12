@@ -12,6 +12,7 @@ const patchSchema = z.object({
   ends_at: z.string().optional(),
   multiplier: z.number().min(1).max(100).optional(),
   bonus_points: z.number().int().min(0).optional(),
+  visit_interval: z.number().int().min(2).max(100).nullable().optional(),
   max_bonus_points_per_customer: z.number().int().positive().nullable().optional(),
   max_bonus_points_total: z.number().int().positive().nullable().optional(),
   min_purchase_amount: z.number().nonnegative().nullable().optional(),
