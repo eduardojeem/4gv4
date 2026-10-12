@@ -93,7 +93,7 @@ describe('BusinessProfileCard', () => {
         ...status,
         planCode: 'PRO',
         planName: 'Pro',
-        entitledModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
+        entitledModules: ['inventory', 'pos', 'crm', 'repairs', 'analytics', 'security'],
         enabledModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
         effectiveModules: ['inventory', 'pos', 'crm', 'analytics', 'security'],
       }}>
@@ -104,14 +104,15 @@ describe('BusinessProfileCard', () => {
     await user.click(screen.getByLabelText('Forma de trabajo'))
     await user.click(screen.getByRole('option', { name: 'Negocio mixto' }))
 
-    // Lo que no recomienda el rubro se desmarca, y se avisa.
-    expect(screen.getByLabelText('Analytics avanzado')).not.toBeChecked()
-    expect(screen.getByLabelText('Seguridad y auditoría')).not.toBeChecked()
+    // Lo que recomienda la forma de trabajo se marca, y se avisa.
+    expect(screen.getByLabelText('Módulo de Reparaciones')).toBeChecked()
     expect(screen.getByText(/Marcamos las herramientas recomendadas para Ropa y moda/)).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Deshacer' }))
+    // Las herramientas generales no dependen del rubro: quedan como estaban.
     expect(screen.getByLabelText('Analytics avanzado')).toBeChecked()
     expect(screen.getByLabelText('Seguridad y auditoría')).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(screen.getByLabelText('Módulo de Reparaciones')).not.toBeChecked()
   })
 
   it('una cosmética no lleva Reparaciones y propone preparar la página web', async () => {

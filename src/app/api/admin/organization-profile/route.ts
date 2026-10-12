@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withTenantAuth, type TenantAuthContext } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { BusinessProfileInputSchema } from '@/lib/organization/business-profile'
+import { BusinessProfileInputSchema, moduleDependencyProblems } from '@/lib/organization/business-profile'
 import { serviceBusinessDetailsPatch } from '@/lib/organization/service-specialties'
 import { validateEnabledModules } from '@/lib/saas/effective-modules'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
@@ -102,6 +102,17 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
       code: 'MODULE_NOT_ENTITLED',
       error: 'Uno o más módulos seleccionados no están incluidos en el plan actual.',
       unavailableModules: entitlement.unavailableModules,
+    }, { status: 422 })
+  }
+
+  // Un módulo sin lo que necesita deja su sección vacía (ej. Entregas sin Pedidos).
+  const dependencyProblems = moduleDependencyProblems(validation.data.enabledModules ?? [])
+  if (validation.data.enabledModules && dependencyProblems.length > 0) {
+    return NextResponse.json({
+      success: false,
+      code: 'MODULE_DEPENDENCY',
+      error: dependencyProblems.join(' '),
+      problems: dependencyProblems,
     }, { status: 422 })
   }
 

@@ -42,6 +42,8 @@ import {
   ORGANIZATION_MODULES,
   defaultOperatingModelFor,
   getSuggestedModules,
+  moduleDependencyProblems,
+  modulesForVerticalChange,
   type BusinessVertical,
   type OperatingModel,
   type OrganizationModule,
@@ -158,7 +160,9 @@ export function BusinessProfileCard() {
   // recomendadas que incluye el plan (una cosmética no necesita Reparaciones).
   // Se muestra qué cambió y se puede deshacer.
   const applyRecommendationFor = (nextVertical: BusinessVertical, nextModel: OperatingModel) => {
-    const recommended = getSuggestedModules(nextVertical, nextModel).filter(module => entitled.has(module))
+    // Las herramientas generales (Finanzas, Informes, Seguridad, Analítica) no
+    // dependen del rubro: quedan como estaban.
+    const recommended = modulesForVerticalChange(enabled, getSuggestedModules(nextVertical, nextModel), entitled)
     const added = recommended.filter(module => !enabled.includes(module))
     const removed = enabled.filter(module => !recommended.includes(module))
     if (added.length === 0 && removed.length === 0) {
@@ -225,6 +229,8 @@ export function BusinessProfileCard() {
       ? Array.from(new Set([...current, module]))
       : current.filter(item => item !== module))
   }
+
+  const dependencyProblems = moduleDependencyProblems(enabled)
 
   const save = async () => {
     setSaving(true)
@@ -730,9 +736,14 @@ export function BusinessProfileCard() {
               {enabled.length} de {ORGANIZATION_MODULES.length} herramientas activadas
             </Badge>
           </div>
+          {dependencyProblems.length > 0 && (
+            <ul role="alert" className="w-full space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 sm:w-auto">
+              {dependencyProblems.map((problem) => <li key={problem}>{problem}</li>)}
+            </ul>
+          )}
           <Button
             onClick={save}
-            disabled={!dirty || saving}
+            disabled={!dirty || saving || dependencyProblems.length > 0}
             className="gap-2 sm:min-w-44"
           >
             {saving ? (
