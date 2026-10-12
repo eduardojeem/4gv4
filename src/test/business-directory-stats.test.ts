@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { DIRECTORY_STAT_MINIMUMS, showcaseLogos, visibleDirectoryStats } from '@/lib/public/business-directory'
 
 /**
@@ -27,7 +29,7 @@ describe('las cifras de /saas/negocios', () => {
 })
 
 describe('las cifras del marketplace', () => {
-  const leer = (ruta: string) => require('node:fs').readFileSync(require('node:path').resolve(process.cwd(), ruta), 'utf8') as string
+  const leer = (ruta: string) => readFileSync(resolve(process.cwd(), ruta), 'utf8')
 
   it('la portada usa el mismo criterio y cuenta todas las tiendas, no las 24 que trae', () => {
     const portada = leer('src/app/marketplace/page.tsx')

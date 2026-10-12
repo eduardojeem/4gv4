@@ -93,4 +93,3 @@ Hay 24 ramas locales y 32 remotas (sin contar origin/HEAD). Atrasada/exclusivos 
 Orden recomendado: preservar/revisar los 5 worktrees pendientes; comparar el commit no equivalente de System Health; validar e integrar los 3 commits actuales mediante PR; actualizar main local por fast-forward; luego decidir qué ramas/worktrees antiguos archivar o eliminar, con autorización explícita. Antes de eliminar, revisar también PR abiertos, archivos ignorados y dependencias de otras tareas.
 
 No se modificaron ramas, upstreams, commits ni archivos de aplicación. Solo se creó este informe. No se ejecutaron builds de todas las ramas ni se comprobó el estado actual de GitHub Actions o Vercel.
-
