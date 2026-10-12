@@ -13,6 +13,12 @@
 
 Cambiar datos relevantes o retirar un documento de una ficha aprobada la devuelve a revisión pendiente. No borra deuda ni pagos. Si la deuda supera el nuevo límite, el disponible queda en cero.
 
+## Ficha del cliente y configuración global
+
+La pantalla separa **Ficha del cliente** (datos, referencias, documentos y evaluación) de **Configuración de créditos** (requisitos para toda la organización). La segunda pestaña solo está disponible para propietario y administrador con permiso de configuración. Cambiar de pestaña conserva los borradores; los datos pendientes del cliente deben guardarse antes de modificar requisitos generales.
+
+**Documentos privados** permanece visible antes del primer guardado, con instrucciones para habilitar la carga. Después de guardar, seleccioná tipo de documento y **Archivo o foto**, revisá nombre y tamaño, y pulsá **Subir documento**. Las opciones de limpieza están en **Opciones de mantenimiento**.
+
 ## Requisitos de la organización
 
 El propietario o administrador con permiso de configuración puede elegir:
@@ -47,7 +53,7 @@ Ejecutar en orden, solo si todavía no están aplicados:
 3. `20261011180518_customer_credit_documents_4mb.sql`
 4. `20261011181644_customer_credit_document_lifecycle.sql`
 
-El usuario confirmó los dos primeros. Las migraciones adicionales se probaron en Docker local; esa evidencia no confirma su aplicación remota. No usar `migration repair --status applied` para sustituir la ejecución de SQL pendiente.
+El usuario confirmó la ejecución de los cuatro SQL. En la revisión de publicación se verificaron las tablas y funciones de crédito en el proyecto remoto y el bucket privado con límite de 4 MiB; el historial de migraciones no contiene esas versiones, por lo que la existencia del esquema no equivale a un historial sincronizado. No usar `migration repair --status applied` para sustituir la ejecución de SQL pendiente.
 
 ## Límites de la primera versión
 
