@@ -79,7 +79,7 @@ describe('dashboard navigation information architecture', () => {
   it('keeps mobile priorities stable when optional modules disappear', () => {
     const groups = filterDashboardNavGroups({
       role: 'admin',
-      effectiveModules: ['pos', 'inventory', 'repairs'],
+      effectiveModules: ['pos', 'inventory', 'repairs', 'crm'],
       hasPermission: () => true,
     })
 

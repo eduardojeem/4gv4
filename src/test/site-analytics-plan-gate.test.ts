@@ -81,9 +81,9 @@ describe('visitas web con su propio módulo', () => {
     // El plan al que subir sale del catálogo, no de un texto fijo en la página.
     expect(page).not.toContain('requiredPlan=')
 
-    const nav = readFileSync(resolve(process.cwd(), 'src/config/admin-navigation.ts'), 'utf8')
-    const visitsItem = nav.slice(nav.indexOf("key: 'website-visits'"), nav.indexOf("key: 'website-visits'") + 400)
-    expect(visitsItem).toContain("module: 'web_analytics'")
+    // El menú toma el módulo de la tabla común de rutas (route-modules).
+    const table = readFileSync(resolve(process.cwd(), 'src/lib/navigation/route-modules.ts'), 'utf8')
+    expect(table).toContain("'/admin/visitas': { module: 'web_analytics' }")
 
     const guide = readFileSync(resolve(process.cwd(), 'src/lib/guide/content.ts'), 'utf8')
     const visitsGuide = guide.slice(guide.indexOf("id: 'website-visits'"), guide.indexOf("id: 'website-visits'") + 600)
