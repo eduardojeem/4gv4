@@ -24,8 +24,9 @@ interface PointRulesCardProps {
 const EMPTY_RULE = {
   name: '',
   description: '',
-  kind: 'multiplier' as 'multiplier' | 'bonus_per_purchase',
+  kind: 'multiplier' as 'multiplier' | 'bonus_per_purchase' | 'visit_milestone',
   multiplier: 2,
+  visit_interval: 10,
   bonus_points: 0,
   starts_at: '',
   ends_at: '',
@@ -61,6 +62,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
       kind: draft.kind,
       multiplier: Number(draft.multiplier) || 1,
       bonus_points: Number(draft.bonus_points) || 0,
+      visit_interval: draft.kind === 'visit_milestone' ? Number(draft.visit_interval) || null : null,
       starts_at: draft.starts_at ? new Date(draft.starts_at).toISOString() : '',
       ends_at: draft.ends_at ? new Date(draft.ends_at).toISOString() : '',
       max_bonus_points_per_customer: draft.max_bonus_points_per_customer
@@ -78,7 +80,7 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
     }
   }
 
-  const applyPreset = (preset: 'x2' | 'x3' | 'bonus100') => {
+  const applyPreset = (preset: 'x2' | 'x3' | 'bonus100' | 'visits10') => {
     const today = new Date()
     const nextWeek = new Date()
     nextWeek.setDate(today.getDate() + 7)
@@ -102,6 +104,19 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
         multiplier: 3,
         starts_at: formatDt(today),
         ends_at: formatDt(nextWeek),
+      })
+    } else if (preset === 'visits10') {
+      // La clásica de peluquerías y estéticas: premia volver, no gastar más.
+      const inAYear = new Date()
+      inAYear.setFullYear(today.getFullYear() + 1)
+      setDraft({
+        ...EMPTY_RULE,
+        name: 'Cada 10 visitas, puntos de regalo',
+        kind: 'visit_milestone',
+        visit_interval: 10,
+        bonus_points: 100,
+        starts_at: formatDt(today),
+        ends_at: formatDt(inAYear),
       })
     } else if (preset === 'bonus100') {
       setDraft({
@@ -196,7 +211,11 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
                         {state.label}
                       </Badge>
                       <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 font-extrabold text-[10px]">
-                        {rule.kind === 'multiplier' ? `x${rule.multiplier} Puntos` : `+${rule.bonus_points} pts de regalo`}
+                        {rule.kind === 'multiplier'
+                          ? `x${rule.multiplier} Puntos`
+                          : rule.kind === 'visit_milestone'
+                            ? `+${rule.bonus_points} pts cada ${rule.visit_interval} visitas`
+                            : `+${rule.bonus_points} pts de regalo`}
                       </Badge>
                     </div>
 
@@ -289,6 +308,15 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
               >
                 🎁 Bono +100 Puntos
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-xl text-[11px] h-7 px-2.5 font-semibold"
+                onClick={() => applyPreset('visits10')}
+              >
+                🔁 Cada 10 visitas
+              </Button>
             </div>
           </div>
 
@@ -317,11 +345,41 @@ export function PointRulesCard({ rules, onCreate, onToggle, onDelete, canManage 
                   <SelectContent className="rounded-xl">
                     <SelectItem value="multiplier">Multiplicador (ej: x2, x3)</SelectItem>
                     <SelectItem value="bonus_per_purchase">Puntos fijos de regalo</SelectItem>
+                    <SelectItem value="visit_milestone">Cada N visitas (premia volver)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {draft.kind === 'multiplier' ? (
+              {draft.kind === 'visit_milestone' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="rule-visits" className="text-xs font-semibold">Cada cuántas visitas</Label>
+                    <Input
+                      id="rule-visits"
+                      type="number"
+                      min={2}
+                      max={100}
+                      value={draft.visit_interval}
+                      onChange={(e) => setDraft((d) => ({ ...d, visit_interval: Number(e.target.value) }))}
+                      className="rounded-xl text-xs h-9.5 font-bold"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="rule-visit-bonus" className="text-xs font-semibold">Puntos de regalo</Label>
+                    <Input
+                      id="rule-visit-bonus"
+                      type="number"
+                      min={1}
+                      value={draft.bonus_points}
+                      onChange={(e) => setDraft((d) => ({ ...d, bonus_points: Number(e.target.value) }))}
+                      className="rounded-xl text-xs h-9.5 font-bold"
+                    />
+                  </div>
+                  <p className="col-span-2 text-[11px] text-muted-foreground">
+                    En la visita {draft.visit_interval || 'N'}, {Number(draft.visit_interval) * 2 || '2N'}… el cliente suma {draft.bonus_points || 0} puntos extra. Se cuentan las compras desde el inicio de la promoción.
+                  </p>
+                </div>
+              ) : draft.kind === 'multiplier' ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="rule-multiplier" className="text-xs font-semibold">Multiplicador</Label>
                   <Input

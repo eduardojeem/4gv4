@@ -24,6 +24,7 @@ type RuleRow = {
   max_bonus_points_per_customer?: number | string | null
   max_bonus_points_total?: number | string | null
   awarded_bonus_points?: number | string | null
+  visit_interval?: number | string | null
 }
 
 const toNumberOrNull = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value))
@@ -43,7 +44,8 @@ export function rulesFromRows(rows: RuleRow[] | null | undefined): PointRule[] {
   return (rows ?? []).map((row) => ({
     id: row.id,
     name: row.name ?? 'Promoción',
-    kind: row.kind === 'bonus_per_purchase' ? 'bonus_per_purchase' : 'multiplier',
+    kind: row.kind === 'bonus_per_purchase' || row.kind === 'visit_milestone' ? row.kind : 'multiplier',
+    visitInterval: toNumberOrNull(row.visit_interval),
     multiplier: Number(row.multiplier) || 1,
     bonusPoints: Number(row.bonus_points) || 0,
     startsAt: row.starts_at,

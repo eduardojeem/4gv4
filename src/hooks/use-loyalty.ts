@@ -23,7 +23,9 @@ export interface PointRuleRow {
   description: string | null
   starts_at: string
   ends_at: string
-  kind: 'multiplier' | 'bonus_per_purchase'
+  kind: 'multiplier' | 'bonus_per_purchase' | 'visit_milestone'
+  /** En «cada N visitas»: cada cuántas compras se regalan los puntos. */
+  visit_interval?: number | null
   multiplier: number
   bonus_points: number
   max_bonus_points_per_customer: number | null

@@ -11,7 +11,9 @@ const ruleSchema = z.object({
   description: z.string().max(500).nullable().optional(),
   starts_at: z.string().min(1, 'Falta la fecha de inicio'),
   ends_at: z.string().min(1, 'Falta la fecha de cierre'),
-  kind: z.enum(['multiplier', 'bonus_per_purchase']),
+  kind: z.enum(['multiplier', 'bonus_per_purchase', 'visit_milestone']),
+  // «Cada N visitas»: cada cuántas compras se regalan los puntos.
+  visit_interval: z.number().int().min(2).max(100).nullable().optional(),
   multiplier: z.number().min(1).max(100),
   bonus_points: z.number().int().min(0),
   max_bonus_points_per_customer: z.number().int().positive().nullable().optional(),
@@ -20,6 +22,9 @@ const ruleSchema = z.object({
   is_active: z.boolean().default(true),
 }).refine((data) => new Date(data.ends_at) > new Date(data.starts_at), {
   message: 'La fecha de cierre tiene que ser posterior a la de inicio',
+}).refine((data) => data.kind !== 'visit_milestone' || (Boolean(data.visit_interval) && data.bonus_points > 0), {
+  message: 'Indicá cada cuántas visitas (2 a 100) y cuántos puntos se regalan',
+  path: ['visit_interval'],
 })
 
 function validationError(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>) {
