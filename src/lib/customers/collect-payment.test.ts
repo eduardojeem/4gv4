@@ -129,14 +129,17 @@ function baseFalsa(tablas: Record<string, { data?: unknown[]; error?: unknown }>
         eq: (col: string, val: unknown) => FakeQueryBuilder
         in: (col: string, val: unknown) => FakeQueryBuilder
         order: () => FakeQueryBuilder
+        range: (from:number,to:number) => FakeQueryBuilder
         then: (resolve: (v: unknown) => unknown) => unknown
       }
+      let bounds: [number,number] | null = null
       const builder: FakeQueryBuilder = {
         select: () => builder,
         eq: (col: string, val: unknown) => { registro.filtros.push([col, val]); return builder },
         in: (col: string, val: unknown) => { registro.filtros.push([col, val]); return builder },
         order: () => builder,
-        then: (resolve: (v: unknown) => unknown) => resolve({ data: respuesta.data ?? [], error: respuesta.error ?? null }),
+        range: (from,to) => { bounds=[from,to]; return builder },
+        then: (resolve: (v: unknown) => unknown) => resolve({ data: bounds ? (respuesta.data ?? []).slice(bounds[0],bounds[1]+1) : respuesta.data ?? [], error: respuesta.error ?? null }),
       }
       return builder
     },

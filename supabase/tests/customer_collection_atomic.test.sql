@@ -28,6 +28,7 @@ begin
  repeated_result:=public.collect_customer_payment_atomic(o,c,a,b,p);
  assert first_result=repeated_result,'same request returns persisted receipt';
  assert (first_result->>'appliedAmount')::numeric=100,'real amount in receipt';
+ assert first_result->>'paymentMethod'='cash','receipt preserves original payment method';
  assert (select count(*)=1 from public.credit_payments where credit_id='ca610000-0000-4000-8000-000000000001'),'retry never creates second payment';
  rejected:=false;
  begin perform public.collect_customer_payment_atomic(o,c,a,b,p||'{"amount":101}');

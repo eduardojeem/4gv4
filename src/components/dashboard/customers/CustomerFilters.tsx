@@ -394,7 +394,7 @@ export function CustomerFilters({
           onSearch={handleSearchSubmit}
           customers={customers}
           isSearching={false}
-          placeholder="Buscar por nombre, CI/RUC, teléfono, email, código o notas..."
+          placeholder="Buscar por nombre, CI/RUC, teléfono, email o código..."
           onQuickFilter={(filter) => {
             if (filter.includes('customer_type:')) {
               handleFilterChange('customer_type', filter.split(':')[1])

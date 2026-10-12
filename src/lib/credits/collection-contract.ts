@@ -16,9 +16,18 @@ export const collectionResultSchema = z.object({
   appliedAmount: money,
   excessToStoreCredit: money,
   recordedAt: z.string().datetime({ offset: true }),
+  paymentMethod: z.enum(['cash', 'card', 'transfer']).optional(),
+  reference: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  creditBalances: z.record(z.string(), z.object({
+    remainingBalance: money, paidInstallments: z.number().int().nonnegative(),
+    pendingInstallments: z.number().int().nonnegative(),
+    nextDueDate: z.string().nullable(), nextDueAmount: money.nullable(),
+  })).optional(),
   allocations: z.array(z.object({
     debtId: z.string().uuid(), type: z.enum(['repair', 'installment']),
     paymentId: z.string().uuid(), appliedAmount: money.positive(), remainingBalance: money,
+    totalAmount: money.optional(),
   })),
 }).refine(value => Math.abs(value.appliedAmount - value.allocations.reduce((sum, row) => sum + row.appliedAmount, 0)) < 0.01,
   'El total aplicado no coincide con el reparto.')

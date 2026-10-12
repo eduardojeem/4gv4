@@ -7,6 +7,7 @@ export type CreditPaymentReceiptMethod = 'cash' | 'card' | 'transfer' | string |
 
 export type CreditPaymentReceiptInput = {
   paymentId: string
+  receiptNumber?: string
   paymentDate?: string | Date | null
   paymentAmount: number
   paymentMethod?: CreditPaymentReceiptMethod
@@ -516,7 +517,7 @@ export async function createCreditPaymentReceiptPdf(
   const izq = t.contentLeftMm
   const der = pageW - t.contentLeftMm
 
-  const receiptNumber = buildCreditPaymentReceiptNumber(input.paymentId)
+  const receiptNumber = input.receiptNumber || buildCreditPaymentReceiptNumber(input.paymentId)
   const paidAt = input.paymentDate ? new Date(input.paymentDate) : new Date()
   const compacto = usesShortLabels(t.pageWidthMm)
   const creditRows = buildCreditInfoRows(input, { compacto })

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { Customer } from './use-customer-state'
 import { chunkIds } from '@/lib/customers/batch'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { DEFAULT_CREDIT_TIMEZONE, paymentCalendarStatus, daysUntilCreditDue } from '@/lib/credits/calendar'
 
 export interface CreditInfo {
   id: string
@@ -58,6 +60,7 @@ export interface DebtItem {
 
 export interface CustomerCreditSummary {
   customer_id: string
+  time_zone?: string
   total_credits: number
   active_credits: number
   completed_credits: number
@@ -77,12 +80,12 @@ export interface CustomerCreditSummary {
     on_time_payments: number
     late_payments: number
     missed_payments: number
-    payment_score: number // 0-100
+    payment_score: number | null // No history is not a perfect score.
   }
   next_payment: {
     amount: number
-    due_date: string
-    days_until_due: number
+    due_date: string | null
+    days_until_due: number | null
     is_overdue: boolean
     title?: string
   } | null
@@ -100,6 +103,10 @@ export interface CustomerWithCredits extends Customer {
 }
 
 export function useCustomerCredits(customerId?: string, initialCustomer?: Customer | null) {
+  const organizationId = useOptionalActiveOrganization()?.organization?.id
+  const scopeKey = (organizationId ?? '') + ':' + (customerId ?? '')
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
+  const [timeZone, setTimeZone] = useState(DEFAULT_CREDIT_TIMEZONE)
   const [loading, setLoading] = useState(false)
   const [credits, setCredits] = useState<CreditInfo[]>([])
   const [installments, setInstallments] = useState<InstallmentInfo[]>([])
@@ -147,6 +154,8 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
               setError(collectData.error || 'No se pudo cargar la deuda del cliente.')
             }
             if (isMounted && collectData.success) {
+              setLoadedScope(scopeKey)
+              setTimeZone(collectData.timeZone || DEFAULT_CREDIT_TIMEZONE)
               setDebts(collectData.debts || [])
               setTotalCollectDebt(Number(collectData.totalDebt || 0))
               setOverdueCollectDebt(Number(collectData.overdueDebt || 0))
@@ -212,11 +221,11 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
     return () => {
       isMounted = false
     }
-  }, [customerId, supabase, refreshIndex])
+  }, [customerId, organizationId, scopeKey, supabase, refreshIndex])
 
   // Calcular resumen consolidado y real de créditos del cliente
   const creditSummary = useMemo((): CustomerCreditSummary | null => {
-    if (!customerId) return null
+    if (!customerId || loading || error || loadedScope !== scopeKey) return null
 
     const activeCredits = credits.filter(c => c.status === 'active')
     const completedCredits = credits.filter(c => c.status === 'completed')
@@ -229,42 +238,29 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
     // El saldo de una cuota es lo que falta pagar, no su importe completo: con
     // el importe entero una cuota pagada a medias inflaba la deuda y mostraba
     // menos credito disponible del que el servidor realmente autoriza.
-    const pendingFromInstallments = installments
-      .filter(i => i.status === 'pending' || i.status === 'late')
-      .reduce((sum, i) => {
-        const amount = Math.max(0, Number(i.amount || 0))
-        const paid = Math.min(amount, Math.max(0, Number(i.amount_paid || 0)))
-        return sum + (amount - paid)
-      }, 0)
-    const effectiveTotalPending = totalCollectDebt > 0
-      ? totalCollectDebt
-      : pendingFromInstallments
+    const effectiveTotalPending = totalCollectDebt
 
     // Total abonado
     const paidInstallments = installments.filter(i => i.status === 'paid')
-    const totalPaidFromInstallments = paidInstallments.reduce((sum, i) => sum + Number(i.amount_paid || i.amount || 0), 0)
+    const totalPaidFromInstallments = installments.reduce((sum, i) => sum + Math.min(Number(i.amount || 0), Math.max(0, Number(i.amount_paid || 0))), 0)
     const totalPaid = Math.max(totalPaidFromPayments, totalPaidFromInstallments)
 
     // Historial de pagos
     const latePayments = paidInstallments.filter(i => {
       if (!i.paid_at) return false
-      const paidDate = new Date(i.paid_at)
-      const dueDate = new Date(i.due_date)
-      return paidDate > dueDate
+      return paymentCalendarStatus(i.paid_at, i.due_date, timeZone) === 'late'
     })
     const onTimePayments = paidInstallments.length - latePayments.length
     const missedPayments = installments.filter(i => {
       if (i.status !== 'pending' && i.status !== 'late') return false
-      const dueDate = new Date(i.due_date)
-      const now = new Date()
-      const daysPastDue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-      return daysPastDue > 30
+      const days = daysUntilCreditDue(i.due_date, timeZone)
+      return days !== null && days < -30
     }).length
 
     const totalPaymentEvents = onTimePayments + latePayments.length + missedPayments
     const paymentScore = totalPaymentEvents > 0 
       ? Math.round(((onTimePayments * 100) + (latePayments.length * 50)) / (totalPaymentEvents * 100) * 100)
-      : (overdueCollectDebt > 0 ? 65 : 100)
+      : null
 
     // Próximo pago (buscado entre deudas con vencimiento o cuotas pendientes)
     let nextPayment = null
@@ -273,22 +269,20 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
       .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())[0]
 
     if (pendingWithDueDate) {
-      const dueDate = new Date(pendingWithDueDate.dueDate!)
-      const now = new Date()
-      const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      const daysUntilDue = daysUntilCreditDue(pendingWithDueDate.dueDate, timeZone)
       nextPayment = {
         amount: pendingWithDueDate.pendingAmount,
         due_date: pendingWithDueDate.dueDate!,
         days_until_due: daysUntilDue,
-        is_overdue: daysUntilDue < 0 || pendingWithDueDate.isOverdue,
+        is_overdue: (daysUntilDue !== null && daysUntilDue < 0) || pendingWithDueDate.isOverdue,
         title: pendingWithDueDate.title
       }
     } else if (debts.length > 0 && debts.some(d => d.pendingAmount > 0)) {
       const firstDebt = debts.find(d => d.pendingAmount > 0)!
       nextPayment = {
         amount: firstDebt.pendingAmount,
-        due_date: new Date().toISOString(),
-        days_until_due: 0,
+        due_date: null,
+        days_until_due: null,
         is_overdue: firstDebt.isOverdue,
         title: firstDebt.title
       }
@@ -326,11 +320,12 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
     else if (riskScore >= 25) riskLevel = 'medium'
 
     if (riskFactors.length === 0) {
-      riskFactors.push('Cliente al día sin factores de riesgo detectados')
+      riskFactors.push('Sin factores detectados en los datos disponibles; evaluación orientativa')
     }
 
     return {
       customer_id: customerId,
+      time_zone: timeZone,
       total_credits: credits.length,
       active_credits: activeCredits.length,
       completed_credits: completedCredits.length,
@@ -359,7 +354,7 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
         factors: riskFactors
       }
     }
-  }, [customerId, credits, installments, payments, customerLimit, storeBalance, storeReserved, debts, totalCollectDebt, overdueCollectDebt])
+  }, [customerId, loading, error, loadedScope, scopeKey, timeZone, credits, installments, payments, customerLimit, storeBalance, storeReserved, debts, totalCollectDebt, overdueCollectDebt])
 
   return {
     loading,
@@ -374,6 +369,7 @@ export function useCustomerCredits(customerId?: string, initialCustomer?: Custom
 
 // Hook para obtener resúmenes de crédito de múltiples clientes
 export function useCustomersWithCredits(customers: Customer[], enabled = true) {
+  const organizationId = useOptionalActiveOrganization()?.organization?.id
   const [creditSummaries, setCreditSummaries] = useState<Record<string, CustomerCreditSummary>>({})
   const [loading, setLoading] = useState(false)
   const supabase = useMemo(() => createClient(), [])
@@ -381,7 +377,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
   // El efecto depende del contenido (id y límite de crédito, lo único que usa
   // el cálculo) y no de la referencia del array: un array nuevo con los mismos
   // clientes en cada render disparaba /api/credits/batch en bucle.
-  const customersKey = customers.map(c => `${c.id}:${c.credit_limit ?? ''}`).join('|')
+  const customersKey = (organizationId ?? '') + ':' + customers.map(c => `${c.id}:${c.credit_limit ?? ''}`).join('|')
   const customersRef = useRef(customers)
   customersRef.current = customers
 
@@ -417,6 +413,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
           if (!response.ok) throw new Error('Failed to fetch credits')
           return response.json()
         }))
+        const batchTimeZone = responses[0]?.timeZone || DEFAULT_CREDIT_TIMEZONE
         const creditsData = responses.flatMap((result) => result.credits || [])
         const installmentsData = responses.flatMap((result) => result.installments || [])
         const repairDebtsData = Object.assign({}, ...responses.map((result) => result.repairDebts || {}))
@@ -446,7 +443,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                 const paidInstallments = customerInstallments.filter(i => i.status === 'paid')
                 const pendingInstallments = customerInstallments.filter(i => i.status === 'pending' || i.status === 'late')
                 
-                const totalPaid = paidInstallments.reduce((sum, i) => sum + (i.amount_paid || i.amount), 0)
+                const totalPaid = customerInstallments.reduce((sum, i) => sum + Math.min(Number(i.amount || 0), Math.max(0, Number(i.amount_paid || 0))), 0)
                 // Lo adeudado de una cuota es lo que falta pagar, no su importe
                 // completo. Con el importe entero una cuota abonada a medias
                 // inflaba la deuda del cliente en toda la lista de creditos
@@ -461,7 +458,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                 // Payment history stats
                 const latePayments = paidInstallments.filter(i => {
                     if (!i.paid_at) return false
-                    return new Date(i.paid_at) > new Date(i.due_date)
+                    return paymentCalendarStatus(i.paid_at, i.due_date, batchTimeZone) === 'late'
                 })
                 
                 // Calculate next payment
@@ -470,9 +467,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                 
                 let nextPayment = null
                 if (nextInstallment) {
-                    const dueDate = new Date(nextInstallment.due_date)
-                    const now = new Date()
-                    const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                    const daysUntilDue = daysUntilCreditDue(nextInstallment.due_date, batchTimeZone)
                     
                     const nextAmount = Math.max(0, Number(nextInstallment.amount || 0))
                     const nextPaid = Math.min(nextAmount, Math.max(0, Number(nextInstallment.amount_paid || 0)))
@@ -482,7 +477,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                         amount: nextAmount - nextPaid,
                         due_date: nextInstallment.due_date,
                         days_until_due: daysUntilDue,
-                        is_overdue: daysUntilDue < 0
+                        is_overdue: daysUntilDue !== null && daysUntilDue < 0
                     }
                 }
 
@@ -518,7 +513,7 @@ export function useCustomersWithCredits(customers: Customer[], enabled = true) {
                         on_time_payments: paidInstallments.length - latePayments.length,
                         late_payments: latePayments.length,
                         missed_payments: 0,
-                        payment_score: 100
+                    payment_score: paidInstallments.length > 0 ? Math.round((paidInstallments.length - latePayments.length) / paidInstallments.length * 100) : null
                     },
                     next_payment: nextPayment,
                     risk_assessment: {

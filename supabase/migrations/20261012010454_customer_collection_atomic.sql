@@ -41,6 +41,7 @@ declare
  candidates jsonb:='[]';
  explicit jsonb;
  saved_result jsonb;
+ credit_balances jsonb;
  count_explicit integer;
 begin
  if not exists(select 1 from public.organization_members where organization_id=p_organization_id
@@ -152,7 +153,8 @@ begin
      payment_id:=(repair_result->>'payment_id')::uuid;
    end if;
    allocations:=allocations||jsonb_build_array(jsonb_build_object('debtId',explicit->>'id','type',explicit->>'type',
-     'paymentId',payment_id,'appliedAmount',allocated,'remainingBalance',pending-allocated));
+     'paymentId',payment_id,'appliedAmount',allocated,'remainingBalance',pending-allocated,
+     'totalAmount',case when explicit->>'type'='repair' then total else installment.amount end));
    remaining:=remaining-allocated;
  end loop;
  if remaining>0 then
@@ -164,8 +166,20 @@ begin
        values(session_id,'cash_in',remaining,'Saldo a favor · '||receipt_id,method,p_actor_id,p_organization_id,p_branch_id);
    end if;
  end if;
- saved_result:=jsonb_build_object('receiptId',receipt_id,'receiptNumber','COL-'||upper(replace(receipt_id::text,'-','')),
-   'appliedAmount',amount-remaining,'excessToStoreCredit',remaining,'allocations',allocations,'recordedAt',now());
+ select coalesce(jsonb_object_agg(q.id,jsonb_build_object('remainingBalance',q.balance,'paidInstallments',q.paid_count,
+   'pendingInstallments',q.pending_count,'nextDueDate',q.next_due,'nextDueAmount',q.next_amount)),'{}') into credit_balances from (
+   select c.id,coalesce(sum(greatest(0,i.amount-coalesce(i.amount_paid,0))),0) as balance,
+     count(i.id) filter(where i.amount<=coalesce(i.amount_paid,0)) as paid_count,
+     count(i.id) filter(where i.amount>coalesce(i.amount_paid,0)) as pending_count,
+     (select j.due_date from public.credit_installments j where j.credit_id=c.id and j.amount>coalesce(j.amount_paid,0) order by j.due_date,j.id limit 1) as next_due,
+     (select greatest(0,j.amount-coalesce(j.amount_paid,0)) from public.credit_installments j where j.credit_id=c.id and j.amount>coalesce(j.amount_paid,0) order by j.due_date,j.id limit 1) as next_amount
+   from public.customer_credits c left join public.credit_installments i on i.credit_id=c.id
+   where c.organization_id=p_organization_id and c.customer_id=p_customer_id and c.status<>'cancelled' group by c.id
+ ) q;
+ saved_result:=jsonb_build_object('receiptId',receipt_id,'receiptNumber','COL-'||upper(replace(receipt_id::text,'-','')),'creditBalances',credit_balances,
+   'appliedAmount',amount-remaining,'excessToStoreCredit',remaining,'allocations',allocations,'recordedAt',now(),
+   'paymentMethod',method,'reference',case when method='transfer' then p_request->>'referenceNumber' when method='card' then p_request->>'voucherNumber' else null end,
+   'notes',p_request->>'notes');
  update public.customer_collection_requests set result=saved_result where id=receipt_id;
  return saved_result;
 end $$;

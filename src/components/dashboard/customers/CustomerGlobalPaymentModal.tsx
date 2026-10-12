@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,9 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/hooks/use-customer-state'
 import { useOptionalBranch } from '@/contexts/branch-context'
+import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
+import { useAuth } from '@/hooks/use-auth'
+import { runCollectionAttempt, retryCollectionAttempt, pendingCollectionAttempt, CollectionAttemptError } from '@/lib/credits/collection-attempt'
 
 export const PARAGUAY_BANKS = [
   'Banco Itaú',
@@ -128,6 +131,9 @@ export function CustomerGlobalPaymentModal({
   onSuccess,
 }: CustomerGlobalPaymentModalProps) {
   const [loading, setLoading] = useState(false)
+  const [debtError, setDebtError] = useState(false)
+  const [loadedDebtScope, setLoadedDebtScope] = useState('')
+  const debtRequest = useRef(0)
   const [submitting, setSubmitting] = useState(false)
   const [debts, setDebts] = useState<DebtItem[]>([])
   const [totalDebt, setTotalDebt] = useState(0)
@@ -151,18 +157,35 @@ export function CustomerGlobalPaymentModal({
   const [creditExcess, setCreditExcess] = useState(false)
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey)
   const branchId = useOptionalBranch()?.selectedBranchId ?? null
+  const organizationId = useOptionalActiveOrganization()?.organization?.id
+  const { user } = useAuth()
+  const attemptScope = organizationId && user?.id && customer?.id ? organizationId + ':' + user.id + ':' + customer.id : ''
+  const debtScope = attemptScope + ':' + (branchId ?? '')
+  const currentDebtScope = useRef(debtScope)
+  currentDebtScope.current = debtScope
+  const [needsRecovery, setNeedsRecovery] = useState(false)
 
   // Receipt / Success state
   const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null)
 
   const fetchDebts = async () => {
     if (!customer?.id) return
+    const requestId = ++debtRequest.current
+    const requestedScope = debtScope
     setLoading(true)
+    setDebtError(false)
+    setDebts([])
+    setTotalDebt(0)
+    setCollectableDebt(0)
+    setOverdueDebt(0)
+    setStoreBalance(0)
     try {
       const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''
       const res = await fetch(`/api/customers/${customer.id}/collect-payment${query}`)
       const data = await res.json()
-      if (data.success) {
+      if (requestId !== debtRequest.current || requestedScope !== currentDebtScope.current) return
+      if (res.ok && data.success) {
+        setLoadedDebtScope(requestedScope)
         setDebts(data.debts || [])
         setTotalDebt(data.totalDebt || 0)
         setCollectableDebt(data.collectableDebt ?? data.totalDebt ?? 0)
@@ -176,13 +199,16 @@ export function CustomerGlobalPaymentModal({
         })
         setManualAllocations(initialManual)
       } else {
+        setDebtError(true)
         toast.error(data.error || 'Error al cargar deudas del cliente')
       }
     } catch (err) {
+      if (requestId !== debtRequest.current || requestedScope !== currentDebtScope.current) return
+      setDebtError(true)
       console.error(err)
       toast.error('Error de conexión al cargar deudas')
     } finally {
-      setLoading(false)
+      if (requestId === debtRequest.current && requestedScope === currentDebtScope.current) setLoading(false)
     }
   }
 
@@ -201,9 +227,11 @@ export function CustomerGlobalPaymentModal({
       setNotes('')
       setCreditExcess(false)
       setIdempotencyKey(newIdempotencyKey())
+      try { setNeedsRecovery(Boolean(attemptScope && pendingCollectionAttempt(attemptScope))) }
+      catch { setNeedsRecovery(true) }
       fetchDebts()
     }
-  }, [open, customer?.id, branchId]) // eslint-disable-line react-hooks/exhaustive-deps -- fetchDebts se recrea en cada render; recargar al abrir, al cambiar de cliente o de sucursal es lo buscado
+  }, [open, customer?.id, branchId, attemptScope]) // eslint-disable-line react-hooks/exhaustive-deps -- reload only when the customer/tenant/branch identity changes
 
   const numericAmount = useMemo(() => {
     const cleaned = amountInput.replace(/[^0-9]/g, '')
@@ -314,20 +342,21 @@ export function CustomerGlobalPaymentModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!customer?.id || numericAmount <= 0) {
+    if (submitting || (!needsRecovery && (debtError || loading || loadedDebtScope !== debtScope))) return
+    if (!customer?.id || !attemptScope || (!needsRecovery && numericAmount <= 0)) {
       toast.warning('Ingresá un monto válido a cobrar.')
       return
     }
-    if (missingProof) {
+    if (!needsRecovery && missingProof) {
       toast.warning(missingProof)
       return
     }
-    if (excessToStoreCredit > 0 && !creditExcess) {
+    if (!needsRecovery && excessToStoreCredit > 0 && !creditExcess) {
       toast.warning(`Sobran ${formatCurrency(excessToStoreCredit)}. Confirmá que van a saldo a favor o ajustá el monto.`)
       return
     }
 
-    if (mode === 'manual' && totalAllocated <= 0 && excessToStoreCredit <= 0) {
+    if (!needsRecovery && mode === 'manual' && totalAllocated <= 0 && excessToStoreCredit <= 0) {
       toast.warning('Asigna un monto a al menos una deuda o ingresa el saldo.')
       return
     }
@@ -363,49 +392,38 @@ export function CustomerGlobalPaymentModal({
         branchId: branchId ?? undefined,
       }
 
-      const res = await fetch(`/api/customers/${customer.id}/collect-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const pending = pendingCollectionAttempt(attemptScope)
+      const resolvedPayload: Record<string, unknown> = pending?.payload ?? payload
+      const outcome = needsRecovery
+        ? await retryCollectionAttempt(attemptScope)
+        : await runCollectionAttempt(attemptScope, '/api/customers/' + customer.id + '/collect-payment', payload)
+      const collection = outcome.collection
+      setNeedsRecovery(false)
+      setIdempotencyKey(newIdempotencyKey())
+      const text = (value: unknown) => typeof value === 'string' ? value : null
+      setPaymentResult({
+        receiptNumber: collection.receiptNumber,
+        totalAmount: collection.appliedAmount + collection.excessToStoreCredit,
+        appliedAllocations: collection.allocations.map(row => ({
+          id: row.debtId, type: row.type,
+          title: debts.find(debt => debt.id === row.debtId)?.title ?? (row.type === 'repair' ? 'Reparación' : 'Cuota'),
+          allocatedAmount: row.appliedAmount, previousPending: row.appliedAmount + row.remainingBalance,
+          newPending: row.remainingBalance, fullyPaid: row.remainingBalance === 0,
+        })),
+        excessToStoreCredit: collection.excessToStoreCredit,
+        paymentMethod: text(resolvedPayload.paymentMethod ?? resolvedPayload.method) ?? paymentMethod,
+        bankName: text(resolvedPayload.bankName), referenceNumber: text(resolvedPayload.referenceNumber ?? resolvedPayload.reference),
+        cardType: resolvedPayload.cardType === 'credit' ? 'credit' : 'debit',
+        posNetwork: text(resolvedPayload.posNetwork), voucherNumber: text(resolvedPayload.voucherNumber),
+        lastFourDigits: text(resolvedPayload.lastFourDigits), timestamp: collection.recordedAt,
       })
-
-      const data = await res.json()
-      // 207: se cobró una parte y se cortó en una deuda. Lo cobrado ya está
-      // registrado, así que se muestra el recibo de eso y se avisa del resto.
-      const partial = res.status === 207 && Array.isArray(data.appliedAllocations) && data.appliedAllocations.length > 0
-      if (data.success || partial) {
-        if (partial) {
-          toast.error(data.error || 'El cobro se registró en parte.')
-        } else {
-          toast.success(data.message || 'Cobro registrado')
-        }
-        if (data.storeCreditWarning) toast.warning(data.storeCreditWarning)
-        setIdempotencyKey(newIdempotencyKey())
-        setPaymentResult({
-          receiptNumber: data.receiptNumber,
-          totalAmount: data.totalAmount ?? data.totalApplied ?? 0,
-          appliedAllocations: data.appliedAllocations || [],
-          excessToStoreCredit: data.excessToStoreCredit || 0,
-          paymentMethod: data.paymentMethod || paymentMethod,
-          bankName: data.bankName || (paymentMethod === 'transfer' ? bankName : null),
-          referenceNumber: data.referenceNumber || (paymentMethod === 'transfer' ? referenceNumber : null),
-          cardType: data.cardType || (paymentMethod === 'card' ? cardType : null),
-          posNetwork: data.posNetwork || (paymentMethod === 'card' ? posNetwork : null),
-          voucherNumber: data.voucherNumber || (paymentMethod === 'card' ? voucherNumber : null),
-          lastFourDigits: data.lastFourDigits || (paymentMethod === 'card' ? lastFourDigits : null),
-          timestamp: data.timestamp || new Date().toISOString(),
-        })
-        if (onSuccess) onSuccess()
-      } else {
-        // Se mantiene la clave: reintentar este mismo cobro no cobra dos veces
-        // una reparación que sí haya entrado.
-        toast.error(data.error || 'No se pudo registrar el cobro')
-        if (data.code === 'EXCESS_REQUIRES_CONFIRMATION') setCreditExcess(false)
-        fetchDebts()
-      }
-    } catch (err) {
-      console.error(err)
-      toast.error('No se pudo conectar con el servidor. Revisá si el cobro quedó registrado antes de reintentar.')
+      toast.success('Cobro confirmado. Comprobante recuperable sin repetir el pago.')
+      try { onSuccess?.() } catch { toast.warning('El cobro quedó registrado; actualizá la ficha para ver los saldos.') }
+    } catch (cause) {
+      const uncertain = cause instanceof CollectionAttemptError && cause.uncertain
+      setNeedsRecovery(uncertain)
+      toast.error(cause instanceof Error ? cause.message : 'No se pudo confirmar el cobro.')
+      if (!uncertain) void fetchDebts()
     } finally {
       setSubmitting(false)
     }
@@ -460,7 +478,7 @@ export function CustomerGlobalPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val && !submitting) onClose() }}>
-      <DialogContent className="max-w-3xl lg:max-w-4xl p-0 gap-0 max-h-[92vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-3xl lg:max-w-4xl p-0 gap-0 max-h-[92dvh] flex flex-col overflow-hidden">
         {/* ── Header ── */}
         <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white border-b border-slate-800">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -633,13 +651,19 @@ export function CustomerGlobalPaymentModal({
                 </Button>
               </div>
             </div>
-          ) : loading ? (
+          ) : debtError ? (
+            <div role="alert" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+              <p>No se pudieron verificar las deudas.</p>
+              <Button type="button" variant="outline" onClick={() => void fetchDebts()}>Reintentar consulta</Button>
+              {needsRecovery && <Button type="button" disabled={submitting} onClick={() => void handleSubmit({ preventDefault() {} } as React.FormEvent)}>Recuperar cobro pendiente</Button>}
+            </div>
+          ) : loading || loadedDebtScope !== debtScope ? (
             /* ── SKELETON LOADING ── */
             <div className="space-y-4 py-6">
               <div className="h-20 bg-slate-200 dark:bg-slate-800 animate-pulse rounded-xl" />
               <div className="h-40 bg-slate-200 dark:bg-slate-800 animate-pulse rounded-xl" />
             </div>
-          ) : debts.length === 0 ? (
+          ) : debts.length === 0 && !needsRecovery ? (
             /* ── NO DEBTS VIEW ── */
             <div className="text-center py-12 space-y-3">
               <div className="h-14 w-14 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 mx-auto flex items-center justify-center">
@@ -661,6 +685,8 @@ export function CustomerGlobalPaymentModal({
           ) : (
             /* ── PAYMENT FORM VIEW ── */
             <form onSubmit={handleSubmit} className="space-y-5">
+              {needsRecovery && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Hay un cobro pendiente de confirmar. Recuperá su resultado antes de iniciar otro; no vuelvas a recibir el dinero.</p>}
+              <fieldset disabled={submitting || needsRecovery} className="space-y-5 min-w-0">
               {/* Monto y Medios de Pago */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-xs">
                 {/* Input de Monto */}
@@ -1291,6 +1317,7 @@ export function CustomerGlobalPaymentModal({
               )}
 
               {/* Botón de Confirmación */}
+              </fieldset>
               <div className="flex items-center justify-between pt-2">
                 <Button
                   type="button"
@@ -1305,9 +1332,11 @@ export function CustomerGlobalPaymentModal({
                   type="submit"
                   disabled={
                     submitting ||
-                    numericAmount <= 0 ||
-                    Boolean(missingProof) ||
-                    (excessToStoreCredit > 0 && !creditExcess)
+                    (!needsRecovery && (debtError || loadedDebtScope !== debtScope)) ||
+                    !attemptScope ||
+                    (!needsRecovery && numericAmount <= 0) ||
+                    (!needsRecovery && Boolean(missingProof)) ||
+                    (!needsRecovery && excessToStoreCredit > 0 && !creditExcess)
                   }
                   className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold gap-2 px-6 shadow-md"
                 >
@@ -1319,7 +1348,7 @@ export function CustomerGlobalPaymentModal({
                   ) : (
                     <>
                       <Coins className="h-4 w-4" />
-                      Confirmar Abono de {formatCurrency(numericAmount)}
+                      {needsRecovery ? 'Recuperar cobro pendiente' : 'Confirmar abono de ' + formatCurrency(numericAmount)}
                     </>
                   )}
                 </Button>
