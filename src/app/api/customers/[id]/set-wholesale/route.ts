@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { moduleAccessResponse } from '@/lib/api/api-route-modules'
 import {
   WHOLESALE_PRICE_PERMISSION,
   isLegacyWholesaleRole,
@@ -92,6 +93,11 @@ export async function POST(
     const organization = await getCurrentOrganizationContext(authResult.user.id)
     if (!organization) {
       return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
+    }
+    {
+      // El módulo de la sección (ver ROUTE_MODULES): apagado o fuera del plan, no responde.
+      const denied = await moduleAccessResponse(organization.id, 'crm')
+      if (denied) return denied
     }
 
     const target = await resolveCustomerTarget(admin, organization.id, targetId)
@@ -213,6 +219,11 @@ export async function GET(
     const organization = await getCurrentOrganizationContext(authResult.user.id)
     if (!organization) {
       return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
+    }
+    {
+      // El módulo de la sección (ver ROUTE_MODULES): apagado o fuera del plan, no responde.
+      const denied = await moduleAccessResponse(organization.id, 'crm')
+      if (denied) return denied
     }
 
     const target = await resolveCustomerTarget(admin, organization.id, targetId)

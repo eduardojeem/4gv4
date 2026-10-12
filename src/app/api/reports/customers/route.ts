@@ -26,7 +26,7 @@ function parseRange(request: Request) {
   return { from, to }
 }
 
-export const GET = withTenantAuth({ permission: 'analytics.read' }, async (request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'analytics.read', module: 'reports' }, async (request, { organization }) => {
   const range = parseRange(request)
   if (!range) {
     return NextResponse.json(

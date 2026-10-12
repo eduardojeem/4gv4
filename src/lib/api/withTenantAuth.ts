@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { logger } from '@/lib/logger'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
-import { type SaaSModule } from '@/lib/saas/plans'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import type { OrganizationModule } from '@/lib/organization/business-profile'
 import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 export interface TenantAuthContext {
@@ -24,7 +24,8 @@ export interface TenantAuthContext {
 
 export interface TenantGuardOptions {
   permission?: Permission | Permission[]
-  module?: SaaSModule
+  /** Con una lista alcanza con cualquiera (los clientes los usan CRM y el POS). */
+  module?: OrganizationModule | readonly OrganizationModule[]
 }
 
 export type TenantAuthenticatedHandler = (
@@ -55,10 +56,11 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
       }
 
       if (options.module) {
+        const anyOf: readonly OrganizationModule[] = typeof options.module === 'string' ? [options.module] : options.module
         const planInfo = await getOrganizationPlanInfo(organization.id)
-        if (!planInfo.modules.includes(options.module)) {
-          const commerciallyAvailable = planInfo.entitledModules.includes(options.module)
-            || planInfo.moduleTrials.some(trial => trial.module === options.module)
+        if (!anyOf.some((module) => planInfo.modules.includes(module))) {
+          const commerciallyAvailable = anyOf.some((module) => planInfo.entitledModules.includes(module)
+            || planInfo.moduleTrials.some(trial => trial.module === module))
           return NextResponse.json(
             commerciallyAvailable
               ? {

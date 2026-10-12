@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/server'
  * positions 101+).
  */
 export const GET = withTenantAuth(
-  { permission: ['promotions.create', 'promotions.update', 'promotions.manage'] },
+  { permission: ['promotions.create', 'promotions.update', 'promotions.manage'], module: 'promotions' },
   async (request: NextRequest, { organization }) => {
     const { searchParams } = new URL(request.url)
     const code = (searchParams.get('code') || '').trim().toUpperCase()

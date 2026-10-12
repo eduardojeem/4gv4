@@ -17,7 +17,7 @@ import { findCustomerDuplicates } from '@/lib/customers/duplicate-check'
  * reparaciones y la seccion de clientes.
  */
 export const GET = withTenantAuth(
-  { permission: ['crm.customers.read', 'crm.customers.manage', 'repairs.orders.read', 'repairs.orders.create'] },
+  { permission: ['crm.customers.read', 'crm.customers.manage', 'repairs.orders.read', 'repairs.orders.create'], module: ['crm', 'pos'] },
   async (request, { organization }) => {
     try {
       const { searchParams } = new URL(request.url)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
+import { moduleAccessResponse } from '@/lib/api/api-route-modules'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 export async function GET(request: NextRequest) {
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
     const organization = await getCurrentOrganizationContext(user.id)
     if (!organization) {
       return NextResponse.json({ error: 'Sin organización activa' }, { status: 403 })
+    }
+    {
+      // El módulo de la sección (ver ROUTE_MODULES): apagado o fuera del plan, no responde.
+      const denied = await moduleAccessResponse(organization.id, ['inventory', 'services'])
+      if (denied) return denied
     }
 
     const sku = request.nextUrl.searchParams.get('sku')

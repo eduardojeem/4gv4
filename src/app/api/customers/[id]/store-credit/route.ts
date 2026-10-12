@@ -43,7 +43,8 @@ async function readBalance(
 }
 
 export const GET = withTenantAuth(
-  { permission: 'crm.customers.read', module: 'crm' },
+  // El POS consulta el saldo a favor para cobrar con él.
+  { permission: 'crm.customers.read', module: ['crm', 'pos'] },
   async (request, { organization }, routeContext) => {
     try {
       const id = await getRouteId(routeContext)

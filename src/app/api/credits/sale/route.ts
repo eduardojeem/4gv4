@@ -6,6 +6,7 @@ import {
   normalizeCreditFrequency,
   normalizeInstallmentCount,
 } from '@/lib/credits/installments'
+import { moduleAccessResponse } from '@/lib/api/api-route-modules'
 import { createCreditAccount, CreditAccountError } from '@/lib/credits/create-credit-account'
 
 type CreateCreditSaleBody = {
@@ -53,6 +54,11 @@ export async function POST(request: Request) {
     const organization = await getCurrentOrganizationContext(staffAuth.user.id)
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
+    {
+      // El módulo de la sección (ver ROUTE_MODULES): apagado o fuera del plan, no responde.
+      const denied = await moduleAccessResponse(organization.id, 'credits')
+      if (denied) return denied
     }
 
     const body = await request.json() as CreateCreditSaleBody

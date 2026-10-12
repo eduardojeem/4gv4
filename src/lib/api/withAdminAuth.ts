@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { resolveUserOrganizationId } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
+import { moduleAccessResponse, moduleForAdminApi } from '@/lib/api/api-route-modules'
 
 export interface AdminAuthContext {
   user: {
@@ -176,6 +177,16 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
             { error: 'Forbidden', message: 'Could not verify organization permissions' },
             { status: 403 }
           )
+        }
+      }
+
+      // El módulo de la sección, según la URL (ADMIN_API_MODULES): una tienda que
+      // lo apagó o cuyo plan no lo incluye no puede leer ni guardar por la API.
+      if (organizationId) {
+        const requiredModule = moduleForAdminApi(request.nextUrl.pathname)
+        if (requiredModule) {
+          const denied = await moduleAccessResponse(organizationId, requiredModule)
+          if (denied) return denied
         }
       }
 

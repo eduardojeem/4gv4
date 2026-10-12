@@ -176,7 +176,9 @@ async function findCustomersWithHistory(
   return blocked
 }
 
-export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'crm' }, async (request, { organization }) => {
+// Buscar y crear clientes sirve también para vender: con POS alcanza aunque la
+// tienda no use la sección Clientes (CRM). Editar y borrar siguen siendo de CRM.
+export const GET = withTenantAuth({ permission: 'crm.customers.read', module: ['crm', 'pos'] }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, Number(searchParams.get('page') || 1))
@@ -330,7 +332,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
   }
 })
 
-export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.sales.create'], module: 'crm' }, async (request, { organization }) => {
+export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.sales.create'], module: ['crm', 'pos'] }, async (request, { organization }) => {
   try {
     const validation = customerSchema.safeParse(await request.json())
 
