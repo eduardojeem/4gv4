@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isOwnedRepairImagePath, repairImagePath } from '@/lib/repairs/repair-image-storage'
-import { resolveWarrantyExpiration } from '@/lib/warranty-utils'
+import { buildRepairUpdate } from '@/lib/repairs/repair-update'
 import { parseRepairPartsInput } from '@/lib/repairs/create-repair-input'
 import {
   RepairPartsStockError,
@@ -32,59 +32,6 @@ type RepairNoteInput = {
   id?: unknown
   text?: unknown
   isInternal?: unknown
-}
-
-const REPAIR_FIELD_MAP: Record<string, string> = {
-  brand: 'device_brand',
-  model: 'device_model',
-  deviceType: 'device_type',
-  issue: 'problem_description',
-  description: 'diagnosis',
-  accessType: 'access_type',
-  accessPassword: 'access_password',
-  status: 'status',
-  priority: 'priority',
-  urgency: 'urgency',
-  customer_id: 'customer_id',
-  technician_id: 'technician_id',
-  estimatedCost: 'estimated_cost',
-  laborCost: 'labor_cost',
-  finalCost: 'final_cost',
-  pricingMode: 'pricing_mode',
-  discountAmount: 'discount_amount',
-  priceOverrideReason: 'price_override_reason',
-  warrantyMonths: 'warranty_months',
-  warrantyType: 'warranty_type',
-  warrantyNotes: 'warranty_notes',
-}
-
-function buildRepairUpdate(
-  payload: Record<string, unknown>,
-  anchors: { deliveredAt?: string | null; completedAt?: string | null } = {}
-) {
-  const updateData: Record<string, unknown> = {}
-
-  for (const [uiField, dbField] of Object.entries(REPAIR_FIELD_MAP)) {
-    if (payload[uiField] !== undefined) {
-      updateData[dbField] = payload[uiField]
-    }
-  }
-
-  if (payload.warrantyMonths !== undefined) {
-    // La garantia corre desde que el cliente recibe el equipo. Si todavia no se
-    // entrego ni finalizo, queda en null: la fecha definitiva se fija al
-    // entregar (ver /api/repairs/[id]/delivery).
-    updateData.warranty_expires_at = resolveWarrantyExpiration(
-      Number(payload.warrantyMonths || 0),
-      anchors
-    )
-  }
-
-  if (Object.keys(updateData).length > 0) {
-    updateData.updated_at = new Date().toISOString()
-  }
-
-  return updateData
 }
 
 function normalizeParts(parts: RepairPartInput[]) {

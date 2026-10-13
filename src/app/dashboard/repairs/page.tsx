@@ -598,8 +598,9 @@ function RepairsPageContent() {
         } = {
           brand: d.brand,
           model: d.model,
-          serialNumber: d.serialNumber || undefined,
-          serial_number: d.serialNumber || undefined,
+          // Vacío = se borra: con `undefined` no había forma de quitar un IMEI mal cargado.
+          serialNumber: d.serialNumber?.trim() || null,
+          serial_number: d.serialNumber?.trim() || null,
           deviceType: d.deviceType,
           issue: d.issue,
           description: d.description,

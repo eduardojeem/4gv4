@@ -222,7 +222,7 @@ export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar por cliente, modelo, falla, SKU o # Ticket (ej. R-1001)..."
+                        placeholder="Buscar por cliente, modelo, falla, IMEI / serie o # Ticket (ej. R-1001)..."
                         className="pl-9 pr-9 h-10 rounded-xl text-xs sm:text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
