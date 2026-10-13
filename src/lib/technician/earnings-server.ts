@@ -29,8 +29,12 @@ export function qualifiesForAccrual(
     ? status === 'entregado'
     : status === 'listo' || status === 'entregado'
   if (!statusOk) return false
-  const closedAt = row.completed_at || row.delivered_at || null
-  return Boolean(closedAt && closedAt >= from && closedAt < to)
+  const closedAt = accrual === 'entregado'
+    ? row.delivered_at
+    : row.completed_at || row.delivered_at
+  if (!closedAt) return false
+  const timestamp = Date.parse(closedAt)
+  return Number.isFinite(timestamp) && timestamp >= Date.parse(from) && timestamp < Date.parse(to)
 }
 
 export async function getTechnicianCompensation(
@@ -38,13 +42,14 @@ export async function getTechnicianCompensation(
   organizationId: string,
   technicianId: string,
 ): Promise<CompensationConfig> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('technician_compensation')
     .select('base_salary, commission_rate, commission_base, fixed_per_repair, accrual_status, salary_effective_from')
     .eq('organization_id', organizationId)
     .eq('technician_id', technicianId)
     .maybeSingle()
 
+  if (error) throw error
   if (!data) return { ...DEFAULT_COMPENSATION }
   return {
     base_salary: Number(data.base_salary) || 0,
@@ -85,6 +90,9 @@ export async function computeTechnicianEarnings(
   from: string,
   to: string,
 ): Promise<{ compensation: CompensationConfig; earnings: EarningsResult }> {
+  if (!Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || Date.parse(from) >= Date.parse(to)) {
+    throw new Error('Período inválido')
+  }
   const compensation = await getTechnicianCompensation(supabase, organizationId, technicianId)
   const baseProration = computeBaseProration(compensation.salary_effective_from, from)
 
@@ -93,13 +101,22 @@ export async function computeTechnicianEarnings(
     .select('status, labor_cost, final_cost, estimated_cost, completed_at, delivered_at')
     .eq('organization_id', organizationId)
     .eq('technician_id', technicianId)
+    .eq('is_deleted', false)
+    .order('id', { ascending: true })
 
   if (branchId) query = query.eq('branch_id', branchId)
 
-  const { data: repairs, error } = await query
-  if (error) throw error
+  const repairs: RepairRow[] = []
+  const pageSize = 200
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await query.range(offset, offset + pageSize - 1)
+    if (error) throw error
+    const page = (data as RepairRow[] | null) ?? []
+    repairs.push(...page)
+    if (page.length < pageSize) break
+  }
 
-  const qualifying = ((repairs as RepairRow[] | null) ?? []).filter((row) =>
+  const qualifying = repairs.filter((row) =>
     qualifiesForAccrual(row, compensation.accrual_status, from, to),
   )
 
