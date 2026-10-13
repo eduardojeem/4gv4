@@ -158,16 +158,15 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
 
         {/* Ubicación, Dirección y Botón de Mapa */}
         {(normalizedCity || organization.address) && (
-          <div className="mt-0.5 flex items-center justify-between gap-1 text-[11px] text-muted-foreground sm:mt-1.5 sm:gap-1.5 sm:rounded-lg sm:border sm:border-border/50 sm:bg-muted/40 sm:px-2.5 sm:py-1">
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <MapPin className="h-3 w-3 text-primary shrink-0" />
-              <div className="min-w-0 truncate text-[11px] leading-tight">
+          <div className="mt-1 flex flex-col gap-2 rounded-lg border border-border/50 bg-muted/30 p-2 text-[11px] text-muted-foreground sm:mt-1.5">
+            <div className="flex min-w-0 items-start gap-1.5">
+              <MapPin className="mt-0.5 h-3 w-3 text-primary shrink-0" aria-hidden="true" />
+              <div className="min-w-0 text-[11px] leading-tight">
                 {normalizedCity && (
-                  <span className="font-semibold text-foreground mr-1">{normalizedCity.display}</span>
+                  <span className="block truncate text-xs font-semibold text-foreground">{normalizedCity.display}</span>
                 )}
                 {organization.address && (
-                  // En el celular solo la ciudad: la dirección no entra en media pantalla.
-                  <span className="hidden truncate text-muted-foreground sm:inline">{organization.address}</span>
+                  <span className="mt-0.5 line-clamp-2 break-words text-muted-foreground" title={organization.address}>{organization.address}</span>
                 )}
               </div>
             </div>
@@ -189,8 +188,8 @@ export function OrganizationDirectoryCard({ organization, className, onOpenDetai
                   }
                 }}
                 title="Ver ubicación en Google Maps"
-                // En el celular no: el área táctil mínima (44 px) duplicaba el alto de la tarjeta, y el mapa está en «Detalles».
-                className="hidden shrink-0 items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs sm:inline-flex"
+                aria-label={`Ver mapa de ${organization.name}`}
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 text-[10px] font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer shadow-2xs"
               >
                 <Navigation className="h-2.5 w-2.5" />
                 <span>Mapa</span>

@@ -1,8 +1,14 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 
 let url = ''
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
+beforeAll(() => Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() }))
+afterAll(() => {
+  if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView)
+  else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+})
 const push = vi.fn()
 const replace = vi.fn()
 vi.mock('next/navigation', () => ({
@@ -100,10 +106,43 @@ describe('el directorio', () => {
     expect(screen.getByRole('button', { name: /Tecnología/ })).toBeEnabled()
   })
 
-  it('con una sola ciudad no muestra el filtro de ciudad', () => {
+  it('mantiene Ubicación visible aunque haya una sola ciudad', () => {
     render(<EmpresasClient organizations={ORGS.filter((o) => o.city === 'Encarnación')} />)
-    expect(screen.queryByLabelText('Filtrar por ciudad')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Filtrar por ciudad')).toBeInTheDocument()
+    expect(screen.getByText('Ubicación')).toBeInTheDocument()
     expect(screen.getByLabelText('Ordenar tiendas')).toBeInTheDocument()
+  })
+
+  it('busca ciudades sin tildes y conserva los otros filtros al elegir una ubicación', () => {
+    url = 'rubro=tecnologia&orden=nombre'
+    render(<EmpresasClient organizations={ORGS} initialRubro="tecnologia" initialSort="nombre" />)
+    fireEvent.click(screen.getByLabelText('Filtrar por ciudad'))
+    fireEvent.change(screen.getByPlaceholderText('Buscar ciudad...'), { target: { value: 'encarnacion' } })
+    expect(screen.queryByRole('option', { name: 'Asunción (1)' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: 'Encarnación (1)' }))
+    expect(screen.getByText('Mundo Celulares')).toBeInTheDocument()
+    expect(screen.queryByText('Compu Center')).not.toBeInTheDocument()
+    expect(push).toHaveBeenCalledWith('/marketplace/empresas?rubro=tecnologia&orden=nombre&ciudad=encarnacion', { scroll: false })
+    expect(screen.getByText('Ciudad: Encarnación')).toBeInTheDocument()
+  })
+
+  it('permite quitar solo la ciudad manteniendo el rubro', () => {
+    url = 'rubro=tecnologia&ciudad=encarnacion'
+    render(<EmpresasClient organizations={ORGS} initialRubro="tecnologia" initialCity="encarnacion" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ciudad: Encarnación' }))
+    expect(screen.getByText('Compu Center')).toBeInTheDocument()
+    expect(screen.queryByText('Boutique Luna')).not.toBeInTheDocument()
+    expect(push).toHaveBeenCalledWith('/marketplace/empresas?rubro=tecnologia', { scroll: false })
+  })
+
+  it('una búsqueda de ciudad sin coincidencias conserva la opción de ver todas', () => {
+    render(<EmpresasClient organizations={ORGS} />)
+    fireEvent.click(screen.getByLabelText('Filtrar por ciudad'))
+    fireEvent.change(screen.getByPlaceholderText('Buscar ciudad...'), { target: { value: 'zzzz' } })
+    expect(screen.getByText('No se encontraron ciudades para esa búsqueda.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: 'Todas las ciudades (5)' }))
+    expect(screen.queryByPlaceholderText('Buscar ciudad...')).not.toBeInTheDocument()
+    expect(screen.getByText('Compu Center')).toBeInTheDocument()
   })
 })
 

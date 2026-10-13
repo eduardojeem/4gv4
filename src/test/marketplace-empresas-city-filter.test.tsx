@@ -1,7 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { EmpresasClient } from '@/components/public/EmpresasClient'
 import type { MarketplaceOrganization } from '@/lib/public/marketplace'
+
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
+beforeAll(() => Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() }))
+afterAll(() => {
+  if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView)
+  else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+})
 
 // Mock next/navigation
 vi.mock('next/navigation', () => ({
@@ -109,6 +116,7 @@ describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
 
     const citySelect = screen.getByRole('combobox', { name: 'Filtrar por ciudad' })
     expect(citySelect).toBeInTheDocument()
+    fireEvent.click(citySelect)
 
     // Las 4 variantes de Encarnación ("Encarnación", "encarnacion", "encarnacion, paraguay", "Encarnacion - Itapua")
     // se agrupan en una única opción: "Encarnación (4)"
@@ -122,9 +130,8 @@ describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
     render(<EmpresasClient organizations={mockOrganizations} />)
 
     // Seleccionar Encarnación
-    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por ciudad' }), {
-      target: { value: 'encarnacion' },
-    })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Filtrar por ciudad' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Encarnación (4)' }))
 
     // Las 4 tiendas de Encarnación deben estar presentes
     expect(screen.getByText('Moda Encarnacion 1')).toBeInTheDocument()
@@ -154,9 +161,8 @@ describe('Marketplace Empresas - Filtro por Ciudad y Normalización', () => {
   it('restablece el filtro de ciudad al hacer clic en Restablecer filtros', () => {
     render(<EmpresasClient organizations={mockOrganizations} />)
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por ciudad' }), {
-      target: { value: 'asuncion' },
-    })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Filtrar por ciudad' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Asunción (1)' }))
 
     expect(screen.queryByText('CDE Celulares')).not.toBeInTheDocument()
 

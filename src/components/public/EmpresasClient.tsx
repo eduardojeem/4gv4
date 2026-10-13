@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { OrganizationDetailModal } from '@/components/public/OrganizationDetailModal'
 import { HorizontalScroller } from '@/components/public/HorizontalScroller'
+import { CompanyCityFilter } from '@/components/public/CompanyCityFilter'
 import { normalizeCity } from '@/lib/public/city-normalizer'
 import { rubroLabel } from '@/lib/public/organization-rubro'
 import {
@@ -169,8 +170,6 @@ export function EmpresasClient({
   )
   const rubros = useMemo(() => rubroFacets(organizations, filters), [organizations, query, selectedRubro, selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
   const cities = useMemo(() => cityFacets(organizations, filters), [organizations, query, selectedRubro, selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Con todas las tiendas en la misma ciudad el filtro no sirve para nada.
-  const showCityFilter = cities.length > 1 || selectedCity !== 'all'
   const countWithoutRubro = useMemo(
     () => filterOrganizations(organizations, filters, 'rubro').length,
     [organizations, query, selectedCity], // eslint-disable-line react-hooks/exhaustive-deps
@@ -200,9 +199,9 @@ export function EmpresasClient({
     <div className="space-y-6">
       {/* ── Panel de Control: Buscador, Ciudad, Orden y Rubros ── */}
       <div className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
-        <div className="grid gap-3 sm:grid-cols-12 items-center">
+        <div className="grid gap-3 sm:grid-cols-12 items-end">
           {/* Buscador */}
-          <div className={cn('relative', showCityFilter ? 'sm:col-span-6 lg:col-span-5' : 'sm:col-span-8 lg:col-span-7')}>
+          <div className="relative sm:col-span-6 lg:col-span-5">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
@@ -210,7 +209,7 @@ export function EmpresasClient({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar por tienda, rubro o ciudad..."
               aria-label="Buscar tiendas"
-              className="h-10 rounded-xl pl-10 pr-9 text-xs sm:text-sm bg-background border-border/80 focus-visible:ring-primary [&::-webkit-search-cancel-button]:hidden"
+              className="h-11 rounded-xl pl-10 pr-9 text-base sm:text-sm bg-background border-border/80 focus-visible:ring-primary [&::-webkit-search-cancel-button]:hidden"
             />
             {query && (
               <button
@@ -224,28 +223,11 @@ export function EmpresasClient({
             )}
           </div>
 
-          {/* Filtro por Ciudad (solo si hay más de una) */}
-          {showCityFilter && (
-            <div className="sm:col-span-3 lg:col-span-3 relative">
-              <MapPin className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-              <select
-                aria-label="Filtrar por ciudad"
-                value={activeCityMeta?.key || selectedCity}
-                onChange={(e) => handleCityChange(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
-              >
-                <option value="all">Todas las ciudades ({filterOrganizations(organizations, filters, 'city').length})</option>
-                {cities.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.display} ({c.count})
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground text-xs">
-                ▼
-              </div>
-            </div>
-          )}
+          <div className="sm:col-span-3">
+            <CompanyCityFilter cities={cities} value={activeCityMeta?.key || selectedCity}
+              selectedLabel={activeCityDisplay} total={filterOrganizations(organizations, filters, 'city').length}
+              onChange={handleCityChange} />
+          </div>
 
           {/* Orden */}
           <div className="sm:col-span-3 lg:col-span-2 relative">
@@ -254,7 +236,7 @@ export function EmpresasClient({
               aria-label="Ordenar tiendas"
               value={sort}
               onChange={(e) => handleSortChange(e.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
+              className="h-11 w-full appearance-none rounded-xl border border-border/80 bg-background pl-9 pr-8 text-base sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all cursor-pointer truncate"
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.id} value={option.id}>{option.label}</option>
@@ -266,7 +248,7 @@ export function EmpresasClient({
           </div>
 
           {/* Contador de Tiendas */}
-          <div className={cn('flex justify-start lg:justify-end', showCityFilter ? 'sm:col-span-12 lg:col-span-2' : 'sm:col-span-12 lg:col-span-3')}>
+          <div className="flex justify-start pb-3 sm:col-span-12 lg:col-span-2 lg:justify-end">
             <p className="text-xs font-semibold text-muted-foreground" aria-live="polite">
               <strong className="text-foreground">{filtered.length}</strong> de {organizations.length} tiendas
             </p>
