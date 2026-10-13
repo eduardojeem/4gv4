@@ -15,23 +15,23 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 type PageProps = {
-  searchParams: Promise<{ q?: string; rubro?: string; ciudad?: string; city?: string }>
+  searchParams: Promise<{ q?: string; rubro?: string; ciudad?: string; city?: string; orden?: string }>
 }
 
 export default async function MarketplaceOrganizationsPage({ searchParams }: PageProps) {
-  const { q, rubro, ciudad, city } = await searchParams
+  const { q, rubro, ciudad, city, orden } = await searchParams
   const organizations = await getMarketplaceOrganizations(120)
 
   return (
     <div className="min-h-screen">
       {/* ── Header Hero Moderno ── */}
-      <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.04] via-card to-background py-10 sm:py-12">
+      <section className="relative overflow-hidden border-b border-border/80 bg-gradient-to-b from-primary/[0.04] via-card to-background py-5 sm:py-12">
         <div className="pointer-events-none absolute -left-12 -top-12 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute right-4 top-0 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Breadcrumb */}
-          <nav aria-label="Breadcrumb" className="mb-5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <nav aria-label="Breadcrumb" className="mb-3 sm:mb-5 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Link href="/marketplace" className="flex items-center gap-1 hover:text-foreground transition-colors font-medium">
               <Store className="h-3.5 w-3.5" />
               Marketplace
@@ -42,16 +42,16 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
             </span>
           </nav>
 
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
-                <Building2 className="h-6 w-6" />
+          <div className="flex flex-col gap-3 sm:gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
+                <Building2 className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <div>
-                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+                <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                   Directorio de Empresas
                 </h1>
-                <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                <p className="mt-1 sm:mt-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   {/* La cantidad, recién cuando suma (mismo mínimo que /saas/negocios). */}
                   {organizations.length >= DIRECTORY_STAT_MINIMUMS.stores
                     ? `${organizations.length} tiendas verificadas con catálogo público`
@@ -69,14 +69,17 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
       </section>
 
       {/* ── Directorio con Filtro por Rubros y Ciudades ── */}
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-10">
-        <TopRatedCarousel organizations={organizations} />
+      {/* Las mejor calificadas van después de la grilla: arriba empujaban los
+          filtros y las tiendas fuera de la primera pantalla. */}
+      <section className="mx-auto max-w-7xl px-4 py-5 sm:py-10 sm:px-6 lg:px-8 space-y-10">
         <EmpresasClient
           organizations={organizations}
           initialQuery={q ?? ''}
           initialRubro={rubro ?? 'all'}
           initialCity={ciudad ?? city ?? 'all'}
+          initialSort={orden}
         />
+        <TopRatedCarousel organizations={organizations} />
       </section>
     </div>
   )

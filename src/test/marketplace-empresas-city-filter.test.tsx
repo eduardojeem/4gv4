@@ -5,7 +5,7 @@ import type { MarketplaceOrganization } from '@/lib/public/marketplace'
 
 // Mock next/navigation
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/marketplace/empresas',
   useSearchParams: () => new URLSearchParams(),
 }))

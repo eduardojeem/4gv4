@@ -336,7 +336,7 @@ export function resolveOrganizationRubro(
     // el público veía «Clothing» o «General» y los filtros por rubro no los encontraban.
     const byCode: Record<string, string> = {
       electronics: 'tecnologia', clothing: 'indumentaria', hardware: 'ferreteria', food: 'alimentos',
-      cosmetics: 'belleza', barbershop: 'barberia', general: 'comercio', other: 'comercio',
+      cosmetics: 'belleza', beauty_services: 'belleza', barbershop: 'barberia', general: 'comercio', other: 'comercio',
     }
     if (byCode[vertical]) return byCode[vertical]
     if (vertical.includes('tecno') || vertical.includes('celular') || vertical.includes('comput') || vertical.includes('electr')) return 'tecnologia'
