@@ -11,6 +11,8 @@ export interface AnalyticsModuleFlags {
   repairs: boolean
   inventory: boolean
   crm: boolean
+  /** Agenda de turnos: barberías, salones, estética y demás negocios de servicios. */
+  services: boolean
 }
 
 export type AnalyticsModuleKey = keyof AnalyticsModuleFlags
@@ -23,11 +25,12 @@ export function resolveAnalyticsModules(
   status: string | null,
   effectiveModules: readonly string[],
 ): AnalyticsModuleFlags {
-  if (status === null) return { repairs: true, inventory: true, crm: true }
+  if (status === null) return { repairs: true, inventory: true, crm: true, services: true }
   return {
     repairs: effectiveModules.includes('repairs'),
     inventory: effectiveModules.includes('inventory'),
     crm: effectiveModules.includes('crm'),
+    services: effectiveModules.includes('services'),
   }
 }
 
@@ -61,10 +64,11 @@ export function revenueCardId(flags: AnalyticsModuleFlags): 'gross' | 'pos-reven
   return flags.repairs ? 'gross' : 'pos-revenue'
 }
 
-/** «Ventas, dinero, inventario, clientes y taller», según lo que tenga la empresa. */
+/** «Ventas, agenda, dinero, inventario, clientes y taller», según lo que tenga la empresa. */
 export function describeAnalyticsSections(flags: AnalyticsModuleFlags): string {
   const parts = [
     'Ventas',
+    flags.services ? 'agenda' : null,
     'dinero',
     flags.inventory ? 'inventario' : null,
     flags.crm ? 'clientes' : null,
@@ -72,4 +76,18 @@ export function describeAnalyticsSections(flags: AnalyticsModuleFlags): string {
   ].filter((part): part is string => Boolean(part))
   if (parts.length === 1) return parts[0]
   return `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`
+}
+
+/**
+ * Cómo se llama lo que vende la empresa en los rankings: un negocio de turnos
+ * sin inventario vende servicios, no «productos».
+ */
+export function soldItemsLabel(flags: AnalyticsModuleFlags): { title: string; column: string; empty: string } {
+  if (flags.services && !flags.inventory) {
+    return { title: 'Servicios más vendidos', column: 'Servicio', empty: 'Todavía no hay ranking de servicios' }
+  }
+  if (flags.services) {
+    return { title: 'Productos y servicios más vendidos', column: 'Producto o servicio', empty: 'Todavía no hay ranking de ventas' }
+  }
+  return { title: 'Productos más vendidos', column: 'Producto', empty: 'Todavía no hay ranking de productos' }
 }
