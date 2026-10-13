@@ -9,6 +9,7 @@ import { expenseInputSchema } from '@/lib/finance/schemas'
 import {
   assertFinanceBranchAccess,
   createObligation,
+  generateDueRecurringObligations,
   listObligations,
   resolveFinanceOrganizationId,
   toFinanceApiError,
@@ -94,6 +95,8 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
       })
     }
 
+    // Los recurrentes generan el gasto del período antes de listar.
+    await generateDueRecurringObligations(organizationId)
     const result = await listObligations(organizationId, queryResult.data)
     return NextResponse.json(result)
   } catch (error) {

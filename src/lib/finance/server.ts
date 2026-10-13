@@ -538,6 +538,15 @@ export async function createObligation(params: {
       )
     }
 
+    const duplicate = await findDuplicateRecurringTemplate({ organizationId, input, concept, idempotencyKey })
+    if (duplicate) {
+      throw new FinanceApiError(
+        `Ya tenés un gasto recurrente igual: «${duplicate.concept}». Si es otro gasto, cambiá el concepto; si querés modificarlo, editá el que ya existe.`,
+        409,
+        'FINANCE_RECURRING_DUPLICATE',
+      )
+    }
+
     const supabase = await createClient()
     const { data, error } = await supabase.rpc(
       'create_recurring_finance_obligation_atomic',
@@ -561,31 +570,54 @@ export async function createObligation(params: {
     return (data as { obligation?: unknown } | null)?.obligation ?? data
   }
 
+  // Un segundo envío con la misma clave (doble clic, Enter repetido, reintento)
+  // devuelve el gasto ya creado en vez de crear otro.
+  const creationKey = idempotencyKey ?? null
+  if (creationKey) {
+    const existing = await findObligationByCreationKey(organizationId, creationKey)
+    if (existing) return replayCreatedObligation(existing, input, concept)
+  }
+
   const status =
     input.dueDate && input.dueDate < (await resolveOrganizationToday(organizationId))
       ? 'overdue'
       : 'pending'
-  const { data, error } = await admin
-    .from('finance_obligations')
-    .insert({
-      organization_id: organizationId,
-      branch_id: input.branchId,
-      category_id: input.categoryId,
-      template_id: null,
-      recurrence_period: null,
-      concept,
-      amount: input.amount,
-      currency: 'PYG',
-      vendor: input.vendor ?? null,
-      accounting_date: input.accountingDate,
-      due_date: input.dueDate ?? null,
-      status,
-      notes: input.notes ?? null,
-      created_by: userId,
-      updated_by: userId,
-    })
-    .select('*, finance_categories(id, name, code)')
-    .single()
+  const row = {
+    organization_id: organizationId,
+    branch_id: input.branchId,
+    category_id: input.categoryId,
+    template_id: null,
+    recurrence_period: null,
+    concept,
+    amount: input.amount,
+    currency: 'PYG',
+    vendor: input.vendor ?? null,
+    accounting_date: input.accountingDate,
+    due_date: input.dueDate ?? null,
+    status,
+    notes: input.notes ?? null,
+    created_by: userId,
+    updated_by: userId,
+  }
+  const insertObligation = (values: Record<string, unknown>) =>
+    admin
+      .from('finance_obligations')
+      .insert(values)
+      .select('*, finance_categories(id, name, code)')
+      .single()
+
+  let { data, error } = await insertObligation(
+    creationKey ? { ...row, creation_idempotency_key: creationKey } : row,
+  )
+  // Dos envíos simultáneos con la misma clave: el índice único frena al segundo.
+  if (error?.code === '23505' && creationKey) {
+    const existing = await findObligationByCreationKey(organizationId, creationKey)
+    if (existing) return replayCreatedObligation(existing, input, concept)
+  }
+  // Sin la migración 20261017090000 la columna no existe todavía: se guarda igual.
+  if (error && creationKey && isMissingCreationKeyColumn(error)) {
+    ;({ data, error } = await insertObligation(row))
+  }
 
   if (error || !data) throw toFinanceApiError(error)
 
@@ -593,6 +625,115 @@ export async function createObligation(params: {
     ...data,
     outstanding_amount: Number(data.amount),
     requires_cash_session_on_void: false,
+  }
+}
+
+type CreatedObligationRow = Record<string, unknown> & {
+  amount: number | string
+  paid_amount: number | string | null
+  branch_id: string
+  category_id: string
+  concept: string
+  accounting_date: string
+}
+
+function isMissingCreationKeyColumn(error: { code?: string; message?: string }) {
+  return (error.code === 'PGRST204' || error.code === '42703')
+    && /creation_idempotency_key/.test(error.message ?? '')
+}
+
+async function findObligationByCreationKey(organizationId: string, key: string) {
+  const { data, error } = await createAdminSupabase()
+    .from('finance_obligations')
+    .select('*, finance_categories(id, name, code)')
+    .eq('organization_id', organizationId)
+    .eq('creation_idempotency_key', key)
+    .maybeSingle()
+  if (error) {
+    if (isMissingCreationKeyColumn(error)) return null
+    throw toFinanceApiError(error)
+  }
+  return data as CreatedObligationRow | null
+}
+
+/** La misma clave con otro gasto es un error del cliente, no un reintento. */
+export function replayCreatedObligation(existing: CreatedObligationRow, input: ExpenseInput, concept: string) {
+  const sameRequest =
+    existing.branch_id === input.branchId
+    && existing.category_id === input.categoryId
+    && existing.concept === concept
+    && Number(existing.amount) === Number(input.amount)
+    && existing.accounting_date === input.accountingDate
+  if (!sameRequest) {
+    throw new FinanceApiError(
+      'Esta clave de envío ya se usó para otro gasto. Volvé a abrir el formulario e intentá de nuevo.',
+      409,
+      'FINANCE_IDEMPOTENCY_KEY_REUSED',
+    )
+  }
+  return {
+    ...existing,
+    outstanding_amount: Math.max(0, Number(existing.amount) - Number(existing.paid_amount ?? 0)),
+    requires_cash_session_on_void: false,
+  }
+}
+
+/** Normaliza un concepto para comparar gastos recurrentes («Alquiler  del local» = «alquiler del local»). */
+function sameConcept(a: string, b: string) {
+  const normalize = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return normalize(a) === normalize(b)
+}
+
+/**
+ * Un gasto recurrente activo con el mismo concepto, monto, frecuencia, categoría y
+ * sucursal. Crear otro duplica el gasto todos los meses: una tienda llegó a tener
+ * 8 plantillas del mismo alquiler.
+ */
+export async function findDuplicateRecurringTemplate(params: {
+  organizationId: string
+  input: ExpenseInput
+  concept: string
+  idempotencyKey: string
+}) {
+  const { organizationId, input, concept, idempotencyKey } = params
+  if (!input.recurrence) return null
+  const { data, error } = await createAdminSupabase()
+    .from('finance_expense_templates')
+    .select('id, concept, amount, frequency, starts_on, ends_on, creation_idempotency_key')
+    .eq('organization_id', organizationId)
+    .eq('branch_id', input.branchId)
+    .eq('category_id', input.categoryId)
+    .eq('frequency', input.recurrence.frequency)
+    .eq('status', 'active')
+  if (error) throw toFinanceApiError(error)
+  const today = await resolveOrganizationToday(organizationId)
+  return (data ?? []).find((template) =>
+    // El reintento del mismo envío no es un duplicado: la función lo devuelve tal cual.
+    template.creation_idempotency_key !== idempotencyKey
+    && Number(template.amount) === Number(input.amount)
+    && sameConcept(String(template.concept), concept)
+    && (!template.ends_on || String(template.ends_on) >= today),
+  ) ?? null
+}
+
+/**
+ * Crea el gasto del período actual de cada recurrente activo. Antes no lo llamaba
+ * nadie: un recurrente solo generaba su primer período. La función de la base no
+ * repite un período ya generado, así que llamarla en cada carga es seguro.
+ * Si el usuario no puede administrar finanzas, la base lo rechaza y se sigue.
+ */
+export async function generateDueRecurringObligations(organizationId: string): Promise<number> {
+  try {
+    const today = await resolveOrganizationToday(organizationId)
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc('generate_recurring_finance_obligations', {
+      p_generation_date: today,
+      p_organization_id: organizationId,
+    })
+    if (error) return 0
+    return Number(data ?? 0)
+  } catch {
+    return 0
   }
 }
 

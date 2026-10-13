@@ -4,6 +4,7 @@ import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import {
   assertFinanceBranchAccess,
   financeSummaryQuerySchema,
+  generateDueRecurringObligations,
   getFinanceSummary,
   resolveFinanceOrganizationId,
   toFinanceApiError,
@@ -42,6 +43,8 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
         branchId: query.data.branchId,
       })
     }
+    // El resumen cuenta el gasto del período de los recurrentes aunque nadie haya abierto la lista.
+    await generateDueRecurringObligations(organizationId)
     const summary = await getFinanceSummary(organizationId, query.data)
     return NextResponse.json(summary)
   } catch (error) {
