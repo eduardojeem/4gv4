@@ -513,7 +513,7 @@ async function loadOrganizationTimezone(organizationId: string): Promise<string>
 }
 
 /** Hoy segun el calendario del negocio, para decidir si algo esta vencido. */
-async function resolveOrganizationToday(organizationId: string): Promise<string> {
+export async function resolveOrganizationToday(organizationId: string): Promise<string> {
   return toOrganizationDay(new Date(), await loadOrganizationTimezone(organizationId))
 }
 
