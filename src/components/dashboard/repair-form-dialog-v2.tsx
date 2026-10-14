@@ -2342,15 +2342,15 @@ export function RepairFormDialogV2({
                   />
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:justify-end">
+                    {/* Primero el inventario: descuenta stock y trae el costo real, así la ganancia es cierta. */}
                     <Button
                       type="button"
-                      variant="outline"
                       size="sm"
                       onClick={() => setInventorySearchOpen(true)}
-                      className="gap-2 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:hover:bg-cyan-950/50 dark:hover:text-cyan-400 dark:hover:border-cyan-700 transition-colors shadow-sm"
+                      className="gap-2 bg-cyan-700 text-white hover:bg-cyan-800 shadow-sm"
                     >
                       <Package className="h-4 w-4" />
-                      Agregar del Inventario
+                      Buscar en el inventario
                     </Button>
                     <Button
                       type="button"
@@ -2366,9 +2366,10 @@ export function RepairFormDialogV2({
                         partNumber: ''
                       })}
                       className="gap-2 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 dark:hover:bg-orange-950/50 dark:hover:text-orange-400 dark:hover:border-orange-700 transition-colors shadow-sm"
+                      title="Para algo que no está en el inventario: no descuenta stock"
                     >
                       <Plus className="h-4 w-4" />
-                      Agregar Repuesto
+                      Cargar a mano
                     </Button>
                 </div>
               </CardHeader>
@@ -2379,7 +2380,12 @@ export function RepairFormDialogV2({
                       <Package className="h-8 w-8 text-orange-500 dark:text-orange-400" />
                     </div>
                     <p className="text-muted-foreground dark:text-slate-400 font-medium">No hay repuestos registrados</p>
-                    <p className="text-xs text-muted-foreground dark:text-slate-500 mt-1">Agrega los repuestos necesarios para esta reparación</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-500 mt-1">Buscalos en tu inventario: se descuentan del stock y se calcula la ganancia con su costo.</p>
+                    <Button type="button" size="sm" onClick={() => setInventorySearchOpen(true)} className="mt-4 gap-2 bg-cyan-700 text-white hover:bg-cyan-800">
+                      <Package className="h-4 w-4" />
+                      Buscar en el inventario
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground dark:text-slate-500 mt-3">¿No lo tenés? Guardá la reparación y, desde su detalle, usá «No lo tengo, lo compro».</p>
                   </div>
                 )}
                 {partsFields.map((field, index) => {
