@@ -1799,10 +1799,25 @@ type FinanceRepairRecord = {
   ticketNumber?: string | null
   branchId: string | null
   createdAt: string
+  /** Cuándo se entregó: es cuando la reparación se vuelve ingreso. */
+  deliveredAt?: string | null
   status: string | null
   revenueAmount: number
   paidAmount: number
   employeeId?: string | null
+}
+
+/**
+ * Una reparación es ingreso cuando se entrega, en la fecha de entrega. Antes
+ * contaba el día que entró el equipo: lo que entraba en septiembre y se
+ * cobraba en octubre sumaba en septiembre, y lo que seguía en el taller ya
+ * figuraba como facturado. La plata cobrada se sigue contando por la fecha de
+ * cada cobro (`repair_payments`). Entregadas viejas sin fecha: la de ingreso.
+ */
+export function repairRevenueDate(repair: Pick<FinanceRepairRecord, 'status' | 'createdAt' | 'deliveredAt'>): string | null {
+  const status = String(repair.status ?? '').trim().toLowerCase()
+  if (status !== 'entregado' && status !== 'delivered') return null
+  return repair.deliveredAt || repair.createdAt
 }
 
 type FinanceRepairPartRecord = {
@@ -1991,10 +2006,6 @@ function previousPeriod(filters: FinanceFilters): FinanceFilters {
   }
 }
 
-function isCancelledRepair(status: string | null): boolean {
-  return String(status ?? '').trim().toLowerCase() === 'cancelado'
-}
-
 function isUsedRepairPart(status: string | null | undefined): boolean {
   return ['installed', 'used', 'consumed'].includes(
     String(status ?? '').trim().toLowerCase(),
@@ -2067,12 +2078,10 @@ function buildFinancialSummary(
       isInPeriod(order.createdAt, filters) &&
       String(order.status ?? '').toUpperCase() !== 'CANCELLED',
   )
-  const selectedRepairs = records.repairs.filter(
-    (repair) =>
-      isInBranch(repair.branchId, filters) &&
-      isInPeriod(repair.createdAt, filters) &&
-      !isCancelledRepair(repair.status),
-  )
+  const selectedRepairs = records.repairs.filter((repair) => {
+    const recognizedAt = repairRevenueDate(repair)
+    return isInBranch(repair.branchId, filters) && recognizedAt !== null && isInPeriod(recognizedAt, filters)
+  })
   const usedPartsByRepairId = new Map<string, FinanceRepairPartRecord[]>()
   for (const [repairId, parts] of partsByRepairId) {
     usedPartsByRepairId.set(
@@ -2618,10 +2627,14 @@ async function loadFinanceSummaryRecords(
   const repairsQuery = branch(
     admin
       .from('repairs')
-      .select('id, ticket_number, branch_id, created_at, status, final_cost, estimated_cost, paid_amount, technician_id', { count: 'exact' })
+      .select('id, ticket_number, branch_id, created_at, delivered_at, status, final_cost, estimated_cost, paid_amount, technician_id', { count: 'exact' })
       .eq('organization_id', organizationId)
-      .gte('created_at', startDate)
-      .lt('created_at', `${nextDay(queryEndDate)}T00:00:00.000Z`)
+      // Entregadas en el período (aunque hayan entrado antes) y, para las viejas
+      // sin fecha de entrega, las que entraron en el período. Fechas ya validadas.
+      .or(
+        `and(delivered_at.gte.${startDate},delivered_at.lt.${nextDay(queryEndDate)}T00:00:00.000Z),` +
+        `and(delivered_at.is.null,created_at.gte.${startDate},created_at.lt.${nextDay(queryEndDate)}T00:00:00.000Z)`,
+      )
       .limit(FINANCE_REPORT_QUERY_LIMIT),
   )
   const obligationsQuery = branch(
@@ -2692,6 +2705,7 @@ async function loadFinanceSummaryRecords(
     ticketNumber: (repair as { ticket_number?: string | null }).ticket_number ?? null,
     branchId: repair.branch_id ?? null,
     createdAt: String(repair.created_at),
+    deliveredAt: (repair as { delivered_at?: string | null }).delivered_at ?? null,
     status: repair.status ?? null,
     revenueAmount: money(repair.final_cost ?? repair.estimated_cost),
     paidAmount: money(repair.paid_amount),
@@ -3151,9 +3165,10 @@ function buildProfitabilityRows(
   const sales = records.sales.filter(
     (sale) => isInBranch(sale.branchId, filters) && isInPeriod(sale.createdAt, filters) && isCompletedSaleStatus(sale.status),
   )
-  const repairs = records.repairs.filter(
-    (repair) => isInBranch(repair.branchId, filters) && isInPeriod(repair.createdAt, filters) && !isCancelledRepair(repair.status),
-  )
+  const repairs = records.repairs.filter((repair) => {
+    const recognizedAt = repairRevenueDate(repair)
+    return isInBranch(repair.branchId, filters) && recognizedAt !== null && isInPeriod(recognizedAt, filters)
+  })
   const saleItemsBySaleId = new Map<string, FinanceSaleItemRecord[]>()
   for (const item of records.saleItems) {
     const items = saleItemsBySaleId.get(item.saleId) ?? []
