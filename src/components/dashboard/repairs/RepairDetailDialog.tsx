@@ -1490,6 +1490,30 @@ export function RepairDetailDialog({
                         </>
                       )}
                     </div>
+                    {/* Sin precio, la reparación vale ₲ 0 en Finanzas: se marca bien a la vista. */}
+                    {!financial.priceDefined && repair.status !== 'cancelado' ? (
+                      <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">Falta el precio</p>
+                          <p className="text-xs opacity-80">
+                            {repair.status === 'entregado'
+                              ? 'Se entregó sin precio: en Finanzas cuenta ₲ 0.'
+                              : 'Definilo ahora: sin precio no se puede entregar.'}
+                          </p>
+                        </div>
+                        {repair.status === 'entregado' ? (
+                          isAdmin ? (
+                            <Button type="button" size="sm" className="h-8 bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsFinalPriceCorrectionOpen(true)}>
+                              Definir precio
+                            </Button>
+                          ) : null
+                        ) : (
+                          <Button type="button" size="sm" className="h-8 bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsCostsEditorOpen(true)}>
+                            Definir precio
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
                     <dl className="divide-y divide-emerald-200/80 rounded-lg border border-emerald-200 bg-background/80 text-sm dark:divide-emerald-900/60 dark:border-emerald-900/60">
                       <div className="flex items-center justify-between px-3 py-2">
                         <dt className="text-muted-foreground">Total</dt>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { defineDeliveryPrice } from '@/lib/repairs/define-delivery-price'
 import { logger } from '@/lib/logger'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
@@ -642,6 +643,7 @@ export default function TechnicianPanel() {
           setDeliverTarget(null)
           setQualityCheckTarget(repair)
         }}
+        onDefinePrice={(id, patch) => defineDeliveryPrice(id, patch, selectedBranchId)}
         onConfirm={async (id, payload) => { await deliverRepair(id, payload.outcome, payload.note) }}
         allowPayment={false}
       />

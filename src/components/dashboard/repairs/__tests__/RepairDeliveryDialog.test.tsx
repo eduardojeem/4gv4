@@ -108,7 +108,7 @@ describe('RepairDeliveryDialog', () => {
       onConfirm={vi.fn()}
     />)
 
-    expect(screen.getByRole('heading', { name: 'Confirmar entrega con precio pendiente' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Entregar: falta el precio' })).toBeVisible()
     expect(screen.getByText('Anticipo recibido: 30')).toBeVisible()
     expect(screen.getByText('El precio final todavía está pendiente; el saldo se calculará cuando lo definas.')).toBeVisible()
   })
@@ -340,5 +340,53 @@ describe('RepairDeliveryDialog', () => {
     fireEvent.click(openQualityBtn)
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onOpenQualityCheck).toHaveBeenCalledWith(unverifiedRepair)
+  })
+})
+
+describe('RepairDeliveryDialog: entregar una reparación sin precio', () => {
+  const unpriced = { ...repair, finalCost: null, estimatedCost: 0, laborCost: 0, parts: [], paidAmount: 0 } as unknown as Repair
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    cashRegisterMocks.checkOpenSession.mockResolvedValue({ id: 'session-1' })
+  })
+
+  it('pregunta cuánto se cobró, fija el precio y después cobra y entrega', async () => {
+    const onDefinePrice = vi.fn().mockResolvedValue(undefined)
+    const onConfirm = vi.fn().mockResolvedValue(undefined)
+    render(<RepairDeliveryDialog open repair={unpriced} onOpenChange={vi.fn()} onConfirm={onConfirm} onDefinePrice={onDefinePrice} />)
+
+    expect(screen.getByText('¿Cuánto cobraste por esta reparación?')).toBeVisible()
+    expect(screen.getByRole('button', { name: /Confirmar Entrega/ })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('¿Cuánto cobraste por esta reparación?'), { target: { value: '350' } })
+    fireEvent.click(screen.getByRole('button', { name: /Siguiente: cobrar/ }))
+    expect(await screen.findByLabelText('Monto a cobrar')).toHaveValue('350')
+    fireEvent.click(screen.getByRole('button', { name: 'Cobrar y Entregar' }))
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
+    expect(onDefinePrice).toHaveBeenCalledWith('repair-1', { pricingMode: 'budget', finalCost: 350 })
+    expect(onDefinePrice.mock.invocationCallOrder[0]).toBeLessThan(onConfirm.mock.invocationCallOrder[0])
+    expect(onConfirm).toHaveBeenCalledWith('repair-1', expect.objectContaining({ outcome: 'repaired', payment: expect.objectContaining({ amount: 350 }) }))
+  })
+
+  it('«Sin cargo» entrega con precio 0 y el motivo, sin cobrar', async () => {
+    const onDefinePrice = vi.fn().mockResolvedValue(undefined)
+    const onConfirm = vi.fn().mockResolvedValue(undefined)
+    render(<RepairDeliveryDialog open repair={unpriced} onOpenChange={vi.fn()} onConfirm={onConfirm} onDefinePrice={onDefinePrice} />)
+
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar Entrega/ }))
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
+    expect(onDefinePrice).toHaveBeenCalledWith('repair-1', expect.objectContaining({ finalCost: 0, priceOverrideReason: expect.stringMatching(/Sin cargo/) }))
+    expect(onConfirm.mock.calls[0][1]).not.toHaveProperty('payment')
+  })
+
+  it('si la pantalla no puede fijar el precio, no deja entregar y explica dónde hacerlo', () => {
+    render(<RepairDeliveryDialog open repair={unpriced} onOpenChange={vi.fn()} onConfirm={vi.fn()} allowPayment={false} />)
+    fireEvent.change(screen.getByLabelText('¿Cuánto cobraste por esta reparación?'), { target: { value: '350' } })
+    expect(screen.getByText(/definilo en el detalle de la reparación/)).toBeVisible()
+    expect(screen.getByRole('button', { name: /Confirmar Entrega/ })).toBeDisabled()
   })
 })

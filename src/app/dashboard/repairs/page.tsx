@@ -27,6 +27,7 @@ import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useBranch } from '@/contexts/branch-context'
 import { useAuth } from '@/contexts/auth-context'
 import { branchHeaders } from '@/lib/branches/client'
+import { defineDeliveryPrice } from '@/lib/repairs/define-delivery-price'
 
 // Repair Components
 import { RepairStats } from '@/components/dashboard/repairs/RepairStats'
@@ -1169,6 +1170,7 @@ function RepairsPageContent() {
           setDeliverTarget(null)
           setQualityCheckTarget(repair)
         } : undefined}
+        onDefinePrice={(id, patch) => defineDeliveryPrice(id, patch, selectedBranchId)}
         onConfirm={async (id, payload: RepairDeliveryConfirmPayload) => {
           const response = await fetch(`/api/repairs/${id}/delivery`, {
             method: 'POST',
