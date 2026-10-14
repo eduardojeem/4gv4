@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
@@ -8,6 +8,7 @@ import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organizat
 import { z } from 'zod'
 import { getPublicationIssues, resolvePublicationUpdate } from '@/lib/website/publication'
 import { validateTenantSlug } from '@/lib/saas/reserved-slugs'
+import { invalidateMarketplaceCatalog, samePublicValue } from '@/lib/public/cache-invalidation'
 
 const slugSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -62,7 +63,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       .maybeSingle(),
     admin
       .from('organizations')
-      .select('slug, marketplace_public, storefront_public')
+      .select('name, logo_url, slug, marketplace_public, storefront_public')
       .eq('id', orgId)
       .maybeSingle(),
   ])
@@ -124,6 +125,20 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     const issues = getPublicationIssues(CompanyInfoSchema.parse(validation.data), mode)
     if (issues.length) return NextResponse.json({ error: issues.join(' ') }, { status: 422 })
   }
+
+  const { data: previousCompany, error: previousCompanyError } = await admin
+    .from('website_settings')
+    .select('value')
+    .eq('organization_id', orgId)
+    .eq('key', 'company_info')
+    .maybeSingle()
+  const companyChanged = Boolean(previousCompanyError)
+    || !samePublicValue(previousCompany?.value, validation.data)
+    || currentOrganization.name !== name
+    || currentOrganization.logo_url !== (logoUrl?.trim() || null)
+    || currentSlug !== canonicalSlug
+    || currentOrganization.marketplace_public !== publication.marketplacePublic
+    || currentOrganization.storefront_public !== publication.storefrontPublic
 
   // `organizations.logo_url` es el logo canonico de la tienda: de ahi lo toman el
   // directorio del marketplace, el contexto de la organizacion y los recibos de
@@ -223,14 +238,17 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     if (publishError) return NextResponse.json({ error: 'Datos guardados, pero no se pudo publicar. Intentá nuevamente.' }, { status: 500 })
   }
 
-  revalidatePath(`/${canonicalSlug}`, 'layout')
-  if (currentSlug && currentSlug !== canonicalSlug) revalidatePath(`/${currentSlug}`, 'layout')
-  revalidatePath('/marketplace', 'layout')
-  revalidatePath('/marketplace/empresas')
-  try {
-    revalidateTag('marketplace:organizations', 'max')
-  } catch (cacheError) {
-    console.warn('Could not revalidate marketplace:organizations tag:', cacheError)
+  if (companyChanged) {
+    revalidatePath(`/${canonicalSlug}`, 'layout')
+    if (currentSlug && currentSlug !== canonicalSlug) revalidatePath(`/${currentSlug}`, 'layout')
+    revalidatePath('/marketplace')
+    revalidatePath('/marketplace/empresas')
+    try {
+      // Publication, slug and contact changes also affect product cards.
+      invalidateMarketplaceCatalog()
+    } catch (cacheError) {
+      console.warn('Could not revalidate marketplace on company update:', cacheError)
+    }
   }
   return NextResponse.json({ success: true, data: validation.data })
 }

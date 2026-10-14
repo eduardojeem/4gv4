@@ -9,6 +9,7 @@ import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organizat
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 import { rateLimiter } from '@/lib/rate-limiter'
+import { samePublicValue } from '@/lib/public/cache-invalidation'
 import type { BusinessVertical, OperatingModel } from '@/lib/organization/business-profile'
 
 /**
@@ -159,6 +160,18 @@ async function updateHandler(
     }
 
     const adminSupabase = createAdminSupabase()
+    const marketplaceEntries = validatedEntries.filter(({ key }) => key === 'company_info' || key === 'hero_content')
+    let hasMarketplaceChanges = false
+    if (marketplaceEntries.length) {
+      const { data: previousRows, error: previousError } = await adminSupabase
+        .from('website_settings')
+        .select('key, value')
+        .eq('organization_id', orgId)
+        .in('key', marketplaceEntries.map(({ key }) => key))
+      // If the comparison cannot be read, preserve freshness conservatively.
+      hasMarketplaceChanges = Boolean(previousError) || marketplaceEntries.some(({ key, value }) =>
+        !samePublicValue(previousRows?.find(row => row.key === key)?.value, value))
+    }
     const now = new Date().toISOString()
     const { data: persistedRows, error: updateError } = await adminSupabase
       .from('website_settings')
@@ -186,12 +199,11 @@ async function updateHandler(
       new_values: { organization_id: orgId, keys: validatedEntries.map(({ key }) => key) },
     })
 
-    const hasMarketplaceKeys = validatedEntries.some(({ key }) => key === 'company_info' || key === 'hero_content')
-    if (hasMarketplaceKeys) {
+    if (hasMarketplaceChanges) {
       try {
         revalidateTag('marketplace:organizations', 'max')
         revalidatePath('/marketplace/empresas')
-        revalidatePath('/marketplace', 'layout')
+        revalidatePath('/marketplace')
       } catch (cacheError) {
         console.warn('Could not revalidate marketplace cache on settings batch update:', cacheError)
       }

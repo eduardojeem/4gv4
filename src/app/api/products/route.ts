@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { ProductBrandError, resolveProductBrand } from '@/lib/products/product-brand'
 import { logger } from '@/lib/logger'
+import { hasPublicProductChange, invalidateMarketplaceCatalog } from '@/lib/public/cache-invalidation'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 import { foreignPriceColumns, foreignPriceErrorMessage, productsHaveForeignPriceColumns } from '@/lib/products/foreign-price'
 import type { AppRole } from '@/lib/auth/role-utils'
@@ -22,9 +23,10 @@ import { persistDeviceFields } from '@/lib/products/device-persist'
 import { DEVICE_COLUMNS_MISSING_MESSAGE, productsHaveDeviceColumns } from '@/lib/products/device-columns'
 import { HIDE_PRICE_COLUMN_MISSING_MESSAGE, persistPriceVisibility } from '@/lib/products/price-visibility'
 
-function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null) {
+function revalidateProductStorefront(organizationSlug?: string | null, organizationId?: string | null, productId?: string | null, previous?: Record<string, unknown>, patch?: Record<string, unknown>) {
+  if (previous && patch && !hasPublicProductChange(previous, patch)) return
   try {
-    const paths: string[] = ['/', '/productos', '/ofertas', '/marketplace', '/marketplace/productos', '/marketplace/ofertas']
+    const paths: string[] = ['/', '/productos', '/ofertas']
     if (productId) {
       paths.push(`/productos/${productId}`)
     }
@@ -44,8 +46,7 @@ function revalidateProductStorefront(organizationSlug?: string | null, organizat
       }
     }
     try {
-      revalidateTag('marketplace:products', 'max')
-      revalidateTag('marketplace:offers', 'max')
+      invalidateMarketplaceCatalog()
       if (organizationId) {
         revalidateTag(`product-facets:${organizationId}`, 'max')
       }
@@ -1074,7 +1075,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
         validated,
       })
 
-      revalidateProductStorefront(organization.slug, organization.id, savedProductId)
+      revalidateProductStorefront(organization.slug, organization.id, savedProductId, existingProduct, validated)
 
       return NextResponse.json({
         success: true,
@@ -1265,7 +1266,7 @@ export const PUT = withTenantAuth({ permission: 'products.update', module: 'inve
       validated,
     })
 
-    revalidateProductStorefront(organization.slug, organization.id, String(product.id))
+    revalidateProductStorefront(organization.slug, organization.id, String(product.id), existingProduct, validated)
 
     return NextResponse.json({
       success: true,
@@ -1365,6 +1366,15 @@ export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'i
     }
     
     logger.info('Products deleted', { count: ids.length, userId: user.id })
+    revalidateProductStorefront(organization.slug, organization.id)
+    try {
+      for (const id of ids) {
+        revalidatePath(`/productos/${id}`)
+        if (organization.slug) revalidatePath(`/${organization.slug}/productos/${id}`)
+      }
+    } catch (error) {
+      logger.warn('Failed to revalidate deleted product pages', { error })
+    }
     
     return NextResponse.json({
       success: true,
