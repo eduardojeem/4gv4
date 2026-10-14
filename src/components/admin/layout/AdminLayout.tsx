@@ -22,6 +22,8 @@ import { useAdminNavBadges } from '@/hooks/use-admin-nav-badges'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { AdminMobileNav } from './AdminMobileNav'
+import { AdminMobileDrawer } from './AdminMobileDrawer'
 import { cn } from '@/lib/utils'
 
 interface AdminLayoutProps {
@@ -188,18 +190,24 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      {mobileSidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setMobileSidebarOpen(false)} />}
-
-      <aside aria-label="Menu lateral" className={cn('fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card text-card-foreground shadow-lg transition-all duration-300 ease-in-out lg:static lg:shadow-none', mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed ? 'w-20 lg:w-20' : 'w-72 lg:w-72', 'lg:translate-x-0')}>
+      <aside
+        aria-label="Menu lateral"
+        className={cn(
+          'hidden lg:flex flex-col border-r border-border bg-card text-card-foreground shadow-none transition-all duration-300 ease-in-out',
+          collapsed ? 'w-20' : 'w-72',
+        )}
+      >
         <div className="flex h-16 items-center justify-between border-b border-border px-6">
           {!collapsed && <span className="text-xl font-semibold text-foreground">Admin</span>}
 
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} className={cn('ml-auto hidden text-muted-foreground hover:text-foreground lg:flex', collapsed && 'mx-auto')} aria-label={collapsed ? 'Expandir menu lateral' : 'Contraer menu lateral'}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className={cn('ml-auto hidden text-muted-foreground hover:text-foreground lg:flex', collapsed && 'mx-auto')}
+            aria-label={collapsed ? 'Expandir menu lateral' : 'Contraer menu lateral'}
+          >
             {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 rotate-90" />}
-          </Button>
-
-          <Button variant="ghost" size="icon" onClick={() => setMobileSidebarOpen(false)} className="text-muted-foreground lg:hidden" aria-label="Cerrar menu lateral">
-            <X className="h-5 w-5" />
           </Button>
         </div>
 
@@ -437,10 +445,31 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 scroll-smooth md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 scroll-smooth md:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           <div className="mx-auto max-w-7xl space-y-4 md:space-y-6">{children}</div>
         </main>
       </div>
+
+      <AdminMobileNav
+        visibleCategories={visibleCategories}
+        pathname={pathname}
+        navBadges={navBadges}
+        onOpenMenu={() => setMobileSidebarOpen(true)}
+      />
+
+      <AdminMobileDrawer
+        open={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+        visibleCategories={visibleCategories}
+        expandedCategories={expandedCategories}
+        onToggleCategory={toggleCategory}
+        pathname={pathname}
+        navBadges={navBadges}
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenLogout={() => setLogoutOpen(true)}
+        user={user}
+        userInitials={userInitials}
+      />
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} onSearch={handleSearch} />
       <LogoutDialog open={logoutOpen} loading={loading} onClose={() => setLogoutOpen(false)} onConfirm={handleLogout} />

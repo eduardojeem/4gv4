@@ -1,6 +1,7 @@
 'use client'
 
-import { Award, Clock, Users, Wrench, Gauge, TrendingUp } from 'lucide-react'
+import { Award, CheckCircle2, Clock, Gauge, TrendingUp, Users, Wrench } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 interface TechnicianStatsGridProps {
@@ -13,51 +14,76 @@ interface TechnicianStatsGridProps {
   topCloserName?: string
 }
 
-interface StatItemProps {
+interface StatCardProps {
   label: string
   value: string | number
-  sub?: string
+  sub: string
   icon: React.ElementType
-  tone: 'blue' | 'green' | 'red' | 'purple' | 'cyan' | 'orange'
-  featured?: boolean
+  accent: 'blue' | 'emerald' | 'rose' | 'amber' | 'indigo' | 'cyan'
 }
 
-const toneMap: Record<StatItemProps['tone'], { icon: string; value: string; border: string; glow: string }> = {
-  blue:   { icon: 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300',   value: 'text-blue-700 dark:text-blue-300',   border: 'border-blue-200/60 dark:border-blue-800/50',   glow: 'shadow-blue-500/10'   },
-  green:  { icon: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300', value: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200/60 dark:border-emerald-800/50', glow: 'shadow-emerald-500/10' },
-  red:    { icon: 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300',       value: 'text-red-700 dark:text-red-300',       border: 'border-red-200/60 dark:border-red-800/50',       glow: 'shadow-red-500/10'    },
-  purple: { icon: 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300', value: 'text-violet-700 dark:text-violet-300', border: 'border-violet-200/60 dark:border-violet-800/50', glow: 'shadow-violet-500/10' },
-  cyan:   { icon: 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-300',   value: 'text-cyan-700 dark:text-cyan-300',   border: 'border-cyan-200/60 dark:border-cyan-800/50',   glow: 'shadow-cyan-500/10'   },
-  orange: { icon: 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300', value: 'text-orange-700 dark:text-orange-300', border: 'border-orange-200/60 dark:border-orange-800/50', glow: 'shadow-orange-500/10' },
-}
+const ACCENT_STYLES = {
+  blue: {
+    iconBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    border: 'border-l-4 border-l-blue-500',
+    valueText: 'text-foreground',
+  },
+  emerald: {
+    iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    border: 'border-l-4 border-l-emerald-500',
+    valueText: 'text-emerald-600 dark:text-emerald-400',
+  },
+  rose: {
+    iconBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+    border: 'border-l-4 border-l-rose-500',
+    valueText: 'text-rose-600 dark:text-rose-400',
+  },
+  amber: {
+    iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    border: 'border-l-4 border-l-amber-500',
+    valueText: 'text-amber-600 dark:text-amber-400',
+  },
+  indigo: {
+    iconBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+    border: 'border-l-4 border-l-indigo-500',
+    valueText: 'text-foreground',
+  },
+  cyan: {
+    iconBg: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+    border: 'border-l-4 border-l-cyan-500',
+    valueText: 'text-foreground',
+  },
+} as const
 
-function StatItem({ label, value, sub, icon: Icon, tone, featured }: StatItemProps) {
-  const t = toneMap[tone]
+function StatCard({ label, value, sub, icon: Icon, accent }: StatCardProps) {
+  const style = ACCENT_STYLES[accent]
+
   return (
-    <div
+    <Card
       className={cn(
-        'flex items-center gap-3 rounded-xl border bg-background/60 px-4 py-3.5 backdrop-blur-sm transition-all duration-200',
+        'relative overflow-hidden border-border/70 bg-card/80 backdrop-blur-sm transition-all duration-200',
         'hover:shadow-md hover:-translate-y-0.5',
-        t.border,
-        t.glow && `hover:shadow-sm`,
-        featured && 'col-span-2 sm:col-span-1 border-2',
+        style.border,
       )}
     >
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', t.icon)}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {label}
-        </p>
-        <p className={cn('truncate text-xl font-bold leading-tight', t.value)}>
-          {value}
-        </p>
-        {sub && (
-          <p className="truncate text-[11px] text-muted-foreground/70">{sub}</p>
-        )}
-      </div>
-    </div>
+      <CardContent className="p-3.5 sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+            {label}
+          </span>
+          <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-xs', style.iconBg)}>
+            <Icon className="h-4 w-4" />
+          </div>
+        </div>
+
+        <div className="mt-2">
+          <p className={cn('text-xl sm:text-2xl font-bold tracking-tight tabular-nums truncate', style.valueText)}>
+            {value}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sub}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -66,58 +92,69 @@ export function TechnicianStatsGrid({
   techniciansWithoutLoad,
   highLoadTechnicians,
   totalActiveJobs,
-  avgJobsPerTech: _avgJobsPerTech,
+  avgJobsPerTech,
   avgCompletionTime,
   topCloserName,
 }: TechnicianStatsGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-      <StatItem
-        label="Total técnicos"
+      <StatCard
+        label="Equipo Técnico"
         value={totalTechnicians}
-        sub="En esta sucursal"
+        sub="Personal asignado"
         icon={Users}
-        tone="blue"
+        accent="blue"
       />
-      <StatItem
-        label="Sin carga"
+
+      <StatCard
+        label="Disponibles"
         value={techniciansWithoutLoad}
-        sub="Disponibles ahora"
-        icon={Gauge}
-        tone="green"
+        sub="Sin carga actual"
+        icon={CheckCircle2}
+        accent="emerald"
       />
-      <StatItem
-        label="Carga alta"
+
+      <StatCard
+        label="Sobrecargados"
         value={highLoadTechnicians}
-        sub="Conviene repartir"
+        sub={highLoadTechnicians > 0 ? 'Conviene redistribuir' : 'Carga balanceada'}
         icon={TrendingUp}
-        tone="red"
+        accent={highLoadTechnicians > 0 ? 'rose' : 'amber'}
       />
-      <StatItem
-        label="Trabajos activos"
+
+      <StatCard
+        label="En Proceso"
         value={totalActiveJobs}
-        sub="En curso ahora"
+        sub="Reparaciones activas"
         icon={Wrench}
-        tone="purple"
+        accent="indigo"
       />
-      {avgCompletionTime && (
-        <StatItem
-          label="Tiempo promedio"
-          value={avgCompletionTime}
-          sub="Para cerrar un trabajo"
-          icon={Clock}
-          tone="cyan"
-        />
-      )}
-      {topCloserName && (
-        <StatItem
-          label="Más cierres"
+
+      <StatCard
+        label="Promedio Carga"
+        value={`${avgJobsPerTech.toFixed(1)}`}
+        sub="Órdenes por técnico"
+        icon={Gauge}
+        accent="cyan"
+      />
+
+      {topCloserName ? (
+        <StatCard
+          label="Mayor Rendimiento"
           value={topCloserName}
-          sub="Este mes"
+          sub="Más cierres en el mes"
           icon={Award}
-          tone="orange"
+          accent="amber"
         />
-      )}
+      ) : avgCompletionTime ? (
+        <StatCard
+          label="Tiempo Promedio"
+          value={avgCompletionTime}
+          sub="Para entrega final"
+          icon={Clock}
+          accent="cyan"
+        />
+      ) : null}
     </div>
   )
 }

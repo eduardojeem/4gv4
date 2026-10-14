@@ -119,7 +119,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                   onClick={() => router.push(`/dashboard/repairs/technicians`)}
                 >
                   <Edit className="h-4 w-4" />
-                  Editar perfil
+                  Ver equipo
                 </Button>
                 <Button
                   size="sm"
