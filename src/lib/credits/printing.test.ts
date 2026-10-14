@@ -5,7 +5,7 @@ import { formatCurrency } from '@/lib/currency'
 import { createCreditHistoryTicket, findNextDueInstallment } from './credit-history-ticket'
 import { createCreditHistoryPdf } from './credit-history-pdf'
 import { createCreditPaymentReceiptPdf, buildAccountStatusRows, getCreditPaymentReceiptTarget } from './payment-receipt'
-import { getCreditPaperMetrics, CREDIT_PAPER_WIDTH_MM } from './paper'
+import { getCreditPaperMetrics, CREDIT_PAPER_WIDTH_MM, toPdfText } from './paper'
 
 const EMISOR = {
   companyName: 'Comercial San Miguel S.R.L.',
@@ -49,6 +49,15 @@ function textoDePagina(doc: unknown, pagina: number): string {
 }
 
 describe('estado de cuenta en rollo', () => {
+  it('no deja espacios duros en los montos (salian como ? en negrita)', async () => {
+    const doc = await createCreditHistoryTicket(entrada(1, 3), { format: '80mm' })
+    const texto = textoDePagina(doc, 1)
+    expect(texto).toContain('4.000.000')
+    expect(texto).not.toMatch(/[  ]/)
+    expect(texto).toContain('TOTAL FINANCIADO')
+  })
+
+
   it('respeta el ancho de papel elegido', async () => {
     for (const format of ['58mm', '80mm'] as const) {
       const doc = await createCreditHistoryTicket(entrada(2, 6), { format })
@@ -202,7 +211,7 @@ describe('comprobante de pago', () => {
     // factura en reales o en dolares veia guaranies en su propio comprobante.
     // En una instalacion en guaranies el resultado se ve igual; lo que cambia es
     // que ahora sale del mismo helper que el resto de los montos.
-    expect(saldada).toBe(`${formatCurrency(0)} (TOTALMENTE SALDADO)`)
+    expect(saldada).toBe(`${toPdfText(formatCurrency(0))} (TOTALMENTE SALDADO)`)
 
     const fuente = readFileSync(resolve(process.cwd(), 'src/lib/credits/payment-receipt.ts'), 'utf8')
     expect(fuente).not.toMatch(/'Gs\. 0/)

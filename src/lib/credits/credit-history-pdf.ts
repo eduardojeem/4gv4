@@ -1,8 +1,10 @@
-import { formatCurrency, getDisplayLocale } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase, getDisplayLocale } from '@/lib/currency'
 import { formatDateOnlyDisplay } from '@/lib/date-only'
 import { formatCreditId } from '@/lib/utils'
-import { getCreditPaperMetrics } from './paper'
-import { findNextDueInstallment } from './credit-history-ticket'
+import { getCreditPaperMetrics, toPdfText } from './paper'
+import { findNextDueInstallment, totalFinanciado } from './credit-history-ticket'
+
+const formatCurrency = (amount: number) => toPdfText(formatCurrencyBase(amount))
 
 /**
  * Estado de cuenta en hoja A4.
@@ -66,12 +68,7 @@ function statusLabel(status: string) {
 }
 
 const AZUL: [number, number, number] = [30, 64, 175]
-const GRIS_TEXTO: [number, number, number] = [100, 116, 139]
-
-/** Un credito en mora sigue vigente para el cliente, aunque no sea `active`. */
-function vigentes(credits: CreditHistoryItem[]) {
-  return credits.filter((c) => c.status === 'active' || c.status === 'defaulted').length
-}
+const GRIS_TEXTO: [number, number, number] = [0, 0, 0]
 
 export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
   const { default: jsPDF } = await import('jspdf')
@@ -102,7 +99,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
   doc.setFontSize(11)
   doc.text(input.customerName, margin + 4, y + 7, { maxWidth: usableW - 8 })
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   const meta = [
     input.customerCode ? `Código: ${input.customerCode}` : '',
@@ -130,8 +127,10 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
 
   // Cuatro celdas en vez de tres: el proximo vencimiento es la respuesta a la
   // pregunta con la que el cliente pide el documento, y antes no figuraba.
+  // "Creditos vigentes" cedio su lugar al total financiado: junto a lo pagado y
+  // al saldo son las tres cifras que el cliente controla.
   const celdas: Array<{ rotulo: string; valor: string; color: [number, number, number]; fondo: [number, number, number] }> = [
-    { rotulo: 'CRÉDITOS VIGENTES', valor: String(vigentes(input.credits)), color: AZUL, fondo: [239, 246, 255] },
+    { rotulo: 'TOTAL FINANCIADO', valor: formatCurrency(totalFinanciado(input.credits)), color: AZUL, fondo: [239, 246, 255] },
     { rotulo: 'TOTAL PAGADO', valor: formatCurrency(input.totalPaid), color: [22, 163, 74], fondo: [240, 253, 244] },
     { rotulo: 'SALDO PENDIENTE', valor: formatCurrency(input.totalDebt), color: [220, 38, 38], fondo: [254, 242, 242] },
     {
@@ -150,9 +149,9 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
     doc.setFillColor(...celda.fondo)
     doc.roundedRect(x, y, anchoCelda, 15, 2, 2, 'F')
 
-    doc.setFontSize(6.2)
-    doc.setTextColor(...GRIS_TEXTO)
-    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.8)
+    doc.setTextColor(0)
+    doc.setFont('helvetica', 'bold')
     doc.text(celda.rotulo, x + 3, y + 5, { maxWidth: anchoCelda - 6 })
 
     // El monto se achica si no entra: en guaranies una cifra de ocho digitos a
@@ -169,34 +168,32 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
   })
 
   doc.setTextColor(0)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
 
   // ─── Tabla de creditos ────────────────────────────────────────────────
   y += 21
 
   autoTable(doc, {
     startY: y,
-    head: [['Código', 'Capital', 'Interés', 'Plazo', 'Inicio', 'Estado', 'Saldo']],
+    head: [['Código', 'Total financiado', 'Plazo', 'Inicio', 'Estado', 'Saldo']],
     body: input.credits.map((credit) => [
       credit.creditCode || formatCreditId(credit.id),
       formatCurrency(credit.principal),
-      `${credit.interestRate}%`,
       `${credit.termMonths} meses`,
       formatDateOnlyDisplay(credit.startDate, undefined, { day: '2-digit', month: '2-digit', year: '2-digit' }),
       statusLabel(credit.status),
       formatCurrency(credit.remainingBalance ?? 0),
     ]),
-    theme: 'striped',
+    theme: 'grid',
     headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', fontSize: m.tableHeadSize, halign: 'center' },
-    bodyStyles: { fontSize: m.tableBodySize, cellPadding: m.cellPadding },
+    bodyStyles: { fontSize: m.tableBodySize, cellPadding: m.cellPadding, fontStyle: 'bold', textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
     columnStyles: {
       0: { fontStyle: 'bold', halign: 'left' },
       1: { halign: 'right' },
       2: { halign: 'center' },
       3: { halign: 'center' },
       4: { halign: 'center' },
-      5: { halign: 'center' },
-      6: { halign: 'right', fontStyle: 'bold' },
+      5: { halign: 'right', fontSize: m.tableBodySize + 1 },
     },
     margin: { left: margin, right: margin, top: ALTO_CABECERA + 6, bottom: ALTO_PIE },
     styles: { overflow: 'linebreak' },
@@ -220,7 +217,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
     doc.setFontSize(9)
     doc.setTextColor(...AZUL)
     doc.text(
-      `Cuotas — ${credit.creditCode || formatCreditId(credit.id)} (${formatCurrency(credit.principal)})`,
+      `CUOTAS — ${credit.creditCode || formatCreditId(credit.id)} (Total ${formatCurrency(credit.principal)})`,
       margin, currentY, { maxWidth: usableW }
     )
     doc.setTextColor(0)
@@ -239,13 +236,13 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
       ]),
       theme: 'grid',
       headStyles: { fillColor: GRIS_TEXTO, textColor: 255, fontSize: 7, fontStyle: 'bold', halign: 'center' },
-      bodyStyles: { fontSize: 7, cellPadding: 1.8 },
+      bodyStyles: { fontSize: 7.5, cellPadding: 1.8, fontStyle: 'bold', textColor: 0, lineColor: [0, 0, 0], lineWidth: 0.2 },
       columnStyles: {
         0: { halign: 'center', cellWidth: 10 },
         1: { halign: 'center' },
         2: { halign: 'right' },
         3: { halign: 'right' },
-        4: { halign: 'right', fontStyle: 'bold' },
+        4: { halign: 'right', fontSize: 8.5 },
         5: { halign: 'center' },
       },
       margin: { left: margin + 5, right: margin + 5, top: ALTO_CABECERA + 6, bottom: ALTO_PIE },
@@ -269,7 +266,7 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
     doc.setFontSize(14)
     doc.text(input.companyName, margin, 11, { maxWidth: usableW * 0.55 })
 
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(7.5)
     const emisor = [
       input.companyRuc ? `RUC ${input.companyRuc}` : '',
@@ -281,23 +278,23 @@ export async function createCreditHistoryPdf(input: CreditHistoryPdfInput) {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.text('ESTADO DE CUENTA', pageW - margin, 11, { align: 'right' })
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(7.5)
     doc.text(
-      `${input.customerName}  ·  ${now.toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'long', year: 'numeric' })}`,
+      toPdfText(`${input.customerName}  ·  ${now.toLocaleDateString(getDisplayLocale(), { day: '2-digit', month: 'long', year: 'numeric' })}`),
       pageW - margin, 17, { align: 'right', maxWidth: usableW * 0.42 }
     )
     doc.text(`Página ${p} de ${total}`, pageW - margin, 21.5, { align: 'right' })
 
-    doc.setTextColor(150)
-    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(0)
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(7)
     doc.text(
-      `Emitido el ${now.toLocaleString(getDisplayLocale())} — ${input.companyName}`,
+      toPdfText(`Emitido el ${now.toLocaleString(getDisplayLocale())} — ${input.companyName}`),
       pageW / 2, pageH - 7, { align: 'center', maxWidth: usableW }
     )
     doc.setTextColor(0)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('helvetica', 'bold')
   }
 
   return doc
