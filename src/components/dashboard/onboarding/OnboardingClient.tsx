@@ -74,6 +74,7 @@ import {
 import { checkoutChoicesError, type CheckoutChoices } from '@/lib/onboarding/checkout-choices'
 import { siteUrl } from '@/lib/site-url'
 import { ShareStoreCard } from './ShareStoreCard'
+import { BusinessStartGuide } from './BusinessStartGuide'
 
 type StepProgress = {
   hasCompanyInfo: boolean
@@ -618,6 +619,7 @@ export function OnboardingClient({
       if (!response.ok) throw new Error(payload?.error || 'No se pudo guardar la configuración')
 
       clearOnboardingStatusCache()
+      window.dispatchEvent(new Event('business-start-guide:changed'))
       // Lo guardado ya no necesita borrador.
       clearOnboardingDraft(organization.id)
       setDraftRestored(false)
@@ -641,6 +643,7 @@ export function OnboardingClient({
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-32 sm:pb-24">
+      <BusinessStartGuide />
       {/* Encabezado Principal */}
       <header className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-primary/[0.04] p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

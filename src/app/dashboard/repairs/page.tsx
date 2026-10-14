@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
+import { FirstOperationEntryGuide } from '@/components/dashboard/onboarding/FirstOperationEntryGuide'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
@@ -843,6 +844,7 @@ function RepairsPageContent() {
   return (
     <RepairHelpActionsProvider execute={executeRepairHelpAction}>
     <div className="flex flex-col gap-3 sm:gap-3.5 bg-slate-50 p-3 sm:p-4 lg:p-5 dark:bg-slate-950">
+      <FirstOperationEntryGuide kind="repair" />
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={canManageRepairs ? handleNewRepair : undefined}

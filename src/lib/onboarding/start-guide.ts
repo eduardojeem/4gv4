@@ -65,13 +65,13 @@ export function evaluateStartGuide(evidence: StartGuideEvidence, preferences: St
     add('website', 'Prepará tu página pública', 'Es opcional para comenzar a operar; publicala solo cuando esté lista.', '/admin/website', null, false)
   }
   if (['retail', 'wholesale', 'mixed'].includes(model) && moduleEnabled('pos') && allowed('pos.sales.create')) {
-    add('first-sale', 'Tu primera venta', 'Revisá productos, importe y forma de cobro antes de confirmar.', '/dashboard/pos', evidence.firstSale, false)
+    add('first-sale', 'Tu primera venta', 'Revisá productos, importe y forma de cobro antes de confirmar.', '/dashboard/pos?guide=first-sale', evidence.firstSale, false)
   }
   if (['service', 'mixed'].includes(model) && moduleEnabled('services') && allowed('settings.manage')) {
-    add('first-reservation', 'Tu primera reserva', 'Reservar no significa haber realizado ni cobrado el servicio.', '/dashboard/agenda', evidence.firstReservation, false)
+    add('first-reservation', 'Tu primera reserva', 'Reservar no significa haber realizado ni cobrado el servicio.', '/dashboard/agenda?guide=first-reservation', evidence.firstReservation, false)
   }
   if (['repair', 'mixed'].includes(model) && moduleEnabled('repairs') && allowed('repairs.orders.create')) {
-    add('first-repair', 'Tu primera recepción de taller', 'Registrá el equipo y las condiciones. La recepción no equivale a entrega o cobro.', '/dashboard/repairs', evidence.firstRepair, false)
+    add('first-repair', 'Tu primera recepción de taller', 'Registrá el equipo y las condiciones. La recepción no equivale a entrega o cobro.', '/dashboard/repairs?guide=first-repair', evidence.firstRepair, false)
   }
   const required = tasks.filter(task => task.required)
   const next = tasks.find(task => task.required && task.state !== 'ready') ?? tasks.find(task => task.state !== 'ready')

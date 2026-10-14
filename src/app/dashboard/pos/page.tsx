@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { FirstOperationEntryGuide } from '@/components/dashboard/onboarding/FirstOperationEntryGuide'
 import {
   Search, Plus, ShoppingCart, CreditCard, FileText, Package, Star, Filter, Grid, List,
   Keyboard, Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
@@ -1362,6 +1363,7 @@ function POSPageContent() {
 
   return (
     <div className={`pos-theme pos-shell h-dvh max-h-dvh overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      <FirstOperationEntryGuide kind="sale" />
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Contenido principal */}
         <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
