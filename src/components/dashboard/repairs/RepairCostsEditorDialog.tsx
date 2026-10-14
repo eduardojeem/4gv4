@@ -1,6 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { describeSuggestion } from '@/lib/repairs/price-suggestion'
+import { useRepairPriceSuggestion } from '@/hooks/use-repair-price-suggestion'
+import { useOptionalBranch } from '@/contexts/branch-context'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -121,6 +124,11 @@ function RepairCostsEditorForm({
   )
   const [manualServiceAmount, setManualServiceAmount] = useState(0)
   const [financeGuideOpen, setFinanceGuideOpen] = useState(false)
+  const branchContext = useOptionalBranch()
+  const suggestion = useRepairPriceSuggestion({
+    brand: repair.brand, model: repair.model, issue: repair.issue, excludeId: repair.id,
+    branchId: branchContext?.selectedBranchId ?? null, enabled: startWithPrice,
+  })
 
   const input = useMemo(() => ({
     currency: 'PYG',
@@ -280,6 +288,14 @@ function RepairCostsEditorForm({
                           onChange={setManualServiceAmount}
                           autoFocus={startWithPrice}
                         />
+                        {suggestion ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background/80 px-2.5 py-1.5 text-xs">
+                  <span className="text-muted-foreground">{describeSuggestion(suggestion, formatCurrency)}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={false} onClick={() => setManualServiceAmount(suggestion.lastPrice)}>
+                    Usar {formatCurrency(suggestion.lastPrice)}
+                  </Button>
+                </div>
+              ) : null}
                       </div>
                     </div>
                     <div className="mt-4 flex justify-end gap-2">

@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRepairPriceSuggestion } from '@/hooks/use-repair-price-suggestion'
 import { formatCurrency, formatThousands, parseThousands } from '@/lib/currency'
 import { logger } from '@/lib/logger'
 import { useAuth } from '@/contexts/auth-context'
@@ -603,6 +604,15 @@ export function RepairFormDialogV2({
     }
   }, [watchedCustomerId])
   const watchedTechnicianId = watch('devices.0.technician')
+  // Lo que ya se cobró por el mismo modelo y una falla parecida (con un solo equipo).
+  const priceSuggestion = useRepairPriceSuggestion({
+    brand: watch('devices.0.brand'),
+    model: watch('devices.0.model'),
+    issue: watch('devices.0.issue'),
+    excludeId: repair?.id ?? null,
+    branchId: selectedBranchId,
+    enabled: (watch('devices') || []).length === 1,
+  })
 
   const calculatedPricing = useMemo(() => calculateRepairPricing({
     mode: calculationMode,
@@ -2714,6 +2724,7 @@ export function RepairFormDialogV2({
               technicianId={watchedTechnicianId}
               technicianName={technicians.find((tech) => tech.id === watchedTechnicianId)?.name}
               canViewCommission={user?.role === 'admin' || user?.role === 'super_admin'}
+              suggestion={priceSuggestion}
             />
             </div>
 

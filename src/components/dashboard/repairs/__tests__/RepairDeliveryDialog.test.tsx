@@ -383,6 +383,17 @@ describe('RepairDeliveryDialog: entregar una reparación sin precio', () => {
     expect(onConfirm.mock.calls[0][1]).not.toHaveProperty('payment')
   })
 
+  it('sugiere lo que se cobró antes por lo mismo y lo usa con un toque', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      suggestion: { lastPrice: 350, typicalPrice: 350, count: 1, matchedIssue: 'pantalla', device: 'Marca Modelo' },
+    }))))
+    render(<RepairDeliveryDialog open repair={unpriced} onOpenChange={vi.fn()} onConfirm={vi.fn()} onDefinePrice={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Usar 350' }, { timeout: 2000 }))
+    expect(screen.getByLabelText('¿Cuánto cobraste por esta reparación?')).toHaveValue('350')
+    expect(screen.getByText(/La última vez cobraste 350 por «pantalla» en Marca Modelo/)).toBeVisible()
+    vi.unstubAllGlobals()
+  })
+
   it('si la pantalla no puede fijar el precio, no deja entregar y explica dónde hacerlo', () => {
     render(<RepairDeliveryDialog open repair={unpriced} onOpenChange={vi.fn()} onConfirm={vi.fn()} allowPayment={false} />)
     fireEvent.change(screen.getByLabelText('¿Cuánto cobraste por esta reparación?'), { target: { value: '350' } })

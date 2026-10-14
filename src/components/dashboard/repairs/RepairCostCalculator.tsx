@@ -25,6 +25,8 @@ import { calculateRepairTotal, type RepairCalculationInput } from '@/lib/pos-cal
 import { calculateRepairPricing, type RepairPricingMode } from '@/lib/repairs/pricing'
 import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
 import { commissionableAmount } from '@/lib/technician/earnings'
+import { describeSuggestion, type PriceSuggestion } from '@/lib/repairs/price-suggestion'
+import { Button } from '@/components/ui/button'
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100
@@ -90,6 +92,8 @@ interface RepairCostCalculatorProps {
   technicianId?: string | null
   technicianName?: string | null
   canViewCommission?: boolean
+  /** Lo que ya se cobró por el mismo modelo y una falla parecida. */
+  suggestion?: PriceSuggestion | null
 }
 
 export function RepairCostCalculator({
@@ -114,6 +118,7 @@ export function RepairCostCalculator({
   technicianName,
   canViewCommission = false,
   showBreakdown = true,
+  suggestion = null,
   error
 }: RepairCostCalculatorProps) {
   
@@ -288,6 +293,14 @@ export function RepairCostCalculator({
               disabled={disabled}
             />
           </div>
+{suggestion ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background/80 px-2.5 py-1.5 text-xs">
+                  <span className="text-muted-foreground">{describeSuggestion(suggestion, formatCurrency)}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={disabled} onClick={() => handleFinalCostInputChange(String(suggestion.lastPrice))}>
+                    Usar {formatCurrency(suggestion.lastPrice)}
+                  </Button>
+                </div>
+              ) : null}
           {isFinalDerived && (
             <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
               Calculado automáticamente. Podés editarlo para fijar el presupuesto acordado con el cliente.

@@ -37,6 +37,9 @@ import {
 import { getDeliveryOutcomeForQualityResult } from '@/lib/repairs/quality-check'
 import { RepairQualityBadge } from './RepairQualityBadge'
 import { deliveryPricePatch, uiRepairHasDefinedPrice } from '@/lib/repairs/price-required'
+import { describeSuggestion } from '@/lib/repairs/price-suggestion'
+import { useRepairPriceSuggestion } from '@/hooks/use-repair-price-suggestion'
+import { useOptionalBranch } from '@/contexts/branch-context'
 
 export interface RepairedDeliveryConfirmPayload {
   idempotencyKey: string
@@ -160,6 +163,11 @@ export function RepairDeliveryDialog({
   const priceDefined = repair ? uiRepairHasDefinedPrice(repair) : false
   const needsPrice = selected === 'repaired' && !priceDefined
   const parsedPrice = Number(chargedPrice) || 0
+  const branchContext = useOptionalBranch()
+  const suggestion = useRepairPriceSuggestion({
+    brand: repair?.brand, model: repair?.model, issue: repair?.issue, excludeId: repair?.id,
+    branchId: branchContext?.selectedBranchId ?? null, enabled: needsPrice,
+  })
   const priceReady = !needsPrice || noCharge || parsedPrice > 0
   const totalDue = needsPrice
     ? (noCharge ? 0 : parsedPrice)
@@ -517,6 +525,17 @@ export function RepairDeliveryDialog({
                 }}
                 className="h-11 text-base font-semibold tabular-nums"
               />
+{suggestion ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background/80 px-2.5 py-1.5 text-xs">
+                  <span className="text-muted-foreground">{describeSuggestion(suggestion, formatCurrency)}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={noCharge || isSubmitting} onClick={() => {
+                    setChargedPrice(String(suggestion.lastPrice))
+                    if (allowPayment) setAmount(String(Math.max(0, suggestion.lastPrice - alreadyPaid)))
+                  }}>
+                    Usar {formatCurrency(suggestion.lastPrice)}
+                  </Button>
+                </div>
+              ) : null}
               {alreadyPaid > 0 && parsedPrice > 0 && !noCharge ? (
                 <p className="text-xs text-muted-foreground">
                   {`Ya dejó ${formatCurrency(alreadyPaid)} de adelanto: ${balanceDue > 0 ? `queda ${formatCurrency(balanceDue)}` : 'está pagado'}.`}
