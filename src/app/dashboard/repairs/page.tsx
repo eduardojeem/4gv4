@@ -28,6 +28,7 @@ import { useBranch } from '@/contexts/branch-context'
 import { useAuth } from '@/contexts/auth-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { defineDeliveryPrice } from '@/lib/repairs/define-delivery-price'
+import { WaitingPartsPanel } from '@/components/dashboard/repairs/WaitingPartsPanel'
 
 // Repair Components
 import { RepairStats } from '@/components/dashboard/repairs/RepairStats'
@@ -903,6 +904,8 @@ function RepairsPageContent() {
           statusFilter={statusFilter}
           onStatusFilterSelect={setStatusFilter}
         />
+
+        <WaitingPartsPanel repairs={repairs} onOpenRepair={handleViewRepair} />
 
         <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
