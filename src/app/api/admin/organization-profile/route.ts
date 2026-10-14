@@ -6,6 +6,7 @@ import { serviceBusinessDetailsPatch } from '@/lib/organization/service-specialt
 import { validateEnabledModules } from '@/lib/saas/effective-modules'
 import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { revalidatePath, revalidateTag } from 'next/cache'
+import { samePublicValue } from '@/lib/public/cache-invalidation'
 import { resolveStorefrontCapabilities } from '@/lib/website/storefront-capabilities'
 import { buildVerticalWebsitePreset, type PresetKey } from '@/lib/website/vertical-website-preset'
 import type { WebsiteSettings } from '@/types/website-settings'
@@ -169,12 +170,14 @@ async function updateProfile(request: NextRequest, context: TenantAuthContext) {
     : null
 
   // El rubro se ve en el marketplace y en la tienda: que no quede el anterior en caché.
-  try {
-    revalidateTag('marketplace:organizations', 'max')
-    revalidatePath('/marketplace', 'layout')
-    revalidatePath('/saas/negocios')
-  } catch (cacheError) {
-    console.warn('Could not revalidate marketplace cache on profile update:', cacheError)
+  if (!samePublicValue(profileResponse(currentPlan), profileResponse(updatedPlan)) || website?.ok) {
+    try {
+      revalidateTag('marketplace:organizations', 'max')
+      revalidatePath('/marketplace')
+      revalidatePath('/saas/negocios')
+    } catch (cacheError) {
+      console.warn('Could not revalidate marketplace cache on profile update:', cacheError)
+    }
   }
 
   return NextResponse.json({

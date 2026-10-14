@@ -6,6 +6,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { isWebsiteSettingKey, validateSetting } from '@/lib/validation/website-settings'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
 import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
+import { samePublicValue } from '@/lib/public/cache-invalidation'
 
 import { rateLimiter } from '@/lib/rate-limiter'
 
@@ -179,11 +180,11 @@ async function handler(
       hasValue: !!value
     })
 
-    if (key === 'company_info' || key === 'hero_content') {
+    if ((key === 'company_info' || key === 'hero_content') && !samePublicValue(existingRow?.value, value)) {
       try {
         revalidateTag('marketplace:organizations', 'max')
         revalidatePath('/marketplace/empresas')
-        revalidatePath('/marketplace', 'layout')
+        revalidatePath('/marketplace')
       } catch (cacheError) {
         console.warn('Could not revalidate marketplace cache on setting update:', cacheError)
       }

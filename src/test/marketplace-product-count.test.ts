@@ -79,7 +79,7 @@ vi.mock('next/cache', () => ({
   unstable_cache: <T extends (...args: never[]) => unknown>(callback: T) => callback,
 }))
 
-import { getMarketplaceProductsPage } from '@/lib/public/marketplace'
+import { getMarketplaceOrganizationCount, getMarketplaceProductsPage } from '@/lib/public/marketplace'
 
 function productRow(id: string) {
   return {
@@ -108,6 +108,11 @@ describe('getMarketplaceProductsPage', () => {
   beforeEach(() => {
     productRows = [productRow('1'), productRow('2'), productRow('3')]
     productCalls = []
+  })
+
+  it('counts public organizations without hydrating their product galleries', async () => {
+    expect(await getMarketplaceOrganizationCount()).toBe(1)
+    expect(productCalls).toEqual([])
   })
 
   it('separa el total exacto de la cantidad limitada de productos cargados', async () => {
