@@ -46,6 +46,7 @@ import { formatCurrency, getLocaleConfig } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { PaymentDialog } from './PaymentDialog'
 import { PayrollRunDialog } from './PayrollRunDialog'
+import { downloadPayrollEntryPdf, payrollCsvCell, payrollExportStatus } from '@/lib/finances/payroll-export'
 
 type PayrollEntry = {
   id: string
@@ -56,6 +57,9 @@ type PayrollEntry = {
   paid_amount: number
   outstanding_amount: number
   payment_status: string
+  base_amount?: number
+  commission_amount?: number
+  adjustment_amount?: number
 }
 
 type PayrollRun = {
@@ -126,12 +130,14 @@ type EmployeeCommissionsData = {
 
 function EmployeeCommissionsModal({
   entry,
+  run,
   organizationId,
   onClose,
   onPayEntry,
   canPay,
 }: {
   entry: PayrollEntry
+  run?: PayrollRun
   organizationId: string
   onClose: () => void
   onPayEntry: (entry: PayrollEntry) => void
@@ -381,7 +387,29 @@ function EmployeeCommissionsModal({
 
         {/* Footer Fijo */}
         <DialogFooter className="shrink-0 p-4 border-t bg-muted/20 sm:justify-between gap-2">
-          <div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 gap-2"
+              disabled={!run || !data || isLoading || Boolean(error)}
+              onClick={() => {
+                if (!run || !data) return
+                void downloadPayrollEntryPdf(run, {
+                  ...entry,
+                  employee_display_name: data.entry.employeeDisplayName,
+                  employee_role: data.entry.employeeRole,
+                  base_amount: data.entry.baseAmount,
+                  commission_amount: data.entry.commissionAmount,
+                  adjustment_amount: data.entry.adjustmentAmount,
+                  net_amount: data.entry.netAmount,
+                  paid_amount: data.entry.paidAmount,
+                  outstanding_amount: data.entry.outstandingAmount,
+                }).catch(() => toast.error('No se pudo descargar la liquidación. Intentá nuevamente.'))
+              }}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />Descargar liquidación PDF
+            </Button>
             {canPay && entry.outstanding_amount > 0 && (
               <Button
                 type="button"
@@ -451,14 +479,22 @@ function PayrollDetailModal({
   }, [run.entries])
 
   function exportPayrollCSV() {
-    const header = ['Colaborador', 'Rol', 'Autorizado Gs.', 'Pagado Gs.', 'Pendiente Gs.', 'Estado']
+    const currency = getLocaleConfig().currency || 'PYG'
+    const header = [
+      'Colaborador',
+      'Rol',
+      `Autorizado (${currency})`,
+      `Pagado (${currency})`,
+      `Pendiente (${currency})`,
+      'Estado',
+    ]
     const rows = run.entries.map((e) => [
-      `"${(e.employee_display_name || '').replace(/"/g, '""')}"`,
-      `"${ROLE_LABELS[e.employee_role] || e.employee_role}"`,
+      payrollCsvCell(e.employee_display_name || e.employee_id),
+      payrollCsvCell(ROLE_LABELS[e.employee_role] || e.employee_role),
       e.net_amount || 0,
       e.paid_amount || 0,
       e.outstanding_amount || 0,
-      e.outstanding_amount <= 0 ? 'Pagado' : e.paid_amount > 0 ? 'Pago parcial' : 'Pendiente',
+      payrollCsvCell(payrollExportStatus(run, e)),
     ])
     const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -702,7 +738,18 @@ function PayrollDetailModal({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-h-11 gap-1.5"
+                        aria-label={`Descargar PDF de ${entry.employee_display_name || entry.employee_id}`}
+                        onClick={() => {
+                          void downloadPayrollEntryPdf(run, entry).catch(() => toast.error('No se pudo descargar la liquidación. Intentá nuevamente.'))
+                        }}
+                      >
+                        <Download className="h-4 w-4" aria-hidden="true" />PDF
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -968,7 +1015,7 @@ export function PayrollPanel({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Gestiona salarios base, comisiones por ventas/reparaciones y pagos devengados a colaboradores.
+              Prepará y revisá salarios y comisiones integradas. Aprobar autoriza la liquidación; registrar el pago deja constancia del desembolso.
             </p>
           </div>
         </div>
@@ -1335,6 +1382,7 @@ export function PayrollPanel({
         onOpenChange={(nextOpen) => !nextOpen && setPaying(null)}
         organizationId={organizationId}
         payrollEntryId={paying?.id}
+        recipientLabel={paying?.employee_display_name}
         branchId={activeBranchId}
         outstandingAmount={paying?.outstanding_amount}
         onSaved={changed}
@@ -1358,6 +1406,7 @@ export function PayrollPanel({
       {inspectingEntry && (
         <EmployeeCommissionsModal
           entry={inspectingEntry}
+          run={runs.find((run) => run.entries.some((entry) => entry.id === inspectingEntry.id))}
           organizationId={organizationId}
           onClose={() => setInspectingEntry(null)}
           onPayEntry={(entry) => setPaying(entry)}
@@ -1371,7 +1420,7 @@ export function PayrollPanel({
           if (!nextOpen && !approvingId) setConfirmingRunId(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>¿Aprobar nómina de forma definitiva?</AlertDialogTitle>
             <AlertDialogDescription>

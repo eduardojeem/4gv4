@@ -60,7 +60,9 @@ describe('finance operational dialogs', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ preview: { totals: { netPay: 450000 }, entries: [] } })))
     render(<PayrollRunDialog open onOpenChange={vi.fn()} organizationId={uuid} branchId={uuid} filters={{ startDate: '2026-08-01', endDate: '2026-08-15' }} onSaved={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: 'Ver vista previa' }))
-    expect(await screen.findByText(/Total neto:\s*(Gs\.|₲)/)).toBeInTheDocument()
+    const totalCard = (await screen.findByText(/^Total Neto$/i)).parentElement!
+    expect(totalCard).toHaveTextContent(/450[.,]000/)
+    expect(totalCard).toHaveTextContent(/Gs\.|₲/)
     expect(screen.getByRole('button', { name: 'Crear nómina' })).toBeEnabled()
   })
 

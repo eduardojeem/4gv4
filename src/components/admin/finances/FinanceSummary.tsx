@@ -28,6 +28,8 @@ import { formatCurrency } from '@/lib/currency'
 import { exportFinanceSummaryPdf } from '@/lib/finances/finance-reports-pdf-exporter'
 import type { FinanceSummaryReport } from '@/lib/finance/server'
 import { cn } from '@/lib/utils'
+import { reconciliationGuidance } from '@/lib/finance/reconciliation-guidance'
+import { FinanceMetricExplanation } from './FinanceMetricExplanation'
 
 /** Cuantos registros se nombran antes de resumir el resto en "y N mas". */
 const MAX_LISTED_SOURCES = 6
@@ -568,7 +570,7 @@ function CashFlowInsights({
             {formatCurrency(netCashFlow)}
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            Dinero real disponible tras compensar todos los pagos.
+            Flujo neto del período. No representa el saldo disponible de caja o banco.
           </p>
         </div>
       </div>
@@ -682,9 +684,10 @@ export function FinanceSummary({
             </p>
             <p className="text-xs text-muted-foreground">
               {summary.accrued.revenue > 0
-                ? `De ${formatCurrency(summary.accrued.revenue)} en ventas tras todos los costos`
-                : 'Sin ventas registradas en el período'}
+                ? `De ${formatCurrency(summary.accrued.revenue)} en ingresos registrados tras los costos`
+                : 'Sin ingresos registrados en el período'}
             </p>
+            <FinanceMetricExplanation kind="economic" />
           </div>
 
           <div className="hidden lg:block h-16 w-px bg-border/80" />
@@ -711,9 +714,10 @@ export function FinanceSummary({
               {formatCurrency(summary.cash.netCashFlow)}
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(summary.cash.collected)} cobrados vs {formatCurrency(summary.cash.paid)} pagados
+              {formatCurrency(summary.cash.collected)} cobrados vs {formatCurrency(summary.cash.paid)} en pagos netos
             </p>
             <p className="text-xs text-muted-foreground">Flujo del período; no es el saldo disponible de caja o banco.</p>
+            <FinanceMetricExplanation kind="cash" />
           </div>
 
           <div className="hidden lg:block h-16 w-px bg-border/80" />
@@ -811,7 +815,7 @@ export function FinanceSummary({
           />
           <PriorityAction
             title="Nómina del equipo"
-            description="Revisá comisiones de venta y generá la liquidación salarial."
+            description="Revisá salarios y comisiones integradas, prepará la liquidación y luego registrá el pago."
             action="Administrar nómina"
             onClick={onViewPayroll}
             icon={Users}
@@ -867,6 +871,7 @@ export function FinanceSummary({
 
         {/* Tab 1: Devengado */}
         <TabsContent value="accrued" className="space-y-4 mt-0">
+          <FinanceMetricExplanation kind="accrued" />
           <section aria-labelledby="finance-accrued-heading">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -890,7 +895,7 @@ export function FinanceSummary({
               <MetricCard
                 title="Ganancia bruta"
                 value={summary.accrued.grossProfit}
-                description="Ingresos menos costos directos (COGS)"
+                description="Lo que queda de los ingresos después de los costos directos, antes de gastos y nómina"
                 icon={Landmark}
                 tone="positive"
                 badgeText={grossMarginPercent}
@@ -948,15 +953,15 @@ export function FinanceSummary({
               <MetricCard
                 title="Cobrado"
                 value={summary.cash.collected}
-                description="Entradas de efectivo registradas"
+                description="Cobros de dinero registrados, incluidos los medios de pago integrados"
                 icon={TrendingUp}
                 tone="positive"
                 previousValue={summary.comparison?.cash?.collected}
               />
               <MetricCard
-                title="Pagado"
+                title="Pagos netos de anulaciones"
                 value={summary.cash.paid}
-                description="Salidas de efectivo registradas"
+                description="Pagos registrados menos sus anulaciones; puede ser negativo"
                 icon={Landmark}
                 tone="expense"
                 invertDeltaColor
@@ -990,9 +995,9 @@ export function FinanceSummary({
           <AlertTitle className="font-semibold">Faltan costos o datos para completar el resultado</AlertTitle>
           <AlertDescription className="mt-2 text-xs">
             <p className="mb-2">
-              Se detectaron registros sin costo unitario o asignación requerida. La ganancia bruta y neta no pueden calcularse de forma definitiva hasta completar estos datos.
+              Revisá los avisos por tipo: los costos faltantes afectan la ganancia; los cobros sin fecha afectan la precisión del flujo. No se corrigen registrando nuevamente dinero ya cobrado o pagado.
             </p>
-            <ul role="list" className="list-disc pl-4 space-y-1.5">
+            <ul role="list" aria-label="Datos pendientes de conciliación" className="max-h-80 overflow-y-auto list-disc pl-4 pr-2 space-y-3">
               {coverageWarnings.map((warning) => (
                 <li key={`${warning.code}-${warning.message}`}>
                   <span>{warning.message}</span>{' '}
@@ -1007,6 +1012,11 @@ export function FinanceSummary({
                         ` y ${warning.labels.length - MAX_LISTED_SOURCES} más`}
                     </span>
                   )}
+                  <details className="mt-1 rounded-md border border-border/60 bg-background/50 p-2 text-foreground">
+                    <summary className="min-h-11 cursor-pointer font-medium focus-visible:ring-2 focus-visible:ring-ring">Cómo revisar estos registros</summary>
+                    <p className="mt-2 leading-relaxed">{reconciliationGuidance(warning.code)}</p>
+                    <p className="mt-2 text-muted-foreground">Después de revisar los datos de origen, actualizá el resumen con el mismo período y sucursal. Esta guía no modifica movimientos ni certifica una conciliación.</p>
+                  </details>
                 </li>
               ))}
             </ul>

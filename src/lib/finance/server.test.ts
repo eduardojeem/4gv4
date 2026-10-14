@@ -379,7 +379,8 @@ describe('costo de los pedidos web', () => {
     expect(summary.accrued.revenue).toBe(300_000)
     expect(summary.accrued.directCosts).toBe(160_000)
     expect(summary.accrued.grossProfit).toBe(140_000)
-    expect(summary.complete).toBe(true)
+    expect(summary.complete).toBe(false)
+    expect(summary.coverageWarnings).toContainEqual(expect.objectContaining({ code: 'MISSING_CASH_TIMING', sourceType: 'order' }))
   })
 
   // Un pedido anterior a la migracion de snapshots no tiene costo: se declara

@@ -14,6 +14,14 @@ const period = {
 }
 
 describe('canonical finance summary aggregation', () => {
+  it('marks paid web orders as incomplete when collection timing is unavailable', () => {
+    const result = buildFinanceSummaryFromRecords({
+      sales: [], saleItems: [], repairs: [], repairParts: [], obligations: [], payrollEntries: [], financePayments: [], payrollPayments: [],
+      orders: [{ id: 'web-paid', code: 'WEB-1', branchId: 'branch-a', createdAt: '2026-08-08', status: 'completed', paymentStatus: 'PAID', totalAmount: 100, paidAmount: 100 }],
+    }, period)
+    expect(result.complete).toBe(false)
+    expect(result.coverageWarnings).toContainEqual(expect.objectContaining({ code: 'MISSING_CASH_TIMING', sourceId: 'web-paid' }))
+  })
   it('keeps accrued profit separate from collected and paid cash', () => {
     const result = buildFinanceSummaryFromRecords(
       {
