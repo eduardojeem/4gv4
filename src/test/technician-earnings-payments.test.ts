@@ -47,7 +47,9 @@ describe('technician data completeness', () => {
       then(resolve: (value: unknown) => unknown) { return Promise.resolve(resolve({ data: Array.from({ length: 200 }, () => repair), error: null })) },
     }
     const configuration = { select() { return this }, eq() { return this }, maybeSingle: async () => ({ data: { commission_rate: 10 }, error: null }) }
-    const client = { from: (table: string) => table === 'technician_compensation' ? configuration : query } as unknown as SupabaseClient
+    const versions = { select() { return this }, eq() { return this }, order() { return this }, range: async () => ({ data: [], error: null }) }
+    const settings = { select() { return this }, eq() { return this }, maybeSingle: async () => ({ data: { timezone: 'UTC' }, error: null }) }
+    const client = { from: (table: string) => table === 'technician_compensation' ? configuration : table === 'technician_compensation_versions' ? versions : table === 'organization_settings' ? settings : query } as unknown as SupabaseClient
     const { earnings } = await computeTechnicianEarnings(client, 'org', 'tech', null, '2026-10-01', '2026-11-01')
     expect(earnings.repairsCount).toBe(201)
     expect(earnings.total).toBe(2010)

@@ -1,9 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { computeVersionedEarnings, type CompensationVersion } from './versioned-earnings'
 import {
   DEFAULT_COMPENSATION,
-  computeEarnings,
   type CompensationConfig,
-  type EarningRepair,
   type EarningsResult,
 } from '@/lib/technician/earnings'
 
@@ -94,7 +93,20 @@ export async function computeTechnicianEarnings(
     throw new Error('Período inválido')
   }
   const compensation = await getTechnicianCompensation(supabase, organizationId, technicianId)
-  const baseProration = computeBaseProration(compensation.salary_effective_from, from)
+  const versions: CompensationVersion[] = []
+  for (let offset = 0; ; offset += 200) {
+    const { data, error } = await supabase.from('technician_compensation_versions')
+      .select('effective_from, config').eq('organization_id', organizationId).eq('technician_id', technicianId)
+      .order('effective_from', { ascending: true }).range(offset, offset + 199)
+    if (error) throw error
+    const page = (data as CompensationVersion[] | null) ?? []
+    versions.push(...page)
+    if (page.length < 200) break
+  }
+  const { data: settings, error: settingsError } = await supabase.from('organization_settings')
+    .select('timezone').eq('organization_id', organizationId).maybeSingle()
+  if (settingsError) throw settingsError
+  const timeZone = settings?.timezone || 'America/Asuncion'
 
   let query = supabase
     .from('repairs')
@@ -116,15 +128,5 @@ export async function computeTechnicianEarnings(
     if (page.length < pageSize) break
   }
 
-  const qualifying = repairs.filter((row) =>
-    qualifiesForAccrual(row, compensation.accrual_status, from, to),
-  )
-
-  const earningRepairs: EarningRepair[] = qualifying.map((row) => ({
-    labor_cost: row.labor_cost,
-    final_cost: row.final_cost,
-    estimated_cost: row.estimated_cost,
-  }))
-
-  return { compensation, earnings: computeEarnings(compensation, earningRepairs, baseProration) }
+  return computeVersionedEarnings(versions.length ? versions : [{ effective_from: '1900-01-01', config: compensation }], repairs, from, to, timeZone)
 }
