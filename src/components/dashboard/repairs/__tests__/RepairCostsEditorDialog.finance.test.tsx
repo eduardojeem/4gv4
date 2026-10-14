@@ -161,3 +161,19 @@ describe('RepairCostsEditorDialog - Financial Impact and Numbers Input', () => {
     expect(screen.getByText(/Alerta Crítica \(5\.8%\)/i)).toBeVisible()
   })
 })
+
+describe('RepairCostsEditorDialog: «Definir precio»', () => {
+  const unpriced = { ...mockRepair, estimatedCost: 0, finalCost: null, laborCost: 0, parts: [] } as Repair
+
+  it('arranca preguntando cuánto se cobra, con el nombre de la reparación y el cursor en el precio', () => {
+    render(<RepairCostsEditorDialog open repair={unpriced} startWithPrice onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByRole('heading', { name: '¿Cuánto le cobrás al cliente?' })).toBeVisible()
+    expect(screen.getByLabelText('Nombre del servicio')).toHaveValue('Reparación: Cambio de pantalla y pin de carga')
+    expect(screen.getByLabelText('Precio al cliente')).toHaveFocus()
+  })
+
+  it('abierto normalmente no cambia nada', () => {
+    render(<RepairCostsEditorDialog open repair={unpriced} onOpenChange={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.queryByRole('heading', { name: '¿Cuánto le cobrás al cliente?' })).not.toBeInTheDocument()
+  })
+})

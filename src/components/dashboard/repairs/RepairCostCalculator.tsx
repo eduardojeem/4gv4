@@ -246,12 +246,224 @@ export function RepairCostCalculator({
           </div>
           <div>
             <span className="font-semibold">Calculadora de costos</span>
-            <p className="mt-0.5 text-xs font-normal text-muted-foreground">Define lo que se cobra y revisa el desglose antes de guardar.</p>
+            <p className="mt-0.5 text-xs font-normal text-muted-foreground">Escribí cuánto le cobrás; el desglose es opcional.</p>
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 pt-6">
+        {/* Total de la Reparación: lo primero que se decide es cuánto se cobra. */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-base font-semibold flex items-center gap-2 text-emerald-900 dark:text-emerald-300">
+              <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              ¿Cuánto le cobrás al cliente?
+            </Label>
+            {finalCost !== null && calculationMode === 'manual' && (
+              <button
+                type="button"
+                onClick={() => onFinalCostChange(null)}
+                className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-medium hover:underline"
+                disabled={disabled}
+              >
+                Restablecer al estimado
+              </button>
+            )}
+          </div>
 
+          <div className="relative">
+            <span className="absolute left-4 top-4 text-xl font-bold text-emerald-600 dark:text-emerald-400">₲</span>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={formatThousands(finalCost)}
+              onChange={(e) => handleFinalCostInputChange(parseThousands(e.target.value).toString())}
+              placeholder={`${formatCurrency(estimatedCost)} (estimado)`}
+              className={`pl-12 h-16 text-xl font-bold font-mono border-2 disabled:opacity-80 rounded-2xl ${
+                hasCostDifference
+                  ? costDifference > 0
+                    ? 'border-orange-400 dark:border-orange-700 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-900 dark:text-orange-200'
+                    : 'border-green-400 dark:border-green-700 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 text-green-900 dark:text-green-200'
+                  : 'border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900'
+              } ${error ? 'border-red-500 dark:border-red-700' : ''}`}
+              disabled={disabled}
+            />
+          </div>
+          {isFinalDerived && (
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+              Calculado automáticamente. Podés editarlo para fijar el presupuesto acordado con el cliente.
+            </p>
+          )}
+          {isLaborDerived && finalCost === null && (
+            <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
+              Ingresá el total acordado para calcular la mano de obra.
+            </p>
+          )}
+
+          {(discountAmount > 0 || (calculationMode === 'manual' && pricing.customerTotal < pricing.partsPrice)) && onOverrideReasonChange && (
+            <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="repair-price-override" className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                  Motivo del ajuste o descuento
+                </Label>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {[
+                  'Descuento cliente frecuente',
+                  'Ajuste acordado con cliente',
+                  'Garantía previa / Reingreso',
+                  'Promoción especial vigente',
+                ].map((reasonChip) => (
+                  <button
+                    key={reasonChip}
+                    type="button"
+                    onClick={() => onOverrideReasonChange(reasonChip)}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-200 transition-colors border border-amber-200 dark:border-amber-700/60"
+                  >
+                    {reasonChip}
+                  </button>
+                ))}
+              </div>
+              <Input
+                id="repair-price-override"
+                value={overrideReason}
+                onChange={(event) => onOverrideReasonChange(event.target.value)}
+                placeholder="O escribe el motivo de la excepción..."
+                maxLength={300}
+                disabled={disabled}
+                className="text-xs bg-white dark:bg-slate-900"
+              />
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">Obligatorio para auditar descuentos y excepciones de precio.</p>
+            </div>
+          )}
+
+          {/* Resumen en vivo: lo que paga el cliente y, para quien ve costos, lo que queda. */}
+          <div data-testid="repair-price-summary" className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/20 p-3 text-sm sm:grid-cols-4">
+            <div><p className="text-[11px] font-medium text-muted-foreground">Cliente paga</p><p className="font-bold tabular-nums">{formatCurrency(pricing.customerTotal)}</p></div>
+            <div><p className="text-[11px] font-medium text-muted-foreground">Saldo a cobrar</p><p className={cn('font-bold tabular-nums', pricing.balance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')}>{formatCurrency(pricing.balance)}</p></div>
+            {canViewCommission ? (
+              <>
+                <div><p className="text-[11px] font-medium text-muted-foreground">Tu costo (repuestos)</p><p className="font-bold tabular-nums">{formatCurrency(pricing.partsInternalCost)}</p></div>
+                <div>
+                  <p className="text-[11px] font-medium text-muted-foreground">Ganancia</p>
+                  <p className={cn('font-bold tabular-nums', pricing.margin < 0 ? 'text-red-600' : 'text-emerald-600 dark:text-emerald-400')}>
+                    {formatCurrency(pricing.margin)}
+                    {pricing.customerTotal > 0 ? <span className="ml-1 text-[11px] font-semibold opacity-80">({Math.round((pricing.margin / pricing.customerTotal) * 100)}%)</span> : null}
+                  </p>
+                </div>
+              </>
+            ) : null}
+            {canViewCommission && pricing.partsPrice > 0 && pricing.partsInternalCost === 0 ? (
+              <p className="col-span-full text-[11px] text-amber-700 dark:text-amber-400">Cargá lo que te costaron los repuestos para ver la ganancia real.</p>
+            ) : null}
+          </div>
+
+          {/* Diferencia de Costo */}
+          {hasCostDifference && finalCost !== null && (
+            <div className={`flex items-center gap-3 text-sm p-4 rounded-xl border-2 shadow-md ${
+              costDifference > 0 
+                ? 'bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-800 dark:text-orange-200 border-orange-300 dark:border-orange-800' 
+                : 'bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 text-green-800 dark:text-green-200 border-green-300 dark:border-green-800'
+            }`}>
+              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium">
+                {costDifference > 0 ? '📈 Incremento' : '📉 Descuento'} de{' '}
+                <strong className="text-lg">{formatCurrency(Math.abs(costDifference))}</strong>
+                {' '}respecto al costo estimado
+              </span>
+            </div>
+          )}
+          
+          {/* Error de validación */}
+          {error && (
+            <div className="flex items-center gap-3 text-sm text-red-700 dark:text-red-300 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/40 dark:to-red-900/30 p-4 rounded-xl border-2 border-red-300 dark:border-red-800 shadow-md">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium">{error}</span>
+            </div>
+          )}
+
+          {/* Comisión del técnico: solo visible para quien puede ver compensación
+              (dato sensible) y solo si el técnico asignado tiene % configurado. */}
+          {compensationEnabled && isLoadingCompensation && (
+            <div className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed">
+              Calculando comisión del técnico...
+            </div>
+          )}
+          {commissionPreview !== null && (
+            <div className="p-4 rounded-xl border-2 border-violet-200 dark:border-violet-900/50 bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/40 dark:to-violet-900/30 shadow-md space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-violet-600 dark:bg-violet-700 flex items-center justify-center shrink-0">
+                    <Percent className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-violet-900 dark:text-violet-300">
+                      Comisión del técnico{technicianName ? ` — ${technicianName}` : ''}
+                    </p>
+                    <p className="text-xs text-violet-700 dark:text-violet-400">
+                      {compensation.commission_rate}% sobre{' '}
+                      <strong>{compensation.commission_base === 'labor' ? `Mano de Obra (${formatCurrency(laborCost || 0)})` : `Total (${formatCurrency(finalCost ?? estimatedCost)})`}</strong>
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xl font-bold text-violet-900 dark:text-violet-200">
+                  {formatCurrency(commissionPreview)}
+                </span>
+              </div>
+
+              {/* Desglose de Ganancia Neta Empresa vs Retención de Repuestos */}
+              <div className="pt-2.5 border-t border-violet-200/60 dark:border-violet-800/40 grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 rounded-lg bg-white/70 dark:bg-slate-900/60 border border-violet-100 dark:border-violet-900/40">
+                  <span className="text-muted-foreground block text-[10px]">Ganancia Neta Empresa:</span>
+                  <strong className="text-emerald-700 dark:text-emerald-300 text-xs">
+                    {formatCurrency(Math.max(0, (laborCost || 0) - (commissionPreview || 0)))}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-lg bg-white/70 dark:bg-slate-900/60 border border-violet-100 dark:border-violet-900/40">
+                  <span className="text-muted-foreground block text-[10px]">Recuperación Repuestos:</span>
+                  <strong className="text-slate-800 dark:text-slate-200 text-xs">
+                    {formatCurrency(pricing.partsPrice)}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Nota de liquidación */}
+              <p className="text-[11px] text-violet-700/80 dark:text-violet-400/80">
+                Se liquida recién cuando la reparación llegue a{' '}
+                <strong>{compensation.accrual_status === 'entregado' ? 'entregado' : 'lista o entregada'}</strong>
+                . El costo de repuestos no se comparte, queda 100% para la empresa.
+              </p>
+            </div>
+          )}
+
+          {/* Información adicional */}
+          <div className="text-xs text-emerald-700 dark:text-emerald-300 space-y-2 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-lg p-4 border border-emerald-200 dark:border-emerald-900">
+            <p className="flex items-start gap-2">
+              <span className="text-emerald-600 dark:text-emerald-400">•</span>
+              <span>Si no especificas un costo final, se usará el costo estimado automáticamente</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="text-emerald-600 dark:text-emerald-400">•</span>
+              <span>El costo final es lo que se cobrará al cliente</span>
+            </p>
+            {pricesIncludeTax && (
+              <p className="flex items-start gap-2">
+                <span className="text-emerald-600 dark:text-emerald-400">•</span>
+                <span>Los precios incluyen IVA del {taxRate}%</span>
+              </p>
+            )}
+          </div>
+        </div>
+        
+
+        <details
+          className="group rounded-xl border bg-background"
+          open={calculationMode === 'manual' || discountAmount > 0}
+        >
+          <summary className="cursor-pointer list-none rounded-xl px-4 py-3 text-sm font-semibold text-foreground hover:bg-muted/40">
+            Ajustar desglose: mano de obra, descuento y repuestos
+            <span className="ml-1 text-xs font-normal text-muted-foreground">(opcional)</span>
+          </summary>
+          <div className="space-y-6 border-t px-4 pb-4 pt-4">
         {/* Selector de modo: qué campo se deriva y cuál se carga a mano.
             Uno solo de los tres botones puede estar activo a la vez, así no
             hay ambigüedad sobre quién manda cuando dos valores podrían
@@ -481,198 +693,8 @@ export function RepairCostCalculator({
             </div>
           </div>
         )}
-        
-        <Separator />
-        
-        {/* Total de la Reparación */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold flex items-center gap-2 text-emerald-900 dark:text-emerald-300">
-              <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              Presupuesto total
-            </Label>
-            {finalCost !== null && calculationMode === 'manual' && (
-              <button
-                type="button"
-                onClick={() => onFinalCostChange(null)}
-                className="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-medium hover:underline"
-                disabled={disabled}
-              >
-                Restablecer al estimado
-              </button>
-            )}
           </div>
-
-          <div className="relative">
-            <span className="absolute left-4 top-4 text-xl font-bold text-emerald-600 dark:text-emerald-400">₲</span>
-            <Input
-              type="text"
-              inputMode="numeric"
-              value={formatThousands(finalCost)}
-              onChange={(e) => handleFinalCostInputChange(parseThousands(e.target.value).toString())}
-              placeholder={`${formatCurrency(estimatedCost)} (estimado)`}
-              className={`pl-12 h-16 text-xl font-bold font-mono border-2 disabled:opacity-80 rounded-2xl ${
-                hasCostDifference
-                  ? costDifference > 0
-                    ? 'border-orange-400 dark:border-orange-700 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-900 dark:text-orange-200'
-                    : 'border-green-400 dark:border-green-700 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 text-green-900 dark:text-green-200'
-                  : 'border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900'
-              } ${error ? 'border-red-500 dark:border-red-700' : ''}`}
-              disabled={disabled}
-            />
-          </div>
-          {isFinalDerived && (
-            <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-              Calculado automáticamente. Podés editarlo para fijar el presupuesto acordado con el cliente.
-            </p>
-          )}
-          {isLaborDerived && finalCost === null && (
-            <p className="text-[11px] font-medium text-blue-700 dark:text-blue-400">
-              Ingresá el total acordado para calcular la mano de obra.
-            </p>
-          )}
-
-          {(discountAmount > 0 || (calculationMode === 'manual' && pricing.customerTotal < pricing.partsPrice)) && onOverrideReasonChange && (
-            <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 dark:border-amber-800 dark:bg-amber-950/30">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="repair-price-override" className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                  Motivo del ajuste o descuento
-                </Label>
-              </div>
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                {[
-                  'Descuento cliente frecuente',
-                  'Ajuste acordado con cliente',
-                  'Garantía previa / Reingreso',
-                  'Promoción especial vigente',
-                ].map((reasonChip) => (
-                  <button
-                    key={reasonChip}
-                    type="button"
-                    onClick={() => onOverrideReasonChange(reasonChip)}
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-200 transition-colors border border-amber-200 dark:border-amber-700/60"
-                  >
-                    {reasonChip}
-                  </button>
-                ))}
-              </div>
-              <Input
-                id="repair-price-override"
-                value={overrideReason}
-                onChange={(event) => onOverrideReasonChange(event.target.value)}
-                placeholder="O escribe el motivo de la excepción..."
-                maxLength={300}
-                disabled={disabled}
-                className="text-xs bg-white dark:bg-slate-900"
-              />
-              <p className="text-[11px] text-amber-800 dark:text-amber-300">Obligatorio para auditar descuentos y excepciones de precio.</p>
-            </div>
-          )}
-
-          {canViewCommission && (
-            <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-3 text-sm">
-              <div><p className="text-xs text-muted-foreground font-medium">Costo base compra repuestos</p><p className="font-bold">{formatCurrency(pricing.partsInternalCost)}</p></div>
-              <div><p className="text-xs text-muted-foreground font-medium">Margen bruto proyectado</p><p className={cn('font-bold', pricing.margin < 0 ? 'text-red-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatCurrency(pricing.margin)}</p></div>
-            </div>
-          )}
-
-          {/* Diferencia de Costo */}
-          {hasCostDifference && finalCost !== null && (
-            <div className={`flex items-center gap-3 text-sm p-4 rounded-xl border-2 shadow-md ${
-              costDifference > 0 
-                ? 'bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/30 text-orange-800 dark:text-orange-200 border-orange-300 dark:border-orange-800' 
-                : 'bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 text-green-800 dark:text-green-200 border-green-300 dark:border-green-800'
-            }`}>
-              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium">
-                {costDifference > 0 ? '📈 Incremento' : '📉 Descuento'} de{' '}
-                <strong className="text-lg">{formatCurrency(Math.abs(costDifference))}</strong>
-                {' '}respecto al costo estimado
-              </span>
-            </div>
-          )}
-          
-          {/* Error de validación */}
-          {error && (
-            <div className="flex items-center gap-3 text-sm text-red-700 dark:text-red-300 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/40 dark:to-red-900/30 p-4 rounded-xl border-2 border-red-300 dark:border-red-800 shadow-md">
-              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium">{error}</span>
-            </div>
-          )}
-
-          {/* Comisión del técnico: solo visible para quien puede ver compensación
-              (dato sensible) y solo si el técnico asignado tiene % configurado. */}
-          {compensationEnabled && isLoadingCompensation && (
-            <div className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed">
-              Calculando comisión del técnico...
-            </div>
-          )}
-          {commissionPreview !== null && (
-            <div className="p-4 rounded-xl border-2 border-violet-200 dark:border-violet-900/50 bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-950/40 dark:to-violet-900/30 shadow-md space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-violet-600 dark:bg-violet-700 flex items-center justify-center shrink-0">
-                    <Percent className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-violet-900 dark:text-violet-300">
-                      Comisión del técnico{technicianName ? ` — ${technicianName}` : ''}
-                    </p>
-                    <p className="text-xs text-violet-700 dark:text-violet-400">
-                      {compensation.commission_rate}% sobre{' '}
-                      <strong>{compensation.commission_base === 'labor' ? `Mano de Obra (${formatCurrency(laborCost || 0)})` : `Total (${formatCurrency(finalCost ?? estimatedCost)})`}</strong>
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xl font-bold text-violet-900 dark:text-violet-200">
-                  {formatCurrency(commissionPreview)}
-                </span>
-              </div>
-
-              {/* Desglose de Ganancia Neta Empresa vs Retención de Repuestos */}
-              <div className="pt-2.5 border-t border-violet-200/60 dark:border-violet-800/40 grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded-lg bg-white/70 dark:bg-slate-900/60 border border-violet-100 dark:border-violet-900/40">
-                  <span className="text-muted-foreground block text-[10px]">Ganancia Neta Empresa:</span>
-                  <strong className="text-emerald-700 dark:text-emerald-300 text-xs">
-                    {formatCurrency(Math.max(0, (laborCost || 0) - (commissionPreview || 0)))}
-                  </strong>
-                </div>
-                <div className="p-2 rounded-lg bg-white/70 dark:bg-slate-900/60 border border-violet-100 dark:border-violet-900/40">
-                  <span className="text-muted-foreground block text-[10px]">Recuperación Repuestos:</span>
-                  <strong className="text-slate-800 dark:text-slate-200 text-xs">
-                    {formatCurrency(pricing.partsPrice)}
-                  </strong>
-                </div>
-              </div>
-
-              {/* Nota de liquidación */}
-              <p className="text-[11px] text-violet-700/80 dark:text-violet-400/80">
-                Se liquida recién cuando la reparación llegue a{' '}
-                <strong>{compensation.accrual_status === 'entregado' ? 'entregado' : 'lista o entregada'}</strong>
-                . El costo de repuestos no se comparte, queda 100% para la empresa.
-              </p>
-            </div>
-          )}
-
-          {/* Información adicional */}
-          <div className="text-xs text-emerald-700 dark:text-emerald-300 space-y-2 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-lg p-4 border border-emerald-200 dark:border-emerald-900">
-            <p className="flex items-start gap-2">
-              <span className="text-emerald-600 dark:text-emerald-400">•</span>
-              <span>Si no especificas un costo final, se usará el costo estimado automáticamente</span>
-            </p>
-            <p className="flex items-start gap-2">
-              <span className="text-emerald-600 dark:text-emerald-400">•</span>
-              <span>El costo final es lo que se cobrará al cliente</span>
-            </p>
-            {pricesIncludeTax && (
-              <p className="flex items-start gap-2">
-                <span className="text-emerald-600 dark:text-emerald-400">•</span>
-                <span>Los precios incluyen IVA del {taxRate}%</span>
-              </p>
-            )}
-          </div>
-        </div>
-        
+        </details>
       </CardContent>
     </Card>
   )

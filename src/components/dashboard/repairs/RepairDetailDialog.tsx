@@ -187,6 +187,8 @@ export function RepairDetailDialog({
   const [warrantyDraft, setWarrantyDraft] = useState({ months: 0, type: 'full' as 'labor' | 'parts' | 'full', notes: '' })
   const [savingQuickEdit, setSavingQuickEdit] = useState(false)
   const [isCostsEditorOpen, setIsCostsEditorOpen] = useState(false)
+  // Abierto desde «Definir precio»: el editor arranca preguntando cuánto se cobra.
+  const [costsEditorStartsWithPrice, setCostsEditorStartsWithPrice] = useState(false)
   const [isInternalCostCorrectionOpen, setIsInternalCostCorrectionOpen] = useState(false)
   const [isFinalPriceCorrectionOpen, setIsFinalPriceCorrectionOpen] = useState(false)
   const { settings } = useSharedSettings()
@@ -1508,7 +1510,7 @@ export function RepairDetailDialog({
                             </Button>
                           ) : null
                         ) : (
-                          <Button type="button" size="sm" className="h-8 bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsCostsEditorOpen(true)}>
+                          <Button type="button" size="sm" className="h-8 bg-amber-600 text-white hover:bg-amber-700" onClick={() => { setCostsEditorStartsWithPrice(true); setIsCostsEditorOpen(true) }}>
                             Definir precio
                           </Button>
                         )}
@@ -2713,10 +2715,14 @@ export function RepairDetailDialog({
         />
         <RepairCostsEditorDialog
           open={isCostsEditorOpen}
+          startWithPrice={costsEditorStartsWithPrice}
           repair={activeRepair}
           maxDiscountPercent={settings.repairMaxDiscountPercent}
           laborTaxRate={configuredTaxRate}
-          onOpenChange={setIsCostsEditorOpen}
+          onOpenChange={(nextOpen) => {
+            setIsCostsEditorOpen(nextOpen)
+            if (!nextOpen) setCostsEditorStartsWithPrice(false)
+          }}
           onSaved={async () => {
             await onCostSaved?.()
           }}
