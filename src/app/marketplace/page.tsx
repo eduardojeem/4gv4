@@ -7,7 +7,7 @@ import { MarketplaceProductCarousel } from '@/components/public/MarketplaceProdu
 import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSection'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/components/public/MarketplaceOffersSection'
-import { getMarketplaceOrganizations, getMarketplaceProductsPage, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
+import { getMarketplaceOrganizations, getMarketplaceOrganizationCount, getMarketplaceProductsPage, getMarketplaceBrands, getMarketplaceOffers } from '@/lib/public/marketplace'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/branding'
 import { getPlatformAnnouncements } from '@/lib/platform/announcement'
@@ -15,7 +15,7 @@ import { pickLiveAnnouncement } from '@/lib/announcements/announcement'
 import { AnnouncementModal } from '@/components/public/AnnouncementModal'
 import { OrganizationDirectoryCard } from '@/components/public/OrganizationDirectoryCard'
 import { MarketplaceBusinessPromoShowcase } from '@/components/public/MarketplaceBusinessPromoShowcase'
-import { BUSINESS_DIRECTORY_MAX_STORES, visibleDirectoryStats } from '@/lib/public/business-directory'
+import { visibleDirectoryStats } from '@/lib/public/business-directory'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding().catch(() => DEFAULT_PLATFORM_BRANDING)
@@ -28,10 +28,9 @@ export async function generateMetadata(): Promise<Metadata> {
   })
 }
 
-// La pagina puede reutilizar el HTML/RSC durante la misma ventana corta que el
-// catalogo. Los filtros personales viven en otras rutas y no forman parte de
-// esta salida publica.
-export const revalidate = 30
+// Cinco minutos de respaldo; las escrituras del catálogo invalidan sus tags.
+// Debe ser literal para que Next pueda analizar la configuración de la ruta.
+export const revalidate = 300
 const MARKETPLACE_HOME_PRODUCT_LIMIT = 24
 const MARKETPLACE_HOME_OFFER_LIMIT = 48
 
@@ -40,23 +39,27 @@ const MARKETPLACE_HOME_OFFER_LIMIT = 48
  * la portada se prerenderiza: sin respaldo el build fallaba. En producción un
  * fallo del catálogo tiene que llegar a error.tsx («No pudimos cargar el
  * marketplace» con «Reintentar»), no mostrar un marketplace vacío que parece
- * no tener productos. Lo prerenderizado vacío se regenera a los 30 s.
+ * no tener productos. Lo prerenderizado vacío se regenera a los 5 minutos.
  */
 function duringBuild<T>(promise: Promise<T>, fallback: T): Promise<T> {
   return process.env.NEXT_PHASE === 'phase-production-build' ? promise.catch(() => fallback) : promise
 }
 
 export default async function MarketplacePage() {
-  const [organizations, directory, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
+  const [organizationRows, organizationCount, marketplacePage, brands, marketplaceOffers, announcement] = await Promise.all([
     getMarketplaceOrganizations().catch(() => []),
-    // Solo para contar: la lista de la portada trae 24 y la cifra se quedaba en
-    // 24. Es la misma lista cacheada de /marketplace/empresas y /saas/negocios.
-    getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES).catch(() => []),
+    getMarketplaceOrganizationCount().catch(() => 0),
     duringBuild(getMarketplaceProductsPage(MARKETPLACE_HOME_PRODUCT_LIMIT), { products: [], total: 0 }),
     duringBuild(getMarketplaceBrands(30), []),
     duringBuild(getMarketplaceOffers(MARKETPLACE_HOME_OFFER_LIMIT), []),
     getPlatformAnnouncements().catch(() => []),
   ])
+  // Both client sections share these objects; neither displays more than four
+  // products per store. Trim once to preserve RSC reference deduplication.
+  const organizations = organizationRows.map(organization => ({
+    ...organization,
+    featured_products: organization.featured_products.slice(0, 4),
+  }))
   const marketplaceProducts = marketplacePage.products
 
   const featuredProducts = marketplaceProducts.filter((product) => product.featured)
@@ -90,7 +93,7 @@ export default async function MarketplacePage() {
   const totalProducts = marketplacePage.total
   // Mismo criterio que /saas/negocios: «10 tiendas» resta más de lo que suma.
   // Cada cifra aparece sola al llegar a su mínimo.
-  const storeCount = Math.max(organizations.length, directory.length)
+  const storeCount = Math.max(organizations.length, organizationCount)
   const shownStats = new Set(visibleDirectoryStats({ stores: storeCount, cities: 0, products: totalProducts }).map((stat) => stat.key))
 
   return (

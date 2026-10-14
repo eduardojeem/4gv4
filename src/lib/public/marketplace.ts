@@ -21,8 +21,9 @@ function logMarketplaceError(query: string, error: { message?: string; code?: st
   logger.error(`[marketplace] falló la consulta de ${query}`, { code: error.code, message: error.message })
 }
 
-export const MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 30
+export const MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 300
 export const MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS = 300
+export const MARKETPLACE_FACETS_REVALIDATE_SECONDS = 900
 /** Cuántos productos lleva la fila de cada tienda en el inicio del marketplace. */
 export const FEATURED_PRODUCTS_PER_ORGANIZATION = 12
 
@@ -610,6 +611,13 @@ const getCachedMarketplaceOrganizations = unstable_cache(
   { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:organizations'] }
 )
 
+// Counting stores must not hydrate product galleries for the entire directory.
+export const getMarketplaceOrganizationCount = unstable_cache(
+  async () => (await getShowcaseOrganizationIds(createAdminSupabase())).length,
+  ['marketplace-organization-count'],
+  { revalidate: MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS, tags: ['marketplace:organizations'] }
+)
+
 const getCachedMarketplaceProductsPage = unstable_cache(
   getMarketplaceProductsPageUncached,
   ['marketplace-products'],
@@ -619,13 +627,13 @@ const getCachedMarketplaceProductsPage = unstable_cache(
 export const getMarketplaceCategories = unstable_cache(
   getMarketplaceCategoriesUncached,
   ['marketplace-categories'],
-  { revalidate: MARKETPLACE_CATALOG_REVALIDATE_SECONDS, tags: ['marketplace:categories'] }
+  { revalidate: MARKETPLACE_FACETS_REVALIDATE_SECONDS, tags: ['marketplace:categories'] }
 )
 
 const getCachedMarketplaceBrands = unstable_cache(
   getMarketplaceBrandsUncached,
   ['marketplace-brands'],
-  { revalidate: MARKETPLACE_CATALOG_REVALIDATE_SECONDS, tags: ['marketplace:brands'] }
+  { revalidate: MARKETPLACE_FACETS_REVALIDATE_SECONDS, tags: ['marketplace:brands'] }
 )
 
 export const getMarketplaceOffers = unstable_cache(

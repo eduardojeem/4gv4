@@ -19,7 +19,8 @@ const brandingSource = readFileSync(
 describe('Marketplace production cache', () => {
   it('shares public catalog reads between requests with freshness based on volatility', () => {
     expect(marketplaceSource).toContain("import { unstable_cache } from 'next/cache'")
-    expect(marketplaceSource).toContain('MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 30')
+    expect(marketplaceSource).toContain('MARKETPLACE_CATALOG_REVALIDATE_SECONDS = 300')
+    expect(marketplaceSource).toContain('MARKETPLACE_FACETS_REVALIDATE_SECONDS = 900')
     expect(marketplaceSource).toContain('MARKETPLACE_DIRECTORY_REVALIDATE_SECONDS = 300')
     expect(marketplaceSource).toContain("tags: ['marketplace:products']")
     expect(marketplaceSource).toContain("tags: ['marketplace:offers']")
@@ -32,7 +33,7 @@ describe('Marketplace production cache', () => {
 
   it('does not force the Marketplace home to render dynamically on every visit', () => {
     expect(marketplaceHome).not.toContain("export const dynamic = 'force-dynamic'")
-    expect(marketplaceHome).toContain('export const revalidate = 30')
+    expect(marketplaceHome).toContain('export const revalidate = 300')
   })
 
   it('does not query platform branding repeatedly across layout and metadata', () => {
