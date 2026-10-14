@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-12T13:29:00.230Z",
+  "generatedAt": "2026-10-14T04:35:55.224Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
@@ -3650,6 +3650,36 @@
       "serviceRole": true
     },
     {
+      "route": "/api/onboarding/start-guide",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        },
+        {
+          "method": "PATCH",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": false
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": false
+    },
+    {
       "route": "/api/onboarding/status",
       "methods": [
         "GET"
@@ -7067,7 +7097,11 @@
     "20261011181644",
     "20261012010454",
     "20261012120000",
+    "20261013011152",
+    "20261013114806",
     "20261013120000",
+    "20261013123506",
+    "20261013233736",
     "20261014120000",
     "20261014120001",
     "20261014120002",
