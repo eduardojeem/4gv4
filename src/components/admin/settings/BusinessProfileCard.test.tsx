@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { SubscriptionStatusProvider, type SubscriptionStatusData } from '@/contexts/SubscriptionStatusContext'
-import { BusinessProfileCard } from './BusinessProfileCard'
+import { BusinessProfileCard, type BusinessProfileActions } from './BusinessProfileCard'
 
 const status: SubscriptionStatusData = {
   status: 'active',
@@ -228,5 +228,29 @@ describe('BusinessProfileCard', () => {
     await user.click(screen.getByRole('option', { name: 'Ropa y moda' }))
 
     expect(screen.queryByText('Especialidades y atención')).not.toBeInTheDocument()
+  })
+
+  it('avisa a la página que hay cambios y se puede descartar desde afuera', async () => {
+    const user = userEvent.setup()
+    const onStateChange = vi.fn()
+    const actionsRef: { current: BusinessProfileActions | null } = { current: null }
+    render(
+      <SubscriptionStatusProvider value={{
+        ...status,
+        planCode: 'PRO',
+        planName: 'Pro',
+        entitledModules: ['inventory', 'pos', 'crm', 'repairs'],
+      }}>
+        <BusinessProfileCard onStateChange={onStateChange} actionsRef={actionsRef} />
+      </SubscriptionStatusProvider>,
+    )
+
+    expect(onStateChange).toHaveBeenLastCalledWith({ dirty: false, canSave: false })
+    await user.click(screen.getByLabelText('Módulo de Reparaciones'))
+    expect(onStateChange).toHaveBeenLastCalledWith({ dirty: true, canSave: true })
+
+    act(() => actionsRef.current?.reset())
+    expect(screen.getByLabelText('Módulo de Reparaciones')).not.toBeChecked()
+    expect(onStateChange).toHaveBeenLastCalledWith({ dirty: false, canSave: false })
   })
 })
