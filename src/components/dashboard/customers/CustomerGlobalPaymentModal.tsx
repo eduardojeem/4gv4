@@ -39,6 +39,10 @@ import { useOptionalBranch } from '@/contexts/branch-context'
 import { useOptionalActiveOrganization } from '@/contexts/ActiveOrganizationContext'
 import { useAuth } from '@/hooks/use-auth'
 import { runCollectionAttempt, retryCollectionAttempt, pendingCollectionAttempt, CollectionAttemptError } from '@/lib/credits/collection-attempt'
+import { createGlobalPaymentReceiptPdf } from '@/lib/credits/global-payment-receipt'
+import { printPdfDocument } from '@/lib/credits/print-receipt'
+import { useCreditPrinting } from '@/hooks/use-credit-printing'
+import { CreditPaperPicker } from '@/components/dashboard/credits/CreditPaperPicker'
 
 export const PARAGUAY_BANKS = [
   'Banco Itaú',
@@ -102,11 +106,15 @@ interface PaymentResult {
     type: 'repair' | 'installment'
     title: string
     allocatedAmount: number
+    totalAmount: number
     previousPending: number
     newPending: number
     fullyPaid: boolean
   }>
   excessToStoreCredit: number
+  /** Deudas que este pago no toco y siguen pendientes. */
+  otherPendingAmount: number
+  notes?: string | null
   paymentMethod: string
   bankName?: string | null
   referenceNumber?: string | null
@@ -159,6 +167,8 @@ export function CustomerGlobalPaymentModal({
   const branchId = useOptionalBranch()?.selectedBranchId ?? null
   const organizationId = useOptionalActiveOrganization()?.organization?.id
   const { user } = useAuth()
+  const { format: paperFormat, changeFormat: changePaperFormat, issuer } = useCreditPrinting()
+  const [printing, setPrinting] = useState(false)
   const attemptScope = organizationId && user?.id && customer?.id ? organizationId + ':' + user.id + ':' + customer.id : ''
   const debtScope = attemptScope + ':' + (branchId ?? '')
   const currentDebtScope = useRef(debtScope)
@@ -401,6 +411,7 @@ export function CustomerGlobalPaymentModal({
       setNeedsRecovery(false)
       setIdempotencyKey(newIdempotencyKey())
       const text = (value: unknown) => typeof value === 'string' ? value : null
+      const coveredIds = new Set(collection.allocations.filter(row => row.appliedAmount > 0).map(row => row.debtId))
       setPaymentResult({
         receiptNumber: collection.receiptNumber,
         totalAmount: collection.appliedAmount + collection.excessToStoreCredit,
@@ -408,9 +419,12 @@ export function CustomerGlobalPaymentModal({
           id: row.debtId, type: row.type,
           title: debts.find(debt => debt.id === row.debtId)?.title ?? (row.type === 'repair' ? 'Reparación' : 'Cuota'),
           allocatedAmount: row.appliedAmount, previousPending: row.appliedAmount + row.remainingBalance,
+          totalAmount: debts.find(debt => debt.id === row.debtId)?.totalAmount ?? row.appliedAmount + row.remainingBalance,
           newPending: row.remainingBalance, fullyPaid: row.remainingBalance === 0,
         })),
         excessToStoreCredit: collection.excessToStoreCredit,
+        otherPendingAmount: debts.filter(debt => !coveredIds.has(debt.id)).reduce((sum, debt) => sum + Math.max(0, debt.pendingAmount), 0),
+        notes: text(resolvedPayload.notes),
         paymentMethod: text(resolvedPayload.paymentMethod ?? resolvedPayload.method) ?? paymentMethod,
         bankName: text(resolvedPayload.bankName), referenceNumber: text(resolvedPayload.referenceNumber ?? resolvedPayload.reference),
         cardType: resolvedPayload.cardType === 'credit' ? 'credit' : 'debit',
@@ -426,6 +440,30 @@ export function CustomerGlobalPaymentModal({
       if (!uncertain) void fetchDebts()
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // El cobro ya esta guardado: si falla el papel, se avisa sin dar a entender
+  // que hay que volver a cobrar.
+  const handlePrintReceipt = async () => {
+    if (!paymentResult || !customer || printing) return
+    setPrinting(true)
+    try {
+      const { doc } = await createGlobalPaymentReceiptPdf({
+        ...paymentResult,
+        paidAt: paymentResult.timestamp,
+        allocations: paymentResult.appliedAllocations,
+        customerName: customer.name,
+        customerDocument: customer.ruc || customer.customerCode || null,
+        ...issuer,
+      }, { format: paperFormat })
+      await printPdfDocument(doc)
+    } catch (error) {
+      toast.error('No se pudo imprimir el comprobante', {
+        description: `El pago quedó registrado. ${error instanceof Error ? error.message : ''}`.trim(),
+      })
+    } finally {
+      setPrinting(false)
     }
   }
 
@@ -622,6 +660,7 @@ export function CustomerGlobalPaymentModal({
 
               {/* Action buttons */}
               <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                <CreditPaperPicker value={paperFormat} onChange={changePaperFormat} className="mr-auto" />
                 {customer?.phone && (
                   <Button
                     type="button"
@@ -637,7 +676,8 @@ export function CustomerGlobalPaymentModal({
                   type="button"
                   variant="outline"
                   className="gap-1.5"
-                  onClick={() => window.print()}
+                  disabled={printing}
+                  onClick={() => void handlePrintReceipt()}
                 >
                   <Printer className="h-4 w-4" />
                   Imprimir
