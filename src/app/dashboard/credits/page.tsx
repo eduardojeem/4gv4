@@ -1177,6 +1177,7 @@ function CreditsDashboardContent() {
         saleItems={saleItems}
         allCredits={credits}
         allInstallments={installments}
+        onUpdated={refreshData}
         onPayInstallment={(installmentId) => {
           setIsDetailDialogOpen(false)
           handleMarkInstallmentPaidDirectly(installmentId)
