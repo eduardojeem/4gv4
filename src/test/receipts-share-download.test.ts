@@ -25,6 +25,26 @@ describe('ticket de venta en texto y por WhatsApp', () => {
     expect(text).toMatch(/\*Total: .*100\.000\*/)
     expect(text).toMatch(/Efectivo: .*120\.000/)
     expect(text).toMatch(/Vuelto: .*20\.000/)
+    expect(text).toContain('Hola Juan')
+    expect(text).toContain('✅ *PAGADO*')
+  })
+
+  it('a crédito muestra total financiado, cuotas y saldo, sin la línea de crédito como pago', () => {
+    const text = buildReceiptShareText({
+      ...receipt,
+      change: undefined,
+      payments: [{ id: 'c', method: 'credit', amount: 100_000 }],
+      creditInfo: {
+        baseTotal: 100_000, interestAmount: 20_000, financedTotal: 120_000,
+        installmentCount: 6, installmentAmount: 20_000, frequency: 'monthly', interestRate: 20,
+        firstDueDate: '2026-11-10',
+      },
+    }, { name: 'JE', phone: '021 555 000' })
+    expect(text).toMatch(/Total financiado: .*120\.000/)
+    expect(text).toMatch(/6 cuotas mensuales de .*20\.000/)
+    expect(text).toMatch(/\*Saldo pendiente: .*120\.000\*/)
+    expect(text).not.toMatch(/Crédito: .*100\.000/)
+    expect(text).toContain('Consultas: 021 555 000')
   })
 
   it('el número de Paraguay pasa a formato internacional', () => {

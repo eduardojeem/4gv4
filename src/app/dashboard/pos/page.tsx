@@ -2977,17 +2977,16 @@ function POSPageContent() {
 
           {currentReceipt && (
             <div className="space-y-4">
-              <ReceiptGenerator
-                receiptData={currentReceipt}
-                formatCurrency={formatCurrency}
-                onPrint={() => printReceipt(currentReceipt, companyInfo)}
-                onDownload={() => downloadReceipt(currentReceipt, companyInfo)}
-                onShare={() => shareReceipt(currentReceipt, companyInfo)}
-              />
+              {/* Vista previa sobre fondo gris: el ticket se ve como el papel que sale. */}
+              <div className="rounded-lg bg-muted/60 p-3">
+                <ReceiptGenerator
+                  receiptData={currentReceipt}
+                  formatCurrency={formatCurrency}
+                />
+              </div>
 
               <div className="flex gap-2 pt-4 border-t">
                 <Button
-                  variant="outline"
                   size="sm"
                   className="flex-1"
                   onClick={() => printReceipt(currentReceipt, companyInfo)}

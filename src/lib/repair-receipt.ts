@@ -1,5 +1,6 @@
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
+import { HIGH_CONTRAST_PRINT_CSS } from '@/lib/print-contrast'
 import {
   DEFAULT_RECEIPT_SETTINGS,
   normalizeRepairReceiptSettings,
@@ -700,6 +701,10 @@ const generateRepairReceiptHTML = (
       font-weight: 600;
       color: #374151;
     }
+
+    ${HIGH_CONTRAST_PRINT_CSS}
+    body .ticket-badge { background: #000 !important; color: #fff !important; border-radius: 0 !important; }
+    body .company-name { font-weight: 900 !important; }
   `
 
   // ==========================================
@@ -1082,12 +1087,12 @@ const generateRepairReceiptHTML = (
             <span class="info-label">Seña / Anticipo Pagado:</span>
             <span class="info-value">-${formatCurrency(paidAmount)}</span>
           </div>
-          <div class="info-row" style="font-size: 13px; font-weight: 800; border-top: 1px dashed #111827; padding-top: 4px; margin-top: 4px;">
+          <div class="info-row pc-total" style="font-size: 13px; font-weight: 800; padding: 4px; margin-top: 4px;">
             <span class="info-label">Saldo al Retirar:</span>
             <span class="info-value">${formatCurrency(pendingBalance)}</span>
           </div>
           ` : `
-          <div class="info-row" style="font-size: 13px; font-weight: 800; border-top: 1px dashed #111827; padding-top: 4px; margin-top: 4px;">
+          <div class="info-row pc-total" style="font-size: 13px; font-weight: 800; padding: 4px; margin-top: 4px;">
             <span class="info-label">Saldo al Retirar:</span>
             <span class="info-value">${formatCurrency(totalCost)}</span>
           </div>
