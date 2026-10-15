@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T04:35:55.224Z",
+  "generatedAt": "2026-10-15T01:50:39.577Z",
   "apiRoutes": [
     {
       "route": "/api/admin/analytics/website",
@@ -2364,6 +2364,36 @@
         },
         {
           "method": "POST",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        }
+      ],
+      "rateLimited": false,
+      "turnstile": false,
+      "superAdminGuard": false,
+      "authGuard": true,
+      "serviceRole": true
+    },
+    {
+      "route": "/api/credits/amendments",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "methodSecurity": [
+        {
+          "method": "GET",
+          "rateLimited": false,
+          "turnstile": false,
+          "superAdminGuard": false,
+          "authGuard": true,
+          "serviceRole": true
+        },
+        {
+          "method": "PATCH",
           "rateLimited": false,
           "turnstile": false,
           "superAdminGuard": false,
@@ -7116,7 +7146,8 @@
     "20261016090000",
     "20261016120000",
     "20261016150000",
-    "20261016180000"
+    "20261016180000",
+    "20261017100000"
   ],
   "paymentProviders": [
     {

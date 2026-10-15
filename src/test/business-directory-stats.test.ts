@@ -33,7 +33,9 @@ describe('las cifras del marketplace', () => {
 
   it('la portada usa el mismo criterio y cuenta todas las tiendas, no las 24 que trae', () => {
     const portada = leer('src/app/marketplace/page.tsx')
-    expect(portada).toContain('getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES)')
+    expect(portada).toContain('getMarketplaceOrganizationCount().catch(() => 0)')
+    expect(portada).toContain('Math.max(organizations.length, organizationCount)')
+    expect(portada).not.toContain('getMarketplaceOrganizations(BUSINESS_DIRECTORY_MAX_STORES)')
     expect(portada).toContain('visibleDirectoryStats({ stores: storeCount, cities: 0, products: totalProducts })')
     expect(portada).toContain("{shownStats.has('stores') && (")
   })
