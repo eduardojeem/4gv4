@@ -146,7 +146,7 @@ export function SaleSummary({
               <span>{formatCurrency(creditPrincipal)}</span>
             </div>
             <div className="flex justify-between text-blue-700 dark:text-blue-300">
-              <span>Interes credito ({creditTerms.interestRate}%):</span>
+              <span>Interés crédito ({creditTerms.interestRate}%):</span>
               <span>+{formatCurrency(creditSummary.interestAmount)}</span>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">

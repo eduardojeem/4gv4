@@ -20,9 +20,10 @@ import {
   XCircle,
   Wrench,
   AlertCircle,
-  DollarSign,
+  ShoppingCart,
   Calendar,
-  Users,
+  ExternalLink,
+  Info,
   Clock,
   PackageX,
   ChevronDown,
@@ -32,6 +33,7 @@ import {
 } from 'lucide-react'
 import { CustomerCreditHistory } from '@/components/pos/CustomerCreditHistory'
 import { useCreditSystem } from '@/hooks/use-credit-system'
+import { getDisplayLocale } from '@/lib/currency'
 import { CartItem } from '../types'
 import { Badge } from '@/components/ui/badge'
 import { PaymentMethods } from './checkout/PaymentMethods'
@@ -259,6 +261,18 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     else processSale()
   }, [paymentStatus, pendingConfirmation, processMixedPayment, processSale])
 
+  // Mientras se procesa el cobro no se puede cambiar que reparaciones van en la
+  // venta: antes el clic seguia funcionando aunque el teclado estaba bloqueado.
+  const isProcessing = paymentStatus === 'processing'
+  const toggleRepair = (repairId: string) => {
+    if (isProcessing) return
+    setSelectedRepairIds(
+      selectedRepairIds.includes(repairId)
+        ? selectedRepairIds.filter(id => id !== repairId)
+        : [...selectedRepairIds, repairId]
+    )
+  }
+
   const openSaleConfirmation = React.useCallback((kind: 'sale' | 'mixed') => {
     confirmationSubmittedRef.current = false
     setPendingConfirmation(kind)
@@ -271,7 +285,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
       <DialogContent showCloseButton={paymentStatus !== 'processing'} className="flex max-h-[92vh] w-[95vw] flex-col overflow-hidden p-0 border-0 shadow-2xl rounded-2xl max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-full max-sm:rounded-none sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
         <DialogHeader className="shrink-0 border-b bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-sm px-5 py-4 pr-12 sm:px-7 sm:py-5">
           <DialogTitle className="flex items-center gap-3 text-lg sm:text-xl font-bold tracking-tight">
-            <DollarSign className="h-6 w-6 text-primary p-1 bg-primary/10 rounded-lg" aria-hidden="true" />
+            <ShoppingCart className="h-6 w-6 text-primary p-1 bg-primary/10 rounded-lg" aria-hidden="true" />
             Cobrar venta
           </DialogTitle>
           <DialogDescription className="text-sm mt-1 text-slate-500 dark:text-slate-400">
@@ -283,7 +297,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
           <div className="mx-6 mt-4 mb-1 flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive">
              <div className="flex items-center gap-2">
                <AlertCircle className="h-4 w-4" />
-               <span className="text-sm font-medium">La caja esta cerrada. Debe abrirla antes de procesar ventas.</span>
+               <span className="text-sm font-medium">La caja está cerrada. Abrila para poder cobrar.</span>
              </div>
              {onOpenRegister && (
                <Button 
@@ -315,7 +329,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <div>
                   <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300">¡Venta completada con éxito!</div>
-                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Generando comprobante de venta...</div>
+                  <div className="text-xs text-emerald-700 dark:text-emerald-400">Generando comprobante de venta...</div>
                 </div>
               </div>
             )}
@@ -374,11 +388,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-medium flex items-center gap-2 text-sm">
                           <Wrench className="h-4 w-4" />
-                          Vincular a Reparacion ({selectedRepairIds.length})
+                          Vincular a reparación ({selectedRepairIds.length})
                         </h4>
                         {selectedRepairIds.length > 0 && (
-                           <Button variant="ghost" size="sm" onClick={() => setSelectedRepairIds([])} className="h-6 text-xs text-muted-foreground hover:text-destructive px-2">
-                              Limpiar seleccion
+                           <Button variant="ghost" size="sm" disabled={isProcessing} onClick={() => setSelectedRepairIds([])} className="h-6 text-xs text-muted-foreground hover:text-destructive px-2">
+                              Limpiar selección
                            </Button>
                         )}
                       </div>
@@ -403,25 +417,16 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                   >
                                      {/* Header Row - Click to toggle */}
                                      <div 
-                                        className="p-3 flex items-center justify-between cursor-pointer select-none"
+                                        className={cn('p-3 flex items-center justify-between select-none', isProcessing ? 'cursor-not-allowed opacity-70' : 'cursor-pointer')}
                                         role="checkbox"
                                         aria-checked={isSelected}
-                                        tabIndex={paymentStatus === 'processing' ? -1 : 0}
-                                        onClick={() => {
-                                           if (isSelected) {
-                                              setSelectedRepairIds(selectedRepairIds.filter(id => id !== repair.id))
-                                           } else {
-                                              setSelectedRepairIds([...selectedRepairIds, repair.id])
-                                           }
-                                        }}
+                                        aria-disabled={isProcessing}
+                                        tabIndex={isProcessing ? -1 : 0}
+                                        onClick={() => toggleRepair(repair.id)}
                                         onKeyDown={(event) => {
                                            if (event.key !== 'Enter' && event.key !== ' ') return
                                            event.preventDefault()
-                                           if (isSelected) {
-                                              setSelectedRepairIds(selectedRepairIds.filter(id => id !== repair.id))
-                                           } else {
-                                              setSelectedRepairIds([...selectedRepairIds, repair.id])
-                                           }
+                                           toggleRepair(repair.id)
                                         }}
                                      >
                                         <div className="flex items-center gap-3">
@@ -434,16 +439,16 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                               </div>
                                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                   <Badge variant="outline" className={`
-                                                      capitalize font-normal text-[10px] px-1.5 py-0 h-4
+                                                      capitalize font-normal text-xs px-1.5 py-0 h-5
                                                       ${repair.status === 'listo' || repair.status === 'entregado' ? 'border-green-500 text-green-600 bg-green-50 dark:bg-green-900/20' : ''}
                                                       ${repair.status === 'reparacion' ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''}
                                                       ${repair.status === 'diagnostico' ? 'border-yellow-500 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' : ''}
                                                   `}>
                                                       {supabaseStatusToLabel[repair.status] || repair.status}
                                                   </Badge>
-                                                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                      <Calendar className="h-3 w-3" />
-                                                      {repair.created_at ? new Date(repair.created_at).toLocaleDateString() : ''}
+                                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                      <Calendar className="h-3 w-3" aria-hidden="true" />
+                                                      {repair.created_at ? new Date(repair.created_at).toLocaleDateString(getDisplayLocale()) : ''}
                                                   </span>
                                               </div>
                                            </div>
@@ -452,10 +457,10 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                            <div className="font-bold text-sm">
                                               {formatCurrency(getRepairBalanceDue(repair))}
                                            </div>
-                                           <div className="text-[10px] text-muted-foreground">
+                                           <div className="text-xs text-muted-foreground">
                                               {(repair.paid_amount || 0) > 0
                                                  ? 'Saldo pendiente'
-                                                 : repair.final_cost ? 'Costo Final' : 'Estimado'}
+                                                 : repair.final_cost ? 'Costo final' : 'Estimado'}
                                            </div>
                                         </div>
                                      </div>
@@ -464,7 +469,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                      {isSelected && (
                                         <div className="px-3 pb-3 pt-0 animate-in slide-in-from-top-1 duration-200">
                                            {(repair.paid_amount || 0) > 0 && (
-                                              <div className="mt-1 mb-2 text-[11px] text-muted-foreground">
+                                              <div className="mt-1 mb-2 text-xs text-muted-foreground">
                                                  Costo total {formatCurrency(repair.final_cost || repair.estimated_cost || 0)} — ya pagado {formatCurrency(repair.paid_amount || 0)}
                                               </div>
                                            )}
@@ -475,8 +480,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                               </div>
                                            )}
                                            <div className="flex justify-end">
-                                              <Link href={`/dashboard/repairs?repairId=${repair.id}`} target="_blank" className="text-[10px] text-primary hover:underline flex items-center gap-1">
-                                                  Ver ficha completa <Users className="h-3 w-3" />
+                                              <Link href={`/dashboard/repairs?repairId=${repair.id}`} target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1">
+                                                  Ver ficha completa <ExternalLink className="h-3 w-3" aria-hidden="true" />
                                               </Link>
                                            </div>
                                         </div>
@@ -494,7 +499,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 {selectedRepairIds.length > 0 && (
                    <div className="mt-4 p-3 bg-muted/30 rounded-lg border animate-in fade-in duration-300">
                       <div className="flex items-center justify-between mb-2">
-                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Acciones ({selectedRepairIds.length} seleccionados)</span>
+                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Acciones ({selectedRepairIds.length} {selectedRepairIds.length === 1 ? 'seleccionada' : 'seleccionadas'})</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                          {(() => {
@@ -520,14 +525,14 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                        <div className="text-xs font-semibold leading-tight">
                                          {markRepairDelivered ? 'Cobrar y entregar' : 'Cobrar sin entregar'}
                                        </div>
-                                       <div className="text-[10px] text-muted-foreground leading-tight">
+                                       <div className="text-xs text-muted-foreground leading-tight">
                                           {canDeliver
                                             ? 'Actualizar estado a "Entregado"'
                                             : deliveryEligibility.reason
                                               ?? `${blockedCount === 1 ? 'La reparación seleccionada no puede' : `${blockedCount} reparaciones seleccionadas no pueden`} entregarse todavía. Podés cobrarlas igual.`}
                                        </div>
                                        {!canDeliver && deliveryEligibility.blockingTickets.length > 0 && (
-                                         <div className="mt-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                         <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                                            Bloqueadas: {deliveryEligibility.blockingTickets.join(', ')}
                                          </div>
                                        )}
@@ -544,8 +549,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 
                          {/* Delivery outcome selector: visible when markRepairDelivered is ON */}
                          {markRepairDelivered && (
-                           <div className="col-span-2 p-2 rounded-lg border bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200">
-                             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Resultado de la reparacion</div>
+                           <div className="sm:col-span-2 p-2 rounded-lg border bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200">
+                             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Resultado de la reparación</div>
                              <div className="grid grid-cols-3 gap-1.5">
                                {([
                                  { value: 'repaired' as const, label: 'Reparado', Icon: CheckCircle2, cls: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
@@ -556,7 +561,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                    key={value}
                                    type="button"
                                    onClick={() => setDeliveryOutcome(value)}
-                                   className={`flex flex-col items-center gap-1 rounded border p-2 text-center text-[10px] font-medium transition-all ${
+                                   aria-pressed={deliveryOutcome === value}
+                                   className={`flex flex-col items-center gap-1 rounded border p-2 text-center text-xs font-medium transition-all ${
                                      deliveryOutcome === value ? cls : 'border-border bg-background text-muted-foreground hover:bg-muted/30'
                                    }`}
                                  >
@@ -737,38 +743,30 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                         : mixedPaymentValidation.code === 'PAYMENT_EXCESS'
                           ? `Exceso ${formatCurrency(Math.abs(mixedPaymentValidation.remaining))}`
                           : paymentSplit.length === 0
-                            ? 'Agregue una forma de pago'
+                            ? 'Agregá una forma de pago'
                             : 'Revisar venta mixta'}
                     </>
                   )}
                 </Button>
               )}
 
-              {!isRegisterOpen ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  ⚠️ La caja registradora debe estar abierta para confirmar la venta.
-                </p>
-              ) : paymentMethod === 'cash' && cashReceived < amountDue ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  💡 Ingresa el efectivo recibido o haz clic en <strong>Monto Exacto</strong>.
-                </p>
-              ) : paymentMethod === 'card' && cardNumber.length < 4 ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  💡 Ingresa los 4 dígitos finales del ticket de tarjeta.
-                </p>
-              ) : paymentMethod === 'transfer' && !transferReference ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  💡 Ingresa el número de referencia de la transferencia.
-                </p>
-              ) : paymentMethod === 'credit' && !activeCustomer ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  💡 Selecciona un cliente en la columna izquierda para vender a crédito.
-                </p>
-              ) : paymentMethod === 'credit' && !canUseCredit ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
-                  💡 Habilita la línea de crédito del cliente en el panel de pago.
-                </p>
-              ) : null}
+              {/* La caja cerrada ya se avisa arriba, con el boton para abrirla: aca solo
+                  se explica que falta para habilitar el cobro. */}
+              {(() => {
+                const hint = !isRegisterOpen || isMixedPayment ? null
+                  : paymentMethod === 'cash' && cashReceived < amountDue ? <>Ingresá el efectivo recibido o tocá <strong>Monto exacto</strong>.</>
+                  : paymentMethod === 'card' && cardNumber.length < 4 ? 'Ingresá los 4 dígitos finales del comprobante de la tarjeta.'
+                  : paymentMethod === 'transfer' && !transferReference ? 'Ingresá el número de referencia de la transferencia.'
+                  : paymentMethod === 'credit' && !activeCustomer ? 'Seleccioná un cliente en la columna izquierda para vender a crédito.'
+                  : paymentMethod === 'credit' && !canUseCredit ? 'Habilitá la línea de crédito del cliente en el panel de pago.'
+                  : null
+                return hint ? (
+                  <p className="flex items-start justify-center gap-1.5 text-center text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>{hint}</span>
+                  </p>
+                ) : null
+              })()}
 
               <Button
                 variant="outline"
@@ -817,22 +815,25 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
           <DialogHeader className="px-6 py-4 border-b bg-muted/30 flex flex-row items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-6 w-6 text-primary p-1 bg-primary/10 rounded-lg" />
-              Historial de Credito
+              Historial de crédito
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Créditos, cuotas y pagos del cliente seleccionado.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="px-6 py-3 border-b bg-background/90">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
               <div className="rounded-lg border bg-muted/20 px-3 py-2">
-                <p className="text-[11px] text-muted-foreground">Cliente</p>
+                <p className="text-xs text-muted-foreground">Cliente</p>
                 <p className="font-semibold truncate">{activeCustomer?.name || 'Sin cliente seleccionado'}</p>
               </div>
               <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
-                <p className="text-[11px] text-muted-foreground">Estado de credito</p>
+                <p className="text-xs text-muted-foreground">Estado de crédito</p>
                 <p className="font-semibold">
                   {creditSummary
                     ? `${formatCurrency(creditSummary.availableCredit)} disponible`
-                    : 'Sin informacion'}
+                    : 'Sin información'}
                 </p>
               </div>
             </div>
