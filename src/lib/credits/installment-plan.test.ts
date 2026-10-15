@@ -58,7 +58,7 @@ describe('avance del plan de cuotas', () => {
 })
 
 describe('filas del plan en el comprobante', () => {
-  it('escribe la cuota como "3 de 12" y el avance', () => {
+  it('escribe la cuota como "3 de 12" sin duplicar el avance del plan', () => {
     const filas = buildInstallmentPlanRows({
       ...base,
       installmentNumber: 3,
@@ -67,7 +67,6 @@ describe('filas del plan en el comprobante', () => {
     })
     expect(filas).toEqual([
       ['CUOTA ABONADA', '3 de 12'],
-      ['Cuotas pagadas', '3 de 12  (25%)'],
       ['Cuotas que faltan', '9 cuotas'],
     ])
   })
@@ -96,7 +95,7 @@ describe('filas del plan en el comprobante', () => {
       ...base, totalInstallments: 12, paidInstallmentsCount: 12,
     })
     expect(filas.some(([k]) => k === 'CUOTA ABONADA')).toBe(false)
-    expect(filas).toContainEqual(['Cuotas pagadas', '12 de 12  (100%)'])
+    expect(filas).toContainEqual(['Cuotas pagadas', '12 de 12'])
   })
 })
 
@@ -251,14 +250,17 @@ describe('etiquetas en papel angosto', () => {
     const largas = [
       ...buildCreditInfoRows(entrada),
       ...buildPaymentDetailRows(entrada),
+      ...buildAccountStatusRows(entrada),
     ].map(([k]) => k)
     const cortas = [
       ...buildCreditInfoRows(entrada, { compacto: true }),
       ...buildPaymentDetailRows(entrada, { compacto: true }),
+      ...buildAccountStatusRows(entrada, { compacto: true }),
     ].map(([k]) => k)
 
-    expect(largas).toContain('Total Financiado')
-    expect(cortas).toContain('Financiado')
+    expect(largas).toContain('Total financiado')
+    expect(cortas).toContain('Total créd.')
+    expect(largas.filter(label => label === 'Total financiado')).toHaveLength(1)
     expect(largas).toContain('MONTO ABONADO')
     expect(cortas).toContain('ABONADO')
     // Ninguna etiqueta corta debe pasar de lo que entra en una linea de 58 mm.
