@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertCircle, ArrowRight,
   Building2,
   Check, Clock,
   Coins,
-  ExternalLink,
   Globe,
   Info, Loader2,
   Mail,
@@ -38,9 +37,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
-import { BusinessProfileCard } from '@/components/admin/settings/BusinessProfileCard'
+import { BusinessProfileCard, type BusinessProfileActions } from '@/components/admin/settings/BusinessProfileCard'
 import { useAuth } from '@/contexts/auth-context'
-import { useTheme, type Theme } from '@/contexts/theme-context'
+import { useTheme } from '@/contexts/theme-context'
 import {
   DEFAULT_SYSTEM_COLOR_SCHEME,
   getSystemColorSchemeOption,
@@ -61,6 +60,20 @@ type FieldErrors = Partial<Record<
   'companyName' | 'companyEmail' | 'companyPhone' | 'companyRuc' | 'companyAddress' | 'city' | 'taxRate',
   string
 >>
+
+type SettingsTab = 'company' | 'operations' | 'appearance'
+
+const HASH_BY_TAB: Record<SettingsTab, string> = {
+  company: 'empresa',
+  operations: 'operacion',
+  appearance: 'apariencia',
+}
+
+const TAB_BY_HASH: Record<string, SettingsTab | undefined> = {
+  empresa: 'company',
+  operacion: 'operations',
+  apariencia: 'appearance',
+}
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null
@@ -84,18 +97,36 @@ export default function AdminSettingsPage() {
   const { loading: authLoading } = useAuth()
   const { theme: activeTheme, colorScheme: activeColorScheme, setTheme, setColorScheme } = useTheme()
   const t = getAdminSettingsText('es')
-  const [activeTab, setActiveTab] = useState('company')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('company')
 
-  // Los enlaces «Tipo de cambio» del resto del panel llegan con #monedas.
+  // La pestaña va en la direccion (#empresa, #operacion, #apariencia): al
+  // recargar se vuelve a la misma. Los enlaces «Tipo de cambio» del resto del
+  // panel llegan con #monedas, que vive en Operacion.
   useEffect(() => {
-    if (window.location.hash !== '#monedas') return
+    const hash = window.location.hash.slice(1)
+    const fromHash = hash === 'monedas' ? 'operations' : TAB_BY_HASH[hash]
+    if (!fromHash) return
     const timer = window.setTimeout(() => {
-      setActiveTab('operations')
-      window.setTimeout(() => document.getElementById('monedas')?.scrollIntoView({ behavior: 'smooth' }), 150)
+      setActiveTab(fromHash)
+      if (hash === 'monedas') {
+        window.setTimeout(() => document.getElementById('monedas')?.scrollIntoView({ behavior: 'smooth' }), 150)
+      }
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
+
+  const changeTab = (value: string) => {
+    const tab = value as SettingsTab
+    setActiveTab(tab)
+    window.history.replaceState(null, '', `#${HASH_BY_TAB[tab]}`)
+  }
   const [currencyChangeConfirmed, setCurrencyChangeConfirmed] = useState(false)
+
+  // Los errores se muestran recien cuando se toca el campo o se intenta
+  // guardar: antes una organizacion sin email entraba con el campo en rojo.
+  const [touched, setTouched] = useState<Partial<Record<keyof FieldErrors, boolean>>>({})
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+  const touch = (field: keyof FieldErrors) => setTouched((current) => current[field] ? current : { ...current, [field]: true })
 
   const validationErrors = useMemo<FieldErrors>(() => {
     const next: FieldErrors = {}
@@ -103,21 +134,35 @@ export default function AdminSettingsPage() {
     const email = settings.companyEmail.trim()
     if (!name) next.companyName = 'Ingresá el nombre de la empresa.'
     else if (name.length > 100) next.companyName = 'El nombre no puede superar 100 caracteres.'
-    if (!email) next.companyEmail = 'Ingresá el email de la empresa.'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.companyEmail = 'Ingresá un email válido.'
+    // El email es opcional: solo se valida el formato si se cargó.
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.companyEmail = 'Ingresá un email válido.'
     if (settings.companyPhone.length > 50) next.companyPhone = 'El teléfono no puede superar 50 caracteres.'
     if (settings.companyRuc.length > 50) next.companyRuc = 'El RUC no puede superar 50 caracteres.'
     if (settings.companyAddress.length > 500) next.companyAddress = 'La dirección no puede superar 500 caracteres.'
     if (settings.city.length > 100) next.city = 'La ciudad no puede superar 100 caracteres.'
-    if (!Number.isFinite(settings.taxRate) || settings.taxRate < 0 || settings.taxRate > 100) {
+    if (!Number.isFinite(settings.taxRate)) {
+      next.taxRate = 'Ingresá la tasa de IVA (0 si no corresponde).'
+    } else if (settings.taxRate < 0 || settings.taxRate > 100) {
       next.taxRate = 'El IVA debe estar entre 0 y 100%.'
     }
     return next
   }, [settings])
+  const visibleError = (field: keyof FieldErrors) =>
+    touched[field] || submitAttempted ? validationErrors[field] : undefined
+  const errorCount = Object.keys(validationErrors).length
+
+  // El perfil del negocio guarda por su cuenta, pero sus cambios cuentan como
+  // pendientes y se guardan o descartan desde la misma barra.
+  const profileActionsRef = useRef<BusinessProfileActions | null>(null)
+  const [profileState, setProfileState] = useState({ dirty: false, canSave: false })
+  const handleProfileState = useCallback((state: { dirty: boolean; canSave: boolean }) => {
+    setProfileState((current) => current.dirty === state.dirty && current.canSave === state.canSave ? current : state)
+  }, [])
 
   const currencyChanged = settings.currency !== originalSettings.currency
-  const canSave = Object.keys(validationErrors).length === 0
-    && (!currencyChanged || currencyChangeConfirmed)
+  const settingsCanSave = errorCount === 0 && (!currencyChanged || currencyChangeConfirmed)
+  const hasPendingChanges = hasChanges || profileState.dirty
+  const canSave = (!hasChanges || settingsCanSave) && (!profileState.dirty || profileState.canSave)
   const selectedCurrency = getCurrencyDefinition(settings.currency)
   const selectedLanguage = SUPPORTED_LANGUAGES.find(({ code }) => code === settings.language)
     ?? SUPPORTED_LANGUAGES[0]
@@ -130,77 +175,65 @@ export default function AdminSettingsPage() {
       const typedKey = key as keyof typeof settings
       return JSON.stringify(settings[typedKey]) === JSON.stringify(originalSettings[typedKey]) ? count : count + 1
     }, 0)
-  ), [settings, originalSettings])
-
-  const themeDirtyRef = useRef(false)
-  // Preservar el tema y esquema con el que el usuario ingresó a la pantalla.
-  // No forzamos un cambio al cargar para no pisar el modo claro/oscuro del usuario.
-  const savedThemeRef = useRef({ theme: activeTheme, color: activeColorScheme })
+  ), [settings, originalSettings]) + (profileState.dirty ? 1 : 0)
 
   useEffect(() => {
-    if (!themeDirtyRef.current) {
-      savedThemeRef.current = { theme: activeTheme, color: activeColorScheme }
-    }
-  }, [activeTheme, activeColorScheme])
-
-  // Si el usuario previsualiza un cambio de tema pero sale sin guardar, revertimos a su tema activo.
-  useEffect(() => () => {
-    if (!themeDirtyRef.current) return
-    const { theme, color } = savedThemeRef.current
-    setTheme(theme as 'light' | 'dark' | 'system')
-    setColorScheme(isSystemColorScheme(color) ? color : DEFAULT_SYSTEM_COLOR_SCHEME)
-  }, [setTheme, setColorScheme])
-
-  useEffect(() => {
-    if (!hasChanges) return
+    if (!hasPendingChanges) return
     const handler = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [hasChanges])
+  }, [hasPendingChanges])
 
+  // Apariencia es una preferencia de cada persona: se aplica al instante y
+  // queda en este navegador. Antes se guardaba como dato de la organizacion,
+  // pero el panel nunca lo leia: no le llegaba a nadie mas y la pagina podia
+  // marcar un tema distinto del que se veia.
   const handleThemeChange = (value: string) => {
-    updateSetting('theme', value)
     setTheme(value as 'light' | 'dark' | 'system')
-    themeDirtyRef.current = true
   }
 
   const handleColorChange = (value: SystemColorScheme) => {
-    updateSetting('primaryColor', value)
     setColorScheme(value)
-    themeDirtyRef.current = true
   }
 
   const handleSave = async () => {
+    setSubmitAttempted(true)
     if (!canSave) {
-      setActiveTab(validationErrors.taxRate || currencyChanged ? 'operations' : 'company')
-      toast.error(currencyChanged && !currencyChangeConfirmed
-        ? 'Confirmá el impacto del cambio de moneda antes de guardar.'
-        : 'Revisá los campos marcados antes de guardar.')
+      if (hasChanges && !settingsCanSave) {
+        changeTab(validationErrors.taxRate || currencyChanged ? 'operations' : 'company')
+        toast.error(currencyChanged && !currencyChangeConfirmed
+          ? 'Confirmá el impacto del cambio de moneda antes de guardar.'
+          : 'Revisá los campos marcados antes de guardar.')
+      } else {
+        changeTab('company')
+        toast.error('Revisá el perfil del negocio antes de guardar.')
+      }
       return
     }
-    const result = await saveSettings({ confirmCurrencyChange: currencyChangeConfirmed })
-    if (!result.success) {
-      toast.error(result.error || t.saveError)
-      return
+    if (hasChanges) {
+      const result = await saveSettings({ confirmCurrencyChange: currencyChangeConfirmed })
+      if (!result.success) {
+        toast.error(result.error || t.saveError)
+        return
+      }
+      setCurrencyChangeConfirmed(false)
+      setSubmitAttempted(false)
+      setTouched({})
+      toast.success(t.saved)
     }
-    themeDirtyRef.current = false
-    setCurrencyChangeConfirmed(false)
-    savedThemeRef.current = {
-      theme: (settings.theme as Theme) || 'light',
-      color: isSystemColorScheme(settings.primaryColor) ? settings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME,
-    }
-    toast.success(t.saved)
+    // El perfil avisa por su cuenta si se guardo o no.
+    if (profileState.dirty) await profileActionsRef.current?.save()
   }
 
-  // Support Ctrl+S / Cmd+S shortcut to save.
+  // Ctrl+S / Cmd+S para guardar.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        if (hasChanges && canSave && !isSaving) {
+        if (hasPendingChanges && canSave && !isSaving) {
           void handleSave()
         }
       }
@@ -211,12 +244,10 @@ export default function AdminSettingsPage() {
 
   const handleReset = () => {
     resetSettings()
-    if (themeDirtyRef.current) {
-      setTheme(savedThemeRef.current.theme as 'light' | 'dark' | 'system')
-      setColorScheme(isSystemColorScheme(savedThemeRef.current.color) ? savedThemeRef.current.color : DEFAULT_SYSTEM_COLOR_SCHEME)
-      themeDirtyRef.current = false
-    }
+    profileActionsRef.current?.reset()
     setCurrencyChangeConfirmed(false)
+    setSubmitAttempted(false)
+    setTouched({})
     toast.info(t.discarded)
   }
 
@@ -293,7 +324,8 @@ export default function AdminSettingsPage() {
     )
   }
 
-  const selectedColorScheme = getSystemColorSchemeOption(settings.primaryColor)
+  const activeSystemColorScheme = isSystemColorScheme(activeColorScheme) ? activeColorScheme : DEFAULT_SYSTEM_COLOR_SCHEME
+  const selectedColorScheme = getSystemColorSchemeOption(activeSystemColorScheme)
   const selectedColorSchemeText = t.appearance.colorSchemes[selectedColorScheme.value] ?? selectedColorScheme
   const timeZoneOptions = Object.entries(t.regional.timeZones)
 
@@ -307,43 +339,36 @@ export default function AdminSettingsPage() {
               <Building2 className="h-6 w-6" />
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                  Configuración de la organización
-                </h1>
-                <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Organización activa
-                </Badge>
-              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Configuración de la organización
+              </h1>
               <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                Datos empresariales, reglas de facturación, impuestos, moneda y apariencia del panel.
+                Datos de la empresa, impuestos, moneda y formato regional.
               </p>
             </div>
           </div>
-
-          {hasChanges ? (
-            <Badge variant="secondary" className="w-fit gap-1.5 border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-amber-800 dark:text-amber-300">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {changedFields} cambio{changedFields === 1 ? '' : 's'} pendiente{changedFields === 1 ? '' : 's'}
-            </Badge>
-          ) : null}
         </div>
       </div>
 
       {/* Barra flotante de cambios pendientes */}
-      {hasChanges ? (
+      {hasPendingChanges ? (
         <div className="sticky top-4 z-30 flex flex-col gap-3 rounded-xl border border-primary/30 bg-background/90 p-4 shadow-xl backdrop-blur-md transition-all sm:flex-row sm:items-center sm:justify-between animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Sparkles className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Cambios sin guardar</p>
+              <p className="text-sm font-semibold text-foreground">
+                {changedFields} cambio{changedFields === 1 ? '' : 's'} sin guardar
+              </p>
               <p className="text-xs text-muted-foreground">
                 {canSave
-                  ? 'Revisá los valores y confirmá para aplicarlos (Ctrl + S).'
-                  : `${Object.keys(validationErrors).length} campo${Object.keys(validationErrors).length === 1 ? '' : 's'} requiere${Object.keys(validationErrors).length === 1 ? '' : 'n'} atención.`}
+                  ? 'Revisá los valores y guardá para aplicarlos (Ctrl + S).'
+                  : errorCount > 0
+                    ? `${errorCount} campo${errorCount === 1 ? '' : 's'} requiere${errorCount === 1 ? '' : 'n'} atención.`
+                    : currencyChanged && !currencyChangeConfirmed
+                      ? 'Falta confirmar el cambio de moneda.'
+                      : 'Revisá el perfil del negocio.'}
               </p>
             </div>
           </div>
@@ -352,7 +377,7 @@ export default function AdminSettingsPage() {
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
               Descartar
             </Button>
-            <Button size="sm" onClick={() => void handleSave()} disabled={isSaving || !canSave} className="h-9 px-4 shadow-sm">
+            <Button size="sm" onClick={() => void handleSave()} disabled={isSaving} className="h-9 px-4 shadow-sm">
               {isSaving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
               {isSaving ? 'Guardando…' : 'Guardar cambios'}
             </Button>
@@ -361,7 +386,7 @@ export default function AdminSettingsPage() {
       ) : null}
 
       {/* Tabs principales */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
         <div className="border-b border-border/80 pb-3">
           <TabsList className="grid h-11 w-full grid-cols-3 sm:w-[480px] p-1 bg-muted/60 rounded-xl">
             <TabsTrigger value="company" className="gap-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
@@ -382,7 +407,7 @@ export default function AdminSettingsPage() {
         {/* TAB 1: EMPRESA */}
         <TabsContent value="company" className="m-0 space-y-6 focus-visible:outline-none">
           {/* Business Profile Component */}
-          <BusinessProfileCard />
+          <BusinessProfileCard onStateChange={handleProfileState} actionsRef={profileActionsRef} />
 
           {/* Información Legal y Facturación */}
           <Card className="border-border/80 shadow-sm">
@@ -419,12 +444,13 @@ export default function AdminSettingsPage() {
                       id="companyName"
                       value={settings.companyName}
                       onChange={(event) => updateSetting('companyName', event.target.value)}
+                      onBlur={() => touch('companyName')}
                       placeholder="Ej: Innova Tech S.A."
                       className="h-10"
-                      aria-invalid={Boolean(validationErrors.companyName)}
-                      aria-describedby={validationErrors.companyName ? 'companyName-error' : undefined}
+                      aria-invalid={Boolean(visibleError('companyName'))}
+                      aria-describedby={visibleError('companyName') ? 'companyName-error' : undefined}
                     />
-                    <FieldError id="companyName-error" message={validationErrors.companyName} />
+                    <FieldError id="companyName-error" message={visibleError('companyName')} />
                   </div>
 
                   <div className="space-y-2">
@@ -435,12 +461,13 @@ export default function AdminSettingsPage() {
                       id="companyRuc"
                       value={settings.companyRuc}
                       onChange={(event) => updateSetting('companyRuc', event.target.value)}
+                      onBlur={() => touch('companyRuc')}
                       placeholder="Ej: 80012345-6"
                       className="h-10"
-                      aria-invalid={Boolean(validationErrors.companyRuc)}
-                      aria-describedby={validationErrors.companyRuc ? 'companyRuc-error' : undefined}
+                      aria-invalid={Boolean(visibleError('companyRuc'))}
+                      aria-describedby={visibleError('companyRuc') ? 'companyRuc-error' : undefined}
                     />
-                    <FieldError id="companyRuc-error" message={validationErrors.companyRuc} />
+                    <FieldError id="companyRuc-error" message={visibleError('companyRuc')} />
                   </div>
                 </div>
               </div>
@@ -456,19 +483,21 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="companyEmail" className="text-xs font-medium text-foreground flex items-center gap-1">
                       <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                      Email empresarial <span className="text-destructive">*</span>
+                      Email empresarial
+                      <span className="font-normal text-muted-foreground">(opcional)</span>
                     </Label>
                     <Input
                       id="companyEmail"
                       type="email"
                       value={settings.companyEmail}
                       onChange={(event) => updateSetting('companyEmail', event.target.value)}
+                      onBlur={() => touch('companyEmail')}
                       placeholder="contacto@miempresa.com"
                       className="h-10"
-                      aria-invalid={Boolean(validationErrors.companyEmail)}
-                      aria-describedby={validationErrors.companyEmail ? 'companyEmail-error' : undefined}
+                      aria-invalid={Boolean(visibleError('companyEmail'))}
+                      aria-describedby={visibleError('companyEmail') ? 'companyEmail-error' : undefined}
                     />
-                    <FieldError id="companyEmail-error" message={validationErrors.companyEmail} />
+                    <FieldError id="companyEmail-error" message={visibleError('companyEmail')} />
                   </div>
 
                   <div className="space-y-2">
@@ -480,12 +509,13 @@ export default function AdminSettingsPage() {
                       id="companyPhone"
                       value={settings.companyPhone}
                       onChange={(event) => updateSetting('companyPhone', event.target.value)}
+                      onBlur={() => touch('companyPhone')}
                       placeholder="+595 21 000 000"
                       className="h-10"
-                      aria-invalid={Boolean(validationErrors.companyPhone)}
-                      aria-describedby={validationErrors.companyPhone ? 'companyPhone-error' : undefined}
+                      aria-invalid={Boolean(visibleError('companyPhone'))}
+                      aria-describedby={visibleError('companyPhone') ? 'companyPhone-error' : undefined}
                     />
-                    <FieldError id="companyPhone-error" message={validationErrors.companyPhone} />
+                    <FieldError id="companyPhone-error" message={visibleError('companyPhone')} />
                   </div>
                 </div>
               </div>
@@ -507,13 +537,14 @@ export default function AdminSettingsPage() {
                       id="companyAddress"
                       value={settings.companyAddress}
                       onChange={(event) => updateSetting('companyAddress', event.target.value)}
+                      onBlur={() => touch('companyAddress')}
                       rows={2}
                       placeholder="Avda. Principal 1234, Edificio Central"
                       className="resize-none"
-                      aria-invalid={Boolean(validationErrors.companyAddress)}
-                      aria-describedby={validationErrors.companyAddress ? 'companyAddress-error' : undefined}
+                      aria-invalid={Boolean(visibleError('companyAddress'))}
+                      aria-describedby={visibleError('companyAddress') ? 'companyAddress-error' : undefined}
                     />
-                    <FieldError id="companyAddress-error" message={validationErrors.companyAddress} />
+                    <FieldError id="companyAddress-error" message={visibleError('companyAddress')} />
                   </div>
 
                   <div className="space-y-2 sm:col-span-1">
@@ -524,33 +555,17 @@ export default function AdminSettingsPage() {
                       id="city"
                       value={settings.city}
                       onChange={(event) => updateSetting('city', event.target.value)}
+                      onBlur={() => touch('city')}
                       placeholder="Ej: Asunción"
                       className="h-10"
-                      aria-invalid={Boolean(validationErrors.city)}
-                      aria-describedby={validationErrors.city ? 'city-error' : undefined}
+                      aria-invalid={Boolean(visibleError('city'))}
+                      aria-describedby={visibleError('city') ? 'city-error' : undefined}
                     />
-                    <FieldError id="city-error" message={validationErrors.city} />
+                    <FieldError id="city-error" message={visibleError('city')} />
                   </div>
                 </div>
               </div>
 
-              {/* Banner Sucursales */}
-              <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Building2 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-foreground">¿Tenés múltiples puntos de venta?</p>
-                    <p className="text-xs text-muted-foreground">El contacto, dirección y encargado de cada sucursal se gestionan por separado.</p>
-                  </div>
-                </div>
-                <Button asChild variant="outline" size="sm" className="h-8 shrink-0 text-xs">
-                  <Link href="/admin/branches">
-                    Administrar sucursales <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -610,8 +625,8 @@ export default function AdminSettingsPage() {
                   <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                          Formato en POS y Comprobantes
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Formato en POS y comprobantes
                         </span>
                         <p className="text-base font-bold tabular-nums text-foreground mt-0.5">
                           {currencyPreview}
@@ -628,10 +643,10 @@ export default function AdminSettingsPage() {
                 <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="setting-language" className="text-xs font-semibold text-foreground">
-                      Idioma y formato regional
+                      Formato regional
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Define separadores numéricos (miles, decimales) y formato general de fechas.
+                      Define los separadores de miles y decimales y el formato de las fechas.
                     </p>
                     <Select
                       value={settings.language}
@@ -653,7 +668,7 @@ export default function AdminSettingsPage() {
                   <div className="flex items-start gap-2.5 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
                     <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <p className="leading-relaxed">
-                      Formato regional: <strong className="text-foreground">{selectedLanguage.locale}</strong>. La interfaz general continúa en español mientras se despliega la traducción multilenguaje integral.
+                      Formato elegido: <strong className="text-foreground">{selectedLanguage.locale}</strong>. Cambia cómo se ven números y fechas; los textos del panel siguen en español.
                     </p>
                   </div>
                 </div>
@@ -666,11 +681,13 @@ export default function AdminSettingsPage() {
                   <div className="flex items-center justify-between">
                     <Label htmlFor="taxRate" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <Percent className="h-3.5 w-3.5 text-primary" />
-                      Tasa de IVA aplicada (%)
+                      Tasa general de IVA (%)
                     </Label>
-                    <Badge variant="secondary" className="text-xs font-mono font-normal">
-                      {settings.taxRate}%
-                    </Badge>
+                    {Number.isFinite(settings.taxRate) ? (
+                      <Badge variant="secondary" className="text-xs font-mono font-normal">
+                        {settings.taxRate}%
+                      </Badge>
+                    ) : null}
                   </div>
                   <Input
                     id="taxRate"
@@ -678,16 +695,18 @@ export default function AdminSettingsPage() {
                     min="0"
                     max="100"
                     step="0.01"
-                    value={settings.taxRate}
-                    onChange={(event) => updateSetting('taxRate', event.target.value === '' ? 0 : Number(event.target.value))}
+                    value={Number.isFinite(settings.taxRate) ? settings.taxRate : ''}
+                    // Vacio no es 0: antes borrar el campo guardaba 0% sin avisar.
+                    onChange={(event) => updateSetting('taxRate', event.target.value === '' ? Number.NaN : Number(event.target.value))}
+                    onBlur={() => touch('taxRate')}
                     className="h-10"
-                    aria-invalid={Boolean(validationErrors.taxRate)}
-                    aria-describedby={validationErrors.taxRate ? 'taxRate-error' : 'taxRate-help'}
+                    aria-invalid={Boolean(visibleError('taxRate'))}
+                    aria-describedby={visibleError('taxRate') ? 'taxRate-error' : 'taxRate-help'}
                   />
-                  <FieldError id="taxRate-error" message={validationErrors.taxRate} />
-                  {!validationErrors.taxRate ? (
-                    <p id="taxRate-help" className="text-[11px] text-muted-foreground leading-relaxed">
-                      El servidor recalcula este porcentaje automáticamente al confirmar cada venta en caja.
+                  <FieldError id="taxRate-error" message={visibleError('taxRate')} />
+                  {!visibleError('taxRate') ? (
+                    <p id="taxRate-help" className="text-xs text-muted-foreground leading-relaxed">
+                      Se aplica a todas las ventas y presupuestos nuevos. Es una sola tasa: todavía no se pueden combinar 10% y 5% en una misma venta.
                     </p>
                   ) : null}
                 </div>
@@ -708,7 +727,7 @@ export default function AdminSettingsPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     Determina la fecha de los cierres diarios de caja, reportes y métricas analíticas.
                   </p>
                 </div>
@@ -744,7 +763,7 @@ export default function AdminSettingsPage() {
                 <div className="space-y-0.5">
                   <p className="font-semibold text-foreground">Información sobre el alcance de cambios</p>
                   <p className="leading-relaxed">
-                    El IVA se aplica a las nuevas ventas y cotizaciones emitidas. El cambio de idioma define formatos numéricos y calendarios pero no altera nombres de productos ni textos personalizados ingresados por los usuarios.
+                    El IVA y el formato regional se aplican a lo nuevo: no modifican ventas ya emitidas ni los nombres de productos y textos que cargaste.
                   </p>
                 </div>
               </div>
@@ -781,10 +800,10 @@ export default function AdminSettingsPage() {
                 </div>
                 <div>
                   <CardTitle className="text-lg font-semibold tracking-tight">
-                    Apariencia y tema del panel
+                    Apariencia del panel
                   </CardTitle>
                   <CardDescription className="mt-0.5 text-xs sm:text-sm">
-                    Personalizá el modo de visualización y el esquema cromático corporativo.
+                    Es tu preferencia personal: se aplica al instante y queda en este navegador. Cada persona del equipo elige la suya.
                   </CardDescription>
                 </div>
               </div>
@@ -798,17 +817,18 @@ export default function AdminSettingsPage() {
                 </Label>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {[
-                    { value: 'light', label: 'Modo Claro', desc: 'Fondo blanco y contrastes nítidos', icon: Sun },
-                    { value: 'dark', label: 'Modo Oscuro', desc: 'Tonos oscuros que descansan la vista', icon: Moon },
-                    { value: 'system', label: 'Configuración del sistema', desc: 'Se sincroniza con tu dispositivo', icon: Laptop },
+                    { value: 'light', label: 'Modo claro', desc: 'Fondo blanco y contrastes nítidos', icon: Sun },
+                    { value: 'dark', label: 'Modo oscuro', desc: 'Tonos oscuros que descansan la vista', icon: Moon },
+                    { value: 'system', label: 'Según el dispositivo', desc: 'Sigue el modo de tu equipo', icon: Laptop },
                   ].map((item) => {
-                    const isSelected = settings.theme === item.value
+                    const isSelected = activeTheme === item.value
                     const Icon = item.icon
                     return (
                       <button
                         key={item.value}
                         type="button"
                         onClick={() => handleThemeChange(item.value)}
+                        aria-pressed={isSelected}
                         className={cn(
                           'flex flex-col items-start gap-2.5 rounded-xl border p-4 text-left transition-all',
                           'hover:border-primary/50 hover:bg-muted/30',
@@ -828,7 +848,7 @@ export default function AdminSettingsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{item.desc}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
                         </div>
                       </button>
                     )
@@ -841,7 +861,7 @@ export default function AdminSettingsPage() {
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <Label className="text-xs font-semibold text-foreground">
-                      Esquema cromático corporativo
+                      Color principal
                     </Label>
                     <p className="text-xs text-muted-foreground">
                       Define el color de botones principales, estados activos, enlaces y gráficos.
@@ -853,7 +873,7 @@ export default function AdminSettingsPage() {
                 </div>
 
                 <SystemColorSchemePicker
-                  value={settings.primaryColor}
+                  value={activeSystemColorScheme}
                   onChange={handleColorChange}
                   labels={t.appearance.colorSchemes}
                   footerText={t.appearance.colorSchemeFooter}
@@ -865,20 +885,17 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
                   <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Vista previa de componentes activos
+                    Vista previa
                   </h4>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Así se verán los botones, badges y controles en tu panel con la configuración seleccionada:
+                  Así se ven los botones y etiquetas del panel con lo que elegiste:
                 </p>
                 <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <Button size="sm" className="shadow-sm">Botón Principal</Button>
-                  <Button variant="outline" size="sm">Botón Secundario</Button>
-                  <Badge className="bg-primary text-primary-foreground">Badge Activo</Badge>
-                  <Badge variant="secondary">Estado Neutral</Badge>
-                  <span className="text-xs font-semibold text-primary underline underline-offset-4 cursor-pointer">
-                    Enlace destacado
-                  </span>
+                  <Button size="sm" className="shadow-sm">Botón principal</Button>
+                  <Button variant="outline" size="sm">Botón secundario</Button>
+                  <Badge className="bg-primary text-primary-foreground">Etiqueta activa</Badge>
+                  <Badge variant="secondary">Estado neutral</Badge>
                 </div>
               </div>
             </CardContent>
@@ -906,7 +923,7 @@ export default function AdminSettingsPage() {
                 Sucursales
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Gestión de sedes, cajas, direcciones y responsables.
+                Dirección, contacto, cajas y responsables de cada sucursal.
               </p>
             </div>
             <span className="mt-3 flex items-center text-xs font-medium text-primary">
@@ -923,7 +940,7 @@ export default function AdminSettingsPage() {
                 <Globe className="h-4 w-4" />
               </div>
               <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                Sitio Web & Tienda
+                Sitio web y tienda
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Diseño, banners, catálogo público y páginas editoriales.
@@ -943,7 +960,7 @@ export default function AdminSettingsPage() {
                 <ReceiptText className="h-4 w-4" />
               </div>
               <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                Suscripción & Plan
+                Suscripción y plan
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Planes contratados, facturas, límites y formas de pago.
@@ -963,7 +980,7 @@ export default function AdminSettingsPage() {
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                Seguridad & Sesiones
+                Seguridad y sesiones
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Control de accesos, registros de auditoría y políticas de seguridad.

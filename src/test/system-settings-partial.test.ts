@@ -3,6 +3,15 @@ import { SystemSettingsPartialSchema } from '@/lib/validations/system-settings'
 import { mergeTenantAdminSettings, getTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 describe('partial organization settings updates', () => {
+  it.each(['', '   '])('accepts an optional blank company email: %j', companyEmail => {
+    expect(SystemSettingsPartialSchema.parse({ companyEmail })).toEqual({ companyEmail: '' })
+  })
+
+  it('trims a supplied company email and rejects invalid addresses', () => {
+    expect(SystemSettingsPartialSchema.parse({ companyEmail: '  tienda@example.com  ' })).toEqual({ companyEmail: 'tienda@example.com' })
+    expect(SystemSettingsPartialSchema.safeParse({ companyEmail: 'correo-invalido' }).success).toBe(false)
+  })
+
   it('does not inject empty defaults for fields omitted by the client', () => {
     expect(SystemSettingsPartialSchema.parse({ companyAddress: 'Nueva dirección' })).toEqual({
       companyAddress: 'Nueva dirección',
