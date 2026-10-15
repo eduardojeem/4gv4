@@ -405,7 +405,8 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* TAB 1: EMPRESA */}
-        <TabsContent value="company" className="m-0 space-y-6 focus-visible:outline-none">
+        {/* Conservar el borrador del perfil y sus acciones al cambiar de pestaña. */}
+        <TabsContent value="company" forceMount className="m-0 space-y-6 focus-visible:outline-none data-[state=inactive]:hidden">
           {/* Business Profile Component */}
           <BusinessProfileCard onStateChange={handleProfileState} actionsRef={profileActionsRef} />
 
